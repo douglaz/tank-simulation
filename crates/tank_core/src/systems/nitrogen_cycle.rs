@@ -13,6 +13,8 @@ struct EnvFactors {
     f_temp: f64,
     f_ph: f64,
     maturity_factor: f64,
+    /// Dirty-filter penalty: 1.0 = clean, lower = clogged/dirty.
+    dirty_filter_factor: f64,
 }
 
 fn safe_rate(v: f64) -> f64 {
@@ -99,53 +101,66 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
         (state.microbe.decomposer_biomass_g + decomp_growth - decomp_decay).max(0.0);
 
     // ---- 4. Nitrification: TAN -> nitrite -> nitrate (+ comammox TAN -> nitrate) ----
+    //
+    // Shared DO and alkalinity budgets enforce that combined nitrification
+    // can never consume more O2 or alkalinity than available this tick.
     let env = compute_env_factors(state);
+    let combined_env = env.maturity_factor * env.dirty_filter_factor;
+
+    let mut do_budget = state.water.dissolved_oxygen_mg_total;
+    let alk_per_mg_n = safe_rate(pp.alkalinity_meq_per_mg_n_nitrified);
+    let mut alk_budget = state.water.alkalinity_meq_total;
+
+    // Stoichiometric O2 costs per mg N for each guild step
+    let o2_for_aob = 3.43_f64; // TAN -> nitrite
+    let o2_for_comammox = pp.o2_per_mg_n_nitrified; // TAN -> nitrate (4.57)
+    let o2_for_nob = 1.14_f64; // nitrite -> nitrate
 
     // 4a. AOB: TAN -> nitrite
     let aob_potential = monod_rate(
         safe_rate(pp.aob_vmax_mg_n_per_g_per_hour),
         state.microbe.ammonia_oxidizer_biomass_g,
-        env.maturity_factor,
+        combined_env,
         env.f_temp,
         env.f_ph,
-        state.water.dissolved_oxygen_mg_total / (state.water.dissolved_oxygen_mg_total + pp.aob_k_do_mg.max(0.01)),
+        do_budget / (do_budget + pp.aob_k_do_mg.max(0.01)),
         state.water.ammonia_total_mg_n_total,
         pp.aob_k_tan_mg.max(0.01),
     );
-    // Oxygen limitation: each mg N needs 3.43 mg O2 for TAN->nitrite step
-    let o2_for_aob = 3.43;
-    let aob_o2_limited = if o2_for_aob > 0.0 {
-        state.water.dissolved_oxygen_mg_total / o2_for_aob
-    } else {
-        f64::MAX
-    };
     let aob_rate = safe_rate(aob_potential)
         .min(state.water.ammonia_total_mg_n_total)
-        .min(aob_o2_limited);
+        .min(if o2_for_aob > 0.0 { do_budget / o2_for_aob } else { f64::MAX })
+        .min(if alk_per_mg_n > 0.0 { alk_budget / alk_per_mg_n } else { f64::MAX });
+
+    // Debit shared budgets for AOB
+    let aob_o2_cost = aob_rate * o2_for_aob;
+    let aob_alk_cost = aob_rate * alk_per_mg_n;
+    do_budget = (do_budget - aob_o2_cost).max(0.0);
+    alk_budget = (alk_budget - aob_alk_cost).max(0.0);
 
     // 4b. Comammox: TAN -> nitrate directly (lower vmax)
     let comammox_vmax = safe_rate(pp.aob_vmax_mg_n_per_g_per_hour * pp.comammox_vmax_fraction);
+    let tan_after_aob = (state.water.ammonia_total_mg_n_total - aob_rate).max(0.0);
     let comammox_potential = monod_rate(
         comammox_vmax,
         state.microbe.comammox_biomass_g,
-        env.maturity_factor,
+        combined_env,
         env.f_temp,
         env.f_ph,
-        state.water.dissolved_oxygen_mg_total / (state.water.dissolved_oxygen_mg_total + pp.comammox_k_do_mg.max(0.01)),
-        state.water.ammonia_total_mg_n_total,
+        do_budget / (do_budget + pp.comammox_k_do_mg.max(0.01)),
+        tan_after_aob,
         pp.comammox_k_tan_mg.max(0.01),
     );
-    let o2_for_comammox = pp.o2_per_mg_n_nitrified; // full 4.57 for TAN->NO3
-    let comammox_o2_limited = if o2_for_comammox > 0.0 {
-        state.water.dissolved_oxygen_mg_total / o2_for_comammox
-    } else {
-        f64::MAX
-    };
-    // Comammox + AOB compete for TAN; cap total TAN consumed
-    let tan_available_for_comammox = (state.water.ammonia_total_mg_n_total - aob_rate).max(0.0);
     let comammox_rate = safe_rate(comammox_potential)
-        .min(tan_available_for_comammox)
-        .min(comammox_o2_limited);
+        .min(tan_after_aob)
+        .min(if o2_for_comammox > 0.0 { do_budget / o2_for_comammox } else { f64::MAX })
+        .min(if alk_per_mg_n > 0.0 { alk_budget / alk_per_mg_n } else { f64::MAX });
+
+    // Debit shared budgets for comammox
+    let comammox_o2_cost = comammox_rate * o2_for_comammox;
+    let comammox_alk_cost = comammox_rate * alk_per_mg_n;
+    do_budget = (do_budget - comammox_o2_cost).max(0.0);
+    alk_budget = (alk_budget - comammox_alk_cost).max(0.0);
 
     // Apply AOB + comammox TAN consumption
     let total_tan_consumed = aob_rate + comammox_rate;
@@ -156,39 +171,32 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     // Comammox produces nitrate directly
     state.water.nitrate_mg_n_total += comammox_rate;
 
-    // O2 consumed so far by AOB and comammox
-    let o2_consumed_aob = aob_rate * o2_for_aob;
-    let o2_consumed_comammox = comammox_rate * o2_for_comammox;
+    // Apply O2 costs so far (AOB + comammox) to state
     state.water.dissolved_oxygen_mg_total =
-        (state.water.dissolved_oxygen_mg_total - o2_consumed_aob - o2_consumed_comammox).max(0.0);
+        (state.water.dissolved_oxygen_mg_total - aob_o2_cost - comammox_o2_cost).max(0.0);
 
-    // 4c. NOB: nitrite -> nitrate
+    // 4c. NOB: nitrite -> nitrate (uses remaining DO/alk budget)
     let nob_potential = monod_rate(
         safe_rate(pp.nob_vmax_mg_n_per_g_per_hour),
         state.microbe.nitrite_oxidizer_biomass_g,
-        env.maturity_factor,
+        combined_env,
         env.f_temp,
         env.f_ph,
-        state.water.dissolved_oxygen_mg_total / (state.water.dissolved_oxygen_mg_total + pp.nob_k_do_mg.max(0.01)),
+        do_budget / (do_budget + pp.nob_k_do_mg.max(0.01)),
         state.water.nitrite_mg_n_total,
         pp.nob_k_nitrite_mg.max(0.01),
     );
-    // O2 for nitrite->nitrate: 4.57 - 3.43 = 1.14 mg O2 per mg N
-    let o2_for_nob = 1.14;
-    let nob_o2_limited = if o2_for_nob > 0.0 {
-        state.water.dissolved_oxygen_mg_total / o2_for_nob
-    } else {
-        f64::MAX
-    };
     let nob_rate = safe_rate(nob_potential)
         .min(state.water.nitrite_mg_n_total)
-        .min(nob_o2_limited);
+        .min(if o2_for_nob > 0.0 { do_budget / o2_for_nob } else { f64::MAX })
+        .min(if alk_per_mg_n > 0.0 { alk_budget / alk_per_mg_n } else { f64::MAX });
+
+    let nob_o2_cost = nob_rate * o2_for_nob;
 
     state.water.nitrite_mg_n_total = (state.water.nitrite_mg_n_total - nob_rate).max(0.0);
     state.water.nitrate_mg_n_total += nob_rate;
-    let o2_consumed_nob = nob_rate * o2_for_nob;
     state.water.dissolved_oxygen_mg_total =
-        (state.water.dissolved_oxygen_mg_total - o2_consumed_nob).max(0.0);
+        (state.water.dissolved_oxygen_mg_total - nob_o2_cost).max(0.0);
 
     // Total N fully nitrified to nitrate (for alkalinity coupling)
     // AOB only takes TAN -> nitrite, NOB takes nitrite -> nitrate, comammox takes TAN -> nitrate
@@ -214,9 +222,12 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     state.microbe.comammox_biomass_g =
         (state.microbe.comammox_biomass_g + comammox_growth - comammox_decay).max(0.0);
 
-    // ---- 6. Alkalinity and DIC coupling from nitrification ----
-    let alk_consumed = total_mg_n_nitrified * safe_rate(pp.alkalinity_meq_per_mg_n_nitrified);
-    state.water.alkalinity_meq_total = (state.water.alkalinity_meq_total - alk_consumed).max(0.0);
+    // ---- 6. Alkalinity consumption from nitrification ----
+    // AOB and comammox alkalinity was already tracked in the budget; apply the
+    // total consumption (AOB + comammox + NOB path) to state.
+    let total_alk_consumed = (aob_rate + comammox_rate + nob_rate) * alk_per_mg_n;
+    state.water.alkalinity_meq_total =
+        (state.water.alkalinity_meq_total - total_alk_consumed).max(0.0);
 
     // Nitrification is a chemoautotrophic process that produces some DIC fixation
     // but for simplicity we model it as a net DIC producer via mineralization pathway above.
@@ -248,13 +259,17 @@ fn compute_env_factors(state: &TankState) -> EnvFactors {
     let f_ph = ph_factor(state.water.ph);
 
     // Maturity factor: immature filters slow nitrification
-    // Use filter_state.biofilter_maturity_index directly
     let maturity_factor = state.filter_state.biofilter_maturity_index.clamp(0.05, 1.0);
+
+    // Dirty-filter factor: clogged filters reduce nitrification efficiency.
+    // clogging_index of 0 = clean (factor=1), clogging_index of 1 = fully clogged (factor=0.2)
+    let dirty_filter_factor = (1.0 - 0.8 * state.filter_state.clogging_index).clamp(0.2, 1.0);
 
     EnvFactors {
         f_temp,
         f_ph,
         maturity_factor,
+        dirty_filter_factor,
     }
 }
 

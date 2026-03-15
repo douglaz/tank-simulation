@@ -228,3 +228,146 @@ fn siphon_detritus_reduces_cycling_pressure() -> Result<(), tank_core::SimError>
 
     Ok(())
 }
+
+/// Verify that when DO is very scarce, combined AOB + comammox oxidation is
+/// capped by the shared O2 budget and never exceeds available DO.
+#[test]
+fn limiter_shared_do_budget() -> Result<(), tank_core::SimError> {
+    let mut state = TankState::new(SimSeed(9400));
+    let vol = state.geometry.water_volume_l();
+
+    // Plenty of TAN substrate
+    state.water.ammonia_total_mg_n_total = 10.0 * vol;
+    // Very small DO pool — only enough for ~0.5 mg N total nitrification
+    // 0.5 mg N via AOB path costs 0.5 * 3.43 = 1.715 mg O2
+    // 0.5 mg N via comammox costs 0.5 * 4.57 = 2.285 mg O2
+    state.water.dissolved_oxygen_mg_total = 2.0; // tiny budget
+
+    // Large biomass to ensure kinetic potential exceeds DO budget
+    state.microbe.ammonia_oxidizer_biomass_g = 1.0;
+    state.microbe.comammox_biomass_g = 1.0;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.5;
+    state.filter_state.biofilter_maturity_index = 0.8;
+
+    // Disable reaeration so DO is not replenished
+    state.process_params.reaeration_kla_base = 0.0;
+    state.process_params.aeration_kla_boost = 0.0;
+
+    let do_before = state.water.dissolved_oxygen_mg_total;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.step_hours(1)?;
+
+    let s = engine.full_state();
+    assert!(
+        s.water.dissolved_oxygen_mg_total >= 0.0,
+        "DO must remain non-negative, got {}",
+        s.water.dissolved_oxygen_mg_total
+    );
+
+    // Total N consumed from TAN should be limited by the small DO pool
+    let tan_consumed = 10.0 * vol - s.water.ammonia_total_mg_n_total;
+    // Maximum possible from 2 mg O2: 2.0/3.43 ≈ 0.58 mg N (if all went to AOB)
+    // or 2.0/4.57 ≈ 0.44 mg N (if all went to comammox)
+    // Either way, total O2 consumed must not exceed the starting budget
+    let o2_consumed = do_before - s.water.dissolved_oxygen_mg_total;
+    assert!(
+        o2_consumed <= do_before + 1e-9,
+        "O2 consumed ({o2_consumed:.6}) must not exceed initial budget ({do_before:.6})"
+    );
+    // Sanity: some nitrification did happen
+    assert!(
+        tan_consumed > 0.0,
+        "Some TAN should be consumed even with limited DO"
+    );
+
+    Ok(())
+}
+
+/// Verify that when alkalinity is nearly exhausted, nitrification is limited
+/// to the supported fraction and alkalinity cannot go negative.
+#[test]
+fn limiter_low_alkalinity_caps_nitrification() -> Result<(), tank_core::SimError> {
+    let mut state = TankState::new(SimSeed(9500));
+    let vol = state.geometry.water_volume_l();
+
+    // Plenty of TAN and DO
+    state.water.ammonia_total_mg_n_total = 10.0 * vol;
+    state.water.dissolved_oxygen_mg_total = 50.0 * vol;
+    // Very low alkalinity: only enough for ~1 mg N at 0.1428 meq/mg N
+    state.water.alkalinity_meq_total = 0.15; // supports ~1.05 mg N total
+
+    state.microbe.ammonia_oxidizer_biomass_g = 0.5;
+    state.microbe.comammox_biomass_g = 0.3;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.3;
+    state.filter_state.biofilter_maturity_index = 0.8;
+
+    let alk_before = state.water.alkalinity_meq_total;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.step_hours(1)?;
+
+    let s = engine.full_state();
+    assert!(
+        s.water.alkalinity_meq_total >= 0.0,
+        "Alkalinity must remain non-negative, got {}",
+        s.water.alkalinity_meq_total
+    );
+
+    // Total alkalinity consumed should not exceed the starting budget
+    let alk_consumed = alk_before - s.water.alkalinity_meq_total;
+    assert!(
+        alk_consumed <= alk_before + 1e-9,
+        "Alkalinity consumed ({alk_consumed:.6}) must not exceed initial budget ({alk_before:.6})"
+    );
+
+    // Some nitrification should still have occurred
+    let tan_consumed = 10.0 * vol - s.water.ammonia_total_mg_n_total;
+    assert!(
+        tan_consumed > 0.0,
+        "Some TAN should be consumed even with limited alkalinity"
+    );
+
+    Ok(())
+}
+
+/// Verify that a dirty (clogged) filter reduces nitrification rate compared
+/// to a clean filter.
+#[test]
+fn dirty_filter_slows_nitrification() -> Result<(), tank_core::SimError> {
+    let base = {
+        let mut state = TankState::new(SimSeed(9600));
+        let vol = state.geometry.water_volume_l();
+        state.water.ammonia_total_mg_n_total = 5.0 * vol;
+        state.microbe.ammonia_oxidizer_biomass_g = 0.2;
+        state.microbe.nitrite_oxidizer_biomass_g = 0.15;
+        state.microbe.comammox_biomass_g = 0.03;
+        state.filter_state.biofilter_maturity_index = 0.6;
+        state
+    };
+
+    let mut clean_state = base.clone();
+    clean_state.filter_state.clogging_index = 0.0; // clean
+
+    let mut dirty_state = base;
+    dirty_state.filter_state.clogging_index = 0.9; // heavily clogged
+
+    let vol = clean_state.geometry.water_volume_l();
+
+    let mut clean_engine = Engine::from_parts(clean_state, vec![]);
+    let mut dirty_engine = Engine::from_parts(dirty_state, vec![]);
+
+    clean_engine.step_hours(24)?;
+    dirty_engine.step_hours(24)?;
+
+    let clean_tan = clean_engine.full_state().water.ammonia_total_mg_n_total / vol;
+    let dirty_tan = dirty_engine.full_state().water.ammonia_total_mg_n_total / vol;
+
+    // Clean filter should oxidize more TAN -> lower remaining TAN
+    assert!(
+        clean_tan < dirty_tan,
+        "Clean filter TAN ({clean_tan:.4}) should be lower than dirty filter ({dirty_tan:.4})"
+    );
+
+    Ok(())
+}

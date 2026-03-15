@@ -249,6 +249,13 @@ impl ProcessParamsPreset {
                 return Err(format!("field `{name}` must be non-negative, got {value}"));
             }
         }
+        // comammox_vmax_fraction must be <= 1.0 (spec requires lower vmax than AOB)
+        if self.comammox_vmax_fraction > 1.0 {
+            return Err(format!(
+                "comammox_vmax_fraction must be <= 1.0, got {}",
+                self.comammox_vmax_fraction
+            ));
+        }
         Ok(())
     }
 }
