@@ -139,7 +139,7 @@ fn shrimp_feeding(state: &mut TankState, _volume_l: f64) {
         (state.algae.periphyton_biomass_g - periph_consumed).max(0.0);
 
     // Shrimp also eat fine detritus (biofilm, decomposing organic matter)
-    let detritus_demand = total_feeding_units * rate;
+    let detritus_demand = total_feeding_units * rate * grazing_access_factor;
     let max_detritus = state.detritus.fine_detritus_g_total * 0.2;
     let detritus_consumed = detritus_demand.min(max_detritus).max(0.0);
     state.detritus.fine_detritus_g_total =
