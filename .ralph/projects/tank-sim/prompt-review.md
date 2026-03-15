@@ -1,3 +1,31 @@
+---
+artifact: prompt-review
+project: tank-sim
+backend: codex(gpt-5.4-xhigh)
+role: prompt_reviewer
+created_at: 2026-03-15T02:47:53Z
+---
+
+I’m reviewing the spec for implementation ambiguity, then I’ll rewrite it into a tighter build-ready prompt with explicit scope, acceptance criteria, and deferred items.
+I’ve isolated the main problems: the spec mixes MVP requirements with research-grade ambitions, and several “must” behaviors still lack concrete pass/fail thresholds. I’m tightening the rewrite around one implementable slice with explicit contracts for determinism, formulas, config shape, and regression tests.
+The rewrite is narrowing the contract in three ways: one authoritative MVP scope, exact storage/step semantics, and numeric acceptance thresholds. I’m also converting free-form areas like events and provenance into smaller machine-testable requirements.
+# Prompt Review
+
+## Issues Found
+- The MVP scope is overloaded. It combines a deterministic engine, TUI, scientific provenance, calibration, multiple ecological subsystems, and large content packs without a single enforced cut line, which makes delivery order ambiguous.
+- Priority is unclear. The spec mixes `MUST`, `SHOULD`, `MAY`, “planned later,” and “non-negotiables” without one authoritative v1 list, so an implementation agent could spend time on stretch work before core loops are stable.
+- The unit model is inconsistent. Some water values are totals, some are concentrations, and some are display metrics, which makes mass balance and save/load correctness easy to get wrong.
+- Determinism is underspecified. “Bitwise-identical” results are hard to guarantee with floating point unless the scope is limited to the same binary/target/toolchain and the RNG/state contract is explicit.
+- Several core systems are only directionally specified. pH approximation, DO saturation, plant/algae competition, microfauna effects, and shrimp reproduction/mortality still leave too much room for incompatible implementations.
+- Action timing is unclear. The spec does not fully define when `apply_action` takes effect relative to the tick pipeline or how invalid actions should be handled.
+- The event system is hard to test as written. Free-form `causes: Vec<String>` will produce inconsistent output unless machine-readable cause codes are also required.
+- Acceptance tests are mostly qualitative. Phrases like “stress rises,” “outperform,” and “warming over time” need numeric assertions or relative thresholds.
+- Parameter provenance is too broad for MVP. Requiring metadata on “every important parameter” adds large content overhead without defining the minimum viable granularity.
+- Optional features are entangled with the public API. Top-off, fertilizer, seasonal schedules, denitrification, and richer plant sets expand the surface area before core chemistry and population loops are validated.
+- Hidden versus observable state is described conceptually, but the snapshot contract, event retention policy, and UI data boundary are not strict enough.
+- The spec lacks a concrete performance and scenario contract, so an implementation agent cannot tell how much engineering effort should go into optimization versus correctness.
+
+## Refined Prompt
 ### Aquarium / Planted Tank Ecosystem Simulator (Rust) — Implementation Prompt v1
 
 Build a deterministic Rust workspace that simulates a single freshwater planted shrimp tank as a causal ecosystem. The target species is `Neocaridina davidi`. The primary interface is a terminal UI. The MVP must be scientifically plausible, testable, and incremental to implement.
