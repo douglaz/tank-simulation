@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use crate::{
     invariants::enforce_invariants,
     rng::SimSeed,
+    systems,
     types::{
         EventCause, EventKind, EventSeverity, PlayerAction, SimError, SimEvent, TankSnapshot,
         TankState,
@@ -42,10 +43,19 @@ impl Engine {
     }
 
     fn step_one_hour(&mut self) -> Result<(), SimError> {
+        // Pre-validate all water changes for known source profiles before any mutations.
+        let actions_slice: Vec<_> = self.queued_actions.iter().cloned().collect();
+        systems::water_change::validate_water_changes(&self.state, &actions_slice)?;
+
+        // Process all queued actions
         while let Some(action) = self.queued_actions.pop_front() {
             self.process_action(action);
         }
 
+        // Step 4: update water temperature from ambient and heater
+        systems::temperature::step_temperature(&mut self.state);
+
+        // Advance time
         self.state.environment.hour_of_day = (self.state.environment.hour_of_day + 1) % 24;
         if self.state.environment.hour_of_day == 0 {
             self.state.environment.day += 1;
@@ -65,29 +75,32 @@ impl Engine {
                     format!("Queued feed processed: {grams:.2} g"),
                 );
             }
-            PlayerAction::WaterChangePercent { percent, .. } => {
-                let retention = 1.0 - (percent / 100.0);
-                self.state.water.ammonia_total_mg_n_total *= retention;
-                self.state.water.nitrite_mg_n_total *= retention;
-                self.state.water.nitrate_mg_n_total *= retention;
-                self.state.water.phosphate_mg_p_total *= retention;
-                self.state.water.dissolved_inorganic_carbon_mg_c_total *= retention;
-                self.state.water.dissolved_organic_carbon_mg_c_total *= retention;
-                self.state.water.dissolved_organic_nitrogen_mg_n_total *= retention;
-                self.state.water.alkalinity_meq_total *= retention;
-                self.state.water.calcium_mg_total *= retention;
-                self.state.water.magnesium_mg_total *= retention;
-                self.state.water.sodium_mg_total *= retention;
-                self.state.water.potassium_mg_total *= retention;
-                self.state.water.bicarbonate_mg_total *= retention;
-                self.state.water.chloride_mg_total *= retention;
-                self.state.water.sulfate_mg_total *= retention;
-                self.push_event(
-                    EventSeverity::Info,
-                    EventKind::StabilityImproving,
-                    vec![EventCause::WaterChange],
-                    format!("Queued water change processed: {percent:.1}%"),
-                );
+            PlayerAction::WaterChangePercent {
+                percent,
+                source_profile_id,
+            } => {
+                if percent <= 0.0 {
+                    return;
+                }
+                // Profile was pre-validated; look it up (guaranteed to exist).
+                let profile = self
+                    .state
+                    .source_water_catalog
+                    .get(&source_profile_id)
+                    .cloned();
+                if let Some(profile) = profile {
+                    systems::water_change::apply_water_change(
+                        &mut self.state,
+                        percent,
+                        &profile,
+                    );
+                    self.push_event(
+                        EventSeverity::Info,
+                        EventKind::StabilityImproving,
+                        vec![EventCause::WaterChange],
+                        format!("Water change processed: {percent:.1}% with {source_profile_id}"),
+                    );
+                }
             }
             PlayerAction::TrimPlants { fraction } => {
                 for plant in &mut self.state.plant_guilds {

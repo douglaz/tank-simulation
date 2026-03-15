@@ -1,11 +1,13 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::rng::{SimRng, SimSeed};
 
 use super::{
     AlgaeState, AnimalState, DetritusState, EnvironmentState, FilterState, HardwareState,
-    MicrobeState, MicrofaunaState, PlantGuild, PlantGuildState, SimEvent, SubstrateKind,
-    SubstrateLayerState, TankGeometry, WaterState,
+    MicrobeState, MicrofaunaState, PlantGuild, PlantGuildState, ProcessParams, SimEvent,
+    SourceWaterProfile, SubstrateKind, SubstrateLayerState, TankGeometry, WaterState,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -31,6 +33,10 @@ pub struct TankState {
     pub detritus: DetritusState,
     pub event_log: Vec<SimEvent>,
     pub rng: SimRng,
+    /// Runtime-resolved source-water catalog keyed by preset id.
+    pub source_water_catalog: BTreeMap<String, SourceWaterProfile>,
+    /// Runtime-resolved process parameters for heat transfer and chemistry systems.
+    pub process_params: ProcessParams,
 }
 
 impl TankState {
@@ -61,6 +67,8 @@ impl TankState {
             detritus: DetritusState::default(),
             event_log: Vec::new(),
             rng: SimRng::new(seed),
+            source_water_catalog: BTreeMap::new(),
+            process_params: ProcessParams::default(),
         }
     }
 

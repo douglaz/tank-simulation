@@ -61,6 +61,8 @@ pub enum SimError {
     EmptySourceProfileId,
     #[error("invariant violation for `{field}` with value {value}")]
     InvariantViolation { field: &'static str, value: f64 },
+    #[error("unknown source water profile: `{id}`")]
+    UnknownSourceProfile { id: String },
     #[error("schema version mismatch: expected {expected}, got {actual}")]
     SchemaVersionMismatch { expected: u32, actual: u32 },
     #[error("serialization error: {0}")]

@@ -3,10 +3,11 @@ name = "Default Process Pack"
 mineralization_rate_per_day = 0.15
 nitrification_vmax = 0.08
 reaeration_kla = 0.4
+k_surface_w_per_m2_k = 10.0
+k_wall_w_per_m2_k = 5.0
 
 [provenance]
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "Default process coefficients for milestone bootstrapping."
-
+notes = "Default process coefficients including heat-transfer parameters for the hourly thermal model."

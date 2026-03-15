@@ -1,0 +1,117 @@
+use tank_core::SimSeed;
+
+#[test]
+fn nano_cycle_materializes_correctly() {
+    let state = tank_scenarios::seeded_state(SimSeed(42), "nano_cycle")
+        .expect("nano_cycle should materialize");
+
+    // Geometry from scenario: 30×20, 20cm tall, 18cm filled
+    assert!((state.geometry.length_cm - 30.0).abs() < f64::EPSILON);
+    assert!((state.geometry.width_cm - 20.0).abs() < f64::EPSILON);
+    assert!((state.geometry.height_cm - 20.0).abs() < f64::EPSILON);
+    assert!((state.geometry.fill_height_cm - 18.0).abs() < f64::EPSILON);
+
+    // Volume: 30 * 20 * 18 / 1000 = 10.8L
+    let expected_vol = 30.0 * 20.0 * 18.0 / 1000.0;
+    let actual_vol = state.geometry.water_volume_l();
+    assert!(
+        (actual_vol - expected_vol).abs() < 0.01,
+        "Volume should be {expected_vol}, got {actual_vol}"
+    );
+
+    // Ambient from scenario
+    assert!((state.environment.ambient_temp_c - 24.0).abs() < f64::EPSILON);
+
+    // Meta
+    assert_eq!(state.meta.scenario_id.as_deref(), Some("nano_cycle"));
+    assert_eq!(state.meta.notes.as_deref(), Some("Nano Cycle"));
+
+    // Source water catalog should contain all presets
+    assert!(state.source_water_catalog.contains_key("soft_acidic"));
+    assert!(state.source_water_catalog.contains_key("moderate"));
+    assert!(state.source_water_catalog.contains_key("hard_shrimp"));
+    assert!(state.source_water_catalog.contains_key("ro_like"));
+
+    // Initial water chemistry comes from soft_acidic profile
+    let sw = &state.source_water_catalog["soft_acidic"];
+    let vol = state.geometry.water_volume_l();
+    assert!(
+        (state.water.calcium_mg_total - sw.calcium_mg_per_l * vol).abs() < 0.01,
+        "Calcium should match source water * volume"
+    );
+    assert!(
+        (state.water.temperature_c - sw.temperature_c).abs() < 0.01,
+        "Initial water temp should match source water"
+    );
+
+    // Substrate: single inert_sand layer
+    assert_eq!(state.substrate_layers.len(), 1);
+    assert_eq!(
+        state.substrate_layers[0].kind,
+        tank_core::SubstrateKind::InertSand
+    );
+
+    // Plants: single fast_stem
+    assert_eq!(state.plant_guilds.len(), 1);
+    assert_eq!(state.plant_guilds[0].guild, tank_core::PlantGuild::FastStem);
+
+    // Process params should be non-default (loaded from preset)
+    assert!(state.process_params.k_surface_w_per_m2_k > 0.0);
+    assert!(state.process_params.k_wall_w_per_m2_k > 0.0);
+}
+
+#[test]
+fn medium_planted_materializes_with_two_substrates_and_plants() {
+    let state = tank_scenarios::seeded_state(SimSeed(43), "medium_planted")
+        .expect("medium_planted should materialize");
+
+    // Two substrate layers
+    assert_eq!(state.substrate_layers.len(), 2);
+    assert_eq!(
+        state.substrate_layers[0].kind,
+        tank_core::SubstrateKind::ActivePlanted
+    );
+    assert_eq!(
+        state.substrate_layers[1].kind,
+        tank_core::SubstrateKind::CoarsePorous
+    );
+
+    // Two plant guilds
+    assert_eq!(state.plant_guilds.len(), 2);
+
+    // Geometry: 60×30, 36cm height, 32cm filled
+    assert!((state.geometry.length_cm - 60.0).abs() < f64::EPSILON);
+    assert!((state.geometry.fill_height_cm - 32.0).abs() < f64::EPSILON);
+
+    // Volume
+    let expected_vol = 60.0 * 30.0 * 32.0 / 1000.0;
+    let actual_vol = state.geometry.water_volume_l();
+    assert!(
+        (actual_vol - expected_vol).abs() < 0.01,
+        "Expected {expected_vol}L, got {actual_vol}L"
+    );
+}
+
+#[test]
+fn warm_room_materializes_with_high_ambient() {
+    let state = tank_scenarios::seeded_state(SimSeed(44), "warm_room")
+        .expect("warm_room should materialize");
+
+    assert!((state.environment.ambient_temp_c - 29.0).abs() < f64::EPSILON);
+}
+
+#[test]
+fn deterministic_materialization() {
+    let state_a = tank_scenarios::seeded_state(SimSeed(99), "nano_cycle")
+        .expect("should materialize");
+    let state_b = tank_scenarios::seeded_state(SimSeed(99), "nano_cycle")
+        .expect("should materialize");
+
+    assert_eq!(state_a, state_b, "Same seed + scenario must produce identical state");
+}
+
+#[test]
+fn unknown_scenario_returns_error() {
+    let result = tank_scenarios::seeded_state(SimSeed(1), "nonexistent_scenario");
+    assert!(result.is_err());
+}

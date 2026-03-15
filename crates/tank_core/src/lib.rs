@@ -2,6 +2,7 @@ pub mod engine;
 pub mod invariants;
 pub mod rng;
 pub mod save;
+pub mod systems;
 pub mod types;
 
 pub use engine::{Engine, SimulationEngine};

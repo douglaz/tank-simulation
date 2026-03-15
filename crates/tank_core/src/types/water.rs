@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::TankGeometry;
+use super::{SourceWaterProfile, TankGeometry};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WaterState {
@@ -44,6 +44,32 @@ impl WaterState {
             bicarbonate_mg_total: 70.0 * volume_l,
             chloride_mg_total: 12.0 * volume_l,
             sulfate_mg_total: 8.0 * volume_l,
+        }
+    }
+
+    /// Creates initial water state from a source-water profile and tank geometry.
+    /// All dissolved totals are the profile's per-liter values multiplied by volume.
+    pub fn from_source_profile(profile: &SourceWaterProfile, geometry: &TankGeometry) -> Self {
+        let volume_l = geometry.water_volume_l();
+        let do_sat = crate::systems::temperature::do_sat_mg_l(profile.temperature_c);
+        Self {
+            temperature_c: profile.temperature_c,
+            ammonia_total_mg_n_total: profile.ammonia_mg_n_per_l * volume_l,
+            nitrite_mg_n_total: profile.nitrite_mg_n_per_l * volume_l,
+            nitrate_mg_n_total: profile.nitrate_mg_n_per_l * volume_l,
+            phosphate_mg_p_total: profile.phosphate_mg_p_per_l * volume_l,
+            dissolved_oxygen_mg_total: do_sat * volume_l,
+            dissolved_inorganic_carbon_mg_c_total: profile.dic_mg_c_per_l * volume_l,
+            dissolved_organic_carbon_mg_c_total: profile.doc_mg_c_per_l * volume_l,
+            dissolved_organic_nitrogen_mg_n_total: profile.don_mg_n_per_l * volume_l,
+            alkalinity_meq_total: profile.alkalinity_meq_per_l * volume_l,
+            calcium_mg_total: profile.calcium_mg_per_l * volume_l,
+            magnesium_mg_total: profile.magnesium_mg_per_l * volume_l,
+            sodium_mg_total: profile.sodium_mg_per_l * volume_l,
+            potassium_mg_total: profile.potassium_mg_per_l * volume_l,
+            bicarbonate_mg_total: profile.bicarbonate_mg_per_l * volume_l,
+            chloride_mg_total: profile.chloride_mg_per_l * volume_l,
+            sulfate_mg_total: profile.sulfate_mg_per_l * volume_l,
         }
     }
 

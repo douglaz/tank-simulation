@@ -18,10 +18,24 @@ pub enum PresetError {
         id: String,
         message: String,
     },
+    #[error("validation failed for preset `{id}` in category `{category}`: {message}")]
+    Validation {
+        category: &'static str,
+        id: String,
+        message: String,
+    },
 }
 
 pub fn load_source_water(id: &str) -> Result<SourceWaterPreset, PresetError> {
-    load_from_registry("source_water", id, SOURCE_WATER_PRESETS)
+    let preset: SourceWaterPreset = load_from_registry("source_water", id, SOURCE_WATER_PRESETS)?;
+    preset
+        .validate()
+        .map_err(|message| PresetError::Validation {
+            category: "source_water",
+            id: id.to_string(),
+            message,
+        })?;
+    Ok(preset)
 }
 
 pub fn load_substrate(id: &str) -> Result<SubstratePreset, PresetError> {

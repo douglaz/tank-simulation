@@ -14,6 +14,9 @@ pub struct HeaterState {
     pub deadband_c: f64,
     pub max_watts: f64,
     pub efficiency: f64,
+    /// Last computed heater output in watts (0.0 when off or above setpoint).
+    #[serde(default)]
+    pub last_output_w: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -62,6 +65,7 @@ impl Default for HeaterState {
             deadband_c: 0.5,
             max_watts: 50.0,
             efficiency: 1.0,
+            last_output_w: 0.0,
         }
     }
 }

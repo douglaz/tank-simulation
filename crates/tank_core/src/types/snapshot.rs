@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{SimEvent, TankState};
+use crate::systems::temperature::do_sat_mg_l;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TankSnapshot {
@@ -14,6 +15,7 @@ pub struct TankSnapshot {
     pub nitrate_mg_l: f64,
     pub phosphate_mg_l: f64,
     pub do_mg_l: f64,
+    pub do_sat_mg_l: f64,
     pub gh_d: f64,
     pub kh_d: f64,
     pub tds_mg_l: f64,
@@ -21,6 +23,7 @@ pub struct TankSnapshot {
     pub ph: f64,
     pub adult_shrimp_count: u32,
     pub total_plant_biomass_g: f64,
+    pub last_heater_output_w: f64,
     pub recent_events: Vec<SimEvent>,
 }
 
@@ -31,7 +34,7 @@ impl TankSnapshot {
         let nitrite_mg_l = safe_div(state.water.nitrite_mg_n_total, volume_l);
         let nitrate_mg_l = safe_div(state.water.nitrate_mg_n_total, volume_l);
         let phosphate_mg_l = safe_div(state.water.phosphate_mg_p_total, volume_l);
-        let do_mg_l = safe_div(state.water.dissolved_oxygen_mg_total, volume_l);
+        let do_mg_l_val = safe_div(state.water.dissolved_oxygen_mg_total, volume_l);
         let ca_mg_l = safe_div(state.water.calcium_mg_total, volume_l);
         let mg_mg_l = safe_div(state.water.magnesium_mg_total, volume_l);
         let alkalinity_meq_l = safe_div(state.water.alkalinity_meq_total, volume_l);
@@ -60,7 +63,8 @@ impl TankSnapshot {
             nitrite_mg_l,
             nitrate_mg_l,
             phosphate_mg_l,
-            do_mg_l,
+            do_mg_l: do_mg_l_val,
+            do_sat_mg_l: do_sat_mg_l(state.water.temperature_c),
             gh_d,
             kh_d,
             tds_mg_l,
@@ -68,6 +72,7 @@ impl TankSnapshot {
             ph,
             adult_shrimp_count: state.animal.adults_count,
             total_plant_biomass_g: state.plant_guilds.iter().map(|plant| plant.biomass_g).sum(),
+            last_heater_output_w: state.hardware.heater.last_output_w,
             recent_events: state.event_log.iter().rev().take(20).cloned().collect(),
         }
     }
