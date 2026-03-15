@@ -2,7 +2,12 @@ id = "default"
 name = "Default Process Pack"
 mineralization_rate_per_day = 0.15
 nitrification_vmax = 0.08
-reaeration_kla = 0.4
+reaeration_kla_base = 0.35
+aeration_kla_boost = 0.9
+background_bod_mg_o2_per_g_biomass_per_hour = 0.05
+plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
+respiration_dic_rate_mg_c_per_g_per_hour = 0.08
+photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.12
 k_surface_w_per_m2_k = 10.0
 k_wall_w_per_m2_k = 5.0
 

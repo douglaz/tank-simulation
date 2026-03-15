@@ -1,6 +1,9 @@
 use crate::types::{SimError, TankState};
 
 pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
+    if state.water.dissolved_oxygen_mg_total.is_finite() {
+        state.water.dissolved_oxygen_mg_total = state.water.dissolved_oxygen_mg_total.max(0.0);
+    }
     check_non_negative(
         "ammonia_total_mg_n_total",
         state.water.ammonia_total_mg_n_total,
@@ -76,6 +79,13 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
             value: state.water.temperature_c,
         });
     }
+    if !state.water.ph.is_finite() {
+        return Err(SimError::InvariantViolation {
+            field: "water.ph",
+            value: state.water.ph,
+        });
+    }
+    state.water.ph = state.water.ph.clamp(5.5, 8.5);
 
     state.geometry.lid_exchange_factor = state.geometry.lid_exchange_factor.clamp(0.0, 1.0);
     state.hardware.light.intensity_index = state.hardware.light.intensity_index.clamp(0.0, 1.0);

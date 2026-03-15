@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{SimEvent, TankState};
-use crate::systems::temperature::do_sat_mg_l;
+use crate::systems::{chemistry::compute_nh3_mg_l, temperature::do_sat_mg_l};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TankSnapshot {
@@ -43,15 +43,8 @@ impl TankSnapshot {
         let conductivity_us_cm = tds_mg_l / 0.65;
         let gh_d = ((2.497 * ca_mg_l) + (4.118 * mg_mg_l)) / 17.848;
         let kh_d = (alkalinity_meq_l * 50.0) / 17.848;
-        let dic_mmol_l = safe_div(
-            state.water.dissolved_inorganic_carbon_mg_c_total / 12.0,
-            volume_l,
-        );
-        let ph = (6.3 + safe_log10(alkalinity_meq_l.max(0.05)) - safe_log10(dic_mmol_l.max(0.02)))
-            .clamp(5.5, 8.5);
-        let pka = 0.09018 + 2729.92 / (273.2 + state.water.temperature_c);
-        let fraction_nh3 = 1.0 / (1.0 + 10.0_f64.powf(pka - ph));
-        let nh3_mg_l = tan_mg_l * fraction_nh3;
+        let ph = state.water.ph;
+        let nh3_mg_l = compute_nh3_mg_l(tan_mg_l, ph, state.water.temperature_c);
 
         Self {
             day: state.environment.day,
@@ -84,8 +77,4 @@ fn safe_div(numerator: f64, denominator: f64) -> f64 {
     } else {
         numerator / denominator
     }
-}
-
-fn safe_log10(value: f64) -> f64 {
-    value.max(f64::MIN_POSITIVE).log10()
 }

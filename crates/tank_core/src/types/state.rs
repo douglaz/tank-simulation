@@ -32,6 +32,8 @@ pub struct TankState {
     pub animal: AnimalState,
     pub detritus: DetritusState,
     pub event_log: Vec<SimEvent>,
+    #[serde(default)]
+    pub last_event_day: BTreeMap<String, u32>,
     pub rng: SimRng,
     /// Runtime-resolved source-water catalog keyed by preset id.
     pub source_water_catalog: BTreeMap<String, SourceWaterProfile>,
@@ -66,6 +68,7 @@ impl TankState {
             animal: AnimalState::default(),
             detritus: DetritusState::default(),
             event_log: Vec::new(),
+            last_event_day: BTreeMap::new(),
             rng: SimRng::new(seed),
             source_water_catalog: BTreeMap::new(),
             process_params: ProcessParams::default(),

@@ -41,7 +41,16 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
     ProcessParams {
         mineralization_rate_per_day: preset.mineralization_rate_per_day,
         nitrification_vmax: preset.nitrification_vmax,
-        reaeration_kla: preset.reaeration_kla,
+        reaeration_kla_base: preset.reaeration_kla_base,
+        aeration_kla_boost: preset.aeration_kla_boost,
+        background_bod_mg_o2_per_g_biomass_per_hour: preset
+            .background_bod_mg_o2_per_g_biomass_per_hour,
+        plant_photosynthesis_o2_mg_per_g_per_hour: preset
+            .plant_photosynthesis_o2_mg_per_g_per_hour,
+        respiration_dic_rate_mg_c_per_g_per_hour: preset
+            .respiration_dic_rate_mg_c_per_g_per_hour,
+        photosynthesis_dic_rate_mg_c_per_g_per_hour: preset
+            .photosynthesis_dic_rate_mg_c_per_g_per_hour,
         k_surface_w_per_m2_k: preset.k_surface_w_per_m2_k,
         k_wall_w_per_m2_k: preset.k_wall_w_per_m2_k,
     }

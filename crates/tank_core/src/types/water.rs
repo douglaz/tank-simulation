@@ -2,6 +2,10 @@ use serde::{Deserialize, Serialize};
 
 use super::{SourceWaterProfile, TankGeometry};
 
+fn default_ph() -> f64 {
+    7.0
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WaterState {
     pub temperature_c: f64,
@@ -21,12 +25,14 @@ pub struct WaterState {
     pub bicarbonate_mg_total: f64,
     pub chloride_mg_total: f64,
     pub sulfate_mg_total: f64,
+    #[serde(default = "default_ph")]
+    pub ph: f64,
 }
 
 impl WaterState {
     pub fn default_for_geometry(geometry: &TankGeometry) -> Self {
         let volume_l = geometry.water_volume_l();
-        Self {
+        let mut state = Self {
             temperature_c: 24.0,
             ammonia_total_mg_n_total: 0.0,
             nitrite_mg_n_total: 0.0,
@@ -44,7 +50,14 @@ impl WaterState {
             bicarbonate_mg_total: 70.0 * volume_l,
             chloride_mg_total: 12.0 * volume_l,
             sulfate_mg_total: 8.0 * volume_l,
-        }
+            ph: default_ph(),
+        };
+        state.ph = crate::systems::chemistry::compute_ph_from_totals(
+            state.alkalinity_meq_total,
+            state.dissolved_inorganic_carbon_mg_c_total,
+            volume_l,
+        );
+        state
     }
 
     /// Creates initial water state from a source-water profile and tank geometry.
@@ -52,7 +65,7 @@ impl WaterState {
     pub fn from_source_profile(profile: &SourceWaterProfile, geometry: &TankGeometry) -> Self {
         let volume_l = geometry.water_volume_l();
         let do_sat = crate::systems::temperature::do_sat_mg_l(profile.temperature_c);
-        Self {
+        let mut state = Self {
             temperature_c: profile.temperature_c,
             ammonia_total_mg_n_total: profile.ammonia_mg_n_per_l * volume_l,
             nitrite_mg_n_total: profile.nitrite_mg_n_per_l * volume_l,
@@ -70,7 +83,14 @@ impl WaterState {
             bicarbonate_mg_total: profile.bicarbonate_mg_per_l * volume_l,
             chloride_mg_total: profile.chloride_mg_per_l * volume_l,
             sulfate_mg_total: profile.sulfate_mg_per_l * volume_l,
-        }
+            ph: default_ph(),
+        };
+        state.ph = crate::systems::chemistry::compute_ph_from_totals(
+            state.alkalinity_meq_total,
+            state.dissolved_inorganic_carbon_mg_c_total,
+            volume_l,
+        );
+        state
     }
 
     pub fn total_tracked_ions_mg(&self) -> f64 {

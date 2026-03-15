@@ -43,11 +43,9 @@ impl Engine {
     }
 
     fn step_one_hour(&mut self) -> Result<(), SimError> {
-        // Pre-validate all water changes for known source profiles before any mutations.
         let actions_slice: Vec<_> = self.queued_actions.iter().cloned().collect();
         systems::water_change::validate_water_changes(&self.state, &actions_slice)?;
 
-        // Process all queued actions
         while let Some(action) = self.queued_actions.pop_front() {
             self.process_action(action);
         }
@@ -55,7 +53,23 @@ impl Engine {
         // Step 4: update water temperature from ambient and heater
         systems::temperature::step_temperature(&mut self.state);
 
-        // Advance time
+        // Step 5: compute light state for the current hour.
+        let light_on = self.state.hardware.light.enabled
+            && systems::light::is_light_on(
+                self.state.environment.hour_of_day,
+                self.state.hardware.light.photoperiod_hours,
+            );
+
+        // Step 9: update DIC, alkalinity, and pH.
+        systems::chemistry::step_hourly_chemistry(&mut self.state, light_on);
+
+        // Step 10 / 11-partial: update dissolved oxygen with background respiration and
+        // light-driven photosynthetic support from existing biomass.
+        systems::dissolved_oxygen::step_dissolved_oxygen(&mut self.state, light_on);
+
+        // Step 13: emit threshold-based chemistry warnings.
+        systems::events::emit_hourly_threshold_events(&mut self.state);
+
         self.state.environment.hour_of_day = (self.state.environment.hour_of_day + 1) % 24;
         if self.state.environment.hour_of_day == 0 {
             self.state.environment.day += 1;

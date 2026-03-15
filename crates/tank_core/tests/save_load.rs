@@ -55,7 +55,12 @@ fn save_load_with_source_water_catalog() -> Result<(), tank_core::SimError> {
     state.process_params = ProcessParams {
         mineralization_rate_per_day: 0.2,
         nitrification_vmax: 0.1,
-        reaeration_kla: 0.5,
+        reaeration_kla_base: 0.5,
+        aeration_kla_boost: 1.1,
+        background_bod_mg_o2_per_g_biomass_per_hour: 0.07,
+        plant_photosynthesis_o2_mg_per_g_per_hour: 0.22,
+        respiration_dic_rate_mg_c_per_g_per_hour: 0.09,
+        photosynthesis_dic_rate_mg_c_per_g_per_hour: 0.14,
         k_surface_w_per_m2_k: 12.0,
         k_wall_w_per_m2_k: 6.0,
     };
