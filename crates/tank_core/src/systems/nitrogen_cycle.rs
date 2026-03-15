@@ -193,9 +193,7 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
 
     // Debit shared budgets for comammox
     let comammox_o2_cost = comammox_rate * o2_for_comammox;
-    let comammox_alk_cost = comammox_rate * alk_per_mg_n;
     do_budget = (do_budget - comammox_o2_cost).max(0.0);
-    alk_budget = (alk_budget - comammox_alk_cost).max(0.0);
 
     // Apply AOB + comammox TAN consumption
     let total_tan_consumed = aob_rate + comammox_rate;
@@ -220,15 +218,12 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
         state.water.nitrite_mg_n_total,
         pp.nob_k_nitrite_mg.max(0.01),
     );
+    // NOB (nitrite -> nitrate) does not consume additional alkalinity beyond
+    // what AOB already consumed for the TAN -> nitrite step.  Only DO limits NOB.
     let nob_rate = safe_rate(nob_potential)
         .min(state.water.nitrite_mg_n_total)
         .min(if o2_for_nob > 0.0 {
             do_budget / o2_for_nob
-        } else {
-            f64::MAX
-        })
-        .min(if alk_per_mg_n > 0.0 {
-            alk_budget / alk_per_mg_n
         } else {
             f64::MAX
         });
@@ -268,9 +263,9 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
         (state.microbe.comammox_biomass_g + comammox_growth - comammox_decay).max(0.0);
 
     // ---- 6. Alkalinity consumption from nitrification ----
-    // AOB and comammox alkalinity was already tracked in the budget; apply the
-    // total consumption (AOB + comammox + NOB path) to state.
-    let total_alk_consumed = (aob_rate + comammox_rate + nob_rate) * alk_per_mg_n;
+    // Only AOB and comammox consume alkalinity (TAN oxidation step).
+    // NOB (nitrite -> nitrate) does not consume additional alkalinity.
+    let total_alk_consumed = (aob_rate + comammox_rate) * alk_per_mg_n;
     state.water.alkalinity_meq_total =
         (state.water.alkalinity_meq_total - total_alk_consumed).max(0.0);
 

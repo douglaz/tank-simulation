@@ -509,6 +509,11 @@ fn materialize_scenario(
     state.process_params = process_params;
     state.shrimp_params = shrimp_params;
 
+    // Seed stability tracker baselines from actual water state to prevent
+    // false chemistry-swing detection on the first update.
+    let volume_l = state.geometry.water_volume_l();
+    state.stability_tracker.seed_from_water(&state.water, volume_l);
+
     Ok(state)
 }
 
