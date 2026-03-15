@@ -99,7 +99,13 @@ pub fn seeded_state(seed: SimSeed, scenario_id: &str) -> Result<TankState, tank_
                 "inert_gravel" => tank_core::SubstrateKind::InertGravel,
                 "active_planted" => tank_core::SubstrateKind::ActivePlanted,
                 "coarse_porous" => tank_core::SubstrateKind::CoarsePorous,
-                _ => tank_core::SubstrateKind::InertSand,
+                other => {
+                    return Err(tank_data::PresetError::Validation {
+                        category: "substrate",
+                        id: other.to_string(),
+                        message: format!("unsupported substrate kind: `{other}`"),
+                    });
+                }
             },
             depth_cm: sub_preset.depth_cm,
             nutrient_store_mg_n_total: sub_preset.nutrient_charge_mg_n_total,
@@ -122,7 +128,13 @@ pub fn seeded_state(seed: SimSeed, scenario_id: &str) -> Result<TankState, tank_
         let guild = match plant_preset.guild.as_str() {
             "FastStem" => PlantGuild::FastStem,
             "RootFeedingRosette" => PlantGuild::RootFeedingRosette,
-            _ => PlantGuild::FastStem,
+            other => {
+                return Err(tank_data::PresetError::Validation {
+                    category: "plants",
+                    id: plant_id.clone(),
+                    message: format!("unsupported plant guild: `{other}`"),
+                });
+            }
         };
         plant_guilds.push(PlantGuildState {
             guild,

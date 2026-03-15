@@ -1,17 +1,23 @@
 use crate::types::{SimError, SourceWaterProfile, TankState};
 
-/// Validates that all water change actions in the queue reference known source profiles.
+/// Validates that all water change actions in the queue reference known and valid source profiles.
 /// Returns the first error found, or Ok(()) if all are valid.
+/// Checks both catalog membership and runtime validity (finite, non-negative chemistry).
 pub fn validate_water_changes(state: &TankState, actions: &[crate::types::PlayerAction]) -> Result<(), SimError> {
     for action in actions {
         if let crate::types::PlayerAction::WaterChangePercent {
             source_profile_id, ..
         } = action
         {
-            if !state.source_water_catalog.contains_key(source_profile_id) {
-                return Err(SimError::UnknownSourceProfile {
-                    id: source_profile_id.clone(),
-                });
+            match state.source_water_catalog.get(source_profile_id) {
+                None => {
+                    return Err(SimError::UnknownSourceProfile {
+                        id: source_profile_id.clone(),
+                    });
+                }
+                Some(profile) => {
+                    profile.validate(source_profile_id)?;
+                }
             }
         }
     }

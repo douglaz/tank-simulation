@@ -118,7 +118,7 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
 }
 
 fn check_non_negative(field: &'static str, value: f64) -> Result<(), SimError> {
-    if value < 0.0 {
+    if !value.is_finite() || value < 0.0 {
         Err(SimError::InvariantViolation { field, value })
     } else {
         Ok(())

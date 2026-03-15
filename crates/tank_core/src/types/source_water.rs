@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::SimError;
+
 /// Runtime source-water profile with explicit per-liter chemistry.
 /// Stored in `TankState.source_water_catalog` for deterministic continuation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -23,6 +25,46 @@ pub struct SourceWaterProfile {
 }
 
 impl SourceWaterProfile {
+    /// Validates that all chemistry fields are finite and non-negative,
+    /// and temperature is finite and above 0.0 C.
+    /// Returns `Ok(())` if the profile is valid for use in water changes.
+    pub fn validate(&self, profile_id: &str) -> Result<(), SimError> {
+        let fields: &[(&str, f64)] = &[
+            ("ammonia_mg_n_per_l", self.ammonia_mg_n_per_l),
+            ("nitrite_mg_n_per_l", self.nitrite_mg_n_per_l),
+            ("nitrate_mg_n_per_l", self.nitrate_mg_n_per_l),
+            ("phosphate_mg_p_per_l", self.phosphate_mg_p_per_l),
+            ("dic_mg_c_per_l", self.dic_mg_c_per_l),
+            ("doc_mg_c_per_l", self.doc_mg_c_per_l),
+            ("don_mg_n_per_l", self.don_mg_n_per_l),
+            ("alkalinity_meq_per_l", self.alkalinity_meq_per_l),
+            ("calcium_mg_per_l", self.calcium_mg_per_l),
+            ("magnesium_mg_per_l", self.magnesium_mg_per_l),
+            ("sodium_mg_per_l", self.sodium_mg_per_l),
+            ("potassium_mg_per_l", self.potassium_mg_per_l),
+            ("bicarbonate_mg_per_l", self.bicarbonate_mg_per_l),
+            ("chloride_mg_per_l", self.chloride_mg_per_l),
+            ("sulfate_mg_per_l", self.sulfate_mg_per_l),
+        ];
+        for &(field, value) in fields {
+            if !value.is_finite() || value < 0.0 {
+                return Err(SimError::InvalidSourceProfile {
+                    id: profile_id.to_string(),
+                    field,
+                    value,
+                });
+            }
+        }
+        if !self.temperature_c.is_finite() || self.temperature_c <= 0.0 {
+            return Err(SimError::InvalidSourceProfile {
+                id: profile_id.to_string(),
+                field: "temperature_c",
+                value: self.temperature_c,
+            });
+        }
+        Ok(())
+    }
+
     /// Creates a zero-nutrient profile (equivalent to pure RO water).
     pub fn zero() -> Self {
         Self {

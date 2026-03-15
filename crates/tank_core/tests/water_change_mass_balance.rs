@@ -1,4 +1,4 @@
-use tank_core::{Engine, PlayerAction, SimSeed, SimulationEngine, SourceWaterProfile, TankState};
+use tank_core::{Engine, PlayerAction, SimError, SimSeed, SimulationEngine, SourceWaterProfile, TankState};
 
 /// Helper: build a state with a known source-water catalog containing `ro_like`.
 fn state_with_ro_like(seed: SimSeed) -> TankState {
@@ -243,6 +243,79 @@ fn unknown_profile_leaves_state_unchanged() -> Result<(), tank_core::SimError> {
     assert_eq!(before.event_log.len(), after.event_log.len());
     assert!(
         (before.water.calcium_mg_total - after.water.calcium_mg_total).abs() < f64::EPSILON,
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_resolved_profile_returns_error_and_leaves_state_unchanged() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(700));
+    // Insert a profile with NaN in a chemistry field — simulating corrupted saved state
+    let mut bad_profile = SourceWaterProfile::zero();
+    bad_profile.calcium_mg_per_l = f64::NAN;
+    state
+        .source_water_catalog
+        .insert("corrupted".to_string(), bad_profile);
+
+    let before = state.clone();
+    let mut engine = Engine::from_parts(state, vec![]);
+
+    // Queue a feed and a water change referencing the invalid profile
+    engine.apply_action(PlayerAction::Feed { grams: 1.0 })?;
+    engine.apply_action(PlayerAction::WaterChangePercent {
+        percent: 50.0,
+        source_profile_id: "corrupted".to_string(),
+    })?;
+
+    let result = engine.step_hours(1);
+    assert!(
+        matches!(result, Err(SimError::InvalidSourceProfile { .. })),
+        "Expected InvalidSourceProfile error, got: {result:?}"
+    );
+
+    // State should be exactly unchanged
+    let after = engine.full_state();
+    assert_eq!(before.environment.day, after.environment.day);
+    assert_eq!(before.environment.hour_of_day, after.environment.hour_of_day);
+    assert_eq!(before.event_log.len(), after.event_log.len());
+    assert!(
+        (before.water.calcium_mg_total - after.water.calcium_mg_total).abs() < f64::EPSILON,
+    );
+    assert!(
+        (before.water.ammonia_total_mg_n_total - after.water.ammonia_total_mg_n_total).abs()
+            < f64::EPSILON,
+    );
+    // Detritus should not have been modified (feed not applied)
+    assert!(
+        (before.detritus.particulate_organics_g_total - after.detritus.particulate_organics_g_total)
+            .abs()
+            < f64::EPSILON,
+    );
+
+    Ok(())
+}
+
+#[test]
+fn invalid_resolved_profile_negative_chemistry_returns_error() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(800));
+    let mut bad_profile = SourceWaterProfile::zero();
+    bad_profile.nitrate_mg_n_per_l = -5.0;
+    state
+        .source_water_catalog
+        .insert("negative".to_string(), bad_profile);
+
+    let mut engine = Engine::from_parts(state, vec![]);
+
+    engine.apply_action(PlayerAction::WaterChangePercent {
+        percent: 25.0,
+        source_profile_id: "negative".to_string(),
+    })?;
+
+    let result = engine.step_hours(1);
+    assert!(
+        matches!(result, Err(SimError::InvalidSourceProfile { .. })),
+        "Expected InvalidSourceProfile error for negative chemistry, got: {result:?}"
     );
 
     Ok(())
