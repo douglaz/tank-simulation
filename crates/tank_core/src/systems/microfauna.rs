@@ -39,9 +39,8 @@ pub fn step_daily_microfauna(state: &mut TankState) {
         .clamp(0.0, 1.0);
 
     // Grazing pressure reflects population and available food
-    state.microfauna.grazing_pressure_index = (state.microfauna.population_index
-        * resource_availability.sqrt())
-    .clamp(0.0, 1.0);
+    state.microfauna.grazing_pressure_index =
+        (state.microfauna.population_index * resource_availability.sqrt()).clamp(0.0, 1.0);
 
     // Microfauna consume some periphyton (without driving it negative)
     let consumption_fraction =

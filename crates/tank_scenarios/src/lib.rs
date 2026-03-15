@@ -6,12 +6,44 @@ use tank_core::{
 };
 use tank_data::{load_scenario, ScenarioPreset};
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ScenarioGeometryOverrides {
+    pub size_scale: f64,
+    pub fill_ratio: f64,
+}
+
+impl Default for ScenarioGeometryOverrides {
+    fn default() -> Self {
+        Self {
+            size_scale: 1.0,
+            fill_ratio: 1.0,
+        }
+    }
+}
+
 pub fn default_scenario_ids() -> &'static [&'static str] {
     tank_data::scenario_ids()
 }
 
 pub fn load_named_scenario(id: &str) -> Result<ScenarioPreset, tank_data::PresetError> {
     load_scenario(id)
+}
+
+pub fn seeded_state_with_overrides(
+    seed: SimSeed,
+    scenario_id: &str,
+    overrides: ScenarioGeometryOverrides,
+) -> Result<TankState, tank_data::PresetError> {
+    validate_geometry_overrides(scenario_id, overrides)?;
+    let mut scenario = load_named_scenario(scenario_id)?;
+    scenario.tank_length_cm *= overrides.size_scale;
+    scenario.tank_width_cm *= overrides.size_scale;
+    scenario.tank_height_cm *= overrides.size_scale;
+    scenario.fill_height_cm =
+        (scenario.fill_height_cm * overrides.size_scale * overrides.fill_ratio)
+            .min(scenario.tank_height_cm);
+
+    materialize_scenario(seed, scenario)
 }
 
 /// Converts a `tank_data::SourceWaterPreset` into a `tank_core::SourceWaterProfile`.
@@ -134,7 +166,13 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
 /// - Process parameters come from the scenario's process params preset.
 pub fn seeded_state(seed: SimSeed, scenario_id: &str) -> Result<TankState, tank_data::PresetError> {
     let scenario = load_named_scenario(scenario_id)?;
+    materialize_scenario(seed, scenario)
+}
 
+fn materialize_scenario(
+    seed: SimSeed,
+    scenario: ScenarioPreset,
+) -> Result<TankState, tank_data::PresetError> {
     // Geometry
     let geometry = TankGeometry {
         length_cm: scenario.tank_length_cm,
@@ -249,8 +287,10 @@ pub fn seeded_state(seed: SimSeed, scenario_id: &str) -> Result<TankState, tank_
     };
 
     // Environment
-    let mut environment = tank_core::EnvironmentState::default();
-    environment.ambient_temp_c = scenario.ambient_temp_c;
+    let environment = tank_core::EnvironmentState {
+        ambient_temp_c: scenario.ambient_temp_c,
+        ..Default::default()
+    };
 
     let mut state = TankState::new(seed);
     state.meta = SimMeta {
@@ -267,6 +307,35 @@ pub fn seeded_state(seed: SimSeed, scenario_id: &str) -> Result<TankState, tank_
     state.shrimp_params = shrimp_params;
 
     Ok(state)
+}
+
+fn validate_geometry_overrides(
+    scenario_id: &str,
+    overrides: ScenarioGeometryOverrides,
+) -> Result<(), tank_data::PresetError> {
+    if !overrides.size_scale.is_finite() || overrides.size_scale <= 0.0 {
+        return Err(tank_data::PresetError::Validation {
+            category: "scenarios",
+            id: scenario_id.to_string(),
+            message: format!(
+                "size_scale must be finite and > 0.0, got {}",
+                overrides.size_scale
+            ),
+        });
+    }
+
+    if !overrides.fill_ratio.is_finite() || !(0.1..=1.0).contains(&overrides.fill_ratio) {
+        return Err(tank_data::PresetError::Validation {
+            category: "scenarios",
+            id: scenario_id.to_string(),
+            message: format!(
+                "fill_ratio must be finite and in 0.1..=1.0, got {}",
+                overrides.fill_ratio
+            ),
+        });
+    }
+
+    Ok(())
 }
 
 /// Creates a deterministic cycling fixture pair: one seeded, one unseeded.

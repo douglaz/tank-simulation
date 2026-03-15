@@ -120,7 +120,9 @@ fn shrimp_feeding(state: &mut TankState, _volume_l: f64) {
     let adults = state.animal.adults_count as f64;
     let juveniles = state.animal.juveniles_count as f64;
     let total_feeding_units = adults + juveniles * 0.3;
-    let rate = state.process_params.shrimp_periphyton_grazing_g_per_shrimp_per_day;
+    let rate = state
+        .process_params
+        .shrimp_periphyton_grazing_g_per_shrimp_per_day;
     let food_demand = total_feeding_units * rate;
 
     // Shrimp graze periphyton (at most 50% of available per day)
@@ -149,8 +151,8 @@ fn update_condition(state: &mut TankState, volume_l: f64) {
     let gh_d = ((2.497 * ca_mg_l) + (4.118 * mg_mg_l)) / 17.848;
 
     let total_shrimp = state.animal.adults_count as f64 + state.animal.juveniles_count as f64;
-    let available_food = state.algae.periphyton_biomass_g
-        + state.detritus.fine_detritus_g_total * 0.3;
+    let available_food =
+        state.algae.periphyton_biomass_g + state.detritus.fine_detritus_g_total * 0.3;
     let food_per_shrimp = if total_shrimp > 0.0 {
         available_food / total_shrimp
     } else {
@@ -221,11 +223,9 @@ fn update_molt_stress(state: &mut TankState, volume_l: f64) {
 
     // Rises quickly, decays slowly
     if stress_pressure > state.animal.molt_stress_index {
-        state.animal.molt_stress_index +=
-            0.2 * (stress_pressure - state.animal.molt_stress_index);
+        state.animal.molt_stress_index += 0.2 * (stress_pressure - state.animal.molt_stress_index);
     } else {
-        state.animal.molt_stress_index +=
-            0.05 * (stress_pressure - state.animal.molt_stress_index);
+        state.animal.molt_stress_index += 0.05 * (stress_pressure - state.animal.molt_stress_index);
     }
     state.animal.molt_stress_index = state.animal.molt_stress_index.clamp(0.0, 1.0);
 }
@@ -366,8 +366,10 @@ fn egg_development(state: &mut TankState) {
     }
 
     // Only resolved clutches leave berried_females_count
-    state.animal.berried_females_count =
-        state.animal.berried_females_count.saturating_sub(resolved_berried);
+    state.animal.berried_females_count = state
+        .animal
+        .berried_females_count
+        .saturating_sub(resolved_berried);
 
     if total_failed > 0 {
         // Failure-mode invariant: on hatch failure, juveniles_count does NOT increase
@@ -406,8 +408,11 @@ fn juvenile_recruitment(state: &mut TankState) {
         return;
     }
 
-    let maturation_rate =
-        1.0 / state.process_params.shrimp_juvenile_maturation_days.max(1.0);
+    let maturation_rate = 1.0
+        / state
+            .process_params
+            .shrimp_juvenile_maturation_days
+            .max(1.0);
     let maturing = (state.animal.juveniles_count as f64 * maturation_rate).floor() as u32;
     let maturing = maturing.min(state.animal.juveniles_count);
 

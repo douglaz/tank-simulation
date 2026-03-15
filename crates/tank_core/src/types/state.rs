@@ -11,7 +11,7 @@ use super::{
     TankGeometry, WaterState,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct SimMeta {
     pub scenario_id: Option<String>,
     pub notes: Option<String>,
@@ -112,15 +112,6 @@ impl TankState {
             },
         ];
         state
-    }
-}
-
-impl Default for SimMeta {
-    fn default() -> Self {
-        Self {
-            scenario_id: None,
-            notes: None,
-        }
     }
 }
 

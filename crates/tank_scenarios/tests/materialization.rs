@@ -102,12 +102,40 @@ fn warm_room_materializes_with_high_ambient() {
 
 #[test]
 fn deterministic_materialization() {
-    let state_a = tank_scenarios::seeded_state(SimSeed(99), "nano_cycle")
-        .expect("should materialize");
-    let state_b = tank_scenarios::seeded_state(SimSeed(99), "nano_cycle")
-        .expect("should materialize");
+    let state_a =
+        tank_scenarios::seeded_state(SimSeed(99), "nano_cycle").expect("should materialize");
+    let state_b =
+        tank_scenarios::seeded_state(SimSeed(99), "nano_cycle").expect("should materialize");
 
-    assert_eq!(state_a, state_b, "Same seed + scenario must produce identical state");
+    assert_eq!(
+        state_a, state_b,
+        "Same seed + scenario must produce identical state"
+    );
+}
+
+#[test]
+fn geometry_overrides_scale_size_and_fill() {
+    let state = tank_scenarios::seeded_state_with_overrides(
+        SimSeed(77),
+        "nano_cycle",
+        tank_scenarios::ScenarioGeometryOverrides {
+            size_scale: 1.25,
+            fill_ratio: 0.8,
+        },
+    )
+    .expect("overrides should materialize");
+
+    assert!((state.geometry.length_cm - 37.5).abs() < f64::EPSILON);
+    assert!((state.geometry.width_cm - 25.0).abs() < f64::EPSILON);
+    assert!((state.geometry.height_cm - 25.0).abs() < f64::EPSILON);
+    assert!((state.geometry.fill_height_cm - 18.0).abs() < f64::EPSILON);
+
+    let volume_l = state.geometry.water_volume_l();
+    let profile = &state.source_water_catalog["soft_acidic"];
+    assert!(
+        (state.water.calcium_mg_total - profile.calcium_mg_per_l * volume_l).abs() < 0.01,
+        "water totals should be rebuilt for overridden geometry"
+    );
 }
 
 #[test]

@@ -1,4 +1,6 @@
-use tank_core::{Engine, PlayerAction, SimError, SimSeed, SimulationEngine, SourceWaterProfile, TankState};
+use tank_core::{
+    Engine, PlayerAction, SimError, SimSeed, SimulationEngine, SourceWaterProfile, TankState,
+};
 
 /// Helper: build a state with a known source-water catalog containing `ro_like`.
 fn state_with_ro_like(seed: SimSeed) -> TankState {
@@ -210,7 +212,10 @@ fn unknown_source_profile_returns_error() -> Result<(), tank_core::SimError> {
 
     let result = engine.step_hours(1);
     assert!(
-        matches!(result, Err(tank_core::SimError::UnknownSourceProfile { .. })),
+        matches!(
+            result,
+            Err(tank_core::SimError::UnknownSourceProfile { .. })
+        ),
         "Expected UnknownSourceProfile error, got: {result:?}"
     );
 
@@ -239,11 +244,12 @@ fn unknown_profile_leaves_state_unchanged() -> Result<(), tank_core::SimError> {
     // State should be exactly unchanged: day, hour, event_log, water, rng all pristine
     let after = engine.full_state();
     assert_eq!(before.environment.day, after.environment.day);
-    assert_eq!(before.environment.hour_of_day, after.environment.hour_of_day);
-    assert_eq!(before.event_log.len(), after.event_log.len());
-    assert!(
-        (before.water.calcium_mg_total - after.water.calcium_mg_total).abs() < f64::EPSILON,
+    assert_eq!(
+        before.environment.hour_of_day,
+        after.environment.hour_of_day
     );
+    assert_eq!(before.event_log.len(), after.event_log.len());
+    assert!((before.water.calcium_mg_total - after.water.calcium_mg_total).abs() < f64::EPSILON,);
 
     Ok(())
 }
@@ -277,18 +283,20 @@ fn invalid_resolved_profile_returns_error_and_leaves_state_unchanged() -> Result
     // State should be exactly unchanged
     let after = engine.full_state();
     assert_eq!(before.environment.day, after.environment.day);
-    assert_eq!(before.environment.hour_of_day, after.environment.hour_of_day);
-    assert_eq!(before.event_log.len(), after.event_log.len());
-    assert!(
-        (before.water.calcium_mg_total - after.water.calcium_mg_total).abs() < f64::EPSILON,
+    assert_eq!(
+        before.environment.hour_of_day,
+        after.environment.hour_of_day
     );
+    assert_eq!(before.event_log.len(), after.event_log.len());
+    assert!((before.water.calcium_mg_total - after.water.calcium_mg_total).abs() < f64::EPSILON,);
     assert!(
         (before.water.ammonia_total_mg_n_total - after.water.ammonia_total_mg_n_total).abs()
             < f64::EPSILON,
     );
     // Detritus should not have been modified (feed not applied)
     assert!(
-        (before.detritus.particulate_organics_g_total - after.detritus.particulate_organics_g_total)
+        (before.detritus.particulate_organics_g_total
+            - after.detritus.particulate_organics_g_total)
             .abs()
             < f64::EPSILON,
     );

@@ -33,8 +33,14 @@ fn ph_drifts_with_light_driven_dic_changes() -> Result<(), tank_core::SimError> 
 
     let night_ph_after = night_engine.full_state().water.ph;
     let day_ph_after = day_engine.full_state().water.ph;
-    let night_dic_after = night_engine.full_state().water.dissolved_inorganic_carbon_mg_c_total;
-    let day_dic_after = day_engine.full_state().water.dissolved_inorganic_carbon_mg_c_total;
+    let night_dic_after = night_engine
+        .full_state()
+        .water
+        .dissolved_inorganic_carbon_mg_c_total;
+    let day_dic_after = day_engine
+        .full_state()
+        .water
+        .dissolved_inorganic_carbon_mg_c_total;
 
     assert!(
         night_ph_after < night_ph_before,

@@ -93,7 +93,10 @@ fn spawning_creates_berried_females() -> Result<(), SimError> {
 
     // All ShrimpBerried events must have non-empty cause codes
     for e in events.iter().filter(|e| e.kind == EventKind::ShrimpBerried) {
-        assert!(!e.cause_codes.is_empty(), "ShrimpBerried must have cause codes");
+        assert!(
+            !e.cause_codes.is_empty(),
+            "ShrimpBerried must have cause codes"
+        );
     }
 
     Ok(())
@@ -160,7 +163,10 @@ fn egg_failure_under_stress() -> Result<(), SimError> {
 
     // EggFailure must have cause codes tied to oxygen, temperature, minerals, or instability
     for e in &egg_failures {
-        assert!(!e.cause_codes.is_empty(), "EggFailure must have non-empty cause_codes");
+        assert!(
+            !e.cause_codes.is_empty(),
+            "EggFailure must have non-empty cause_codes"
+        );
     }
 
     // Failure invariant: berried_females_count resolved (back to 0)

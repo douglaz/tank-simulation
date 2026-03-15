@@ -32,7 +32,7 @@ pub struct AerationState {
     pub intensity: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct HardwareState {
     pub light: LightState,
     pub heater: HeaterState,
@@ -85,17 +85,6 @@ impl Default for AerationState {
         Self {
             enabled: false,
             intensity: 0.0,
-        }
-    }
-}
-
-impl Default for HardwareState {
-    fn default() -> Self {
-        Self {
-            light: LightState::default(),
-            heater: HeaterState::default(),
-            filter: FilterHardware::default(),
-            aeration: AerationState::default(),
         }
     }
 }

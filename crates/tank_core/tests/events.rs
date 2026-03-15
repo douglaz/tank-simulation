@@ -28,9 +28,15 @@ fn threshold_events_emit_with_cause_codes() -> Result<(), tank_core::SimError> {
     engine.step_hours(1)?;
 
     let events = &engine.full_state().event_log;
-    assert!(events.iter().any(|event| event.kind == EventKind::AmmoniaWarning));
-    assert!(events.iter().any(|event| event.kind == EventKind::NitriteWarning));
-    assert!(events.iter().any(|event| event.kind == EventKind::OxygenDip));
+    assert!(events
+        .iter()
+        .any(|event| event.kind == EventKind::AmmoniaWarning));
+    assert!(events
+        .iter()
+        .any(|event| event.kind == EventKind::NitriteWarning));
+    assert!(events
+        .iter()
+        .any(|event| event.kind == EventKind::OxygenDip));
     assert!(events.iter().all(|event| !event.cause_codes.is_empty()));
 
     Ok(())
@@ -47,7 +53,10 @@ fn threshold_events_are_deduplicated_per_day() -> Result<(), tank_core::SimError
         .iter()
         .filter(|event| event.kind == EventKind::AmmoniaWarning)
         .count();
-    assert_eq!(same_day_count, 1, "ammonia warning should dedupe within a day");
+    assert_eq!(
+        same_day_count, 1,
+        "ammonia warning should dedupe within a day"
+    );
 
     engine.step_hours(24)?;
     let next_day_count = engine

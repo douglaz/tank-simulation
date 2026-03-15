@@ -3,7 +3,10 @@ use crate::types::{SimError, SourceWaterProfile, TankState};
 /// Validates that all water change actions in the queue reference known and valid source profiles.
 /// Returns the first error found, or Ok(()) if all are valid.
 /// Checks both catalog membership and runtime validity (finite, non-negative chemistry).
-pub fn validate_water_changes(state: &TankState, actions: &[crate::types::PlayerAction]) -> Result<(), SimError> {
+pub fn validate_water_changes(
+    state: &TankState,
+    actions: &[crate::types::PlayerAction],
+) -> Result<(), SimError> {
     for action in actions {
         if let crate::types::PlayerAction::WaterChangePercent {
             source_profile_id, ..
@@ -29,11 +32,7 @@ pub fn validate_water_changes(state: &TankState, actions: &[crate::types::Player
 /// Also mixes water temperature proportionally by exchanged volume.
 ///
 /// A 0% water change is a no-op.
-pub fn apply_water_change(
-    state: &mut TankState,
-    percent: f64,
-    source: &SourceWaterProfile,
-) {
+pub fn apply_water_change(state: &mut TankState, percent: f64, source: &SourceWaterProfile) {
     if percent <= 0.0 {
         return;
     }
@@ -78,6 +77,6 @@ pub fn apply_water_change(
     state.water.sulfate_mg_total += source.sulfate_mg_per_l * exchanged_l;
 
     // Mix temperature proportionally by exchanged volume
-    state.water.temperature_c = state.water.temperature_c * retention
-        + source.temperature_c * fraction;
+    state.water.temperature_c =
+        state.water.temperature_c * retention + source.temperature_c * fraction;
 }

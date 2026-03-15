@@ -45,8 +45,7 @@ pub fn step_temperature(state: &mut TankState) {
     let k_surface = state.process_params.k_surface_w_per_m2_k;
     let k_wall = state.process_params.k_wall_w_per_m2_k;
 
-    let ua_total_w_per_k =
-        (k_surface * surface_area_m2 * top_factor) + (k_wall * wall_area_m2);
+    let ua_total_w_per_k = (k_surface * surface_area_m2 * top_factor) + (k_wall * wall_area_m2);
 
     let ambient_temp_c = state.environment.ambient_temp_c;
     let water_temp_c = state.water.temperature_c;
@@ -55,7 +54,8 @@ pub fn step_temperature(state: &mut TankState) {
 
     // Heater: only fires when enabled and water is below setpoint - deadband/2
     let q_heater_w = if state.hardware.heater.enabled
-        && water_temp_c < (state.hardware.heater.setpoint_c - state.hardware.heater.deadband_c / 2.0)
+        && water_temp_c
+            < (state.hardware.heater.setpoint_c - state.hardware.heater.deadband_c / 2.0)
     {
         (state.hardware.heater.max_watts * state.hardware.heater.efficiency).max(0.0)
     } else {

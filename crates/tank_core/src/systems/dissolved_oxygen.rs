@@ -23,10 +23,14 @@ pub fn step_dissolved_oxygen(state: &mut TankState, light_on: bool) {
         + (state.process_params.aeration_kla_boost * aeration_intensity);
     let delta_do_reaeration_mg = k_la * (do_sat_mg_l - do_mg_l) * volume_l;
 
-    let background_bod_mg = state.process_params.background_bod_mg_o2_per_g_biomass_per_hour
+    let background_bod_mg = state
+        .process_params
+        .background_bod_mg_o2_per_g_biomass_per_hour
         * respiring_biomass_g(state);
     let photosynthetic_o2_mg = if light_on {
-        state.process_params.plant_photosynthesis_o2_mg_per_g_per_hour
+        state
+            .process_params
+            .plant_photosynthesis_o2_mg_per_g_per_hour
             * photosynthetic_biomass_g(state)
             * state.hardware.light.intensity_index
     } else {

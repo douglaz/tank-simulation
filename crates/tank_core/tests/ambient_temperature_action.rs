@@ -77,10 +77,7 @@ fn heater_output_zero_when_above_setpoint() -> Result<(), tank_core::SimError> {
 
     let snap = engine.snapshot();
     // Water should be well above setpoint by now
-    assert!(
-        snap.water_temp_c > 24.0,
-        "Water should be above setpoint"
-    );
+    assert!(snap.water_temp_c > 24.0, "Water should be above setpoint");
     assert!(
         snap.last_heater_output_w == 0.0,
         "Heater should be off when water > setpoint: got {:.2}",

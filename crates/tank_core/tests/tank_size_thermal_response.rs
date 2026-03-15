@@ -180,10 +180,7 @@ fn feed_pulse_tan_concentration_scales_with_volume() -> Result<(), tank_core::Si
         peak_tan_100l = peak_tan_100l.max(tan_100);
     }
 
-    assert!(
-        peak_tan_10l > 0.0,
-        "10L tank should have non-zero peak TAN"
-    );
+    assert!(peak_tan_10l > 0.0, "10L tank should have non-zero peak TAN");
     assert!(
         peak_tan_100l > 0.0,
         "100L tank should have non-zero peak TAN"

@@ -128,7 +128,10 @@ fn filter_cleaning_setback() -> Result<(), tank_core::SimError> {
         .event_log
         .iter()
         .any(|e| e.kind == EventKind::FilterCleaningSetback);
-    assert!(has_setback_event, "FilterCleaningSetback event should be emitted");
+    assert!(
+        has_setback_event,
+        "FilterCleaningSetback event should be emitted"
+    );
 
     // After cleaning, TAN should rise temporarily when feeding resumes
     let tan_before_feed = engine.full_state().water.ammonia_total_mg_n_total;

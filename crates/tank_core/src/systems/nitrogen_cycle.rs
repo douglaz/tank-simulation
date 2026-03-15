@@ -1,5 +1,7 @@
 use crate::types::TankState;
 
+const FEED_P_TO_N_MASS_RATIO: f64 = 0.10;
+
 /// Result of one hourly nitrogen cycle step, carrying coupling values
 /// that downstream systems (DO, chemistry) need.
 #[derive(Debug, Clone, Copy, Default)]
@@ -18,7 +20,11 @@ struct EnvFactors {
 }
 
 fn safe_rate(v: f64) -> f64 {
-    if v.is_finite() { v.max(0.0) } else { 0.0 }
+    if v.is_finite() {
+        v.max(0.0)
+    } else {
+        0.0
+    }
 }
 
 /// Runs the full nitrogen-cycle phase for one hourly tick.
@@ -51,8 +57,11 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let n_to_c = safe_rate(pp.feed_n_to_c_ratio);
     let doc_mg = dissolved * 1000.0 / (1.0 + n_to_c); // carbon fraction
     let don_mg = doc_mg * n_to_c; // nitrogen fraction
+    let phosphate_mg = don_mg * FEED_P_TO_N_MASS_RATIO;
     state.water.dissolved_organic_carbon_mg_c_total += doc_mg;
     state.water.dissolved_organic_nitrogen_mg_n_total += don_mg;
+    // Feed introduces dissolved phosphorus alongside organic C/N, supporting algae pressure.
+    state.water.phosphate_mg_p_total += phosphate_mg;
     // Track flow through dissolved_feed_residue (bookkeeping, decremented by mineralization)
     state.detritus.dissolved_feed_residue_g_total += dissolved;
 
@@ -120,20 +129,27 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let o2_for_nob = 1.14_f64; // nitrite -> nitrate
 
     // 4a. AOB: TAN -> nitrite
+    let aob_env_factor =
+        combined_env * env.f_temp * env.f_ph * (do_budget / (do_budget + pp.aob_k_do_mg.max(0.01)));
     let aob_potential = monod_rate(
         safe_rate(pp.aob_vmax_mg_n_per_g_per_hour),
         state.microbe.ammonia_oxidizer_biomass_g,
-        combined_env,
-        env.f_temp,
-        env.f_ph,
-        do_budget / (do_budget + pp.aob_k_do_mg.max(0.01)),
+        aob_env_factor,
         state.water.ammonia_total_mg_n_total,
         pp.aob_k_tan_mg.max(0.01),
     );
     let aob_rate = safe_rate(aob_potential)
         .min(state.water.ammonia_total_mg_n_total)
-        .min(if o2_for_aob > 0.0 { do_budget / o2_for_aob } else { f64::MAX })
-        .min(if alk_per_mg_n > 0.0 { alk_budget / alk_per_mg_n } else { f64::MAX });
+        .min(if o2_for_aob > 0.0 {
+            do_budget / o2_for_aob
+        } else {
+            f64::MAX
+        })
+        .min(if alk_per_mg_n > 0.0 {
+            alk_budget / alk_per_mg_n
+        } else {
+            f64::MAX
+        });
 
     // Debit shared budgets for AOB
     let aob_o2_cost = aob_rate * o2_for_aob;
@@ -144,20 +160,29 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     // 4b. Comammox: TAN -> nitrate directly (lower vmax)
     let comammox_vmax = safe_rate(pp.aob_vmax_mg_n_per_g_per_hour * pp.comammox_vmax_fraction);
     let tan_after_aob = (state.water.ammonia_total_mg_n_total - aob_rate).max(0.0);
+    let comammox_env_factor = combined_env
+        * env.f_temp
+        * env.f_ph
+        * (do_budget / (do_budget + pp.comammox_k_do_mg.max(0.01)));
     let comammox_potential = monod_rate(
         comammox_vmax,
         state.microbe.comammox_biomass_g,
-        combined_env,
-        env.f_temp,
-        env.f_ph,
-        do_budget / (do_budget + pp.comammox_k_do_mg.max(0.01)),
+        comammox_env_factor,
         tan_after_aob,
         pp.comammox_k_tan_mg.max(0.01),
     );
     let comammox_rate = safe_rate(comammox_potential)
         .min(tan_after_aob)
-        .min(if o2_for_comammox > 0.0 { do_budget / o2_for_comammox } else { f64::MAX })
-        .min(if alk_per_mg_n > 0.0 { alk_budget / alk_per_mg_n } else { f64::MAX });
+        .min(if o2_for_comammox > 0.0 {
+            do_budget / o2_for_comammox
+        } else {
+            f64::MAX
+        })
+        .min(if alk_per_mg_n > 0.0 {
+            alk_budget / alk_per_mg_n
+        } else {
+            f64::MAX
+        });
 
     // Debit shared budgets for comammox
     let comammox_o2_cost = comammox_rate * o2_for_comammox;
@@ -179,20 +204,27 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
         (state.water.dissolved_oxygen_mg_total - aob_o2_cost - comammox_o2_cost).max(0.0);
 
     // 4c. NOB: nitrite -> nitrate (uses remaining DO/alk budget)
+    let nob_env_factor =
+        combined_env * env.f_temp * env.f_ph * (do_budget / (do_budget + pp.nob_k_do_mg.max(0.01)));
     let nob_potential = monod_rate(
         safe_rate(pp.nob_vmax_mg_n_per_g_per_hour),
         state.microbe.nitrite_oxidizer_biomass_g,
-        combined_env,
-        env.f_temp,
-        env.f_ph,
-        do_budget / (do_budget + pp.nob_k_do_mg.max(0.01)),
+        nob_env_factor,
         state.water.nitrite_mg_n_total,
         pp.nob_k_nitrite_mg.max(0.01),
     );
     let nob_rate = safe_rate(nob_potential)
         .min(state.water.nitrite_mg_n_total)
-        .min(if o2_for_nob > 0.0 { do_budget / o2_for_nob } else { f64::MAX })
-        .min(if alk_per_mg_n > 0.0 { alk_budget / alk_per_mg_n } else { f64::MAX });
+        .min(if o2_for_nob > 0.0 {
+            do_budget / o2_for_nob
+        } else {
+            f64::MAX
+        })
+        .min(if alk_per_mg_n > 0.0 {
+            alk_budget / alk_per_mg_n
+        } else {
+            f64::MAX
+        });
 
     let nob_o2_cost = nob_rate * o2_for_nob;
 
@@ -209,19 +241,22 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     // ---- 5. Guild growth and decay ----
     // AOB growth from TAN oxidized
     let aob_growth = safe_rate(pp.aob_growth_yield) * aob_rate;
-    let aob_decay = safe_rate(pp.aob_decay_rate_per_hour) * state.microbe.ammonia_oxidizer_biomass_g;
+    let aob_decay =
+        safe_rate(pp.aob_decay_rate_per_hour) * state.microbe.ammonia_oxidizer_biomass_g;
     state.microbe.ammonia_oxidizer_biomass_g =
         (state.microbe.ammonia_oxidizer_biomass_g + aob_growth - aob_decay).max(0.0);
 
     // NOB growth from nitrite oxidized
     let nob_growth = safe_rate(pp.nob_growth_yield) * nob_rate;
-    let nob_decay = safe_rate(pp.nob_decay_rate_per_hour) * state.microbe.nitrite_oxidizer_biomass_g;
+    let nob_decay =
+        safe_rate(pp.nob_decay_rate_per_hour) * state.microbe.nitrite_oxidizer_biomass_g;
     state.microbe.nitrite_oxidizer_biomass_g =
         (state.microbe.nitrite_oxidizer_biomass_g + nob_growth - nob_decay).max(0.0);
 
     // Comammox growth from TAN fully oxidized
     let comammox_growth = safe_rate(pp.comammox_growth_yield) * comammox_rate;
-    let comammox_decay = safe_rate(pp.comammox_decay_rate_per_hour) * state.microbe.comammox_biomass_g;
+    let comammox_decay =
+        safe_rate(pp.comammox_decay_rate_per_hour) * state.microbe.comammox_biomass_g;
     state.microbe.comammox_biomass_g =
         (state.microbe.comammox_biomass_g + comammox_growth - comammox_decay).max(0.0);
 
@@ -276,19 +311,16 @@ fn compute_env_factors(state: &TankState) -> EnvFactors {
     }
 }
 
-/// Monod-style rate: vmax * biomass * maturity * f_temp * f_ph * f_do_monod * S/(K+S)
+/// Monod-style rate: vmax * biomass * environmental_factor * S/(K+S)
 fn monod_rate(
     vmax: f64,
     biomass_g: f64,
-    maturity_factor: f64,
-    f_temp: f64,
-    f_ph: f64,
-    f_do_monod: f64,
+    environmental_factor: f64,
     substrate: f64,
     k_substrate: f64,
 ) -> f64 {
     let monod = substrate / (substrate + k_substrate);
-    safe_rate(vmax * biomass_g * maturity_factor * f_temp * f_ph * f_do_monod * monod)
+    safe_rate(vmax * biomass_g * environmental_factor * monod)
 }
 
 /// Daily biofilter maturity update. Called every 24 ticks.

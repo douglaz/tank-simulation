@@ -59,8 +59,12 @@ fn dissolved_oxygen_dips_at_night_relative_to_lit_hours() -> Result<(), tank_cor
 fn aeration_recovers_do_faster_than_passive_exchange() -> Result<(), tank_core::SimError> {
     let mut base_state = oxygen_test_state(SimSeed(3100));
     base_state.water.dissolved_oxygen_mg_total = 2.0 * base_state.geometry.water_volume_l();
-    base_state.process_params.background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
-    base_state.process_params.plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
+    base_state
+        .process_params
+        .background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
+    base_state
+        .process_params
+        .plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
     base_state.algae.periphyton_biomass_g = 0.0;
     for plant in &mut base_state.plant_guilds {
         plant.biomass_g = 0.0;
@@ -94,8 +98,12 @@ fn aeration_recovers_do_faster_than_passive_exchange() -> Result<(), tank_core::
 fn reaeration_converges_toward_saturation() -> Result<(), tank_core::SimError> {
     let mut state = oxygen_test_state(SimSeed(3200));
     state.water.dissolved_oxygen_mg_total = 0.0;
-    state.process_params.background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
-    state.process_params.plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
+    state
+        .process_params
+        .background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
+    state
+        .process_params
+        .plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
     state.process_params.reaeration_kla_base = 0.5;
     state.algae.periphyton_biomass_g = 0.0;
     for plant in &mut state.plant_guilds {
