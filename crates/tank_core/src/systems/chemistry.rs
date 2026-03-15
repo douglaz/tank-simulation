@@ -2,7 +2,6 @@ use crate::types::TankState;
 
 const ADULT_SHRIMP_BIOMASS_G: f64 = 0.12;
 const JUVENILE_SHRIMP_BIOMASS_G: f64 = 0.05;
-const ALKALINITY_FEEDBACK_MEQ_PER_MG_C: f64 = 0.0002;
 
 pub fn compute_ph_from_totals(
     alkalinity_meq_total: f64,
@@ -49,9 +48,6 @@ pub fn step_hourly_chemistry(state: &mut TankState, light_on: bool) {
 
     state.water.dissolved_inorganic_carbon_mg_c_total =
         (state.water.dissolved_inorganic_carbon_mg_c_total + net_dic_delta_mg).max(0.0);
-    state.water.alkalinity_meq_total = (state.water.alkalinity_meq_total
-        - (net_dic_delta_mg * ALKALINITY_FEEDBACK_MEQ_PER_MG_C))
-        .max(0.0);
     state.water.ph = compute_ph_from_totals(
         state.water.alkalinity_meq_total,
         state.water.dissolved_inorganic_carbon_mg_c_total,

@@ -205,38 +205,37 @@ fn unknown_source_profile_returns_error() -> Result<(), tank_core::SimError> {
     let state = TankState::new(SimSeed(500)); // empty catalog
     let mut engine = Engine::from_parts(state, vec![]);
 
-    engine.apply_action(PlayerAction::WaterChangePercent {
-        percent: 50.0,
-        source_profile_id: "nonexistent".to_string(),
-    })?;
-
-    let result = engine.step_hours(1);
     assert!(
         matches!(
-            result,
+            engine.apply_action(PlayerAction::WaterChangePercent {
+                percent: 50.0,
+                source_profile_id: "nonexistent".to_string(),
+            }),
             Err(tank_core::SimError::UnknownSourceProfile { .. })
         ),
-        "Expected UnknownSourceProfile error, got: {result:?}"
+        "Expected UnknownSourceProfile error during apply_action"
     );
+    assert!(engine.queued_actions().is_empty());
 
     Ok(())
 }
 
 #[test]
-fn unknown_profile_leaves_state_unchanged() -> Result<(), tank_core::SimError> {
+fn queued_unknown_profile_leaves_state_unchanged() -> Result<(), tank_core::SimError> {
     let mut state = TankState::new(SimSeed(600));
-    // Feed first to have some detritus, then queue a bad water change
     state.detritus.particulate_organics_g_total = 5.0;
     let before = state.clone();
 
-    let mut engine = Engine::from_parts(state, vec![]);
-
-    // Queue both a feed and a bad water change
-    engine.apply_action(PlayerAction::Feed { grams: 1.0 })?;
-    engine.apply_action(PlayerAction::WaterChangePercent {
-        percent: 50.0,
-        source_profile_id: "bad_id".to_string(),
-    })?;
+    let mut engine = Engine::from_parts(
+        state,
+        vec![
+            PlayerAction::Feed { grams: 1.0 },
+            PlayerAction::WaterChangePercent {
+                percent: 50.0,
+                source_profile_id: "bad_id".to_string(),
+            },
+        ],
+    );
 
     let result = engine.step_hours(1);
     assert!(result.is_err());
@@ -265,14 +264,16 @@ fn invalid_resolved_profile_returns_error_and_leaves_state_unchanged() -> Result
         .insert("corrupted".to_string(), bad_profile);
 
     let before = state.clone();
-    let mut engine = Engine::from_parts(state, vec![]);
-
-    // Queue a feed and a water change referencing the invalid profile
-    engine.apply_action(PlayerAction::Feed { grams: 1.0 })?;
-    engine.apply_action(PlayerAction::WaterChangePercent {
-        percent: 50.0,
-        source_profile_id: "corrupted".to_string(),
-    })?;
+    let mut engine = Engine::from_parts(
+        state,
+        vec![
+            PlayerAction::Feed { grams: 1.0 },
+            PlayerAction::WaterChangePercent {
+                percent: 50.0,
+                source_profile_id: "corrupted".to_string(),
+            },
+        ],
+    );
 
     let result = engine.step_hours(1);
     assert!(
@@ -315,16 +316,17 @@ fn invalid_resolved_profile_negative_chemistry_returns_error() -> Result<(), Sim
 
     let mut engine = Engine::from_parts(state, vec![]);
 
-    engine.apply_action(PlayerAction::WaterChangePercent {
-        percent: 25.0,
-        source_profile_id: "negative".to_string(),
-    })?;
-
-    let result = engine.step_hours(1);
     assert!(
-        matches!(result, Err(SimError::InvalidSourceProfile { .. })),
-        "Expected InvalidSourceProfile error for negative chemistry, got: {result:?}"
+        matches!(
+            engine.apply_action(PlayerAction::WaterChangePercent {
+                percent: 25.0,
+                source_profile_id: "negative".to_string(),
+            }),
+            Err(SimError::InvalidSourceProfile { .. })
+        ),
+        "Expected InvalidSourceProfile error for negative chemistry during apply_action"
     );
+    assert!(engine.queued_actions().is_empty());
 
     Ok(())
 }

@@ -1,4 +1,16 @@
-use crate::types::{SimError, SourceWaterProfile, TankState};
+use crate::{
+    systems::temperature::do_sat_mg_l,
+    types::{SimError, SourceWaterProfile, TankState},
+};
+
+pub fn validate_source_profile(state: &TankState, source_profile_id: &str) -> Result<(), SimError> {
+    match state.source_water_catalog.get(source_profile_id) {
+        None => Err(SimError::UnknownSourceProfile {
+            id: source_profile_id.to_string(),
+        }),
+        Some(profile) => profile.validate(source_profile_id),
+    }
+}
 
 /// Validates that all water change actions in the queue reference known and valid source profiles.
 /// Returns the first error found, or Ok(()) if all are valid.
@@ -12,16 +24,7 @@ pub fn validate_water_changes(
             source_profile_id, ..
         } = action
         {
-            match state.source_water_catalog.get(source_profile_id) {
-                None => {
-                    return Err(SimError::UnknownSourceProfile {
-                        id: source_profile_id.clone(),
-                    });
-                }
-                Some(profile) => {
-                    profile.validate(source_profile_id)?;
-                }
-            }
+            validate_source_profile(state, source_profile_id)?;
         }
     }
     Ok(())
@@ -50,6 +53,7 @@ pub fn apply_water_change(state: &mut TankState, percent: f64, source: &SourceWa
     state.water.dissolved_inorganic_carbon_mg_c_total *= retention;
     state.water.dissolved_organic_carbon_mg_c_total *= retention;
     state.water.dissolved_organic_nitrogen_mg_n_total *= retention;
+    state.water.dissolved_oxygen_mg_total *= retention;
     state.water.alkalinity_meq_total *= retention;
     state.water.calcium_mg_total *= retention;
     state.water.magnesium_mg_total *= retention;
@@ -67,6 +71,7 @@ pub fn apply_water_change(state: &mut TankState, percent: f64, source: &SourceWa
     state.water.dissolved_inorganic_carbon_mg_c_total += source.dic_mg_c_per_l * exchanged_l;
     state.water.dissolved_organic_carbon_mg_c_total += source.doc_mg_c_per_l * exchanged_l;
     state.water.dissolved_organic_nitrogen_mg_n_total += source.don_mg_n_per_l * exchanged_l;
+    state.water.dissolved_oxygen_mg_total += do_sat_mg_l(source.temperature_c) * exchanged_l;
     state.water.alkalinity_meq_total += source.alkalinity_meq_per_l * exchanged_l;
     state.water.calcium_mg_total += source.calcium_mg_per_l * exchanged_l;
     state.water.magnesium_mg_total += source.magnesium_mg_per_l * exchanged_l;

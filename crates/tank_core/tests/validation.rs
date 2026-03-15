@@ -66,3 +66,24 @@ fn action_queuing() -> Result<(), tank_core::SimError> {
 
     Ok(())
 }
+
+#[test]
+fn apply_action_rejects_bad_source_profile() {
+    let mut engine = Engine::new(SimSeed(13));
+
+    let result = engine.apply_action(PlayerAction::WaterChangePercent {
+        percent: 25.0,
+        source_profile_id: "nonexistent".to_string(),
+    });
+
+    assert_eq!(
+        result,
+        Err(SimError::UnknownSourceProfile {
+            id: "nonexistent".to_string(),
+        })
+    );
+    assert!(
+        engine.queued_actions().is_empty(),
+        "invalid water change should not be enqueued"
+    );
+}

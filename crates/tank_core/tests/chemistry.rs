@@ -85,6 +85,29 @@ fn ph_formula_uses_state_storage_bounds() {
 }
 
 #[test]
+fn dic_changes_do_not_directly_shift_alkalinity() -> Result<(), tank_core::SimError> {
+    let mut lit = Engine::from_parts(chemistry_state(SimSeed(4_050), 12), vec![]);
+    let mut dark = Engine::from_parts(chemistry_state(SimSeed(4_051), 0), vec![]);
+
+    let lit_alk_before = lit.full_state().water.alkalinity_meq_total;
+    let dark_alk_before = dark.full_state().water.alkalinity_meq_total;
+
+    lit.step_hours(1)?;
+    dark.step_hours(1)?;
+
+    assert!(
+        (lit.full_state().water.alkalinity_meq_total - lit_alk_before).abs() < 1e-12,
+        "lit-hour DIC changes should not directly change alkalinity"
+    );
+    assert!(
+        (dark.full_state().water.alkalinity_meq_total - dark_alk_before).abs() < 1e-12,
+        "dark-hour DIC changes should not directly change alkalinity"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn nitrification_lowers_alkalinity_and_ph() -> Result<(), tank_core::SimError> {
     // Tank with active nitrification
     let mut nitrifying_state = TankState::new(SimSeed(4100));

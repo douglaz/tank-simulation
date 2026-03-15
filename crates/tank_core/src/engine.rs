@@ -176,7 +176,11 @@ impl Engine {
                 self.state.detritus.fine_detritus_g_total *= 1.0 - fraction;
             }
             PlayerAction::CleanFilter { intensity } => {
-                self.state.hardware.filter.cleanliness_index = 1.0;
+                let current_cleanliness =
+                    self.state.hardware.filter.cleanliness_index.clamp(0.0, 1.0);
+                self.state.hardware.filter.cleanliness_index = (current_cleanliness
+                    + ((1.0 - current_cleanliness) * intensity))
+                    .clamp(0.0, 1.0);
                 self.state.filter_state.biofilter_maturity_index *= 1.0 - (intensity * 0.5);
                 self.state.filter_state.clogging_index *= 1.0 - intensity;
                 // Proportional setback in active nitrifier and decomposer biomass
@@ -259,6 +263,13 @@ impl SimulationEngine for Engine {
                     available: available.max(0) as u32,
                 });
             }
+        }
+
+        if let PlayerAction::WaterChangePercent {
+            source_profile_id, ..
+        } = &action
+        {
+            systems::water_change::validate_source_profile(&self.state, source_profile_id)?;
         }
 
         self.queued_actions.push_back(action);

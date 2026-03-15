@@ -23,6 +23,7 @@ pub struct HeaterState {
 pub struct FilterHardware {
     pub enabled: bool,
     pub flow_lph: f64,
+    /// 1.0 is freshly cleaned media; lower values indicate detritus-driven fouling.
     pub cleanliness_index: f64,
 }
 

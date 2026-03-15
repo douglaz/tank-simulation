@@ -1,6 +1,8 @@
 use crate::types::TankState;
 
 const FEED_P_TO_N_MASS_RATIO: f64 = 0.10;
+const ADULT_SHRIMP_BIOMASS_G: f64 = 0.12;
+const JUVENILE_SHRIMP_BIOMASS_G: f64 = 0.05;
 
 /// Result of one hourly nitrogen cycle step, carrying coupling values
 /// that downstream systems (DO, chemistry) need.
@@ -371,9 +373,23 @@ pub fn update_daily_filter_clogging(state: &mut TankState) -> f64 {
         return 0.0;
     }
 
-    let detritus_pressure = (state.detritus.fine_detritus_g_total / volume_l).clamp(0.0, 1.0);
-    let clogging_delta =
-        0.002 * (1.0 - state.hardware.filter.cleanliness_index.clamp(0.0, 1.0)) * detritus_pressure;
+    let fine_detritus_g_l = state.detritus.fine_detritus_g_total / volume_l;
+    let particulate_detritus_g_l = state.detritus.particulate_organics_g_total / volume_l;
+    let dissolved_residue_g_l = state.detritus.dissolved_feed_residue_g_total / volume_l;
+    let detritus_pressure =
+        (fine_detritus_g_l + (0.35 * particulate_detritus_g_l) + (0.25 * dissolved_residue_g_l))
+            .clamp(0.0, 2.0);
+    let shrimp_biomass_g = (f64::from(state.animal.adults_count) * ADULT_SHRIMP_BIOMASS_G)
+        + (f64::from(state.animal.juveniles_count) * JUVENILE_SHRIMP_BIOMASS_G);
+    let bioload_pressure = (shrimp_biomass_g / volume_l).clamp(0.0, 1.0);
+
+    let cleanliness_before = state.hardware.filter.cleanliness_index.clamp(0.0, 1.0);
+    let cleanliness_decay =
+        ((0.03 * detritus_pressure) + (0.004 * bioload_pressure)).clamp(0.0, 0.08);
+    state.hardware.filter.cleanliness_index =
+        (cleanliness_before - cleanliness_decay).clamp(0.0, 1.0);
+
+    let clogging_delta = (cleanliness_decay * (0.4 + (0.6 * cleanliness_before))).clamp(0.0, 1.0);
 
     state.filter_state.clogging_index =
         (state.filter_state.clogging_index + clogging_delta).clamp(0.0, 1.0);
