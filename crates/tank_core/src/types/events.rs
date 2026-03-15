@@ -37,6 +37,10 @@ pub enum EventCause {
     LowMinerals,
     BiofilterImmature,
     SurfaceExchangeRestricted,
+    HighNutrients,
+    PlantCrowding,
+    SurfaceSaturation,
+    SubstrateExhausted,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

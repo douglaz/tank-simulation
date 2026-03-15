@@ -75,6 +75,34 @@ pub struct ProcessParams {
     pub o2_per_mg_n_nitrified: f64,
     /// meq alkalinity consumed per mg N nitrified.
     pub alkalinity_meq_per_mg_n_nitrified: f64,
+
+    // -- Daily plant growth --
+    pub plant_max_growth_rate_fast_stem_per_day: f64,
+    pub plant_max_growth_rate_root_rosette_per_day: f64,
+    pub plant_respiration_fraction_per_day: f64,
+    pub plant_senescence_fraction_per_day: f64,
+    pub plant_health_recovery_per_day: f64,
+    pub plant_health_decline_per_day: f64,
+    pub plant_half_saturation_n_mg_total: f64,
+    pub plant_half_saturation_p_mg_total: f64,
+    pub plant_half_saturation_c_mg_total: f64,
+    pub plant_light_half_saturation: f64,
+    pub plant_temp_optimum_c: f64,
+    pub plant_temp_sigma_c: f64,
+    pub plant_crowding_biomass_g_per_m2: f64,
+
+    // -- Daily algae/periphyton growth --
+    pub algae_max_growth_rate_per_day: f64,
+    pub periphyton_max_growth_rate_per_day: f64,
+    pub algae_respiration_fraction_per_day: f64,
+    pub algae_half_saturation_n_mg_total: f64,
+    pub algae_half_saturation_p_mg_total: f64,
+    pub algae_light_half_saturation: f64,
+    pub algae_temp_optimum_c: f64,
+    pub algae_temp_sigma_c: f64,
+    pub periphyton_capacity_g_per_m2: f64,
+    pub algae_bloom_threshold_g_per_l: f64,
+    pub algae_nuisance_biomass_g_per_m2: f64,
 }
 
 impl Default for ProcessParams {
@@ -120,6 +148,32 @@ impl Default for ProcessParams {
 
             o2_per_mg_n_nitrified: 4.57,
             alkalinity_meq_per_mg_n_nitrified: 0.1428,
+
+            plant_max_growth_rate_fast_stem_per_day: 0.08,
+            plant_max_growth_rate_root_rosette_per_day: 0.06,
+            plant_respiration_fraction_per_day: 0.01,
+            plant_senescence_fraction_per_day: 0.005,
+            plant_health_recovery_per_day: 0.03,
+            plant_health_decline_per_day: 0.08,
+            plant_half_saturation_n_mg_total: 8.0,
+            plant_half_saturation_p_mg_total: 1.2,
+            plant_half_saturation_c_mg_total: 20.0,
+            plant_light_half_saturation: 0.45,
+            plant_temp_optimum_c: 25.0,
+            plant_temp_sigma_c: 7.0,
+            plant_crowding_biomass_g_per_m2: 250.0,
+
+            algae_max_growth_rate_per_day: 0.2,
+            periphyton_max_growth_rate_per_day: 0.15,
+            algae_respiration_fraction_per_day: 0.03,
+            algae_half_saturation_n_mg_total: 5.0,
+            algae_half_saturation_p_mg_total: 0.8,
+            algae_light_half_saturation: 0.35,
+            algae_temp_optimum_c: 27.0,
+            algae_temp_sigma_c: 8.0,
+            periphyton_capacity_g_per_m2: 6.0,
+            algae_bloom_threshold_g_per_l: 0.08,
+            algae_nuisance_biomass_g_per_m2: 10.0,
         }
     }
 }

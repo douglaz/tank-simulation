@@ -177,58 +177,249 @@ pub struct ProcessParamsPreset {
     #[serde(default = "default_alk_per_mg_n")]
     pub alkalinity_meq_per_mg_n_nitrified: f64,
 
+    #[serde(default = "default_plant_max_growth_fast_stem")]
+    pub plant_max_growth_rate_fast_stem_per_day: f64,
+    #[serde(default = "default_plant_max_growth_root_rosette")]
+    pub plant_max_growth_rate_root_rosette_per_day: f64,
+    #[serde(default = "default_plant_respiration_fraction")]
+    pub plant_respiration_fraction_per_day: f64,
+    #[serde(default = "default_plant_senescence_fraction")]
+    pub plant_senescence_fraction_per_day: f64,
+    #[serde(default = "default_plant_health_recovery")]
+    pub plant_health_recovery_per_day: f64,
+    #[serde(default = "default_plant_health_decline")]
+    pub plant_health_decline_per_day: f64,
+    #[serde(default = "default_plant_half_sat_n")]
+    pub plant_half_saturation_n_mg_total: f64,
+    #[serde(default = "default_plant_half_sat_p")]
+    pub plant_half_saturation_p_mg_total: f64,
+    #[serde(default = "default_plant_half_sat_c")]
+    pub plant_half_saturation_c_mg_total: f64,
+    #[serde(default = "default_plant_light_half_sat")]
+    pub plant_light_half_saturation: f64,
+    #[serde(default = "default_plant_temp_optimum")]
+    pub plant_temp_optimum_c: f64,
+    #[serde(default = "default_plant_temp_sigma")]
+    pub plant_temp_sigma_c: f64,
+    #[serde(default = "default_plant_crowding_biomass")]
+    pub plant_crowding_biomass_g_per_m2: f64,
+
+    #[serde(default = "default_algae_max_growth")]
+    pub algae_max_growth_rate_per_day: f64,
+    #[serde(default = "default_periphyton_max_growth")]
+    pub periphyton_max_growth_rate_per_day: f64,
+    #[serde(default = "default_algae_respiration_fraction")]
+    pub algae_respiration_fraction_per_day: f64,
+    #[serde(default = "default_algae_half_sat_n")]
+    pub algae_half_saturation_n_mg_total: f64,
+    #[serde(default = "default_algae_half_sat_p")]
+    pub algae_half_saturation_p_mg_total: f64,
+    #[serde(default = "default_algae_light_half_sat")]
+    pub algae_light_half_saturation: f64,
+    #[serde(default = "default_algae_temp_optimum")]
+    pub algae_temp_optimum_c: f64,
+    #[serde(default = "default_algae_temp_sigma")]
+    pub algae_temp_sigma_c: f64,
+    #[serde(default = "default_periphyton_capacity")]
+    pub periphyton_capacity_g_per_m2: f64,
+    #[serde(default = "default_algae_bloom_threshold")]
+    pub algae_bloom_threshold_g_per_l: f64,
+    #[serde(default = "default_algae_nuisance_biomass")]
+    pub algae_nuisance_biomass_g_per_m2: f64,
+
     pub provenance: Option<Provenance>,
 }
 
-fn default_feed_leach_rate() -> f64 { 0.12 }
-fn default_fine_detritus_dissolution_rate() -> f64 { 0.08 }
-fn default_feed_n_to_c_ratio() -> f64 { 0.16 }
-fn default_decomposer_vmax() -> f64 { 0.02 }
-fn default_decomposer_k_doc() -> f64 { 5.0 }
-fn default_decomposer_growth_yield() -> f64 { 0.3 }
-fn default_decomposer_decay_rate() -> f64 { 0.002 }
-fn default_aob_vmax() -> f64 { 1.5 }
-fn default_aob_k_tan() -> f64 { 0.5 }
-fn default_aob_k_do() -> f64 { 1.0 }
-fn default_aob_growth_yield() -> f64 { 0.001 }
-fn default_aob_decay_rate() -> f64 { 0.003 }
-fn default_nob_vmax() -> f64 { 1.2 }
-fn default_nob_k_nitrite() -> f64 { 0.3 }
-fn default_nob_k_do() -> f64 { 1.0 }
-fn default_nob_growth_yield() -> f64 { 0.001 }
-fn default_nob_decay_rate() -> f64 { 0.003 }
-fn default_comammox_vmax_fraction() -> f64 { 0.4 }
-fn default_comammox_k_tan() -> f64 { 0.8 }
-fn default_comammox_k_do() -> f64 { 1.5 }
-fn default_comammox_growth_yield() -> f64 { 0.0008 }
-fn default_comammox_decay_rate() -> f64 { 0.004 }
-fn default_o2_per_mg_n() -> f64 { 4.57 }
-fn default_alk_per_mg_n() -> f64 { 0.1428 }
+fn default_feed_leach_rate() -> f64 {
+    0.12
+}
+fn default_fine_detritus_dissolution_rate() -> f64 {
+    0.08
+}
+fn default_feed_n_to_c_ratio() -> f64 {
+    0.16
+}
+fn default_decomposer_vmax() -> f64 {
+    0.02
+}
+fn default_decomposer_k_doc() -> f64 {
+    5.0
+}
+fn default_decomposer_growth_yield() -> f64 {
+    0.3
+}
+fn default_decomposer_decay_rate() -> f64 {
+    0.002
+}
+fn default_aob_vmax() -> f64 {
+    1.5
+}
+fn default_aob_k_tan() -> f64 {
+    0.5
+}
+fn default_aob_k_do() -> f64 {
+    1.0
+}
+fn default_aob_growth_yield() -> f64 {
+    0.001
+}
+fn default_aob_decay_rate() -> f64 {
+    0.003
+}
+fn default_nob_vmax() -> f64 {
+    1.2
+}
+fn default_nob_k_nitrite() -> f64 {
+    0.3
+}
+fn default_nob_k_do() -> f64 {
+    1.0
+}
+fn default_nob_growth_yield() -> f64 {
+    0.001
+}
+fn default_nob_decay_rate() -> f64 {
+    0.003
+}
+fn default_comammox_vmax_fraction() -> f64 {
+    0.4
+}
+fn default_comammox_k_tan() -> f64 {
+    0.8
+}
+fn default_comammox_k_do() -> f64 {
+    1.5
+}
+fn default_comammox_growth_yield() -> f64 {
+    0.0008
+}
+fn default_comammox_decay_rate() -> f64 {
+    0.004
+}
+fn default_o2_per_mg_n() -> f64 {
+    4.57
+}
+fn default_alk_per_mg_n() -> f64 {
+    0.1428
+}
+fn default_plant_max_growth_fast_stem() -> f64 {
+    0.08
+}
+fn default_plant_max_growth_root_rosette() -> f64 {
+    0.06
+}
+fn default_plant_respiration_fraction() -> f64 {
+    0.01
+}
+fn default_plant_senescence_fraction() -> f64 {
+    0.005
+}
+fn default_plant_health_recovery() -> f64 {
+    0.03
+}
+fn default_plant_health_decline() -> f64 {
+    0.08
+}
+fn default_plant_half_sat_n() -> f64 {
+    8.0
+}
+fn default_plant_half_sat_p() -> f64 {
+    1.2
+}
+fn default_plant_half_sat_c() -> f64 {
+    20.0
+}
+fn default_plant_light_half_sat() -> f64 {
+    0.45
+}
+fn default_plant_temp_optimum() -> f64 {
+    25.0
+}
+fn default_plant_temp_sigma() -> f64 {
+    7.0
+}
+fn default_plant_crowding_biomass() -> f64 {
+    250.0
+}
+fn default_algae_max_growth() -> f64 {
+    0.2
+}
+fn default_periphyton_max_growth() -> f64 {
+    0.15
+}
+fn default_algae_respiration_fraction() -> f64 {
+    0.03
+}
+fn default_algae_half_sat_n() -> f64 {
+    5.0
+}
+fn default_algae_half_sat_p() -> f64 {
+    0.8
+}
+fn default_algae_light_half_sat() -> f64 {
+    0.35
+}
+fn default_algae_temp_optimum() -> f64 {
+    27.0
+}
+fn default_algae_temp_sigma() -> f64 {
+    8.0
+}
+fn default_periphyton_capacity() -> f64 {
+    6.0
+}
+fn default_algae_bloom_threshold() -> f64 {
+    0.08
+}
+fn default_algae_nuisance_biomass() -> f64 {
+    10.0
+}
 
 impl ProcessParamsPreset {
     pub fn validate(&self) -> Result<(), String> {
         let fields: &[(&str, f64)] = &[
-            ("mineralization_rate_per_day", self.mineralization_rate_per_day),
+            (
+                "mineralization_rate_per_day",
+                self.mineralization_rate_per_day,
+            ),
             ("nitrification_vmax", self.nitrification_vmax),
             ("reaeration_kla_base", self.reaeration_kla_base),
             ("aeration_kla_boost", self.aeration_kla_boost),
-            ("background_bod_mg_o2_per_g_biomass_per_hour", self.background_bod_mg_o2_per_g_biomass_per_hour),
-            ("plant_photosynthesis_o2_mg_per_g_per_hour", self.plant_photosynthesis_o2_mg_per_g_per_hour),
+            (
+                "background_bod_mg_o2_per_g_biomass_per_hour",
+                self.background_bod_mg_o2_per_g_biomass_per_hour,
+            ),
+            (
+                "plant_photosynthesis_o2_mg_per_g_per_hour",
+                self.plant_photosynthesis_o2_mg_per_g_per_hour,
+            ),
             ("k_surface_w_per_m2_k", self.k_surface_w_per_m2_k),
             ("k_wall_w_per_m2_k", self.k_wall_w_per_m2_k),
             ("feed_leach_rate_per_hour", self.feed_leach_rate_per_hour),
-            ("fine_detritus_dissolution_rate_per_hour", self.fine_detritus_dissolution_rate_per_hour),
+            (
+                "fine_detritus_dissolution_rate_per_hour",
+                self.fine_detritus_dissolution_rate_per_hour,
+            ),
             ("feed_n_to_c_ratio", self.feed_n_to_c_ratio),
             ("decomposer_vmax_per_hour", self.decomposer_vmax_per_hour),
             ("decomposer_k_doc_mg", self.decomposer_k_doc_mg),
             ("decomposer_growth_yield", self.decomposer_growth_yield),
-            ("decomposer_decay_rate_per_hour", self.decomposer_decay_rate_per_hour),
-            ("aob_vmax_mg_n_per_g_per_hour", self.aob_vmax_mg_n_per_g_per_hour),
+            (
+                "decomposer_decay_rate_per_hour",
+                self.decomposer_decay_rate_per_hour,
+            ),
+            (
+                "aob_vmax_mg_n_per_g_per_hour",
+                self.aob_vmax_mg_n_per_g_per_hour,
+            ),
             ("aob_k_tan_mg", self.aob_k_tan_mg),
             ("aob_k_do_mg", self.aob_k_do_mg),
             ("aob_growth_yield", self.aob_growth_yield),
             ("aob_decay_rate_per_hour", self.aob_decay_rate_per_hour),
-            ("nob_vmax_mg_n_per_g_per_hour", self.nob_vmax_mg_n_per_g_per_hour),
+            (
+                "nob_vmax_mg_n_per_g_per_hour",
+                self.nob_vmax_mg_n_per_g_per_hour,
+            ),
             ("nob_k_nitrite_mg", self.nob_k_nitrite_mg),
             ("nob_k_do_mg", self.nob_k_do_mg),
             ("nob_growth_yield", self.nob_growth_yield),
@@ -237,9 +428,99 @@ impl ProcessParamsPreset {
             ("comammox_k_tan_mg", self.comammox_k_tan_mg),
             ("comammox_k_do_mg", self.comammox_k_do_mg),
             ("comammox_growth_yield", self.comammox_growth_yield),
-            ("comammox_decay_rate_per_hour", self.comammox_decay_rate_per_hour),
+            (
+                "comammox_decay_rate_per_hour",
+                self.comammox_decay_rate_per_hour,
+            ),
             ("o2_per_mg_n_nitrified", self.o2_per_mg_n_nitrified),
-            ("alkalinity_meq_per_mg_n_nitrified", self.alkalinity_meq_per_mg_n_nitrified),
+            (
+                "alkalinity_meq_per_mg_n_nitrified",
+                self.alkalinity_meq_per_mg_n_nitrified,
+            ),
+            (
+                "plant_max_growth_rate_fast_stem_per_day",
+                self.plant_max_growth_rate_fast_stem_per_day,
+            ),
+            (
+                "plant_max_growth_rate_root_rosette_per_day",
+                self.plant_max_growth_rate_root_rosette_per_day,
+            ),
+            (
+                "plant_respiration_fraction_per_day",
+                self.plant_respiration_fraction_per_day,
+            ),
+            (
+                "plant_senescence_fraction_per_day",
+                self.plant_senescence_fraction_per_day,
+            ),
+            (
+                "plant_health_recovery_per_day",
+                self.plant_health_recovery_per_day,
+            ),
+            (
+                "plant_health_decline_per_day",
+                self.plant_health_decline_per_day,
+            ),
+            (
+                "plant_half_saturation_n_mg_total",
+                self.plant_half_saturation_n_mg_total,
+            ),
+            (
+                "plant_half_saturation_p_mg_total",
+                self.plant_half_saturation_p_mg_total,
+            ),
+            (
+                "plant_half_saturation_c_mg_total",
+                self.plant_half_saturation_c_mg_total,
+            ),
+            (
+                "plant_light_half_saturation",
+                self.plant_light_half_saturation,
+            ),
+            ("plant_temp_optimum_c", self.plant_temp_optimum_c),
+            ("plant_temp_sigma_c", self.plant_temp_sigma_c),
+            (
+                "plant_crowding_biomass_g_per_m2",
+                self.plant_crowding_biomass_g_per_m2,
+            ),
+            (
+                "algae_max_growth_rate_per_day",
+                self.algae_max_growth_rate_per_day,
+            ),
+            (
+                "periphyton_max_growth_rate_per_day",
+                self.periphyton_max_growth_rate_per_day,
+            ),
+            (
+                "algae_respiration_fraction_per_day",
+                self.algae_respiration_fraction_per_day,
+            ),
+            (
+                "algae_half_saturation_n_mg_total",
+                self.algae_half_saturation_n_mg_total,
+            ),
+            (
+                "algae_half_saturation_p_mg_total",
+                self.algae_half_saturation_p_mg_total,
+            ),
+            (
+                "algae_light_half_saturation",
+                self.algae_light_half_saturation,
+            ),
+            ("algae_temp_optimum_c", self.algae_temp_optimum_c),
+            ("algae_temp_sigma_c", self.algae_temp_sigma_c),
+            (
+                "periphyton_capacity_g_per_m2",
+                self.periphyton_capacity_g_per_m2,
+            ),
+            (
+                "algae_bloom_threshold_g_per_l",
+                self.algae_bloom_threshold_g_per_l,
+            ),
+            (
+                "algae_nuisance_biomass_g_per_m2",
+                self.algae_nuisance_biomass_g_per_m2,
+            ),
         ];
         for (name, value) in fields {
             if !value.is_finite() {

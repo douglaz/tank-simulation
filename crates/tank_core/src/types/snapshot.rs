@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{SimEvent, TankState};
+use super::{PlantGuild, SimEvent, TankState};
 use crate::systems::{chemistry::compute_nh3_mg_l, temperature::do_sat_mg_l};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -23,6 +23,13 @@ pub struct TankSnapshot {
     pub ph: f64,
     pub adult_shrimp_count: u32,
     pub total_plant_biomass_g: f64,
+    pub fast_stem_biomass_g: f64,
+    pub root_feeding_rosette_biomass_g: f64,
+    pub suspended_algae_biomass_g: f64,
+    pub periphyton_biomass_g: f64,
+    pub algae_nuisance_index: f64,
+    pub substrate_nutrient_remaining_mg_n_total: f64,
+    pub substrate_nutrient_remaining_mg_p_total: f64,
     pub last_heater_output_w: f64,
     pub recent_events: Vec<SimEvent>,
 }
@@ -45,6 +52,18 @@ impl TankSnapshot {
         let kh_d = (alkalinity_meq_l * 50.0) / 17.848;
         let ph = state.water.ph;
         let nh3_mg_l = compute_nh3_mg_l(tan_mg_l, ph, state.water.temperature_c);
+        let fast_stem_biomass_g: f64 = state
+            .plant_guilds
+            .iter()
+            .filter(|plant| plant.guild == PlantGuild::FastStem)
+            .map(|plant| plant.biomass_g)
+            .sum();
+        let root_feeding_rosette_biomass_g: f64 = state
+            .plant_guilds
+            .iter()
+            .filter(|plant| plant.guild == PlantGuild::RootFeedingRosette)
+            .map(|plant| plant.biomass_g)
+            .sum();
 
         Self {
             day: state.environment.day,
@@ -65,6 +84,21 @@ impl TankSnapshot {
             ph,
             adult_shrimp_count: state.animal.adults_count,
             total_plant_biomass_g: state.plant_guilds.iter().map(|plant| plant.biomass_g).sum(),
+            fast_stem_biomass_g,
+            root_feeding_rosette_biomass_g,
+            suspended_algae_biomass_g: state.algae.suspended_biomass_g,
+            periphyton_biomass_g: state.algae.periphyton_biomass_g,
+            algae_nuisance_index: state.algae.nuisance_index,
+            substrate_nutrient_remaining_mg_n_total: state
+                .substrate_layers
+                .iter()
+                .map(|layer| layer.nutrient_store_mg_n_total)
+                .sum(),
+            substrate_nutrient_remaining_mg_p_total: state
+                .substrate_layers
+                .iter()
+                .map(|layer| layer.nutrient_store_mg_p_total)
+                .sum(),
             last_heater_output_w: state.hardware.heater.last_output_w,
             recent_events: state.event_log.iter().rev().take(20).cloned().collect(),
         }

@@ -88,6 +88,9 @@ impl Engine {
     }
 
     fn run_daily_update(&mut self) {
+        systems::plant_growth::step_daily_plants(&mut self.state);
+        systems::algae_growth::step_daily_algae(&mut self.state);
+
         // Step 6 (daily): biofilter maturity summary update
         let maturity_delta =
             systems::nitrogen_cycle::update_daily_biofilter_maturity(&mut self.state);
@@ -140,11 +143,7 @@ impl Engine {
                     .get(&source_profile_id)
                     .cloned();
                 if let Some(profile) = profile {
-                    systems::water_change::apply_water_change(
-                        &mut self.state,
-                        percent,
-                        &profile,
-                    );
+                    systems::water_change::apply_water_change(&mut self.state, percent, &profile);
                     self.push_event(
                         EventSeverity::Info,
                         EventKind::StabilityImproving,
@@ -154,9 +153,13 @@ impl Engine {
                 }
             }
             PlayerAction::TrimPlants { fraction } => {
+                let mut trimmed_biomass_g = 0.0;
                 for plant in &mut self.state.plant_guilds {
-                    plant.biomass_g *= 1.0 - fraction;
+                    let trimmed = plant.biomass_g * fraction;
+                    plant.biomass_g -= trimmed;
+                    trimmed_biomass_g += trimmed;
                 }
+                self.state.detritus.fine_detritus_g_total += trimmed_biomass_g;
             }
             PlayerAction::SiphonDetritus { fraction } => {
                 self.state.detritus.particulate_organics_g_total *= 1.0 - fraction;

@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::types::substrate::SubstrateLayerState;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum PlantGuild {
     FastStem,
@@ -120,4 +122,31 @@ impl Default for DetritusState {
             dissolved_feed_residue_g_total: 0.0,
         }
     }
+}
+
+impl PlantGuildState {
+    pub fn water_column_uptake_bias(&self) -> f64 {
+        match self.guild {
+            PlantGuild::FastStem => 0.9,
+            PlantGuild::RootFeedingRosette => 0.1,
+        }
+    }
+
+    pub fn substrate_uptake_bias(&self) -> f64 {
+        match self.guild {
+            PlantGuild::FastStem => 0.1,
+            PlantGuild::RootFeedingRosette => 0.9,
+        }
+    }
+}
+
+pub fn total_colonizable_area_cm2(
+    substrate_layers: &[SubstrateLayerState],
+    wall_area_cm2: f64,
+) -> f64 {
+    wall_area_cm2
+        + substrate_layers
+            .iter()
+            .map(|layer| layer.colonizable_area_cm2)
+            .sum::<f64>()
 }

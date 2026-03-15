@@ -13,8 +13,8 @@ pub mod water;
 
 pub use actions::{PlayerAction, SimError};
 pub use biology::{
-    AlgaeState, AnimalState, DetritusState, MicrobeState, MicrofaunaState, PlantGuild,
-    PlantGuildState,
+    total_colonizable_area_cm2, AlgaeState, AnimalState, DetritusState, MicrobeState,
+    MicrofaunaState, PlantGuild, PlantGuildState,
 };
 pub use environment::EnvironmentState;
 pub use events::{EventCause, EventKind, EventSeverity, SimEvent};

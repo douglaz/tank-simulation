@@ -45,10 +45,8 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
         aeration_kla_boost: preset.aeration_kla_boost,
         background_bod_mg_o2_per_g_biomass_per_hour: preset
             .background_bod_mg_o2_per_g_biomass_per_hour,
-        plant_photosynthesis_o2_mg_per_g_per_hour: preset
-            .plant_photosynthesis_o2_mg_per_g_per_hour,
-        respiration_dic_rate_mg_c_per_g_per_hour: preset
-            .respiration_dic_rate_mg_c_per_g_per_hour,
+        plant_photosynthesis_o2_mg_per_g_per_hour: preset.plant_photosynthesis_o2_mg_per_g_per_hour,
+        respiration_dic_rate_mg_c_per_g_per_hour: preset.respiration_dic_rate_mg_c_per_g_per_hour,
         photosynthesis_dic_rate_mg_c_per_g_per_hour: preset
             .photosynthesis_dic_rate_mg_c_per_g_per_hour,
         k_surface_w_per_m2_k: preset.k_surface_w_per_m2_k,
@@ -83,6 +81,33 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
 
         o2_per_mg_n_nitrified: preset.o2_per_mg_n_nitrified,
         alkalinity_meq_per_mg_n_nitrified: preset.alkalinity_meq_per_mg_n_nitrified,
+
+        plant_max_growth_rate_fast_stem_per_day: preset.plant_max_growth_rate_fast_stem_per_day,
+        plant_max_growth_rate_root_rosette_per_day: preset
+            .plant_max_growth_rate_root_rosette_per_day,
+        plant_respiration_fraction_per_day: preset.plant_respiration_fraction_per_day,
+        plant_senescence_fraction_per_day: preset.plant_senescence_fraction_per_day,
+        plant_health_recovery_per_day: preset.plant_health_recovery_per_day,
+        plant_health_decline_per_day: preset.plant_health_decline_per_day,
+        plant_half_saturation_n_mg_total: preset.plant_half_saturation_n_mg_total,
+        plant_half_saturation_p_mg_total: preset.plant_half_saturation_p_mg_total,
+        plant_half_saturation_c_mg_total: preset.plant_half_saturation_c_mg_total,
+        plant_light_half_saturation: preset.plant_light_half_saturation,
+        plant_temp_optimum_c: preset.plant_temp_optimum_c,
+        plant_temp_sigma_c: preset.plant_temp_sigma_c,
+        plant_crowding_biomass_g_per_m2: preset.plant_crowding_biomass_g_per_m2,
+
+        algae_max_growth_rate_per_day: preset.algae_max_growth_rate_per_day,
+        periphyton_max_growth_rate_per_day: preset.periphyton_max_growth_rate_per_day,
+        algae_respiration_fraction_per_day: preset.algae_respiration_fraction_per_day,
+        algae_half_saturation_n_mg_total: preset.algae_half_saturation_n_mg_total,
+        algae_half_saturation_p_mg_total: preset.algae_half_saturation_p_mg_total,
+        algae_light_half_saturation: preset.algae_light_half_saturation,
+        algae_temp_optimum_c: preset.algae_temp_optimum_c,
+        algae_temp_sigma_c: preset.algae_temp_sigma_c,
+        periphyton_capacity_g_per_m2: preset.periphyton_capacity_g_per_m2,
+        algae_bloom_threshold_g_per_l: preset.algae_bloom_threshold_g_per_l,
+        algae_nuisance_biomass_g_per_m2: preset.algae_nuisance_biomass_g_per_m2,
     }
 }
 

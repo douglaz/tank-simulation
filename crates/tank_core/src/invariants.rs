@@ -60,6 +60,11 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
     for plant in &state.plant_guilds {
         check_non_negative("plant.biomass_g", plant.biomass_g)?;
     }
+    check_non_negative("algae.suspended_biomass_g", state.algae.suspended_biomass_g)?;
+    check_non_negative(
+        "algae.periphyton_biomass_g",
+        state.algae.periphyton_biomass_g,
+    )?;
     for layer in &state.substrate_layers {
         check_non_negative("substrate.depth_cm", layer.depth_cm)?;
         check_non_negative(

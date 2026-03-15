@@ -32,10 +32,14 @@ pub fn step_hourly_chemistry(state: &mut TankState, light_on: bool) {
         return;
     }
 
-    let respiration_dic_mg = state.process_params.respiration_dic_rate_mg_c_per_g_per_hour
+    let respiration_dic_mg = state
+        .process_params
+        .respiration_dic_rate_mg_c_per_g_per_hour
         * respiring_biomass_g(state);
     let photosynthesis_dic_mg = if light_on {
-        state.process_params.photosynthesis_dic_rate_mg_c_per_g_per_hour
+        state
+            .process_params
+            .photosynthesis_dic_rate_mg_c_per_g_per_hour
             * photosynthetic_biomass_g(state)
             * state.hardware.light.intensity_index
     } else {
@@ -70,7 +74,7 @@ pub(crate) fn respiring_biomass_g(state: &TankState) -> f64 {
 
 pub(crate) fn photosynthetic_biomass_g(state: &TankState) -> f64 {
     let plant_biomass_g: f64 = state.plant_guilds.iter().map(|plant| plant.biomass_g).sum();
-    plant_biomass_g + state.algae.periphyton_biomass_g
+    plant_biomass_g + state.algae.periphyton_biomass_g + state.algae.suspended_biomass_g
 }
 
 fn safe_log10(value: f64) -> f64 {
