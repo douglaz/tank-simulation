@@ -1,0 +1,14 @@
+id = "soft_acidic"
+name = "Soft Acidic"
+temperature_c = 23.0
+ph = 6.6
+gh_d = 3.0
+kh_d = 1.5
+tds_mg_l = 90.0
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "medium"
+notes = "Low-mineral planted tank source water."
+

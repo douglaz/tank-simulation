@@ -1,0 +1,17 @@
+id = "inert_gravel"
+name = "Inert Gravel"
+depth_cm = 4.0
+cation_exchange_capacity_index = 0.1
+detritus_trapping_index = 0.2
+colonizable_area_factor = 0.6
+low_oxygen_tendency_index = 0.1
+grazing_surface_index = 0.5
+nutrient_charge_mg_n_total = 0.0
+nutrient_charge_mg_p_total = 0.0
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "medium"
+notes = "Coarser inert gravel with more interstitial flow."
+

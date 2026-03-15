@@ -1,0 +1,14 @@
+id = "neocaridina_davidi"
+name = "Neocaridina davidi"
+species = "Neocaridina davidi"
+optimal_temp_min_c = 22.0
+optimal_temp_max_c = 26.0
+gh_min_d = 5.0
+gh_max_d = 10.0
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "medium"
+notes = "Baseline shrimp husbandry profile."
+

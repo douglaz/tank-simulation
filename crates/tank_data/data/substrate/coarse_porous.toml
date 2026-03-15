@@ -1,0 +1,17 @@
+id = "coarse_porous"
+name = "Coarse Porous"
+depth_cm = 4.0
+cation_exchange_capacity_index = 0.3
+detritus_trapping_index = 0.7
+colonizable_area_factor = 0.9
+low_oxygen_tendency_index = 0.5
+grazing_surface_index = 0.7
+nutrient_charge_mg_n_total = 10.0
+nutrient_charge_mg_p_total = 3.0
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "medium"
+notes = "High-surface porous media mix."
+

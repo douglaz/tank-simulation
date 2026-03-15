@@ -1,0 +1,12 @@
+id = "default"
+name = "Default Process Pack"
+mineralization_rate_per_day = 0.15
+nitrification_vmax = 0.08
+reaeration_kla = 0.4
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "medium"
+notes = "Default process coefficients for milestone bootstrapping."
+

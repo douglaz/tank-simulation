@@ -1,0 +1,14 @@
+id = "hard_shrimp"
+name = "Hard Shrimp"
+temperature_c = 23.0
+ph = 7.6
+gh_d = 9.5
+kh_d = 5.0
+tds_mg_l = 220.0
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "medium"
+notes = "Mineral-rich profile targeted at Neocaridina husbandry."
+

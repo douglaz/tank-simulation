@@ -1,0 +1,9 @@
+[package]
+name = "tank_scenarios"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tank_core = { path = "../tank_core" }
+tank_data = { path = "../tank_data" }
+

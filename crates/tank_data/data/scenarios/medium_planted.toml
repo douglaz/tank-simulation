@@ -1,0 +1,19 @@
+id = "medium_planted"
+name = "Medium Planted"
+source_water_id = "moderate"
+substrate_ids = ["active_planted", "coarse_porous"]
+plant_ids = ["fast_stem", "root_rosette"]
+shrimp_profile_id = "neocaridina_davidi"
+process_params_id = "default"
+tank_length_cm = 60.0
+tank_width_cm = 30.0
+tank_height_cm = 36.0
+fill_height_cm = 32.0
+ambient_temp_c = 24.0
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "medium"
+notes = "Broader planted baseline for regression scenarios."
+

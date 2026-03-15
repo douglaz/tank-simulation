@@ -1,0 +1,14 @@
+id = "moderate"
+name = "Moderate"
+temperature_c = 24.0
+ph = 7.1
+gh_d = 6.0
+kh_d = 3.5
+tds_mg_l = 160.0
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "medium"
+notes = "Balanced general-purpose freshwater profile."
+

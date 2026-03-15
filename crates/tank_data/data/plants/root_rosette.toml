@@ -1,0 +1,13 @@
+id = "root_rosette"
+name = "Root Rosette"
+guild = "RootFeedingRosette"
+growth_rate_index = 0.6
+water_column_uptake_bias = 0.3
+substrate_uptake_bias = 0.9
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "medium"
+notes = "Root-heavy rosette responding strongly to substrate quality."
+

@@ -1,0 +1,14 @@
+id = "ro_like"
+name = "RO-Like"
+temperature_c = 23.0
+ph = 6.5
+gh_d = 0.5
+kh_d = 0.3
+tds_mg_l = 15.0
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "high"
+notes = "Very low-mineral reference water."
+
