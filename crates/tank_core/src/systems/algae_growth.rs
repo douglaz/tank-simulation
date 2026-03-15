@@ -64,8 +64,11 @@ pub fn step_daily_algae(state: &mut TankState) {
     let colonizable_area_m2 =
         total_colonizable_area_cm2(&state.substrate_layers, state.geometry.wall_area_cm2())
             / 10_000.0;
-    let periphyton_capacity_g =
-        colonizable_area_m2.max(0.0) * state.process_params.periphyton_capacity_g_per_m2;
+    let grazing_surface_factor =
+        0.7 + (0.3 * state.avg_substrate_index(|layer| layer.grazing_surface_index));
+    let periphyton_capacity_g = colonizable_area_m2.max(0.0)
+        * state.process_params.periphyton_capacity_g_per_m2
+        * grazing_surface_factor;
     let surface_cap_factor = if periphyton_capacity_g <= f64::EPSILON {
         0.0
     } else {

@@ -120,10 +120,17 @@ fn shrimp_feeding(state: &mut TankState, _volume_l: f64) {
     let adults = state.animal.adults_count as f64;
     let juveniles = state.animal.juveniles_count as f64;
     let total_feeding_units = adults + juveniles * 0.3;
+    if total_feeding_units <= f64::EPSILON {
+        state.animal.daily_food_consumed_g = 0.0;
+        return;
+    }
+
     let rate = state
         .process_params
         .shrimp_periphyton_grazing_g_per_shrimp_per_day;
-    let food_demand = total_feeding_units * rate;
+    let grazing_access_factor =
+        0.5 + (0.5 * state.avg_substrate_index(|layer| layer.grazing_surface_index));
+    let food_demand = total_feeding_units * rate * grazing_access_factor;
 
     // Shrimp graze periphyton (at most 50% of available per day)
     let max_periph = state.algae.periphyton_biomass_g * 0.5;
@@ -137,6 +144,7 @@ fn shrimp_feeding(state: &mut TankState, _volume_l: f64) {
     let detritus_consumed = detritus_demand.min(max_detritus).max(0.0);
     state.detritus.fine_detritus_g_total =
         (state.detritus.fine_detritus_g_total - detritus_consumed).max(0.0);
+    state.animal.daily_food_consumed_g = periph_consumed + detritus_consumed;
 }
 
 fn update_condition(state: &mut TankState, volume_l: f64) {
@@ -150,16 +158,19 @@ fn update_condition(state: &mut TankState, volume_l: f64) {
     let mg_mg_l = state.water.magnesium_mg_total / volume_l;
     let gh_d = ((2.497 * ca_mg_l) + (4.118 * mg_mg_l)) / 17.848;
 
-    let total_shrimp = state.animal.adults_count as f64 + state.animal.juveniles_count as f64;
-    let available_food =
-        state.algae.periphyton_biomass_g + state.detritus.fine_detritus_g_total * 0.3;
-    let food_per_shrimp = if total_shrimp > 0.0 {
-        available_food / total_shrimp
+    let total_feeding_units =
+        state.animal.adults_count as f64 + state.animal.juveniles_count as f64 * 0.3;
+    let target_food_g = total_feeding_units
+        * state
+            .process_params
+            .shrimp_periphyton_grazing_g_per_shrimp_per_day
+        * 2.0;
+    let food_factor = if target_food_g > f64::EPSILON {
+        let satiation = (state.animal.daily_food_consumed_g / target_food_g).clamp(0.0, 1.0);
+        0.4 + (0.6 * satiation)
     } else {
         1.0
     };
-
-    let food_factor = (food_per_shrimp / 0.05).clamp(0.0, 1.0);
     let do_factor = (do_mg_l / 6.0).clamp(0.0, 1.0);
     // NH3 risk: condition degrades steadily, reaching zero at ~0.33 mg/L NH3
     let nh3_factor = (1.0 - nh3_mg_l * 3.0).clamp(0.0, 1.0);
@@ -498,6 +509,7 @@ fn reset_hourly_accumulators(state: &mut TankState) {
     state.animal.hourly_low_do_stress_accum = 0.0;
     state.animal.hourly_heat_stress_accum = 0.0;
     state.animal.hourly_instability_stress_accum = 0.0;
+    state.animal.daily_food_consumed_g = 0.0;
 }
 
 // ── Factor functions ────────────────────────────────────────────────────────

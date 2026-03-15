@@ -19,8 +19,14 @@ pub fn step_dissolved_oxygen(state: &mut TankState, light_on: bool) {
     } else {
         0.0
     };
+    let filter_kla_boost = if state.hardware.filter.enabled {
+        0.02 * (state.hardware.filter.flow_lph / 200.0).min(2.0)
+    } else {
+        0.0
+    };
     let k_la = (state.process_params.reaeration_kla_base * state.geometry.top_exchange_factor())
-        + (state.process_params.aeration_kla_boost * aeration_intensity);
+        + (state.process_params.aeration_kla_boost * aeration_intensity)
+        + filter_kla_boost;
     let delta_do_reaeration_mg = k_la * (do_sat_mg_l - do_mg_l) * volume_l;
 
     let background_bod_mg = state

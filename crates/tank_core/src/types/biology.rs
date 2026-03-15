@@ -71,6 +71,8 @@ pub struct AnimalState {
     pub hourly_heat_stress_accum: f64,
     #[serde(default)]
     pub hourly_instability_stress_accum: f64,
+    #[serde(default)]
+    pub daily_food_consumed_g: f64,
 }
 
 /// Species-specific shrimp parameters materialized from ShrimpPreset.
@@ -165,6 +167,7 @@ impl Default for AnimalState {
             hourly_low_do_stress_accum: 0.0,
             hourly_heat_stress_accum: 0.0,
             hourly_instability_stress_accum: 0.0,
+            daily_food_consumed_g: 0.0,
         }
     }
 }

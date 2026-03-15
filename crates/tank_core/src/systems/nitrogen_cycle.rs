@@ -17,6 +17,8 @@ struct EnvFactors {
     maturity_factor: f64,
     /// Dirty-filter penalty: 1.0 = clean, lower = clogged/dirty.
     dirty_filter_factor: f64,
+    filter_enabled_factor: f64,
+    flow_factor: f64,
 }
 
 fn safe_rate(v: f64) -> f64 {
@@ -41,7 +43,9 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let pp = &state.process_params;
 
     // ---- 1. Feed leaching: particulate -> fine detritus ----
-    let leach_rate = safe_rate(pp.feed_leach_rate_per_hour);
+    let trapping_factor =
+        1.0 - (0.5 * state.avg_substrate_index(|layer| layer.detritus_trapping_index));
+    let leach_rate = safe_rate(pp.feed_leach_rate_per_hour * trapping_factor);
     let leached = (state.detritus.particulate_organics_g_total * leach_rate)
         .min(state.detritus.particulate_organics_g_total);
     state.detritus.particulate_organics_g_total -= leached;
@@ -117,7 +121,7 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     // Shared DO and alkalinity budgets enforce that combined nitrification
     // can never consume more O2 or alkalinity than available this tick.
     let env = compute_env_factors(state);
-    let combined_env = env.maturity_factor * env.dirty_filter_factor;
+    let combined_env = env.maturity_factor * env.dirty_filter_factor * env.filter_enabled_factor;
 
     let mut do_budget = state.water.dissolved_oxygen_mg_total;
     let alk_per_mg_n = safe_rate(pp.alkalinity_meq_per_mg_n_nitrified);
@@ -132,7 +136,7 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let aob_env_factor =
         combined_env * env.f_temp * env.f_ph * (do_budget / (do_budget + pp.aob_k_do_mg.max(0.01)));
     let aob_potential = monod_rate(
-        safe_rate(pp.aob_vmax_mg_n_per_g_per_hour),
+        safe_rate(pp.aob_vmax_mg_n_per_g_per_hour) * env.flow_factor,
         state.microbe.ammonia_oxidizer_biomass_g,
         aob_env_factor,
         state.water.ammonia_total_mg_n_total,
@@ -158,7 +162,8 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     alk_budget = (alk_budget - aob_alk_cost).max(0.0);
 
     // 4b. Comammox: TAN -> nitrate directly (lower vmax)
-    let comammox_vmax = safe_rate(pp.aob_vmax_mg_n_per_g_per_hour * pp.comammox_vmax_fraction);
+    let comammox_vmax =
+        safe_rate(pp.aob_vmax_mg_n_per_g_per_hour * pp.comammox_vmax_fraction) * env.flow_factor;
     let tan_after_aob = (state.water.ammonia_total_mg_n_total - aob_rate).max(0.0);
     let comammox_env_factor = combined_env
         * env.f_temp
@@ -207,7 +212,7 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let nob_env_factor =
         combined_env * env.f_temp * env.f_ph * (do_budget / (do_budget + pp.nob_k_do_mg.max(0.01)));
     let nob_potential = monod_rate(
-        safe_rate(pp.nob_vmax_mg_n_per_g_per_hour),
+        safe_rate(pp.nob_vmax_mg_n_per_g_per_hour) * env.flow_factor,
         state.microbe.nitrite_oxidizer_biomass_g,
         nob_env_factor,
         state.water.nitrite_mg_n_total,
@@ -302,12 +307,25 @@ fn compute_env_factors(state: &TankState) -> EnvFactors {
     // Dirty-filter factor: clogged filters reduce nitrification efficiency.
     // clogging_index of 0 = clean (factor=1), clogging_index of 1 = fully clogged (factor=0.2)
     let dirty_filter_factor = (1.0 - 0.8 * state.filter_state.clogging_index).clamp(0.2, 1.0);
+    let filter_enabled_factor = if state.hardware.filter.enabled {
+        1.0
+    } else {
+        0.1
+    };
+    let volume_l = state.geometry.water_volume_l().max(f64::EPSILON);
+    let flow_factor = if state.hardware.filter.enabled {
+        (state.hardware.filter.flow_lph / volume_l).clamp(0.1, 1.0)
+    } else {
+        1.0
+    };
 
     EnvFactors {
         f_temp,
         f_ph,
         maturity_factor,
         dirty_filter_factor,
+        filter_enabled_factor,
+        flow_factor,
     }
 }
 
@@ -341,4 +359,24 @@ pub fn update_daily_biofilter_maturity(state: &mut TankState) -> f64 {
     state.filter_state.biofilter_maturity_index = new_maturity;
 
     new_maturity - prev
+}
+
+pub fn update_daily_filter_clogging(state: &mut TankState) -> f64 {
+    if !state.hardware.filter.enabled {
+        return 0.0;
+    }
+
+    let volume_l = state.geometry.water_volume_l();
+    if volume_l <= f64::EPSILON {
+        return 0.0;
+    }
+
+    let detritus_pressure = (state.detritus.fine_detritus_g_total / volume_l).clamp(0.0, 1.0);
+    let clogging_delta =
+        0.002 * (1.0 - state.hardware.filter.cleanliness_index.clamp(0.0, 1.0)) * detritus_pressure;
+
+    state.filter_state.clogging_index =
+        (state.filter_state.clogging_index + clogging_delta).clamp(0.0, 1.0);
+
+    clogging_delta
 }

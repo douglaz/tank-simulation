@@ -111,6 +111,7 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
     state.animal.molt_stress_index = state.animal.molt_stress_index.clamp(0.0, 1.0);
     state.animal.reproductive_readiness_index =
         state.animal.reproductive_readiness_index.clamp(0.0, 1.0);
+    state.animal.daily_food_consumed_g = state.animal.daily_food_consumed_g.max(0.0);
     // Shrimp population invariants: berried <= adults, no negative egg progress
     state.animal.clamp_berried_to_adults();
     state.animal.egg_progress_days = state.animal.egg_progress_days.max(0.0);

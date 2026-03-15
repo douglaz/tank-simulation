@@ -113,6 +113,32 @@ impl TankState {
         ];
         state
     }
+
+    pub fn avg_substrate_index<F>(&self, select: F) -> f64
+    where
+        F: Fn(&SubstrateLayerState) -> f64,
+    {
+        if self.substrate_layers.is_empty() {
+            return 0.0;
+        }
+
+        let total_depth: f64 = self
+            .substrate_layers
+            .iter()
+            .map(|layer| layer.depth_cm.max(0.0))
+            .sum();
+        if total_depth <= f64::EPSILON {
+            return 0.0;
+        }
+
+        let weighted_sum = self
+            .substrate_layers
+            .iter()
+            .map(|layer| layer.depth_cm.max(0.0) * select(layer).clamp(0.0, 1.0))
+            .sum::<f64>();
+
+        (weighted_sum / total_depth).clamp(0.0, 1.0)
+    }
 }
 
 impl Default for TankState {

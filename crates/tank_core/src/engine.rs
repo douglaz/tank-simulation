@@ -96,6 +96,7 @@ impl Engine {
         systems::algae_growth::step_daily_algae(&mut self.state);
         systems::microfauna::step_daily_microfauna(&mut self.state);
         systems::shrimp::step_daily_shrimp(&mut self.state);
+        systems::nitrogen_cycle::update_daily_filter_clogging(&mut self.state);
 
         // Biofilter maturity summary update
         let maturity_delta =
