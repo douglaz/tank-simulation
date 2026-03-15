@@ -99,6 +99,18 @@ pub struct ShrimpPreset {
     pub optimal_temp_max_c: f64,
     pub gh_min_d: f64,
     pub gh_max_d: f64,
+    #[serde(default = "default_shrimp_base_spawn_rate")]
+    pub base_spawn_rate: f64,
+    #[serde(default = "default_shrimp_egg_duration_days")]
+    pub egg_duration_days: u32,
+    #[serde(default = "default_shrimp_hatch_success_base")]
+    pub hatch_success_base: f64,
+    #[serde(default = "default_shrimp_juvenile_sensitivity")]
+    pub juvenile_sensitivity: f64,
+    #[serde(default = "default_shrimp_high_temp_repro_penalty_start")]
+    pub high_temp_repro_penalty_start_c: f64,
+    #[serde(default = "default_shrimp_high_temp_repro_penalty_full")]
+    pub high_temp_repro_penalty_full_c: f64,
     pub provenance: Option<Provenance>,
 }
 
@@ -226,6 +238,28 @@ pub struct ProcessParamsPreset {
     pub algae_bloom_threshold_g_per_l: f64,
     #[serde(default = "default_algae_nuisance_biomass")]
     pub algae_nuisance_biomass_g_per_m2: f64,
+
+    // -- Shrimp dynamics --
+    #[serde(default = "default_shrimp_base_mortality")]
+    pub shrimp_base_mortality_per_day: f64,
+    #[serde(default = "default_shrimp_stress_mortality_scale")]
+    pub shrimp_stress_mortality_scale: f64,
+    #[serde(default = "default_shrimp_juvenile_maturation_days")]
+    pub shrimp_juvenile_maturation_days: f64,
+    #[serde(default = "default_shrimp_periphyton_grazing")]
+    pub shrimp_periphyton_grazing_g_per_shrimp_per_day: f64,
+    #[serde(default = "default_shrimp_condition_smoothing")]
+    pub shrimp_condition_smoothing: f64,
+
+    // -- Microfauna turnover --
+    #[serde(default = "default_microfauna_mineralization_boost")]
+    pub microfauna_mineralization_boost: f64,
+    #[serde(default = "default_microfauna_periphyton_consumption")]
+    pub microfauna_periphyton_consumption: f64,
+    #[serde(default = "default_microfauna_population_smoothing")]
+    pub microfauna_population_smoothing: f64,
+    #[serde(default = "default_microfauna_shrimp_pressure_threshold")]
+    pub microfauna_shrimp_pressure_threshold: f64,
 
     pub provenance: Option<Provenance>,
 }
@@ -373,6 +407,53 @@ fn default_algae_bloom_threshold() -> f64 {
 }
 fn default_algae_nuisance_biomass() -> f64 {
     10.0
+}
+
+fn default_shrimp_base_spawn_rate() -> f64 {
+    0.15
+}
+fn default_shrimp_egg_duration_days() -> u32 {
+    21
+}
+fn default_shrimp_hatch_success_base() -> f64 {
+    0.7
+}
+fn default_shrimp_juvenile_sensitivity() -> f64 {
+    1.5
+}
+fn default_shrimp_high_temp_repro_penalty_start() -> f64 {
+    28.0
+}
+fn default_shrimp_high_temp_repro_penalty_full() -> f64 {
+    33.0
+}
+
+fn default_shrimp_base_mortality() -> f64 {
+    0.002
+}
+fn default_shrimp_stress_mortality_scale() -> f64 {
+    0.15
+}
+fn default_shrimp_juvenile_maturation_days() -> f64 {
+    30.0
+}
+fn default_shrimp_periphyton_grazing() -> f64 {
+    0.01
+}
+fn default_shrimp_condition_smoothing() -> f64 {
+    0.15
+}
+fn default_microfauna_mineralization_boost() -> f64 {
+    0.15
+}
+fn default_microfauna_periphyton_consumption() -> f64 {
+    0.02
+}
+fn default_microfauna_population_smoothing() -> f64 {
+    0.1
+}
+fn default_microfauna_shrimp_pressure_threshold() -> f64 {
+    3.0
 }
 
 impl ProcessParamsPreset {

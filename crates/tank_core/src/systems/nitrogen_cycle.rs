@@ -67,7 +67,10 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let f_temp_decomp = temperature_factor(temp);
     let f_do_decomp = do_total / (do_total + 2.0); // half-sat ~2 mg total
 
-    let decomp_vmax = safe_rate(pp.decomposer_vmax_per_hour);
+    // Microfauna modestly improve mineralization efficiency
+    let microfauna_boost =
+        1.0 + pp.microfauna_mineralization_boost * state.microfauna.population_index;
+    let decomp_vmax = safe_rate(pp.decomposer_vmax_per_hour) * microfauna_boost;
     let k_doc = pp.decomposer_k_doc_mg.max(0.01);
     let monod_doc = doc_total / (doc_total + k_doc);
 

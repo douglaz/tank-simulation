@@ -57,8 +57,9 @@ fn action_validation() {
 fn action_queuing() -> Result<(), tank_core::SimError> {
     let mut engine = Engine::new(SimSeed(12));
 
+    // Add shrimp first, then remove — validates state-aware queuing
+    engine.apply_action(PlayerAction::AddShrimp { count: 2 })?;
     engine.apply_action(PlayerAction::RemoveShrimp { count: 1 })?;
-    engine.apply_action(PlayerAction::AddShrimp { count: 1 })?;
     engine.step_hours(1)?;
 
     assert_eq!(engine.full_state().animal.adults_count, 1);

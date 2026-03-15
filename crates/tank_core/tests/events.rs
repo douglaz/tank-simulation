@@ -124,3 +124,145 @@ fn event_generation_warm_overfed_weak_aeration() -> Result<(), tank_core::SimErr
 
     Ok(())
 }
+
+#[test]
+fn shrimp_berried_event_has_cause_codes() -> Result<(), tank_core::SimError> {
+    let mut state = TankState::new(SimSeed(5300));
+    state.water.temperature_c = 24.0;
+    state.environment.ambient_temp_c = 24.0;
+    let vol = state.geometry.water_volume_l();
+    state.water.calcium_mg_total = 40.0 * vol;
+    state.water.magnesium_mg_total = 10.0 * vol;
+    state.water.alkalinity_meq_total = 3.0 * vol;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * vol;
+    state.water.dissolved_oxygen_mg_total = 8.0 * vol;
+    state.algae.periphyton_biomass_g = 3.0;
+    state.hardware.aeration.enabled = true;
+    state.hardware.aeration.intensity = 0.3;
+    state.hardware.light.enabled = true;
+    state.hardware.light.intensity_index = 0.6;
+    state.hardware.light.photoperiod_hours = 8.0;
+
+    state.animal.adults_count = 10;
+    state.animal.condition_index = 0.8;
+    state.animal.reproductive_readiness_index = 0.8;
+    state.microbe.decomposer_biomass_g = 0.2;
+    state.microbe.ammonia_oxidizer_biomass_g = 0.15;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.1;
+    state.filter_state.biofilter_maturity_index = 0.5;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+
+    for _ in 0..30 {
+        engine.apply_action(PlayerAction::Feed { grams: 0.1 })?;
+        engine.step_hours(24)?;
+    }
+
+    let berried_events: Vec<_> = engine
+        .full_state()
+        .event_log
+        .iter()
+        .filter(|e| e.kind == EventKind::ShrimpBerried)
+        .collect();
+
+    assert!(
+        !berried_events.is_empty(),
+        "Should emit ShrimpBerried events in good conditions"
+    );
+    for e in &berried_events {
+        assert!(
+            !e.cause_codes.is_empty(),
+            "ShrimpBerried events must have non-empty cause_codes"
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
+fn egg_failure_event_has_cause_codes() -> Result<(), tank_core::SimError> {
+    let mut state = TankState::new(SimSeed(5400));
+    state.water.temperature_c = 32.0;
+    state.environment.ambient_temp_c = 32.0;
+    let vol = state.geometry.water_volume_l();
+    state.water.dissolved_oxygen_mg_total = 2.0 * vol;
+    state.water.calcium_mg_total = 5.0 * vol;
+    state.water.magnesium_mg_total = 1.0 * vol;
+    state.water.alkalinity_meq_total = 2.0 * vol;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * vol;
+
+    state.animal.adults_count = 5;
+    state.animal.berried_females_count = 3;
+    state.animal.egg_progress_days = 20.0;
+    state.animal.condition_index = 0.3;
+    state.hardware.aeration.enabled = false;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.step_hours(24)?;
+
+    let egg_failures: Vec<_> = engine
+        .full_state()
+        .event_log
+        .iter()
+        .filter(|e| e.kind == EventKind::EggFailure)
+        .collect();
+
+    assert!(
+        !egg_failures.is_empty(),
+        "Should emit EggFailure under stressful conditions"
+    );
+    for e in &egg_failures {
+        assert!(
+            !e.cause_codes.is_empty(),
+            "EggFailure events must have non-empty cause_codes"
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
+fn molt_stress_warning_has_cause_codes() -> Result<(), tank_core::SimError> {
+    let mut state = TankState::new(SimSeed(5500));
+    state.water.temperature_c = 30.0;
+    state.environment.ambient_temp_c = 30.0;
+    let vol = state.geometry.water_volume_l();
+    state.water.calcium_mg_total = 2.0 * vol;
+    state.water.magnesium_mg_total = 0.5 * vol;
+    state.water.alkalinity_meq_total = 2.0 * vol;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * vol;
+    state.water.dissolved_oxygen_mg_total = 6.0 * vol;
+
+    state.animal.adults_count = 10;
+    state.animal.condition_index = 0.3;
+    state.animal.molt_stress_index = 0.5;
+    state.hardware.aeration.enabled = true;
+    state.hardware.aeration.intensity = 0.2;
+    state.algae.periphyton_biomass_g = 0.1;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+
+    for _ in 0..14 {
+        engine.step_hours(24)?;
+    }
+
+    let molt_warnings: Vec<_> = engine
+        .full_state()
+        .event_log
+        .iter()
+        .filter(|e| e.kind == EventKind::MoltStressWarning)
+        .collect();
+
+    assert!(
+        !molt_warnings.is_empty(),
+        "Should emit MoltStressWarning under low-mineral, high-temp conditions"
+    );
+    for e in &molt_warnings {
+        assert!(
+            !e.cause_codes.is_empty(),
+            "MoltStressWarning events must have non-empty cause_codes"
+        );
+    }
+
+    Ok(())
+}

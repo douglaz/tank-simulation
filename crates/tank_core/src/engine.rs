@@ -74,6 +74,9 @@ impl Engine {
         // light-driven photosynthetic support from existing biomass.
         systems::dissolved_oxygen::step_dissolved_oxygen(&mut self.state, light_on);
 
+        // Step 12: hourly shrimp stress accumulation.
+        systems::shrimp::step_hourly_shrimp_stress(&mut self.state);
+
         // Step 13: emit threshold-based chemistry warnings.
         systems::events::emit_hourly_threshold_events(&mut self.state);
 
@@ -88,10 +91,13 @@ impl Engine {
     }
 
     fn run_daily_update(&mut self) {
+        // Daily pipeline: plants → algae → microfauna → shrimp → biofilter → stability
         systems::plant_growth::step_daily_plants(&mut self.state);
         systems::algae_growth::step_daily_algae(&mut self.state);
+        systems::microfauna::step_daily_microfauna(&mut self.state);
+        systems::shrimp::step_daily_shrimp(&mut self.state);
 
-        // Step 6 (daily): biofilter maturity summary update
+        // Biofilter maturity summary update
         let maturity_delta =
             systems::nitrogen_cycle::update_daily_biofilter_maturity(&mut self.state);
         if maturity_delta > 0.005 {
@@ -116,6 +122,9 @@ impl Engine {
                 format!("Nitrogen cycle progressing, maturity {current_maturity:.3}"),
             );
         }
+
+        // Long-term stability metrics
+        systems::shrimp::update_stability_tracker(&mut self.state);
     }
 
     fn process_action(&mut self, action: PlayerAction) {
@@ -189,6 +198,10 @@ impl Engine {
             PlayerAction::RemoveShrimp { count } => {
                 self.state.animal.adults_count =
                     self.state.animal.adults_count.saturating_sub(count);
+                // Preserve berried_females_count <= adults_count
+                if self.state.animal.berried_females_count > self.state.animal.adults_count {
+                    self.state.animal.berried_females_count = self.state.animal.adults_count;
+                }
             }
             PlayerAction::ChangePhotoperiod { hours } => {
                 self.state.hardware.light.photoperiod_hours = hours;
@@ -230,6 +243,25 @@ impl Engine {
 impl SimulationEngine for Engine {
     fn apply_action(&mut self, action: PlayerAction) -> Result<(), SimError> {
         action.validate()?;
+
+        // State-aware validation for RemoveShrimp
+        if let PlayerAction::RemoveShrimp { count } = &action {
+            let mut available = self.state.animal.adults_count as i64;
+            for queued in &self.queued_actions {
+                match queued {
+                    PlayerAction::RemoveShrimp { count: c } => available -= *c as i64,
+                    PlayerAction::AddShrimp { count: c } => available += *c as i64,
+                    _ => {}
+                }
+            }
+            if (*count as i64) > available {
+                return Err(SimError::ShrimpRemovalExceedsAvailable {
+                    requested: *count,
+                    available: available.max(0) as u32,
+                });
+            }
+        }
+
         self.queued_actions.push_back(action);
         Ok(())
     }

@@ -41,6 +41,9 @@ pub enum EventCause {
     PlantCrowding,
     SurfaceSaturation,
     SubstrateExhausted,
+    ChemistryInstability,
+    Starvation,
+    PoorCondition,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

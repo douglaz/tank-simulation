@@ -48,6 +48,43 @@ pub struct AnimalState {
     pub molt_stress_index: f64,
     pub reproductive_readiness_index: f64,
     pub egg_progress_days: f64,
+    /// Hidden hourly stress accumulators, reset after daily processing.
+    #[serde(default)]
+    pub hourly_nh3_stress_accum: f64,
+    #[serde(default)]
+    pub hourly_nitrite_stress_accum: f64,
+    #[serde(default)]
+    pub hourly_low_do_stress_accum: f64,
+    #[serde(default)]
+    pub hourly_heat_stress_accum: f64,
+    #[serde(default)]
+    pub hourly_instability_stress_accum: f64,
+}
+
+/// Species-specific shrimp parameters materialized from ShrimpPreset.
+/// Stored in TankState for deterministic save/load.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ShrimpRuntimeParams {
+    pub optimal_temp_min_c: f64,
+    pub optimal_temp_max_c: f64,
+    pub gh_min_d: f64,
+    pub gh_max_d: f64,
+    pub base_spawn_rate: f64,
+    pub egg_duration_days: u32,
+    pub hatch_success_base: f64,
+    pub juvenile_sensitivity: f64,
+    pub high_temp_repro_penalty_start_c: f64,
+    pub high_temp_repro_penalty_full_c: f64,
+}
+
+/// Tracks recent chemistry swings for shrimp stress calculations.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StabilityTracker {
+    pub prev_temp_c: f64,
+    pub prev_ph: f64,
+    pub prev_gh_d: f64,
+    pub prev_do_mg_l: f64,
+    pub instability_index: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -110,6 +147,40 @@ impl Default for AnimalState {
             molt_stress_index: 0.1,
             reproductive_readiness_index: 0.4,
             egg_progress_days: 0.0,
+            hourly_nh3_stress_accum: 0.0,
+            hourly_nitrite_stress_accum: 0.0,
+            hourly_low_do_stress_accum: 0.0,
+            hourly_heat_stress_accum: 0.0,
+            hourly_instability_stress_accum: 0.0,
+        }
+    }
+}
+
+impl Default for ShrimpRuntimeParams {
+    fn default() -> Self {
+        Self {
+            optimal_temp_min_c: 22.0,
+            optimal_temp_max_c: 26.0,
+            gh_min_d: 5.0,
+            gh_max_d: 10.0,
+            base_spawn_rate: 0.15,
+            egg_duration_days: 21,
+            hatch_success_base: 0.7,
+            juvenile_sensitivity: 1.5,
+            high_temp_repro_penalty_start_c: 28.0,
+            high_temp_repro_penalty_full_c: 33.0,
+        }
+    }
+}
+
+impl Default for StabilityTracker {
+    fn default() -> Self {
+        Self {
+            prev_temp_c: 25.0,
+            prev_ph: 7.0,
+            prev_gh_d: 7.0,
+            prev_do_mg_l: 8.0,
+            instability_index: 0.0,
         }
     }
 }

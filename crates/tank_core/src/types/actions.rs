@@ -75,6 +75,8 @@ pub enum SimError {
     Serialization(String),
     #[error("deserialization error: {0}")]
     Deserialization(String),
+    #[error("cannot remove {requested} shrimp, only {available} available")]
+    ShrimpRemovalExceedsAvailable { requested: u32, available: u32 },
 }
 
 impl PlayerAction {

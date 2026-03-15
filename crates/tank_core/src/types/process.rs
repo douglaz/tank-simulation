@@ -103,6 +103,19 @@ pub struct ProcessParams {
     pub periphyton_capacity_g_per_m2: f64,
     pub algae_bloom_threshold_g_per_l: f64,
     pub algae_nuisance_biomass_g_per_m2: f64,
+
+    // -- Shrimp dynamics --
+    pub shrimp_base_mortality_per_day: f64,
+    pub shrimp_stress_mortality_scale: f64,
+    pub shrimp_juvenile_maturation_days: f64,
+    pub shrimp_periphyton_grazing_g_per_shrimp_per_day: f64,
+    pub shrimp_condition_smoothing: f64,
+
+    // -- Microfauna turnover --
+    pub microfauna_mineralization_boost: f64,
+    pub microfauna_periphyton_consumption: f64,
+    pub microfauna_population_smoothing: f64,
+    pub microfauna_shrimp_pressure_threshold: f64,
 }
 
 impl Default for ProcessParams {
@@ -174,6 +187,17 @@ impl Default for ProcessParams {
             periphyton_capacity_g_per_m2: 6.0,
             algae_bloom_threshold_g_per_l: 0.08,
             algae_nuisance_biomass_g_per_m2: 10.0,
+
+            shrimp_base_mortality_per_day: 0.002,
+            shrimp_stress_mortality_scale: 0.15,
+            shrimp_juvenile_maturation_days: 30.0,
+            shrimp_periphyton_grazing_g_per_shrimp_per_day: 0.01,
+            shrimp_condition_smoothing: 0.15,
+
+            microfauna_mineralization_boost: 0.15,
+            microfauna_periphyton_consumption: 0.02,
+            microfauna_population_smoothing: 0.1,
+            microfauna_shrimp_pressure_threshold: 3.0,
         }
     }
 }

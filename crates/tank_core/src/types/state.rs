@@ -6,8 +6,9 @@ use crate::rng::{SimRng, SimSeed};
 
 use super::{
     AlgaeState, AnimalState, DetritusState, EnvironmentState, FilterState, HardwareState,
-    MicrobeState, MicrofaunaState, PlantGuild, PlantGuildState, ProcessParams, SimEvent,
-    SourceWaterProfile, SubstrateKind, SubstrateLayerState, TankGeometry, WaterState,
+    MicrobeState, MicrofaunaState, PlantGuild, PlantGuildState, ProcessParams, ShrimpRuntimeParams,
+    SimEvent, SourceWaterProfile, StabilityTracker, SubstrateKind, SubstrateLayerState,
+    TankGeometry, WaterState,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -39,6 +40,12 @@ pub struct TankState {
     pub source_water_catalog: BTreeMap<String, SourceWaterProfile>,
     /// Runtime-resolved process parameters for heat transfer and chemistry systems.
     pub process_params: ProcessParams,
+    /// Materialized shrimp species parameters for deterministic save/load.
+    #[serde(default)]
+    pub shrimp_params: ShrimpRuntimeParams,
+    /// Tracks recent chemistry swings for shrimp stress.
+    #[serde(default)]
+    pub stability_tracker: StabilityTracker,
 }
 
 impl TankState {
@@ -72,6 +79,8 @@ impl TankState {
             rng: SimRng::new(seed),
             source_water_catalog: BTreeMap::new(),
             process_params: ProcessParams::default(),
+            shrimp_params: ShrimpRuntimeParams::default(),
+            stability_tracker: StabilityTracker::default(),
         }
     }
 

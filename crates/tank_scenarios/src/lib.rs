@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use tank_core::{
-    FilterState, MicrobeState, PlantGuild, PlantGuildState, ProcessParams, SimMeta, SimSeed,
-    SourceWaterProfile, SubstrateLayerState, TankGeometry, TankState, WaterState,
+    FilterState, MicrobeState, PlantGuild, PlantGuildState, ProcessParams, ShrimpRuntimeParams,
+    SimMeta, SimSeed, SourceWaterProfile, SubstrateLayerState, TankGeometry, TankState, WaterState,
 };
 use tank_data::{load_scenario, ScenarioPreset};
 
@@ -108,6 +108,18 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
         periphyton_capacity_g_per_m2: preset.periphyton_capacity_g_per_m2,
         algae_bloom_threshold_g_per_l: preset.algae_bloom_threshold_g_per_l,
         algae_nuisance_biomass_g_per_m2: preset.algae_nuisance_biomass_g_per_m2,
+
+        shrimp_base_mortality_per_day: preset.shrimp_base_mortality_per_day,
+        shrimp_stress_mortality_scale: preset.shrimp_stress_mortality_scale,
+        shrimp_juvenile_maturation_days: preset.shrimp_juvenile_maturation_days,
+        shrimp_periphyton_grazing_g_per_shrimp_per_day: preset
+            .shrimp_periphyton_grazing_g_per_shrimp_per_day,
+        shrimp_condition_smoothing: preset.shrimp_condition_smoothing,
+
+        microfauna_mineralization_boost: preset.microfauna_mineralization_boost,
+        microfauna_periphyton_consumption: preset.microfauna_periphyton_consumption,
+        microfauna_population_smoothing: preset.microfauna_population_smoothing,
+        microfauna_shrimp_pressure_threshold: preset.microfauna_shrimp_pressure_threshold,
     }
 }
 
@@ -221,6 +233,21 @@ pub fn seeded_state(seed: SimSeed, scenario_id: &str) -> Result<TankState, tank_
         plant_guilds.push(PlantGuildState::default());
     }
 
+    // Shrimp species parameters
+    let shrimp_preset = tank_data::load_shrimp(&scenario.shrimp_profile_id)?;
+    let shrimp_params = ShrimpRuntimeParams {
+        optimal_temp_min_c: shrimp_preset.optimal_temp_min_c,
+        optimal_temp_max_c: shrimp_preset.optimal_temp_max_c,
+        gh_min_d: shrimp_preset.gh_min_d,
+        gh_max_d: shrimp_preset.gh_max_d,
+        base_spawn_rate: shrimp_preset.base_spawn_rate,
+        egg_duration_days: shrimp_preset.egg_duration_days,
+        hatch_success_base: shrimp_preset.hatch_success_base,
+        juvenile_sensitivity: shrimp_preset.juvenile_sensitivity,
+        high_temp_repro_penalty_start_c: shrimp_preset.high_temp_repro_penalty_start_c,
+        high_temp_repro_penalty_full_c: shrimp_preset.high_temp_repro_penalty_full_c,
+    };
+
     // Environment
     let mut environment = tank_core::EnvironmentState::default();
     environment.ambient_temp_c = scenario.ambient_temp_c;
@@ -237,6 +264,7 @@ pub fn seeded_state(seed: SimSeed, scenario_id: &str) -> Result<TankState, tank_
     state.plant_guilds = plant_guilds;
     state.source_water_catalog = source_water_catalog;
     state.process_params = process_params;
+    state.shrimp_params = shrimp_params;
 
     Ok(state)
 }
