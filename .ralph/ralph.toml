@@ -6,3 +6,4 @@
 
 [workflow]
 qa_enabled = false
+completion_consensus_threshold = 0.5
