@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
 use tank_core::{
-    FilterState, MicrobeState, PlantGuild, PlantGuildState, ProcessParams, ShrimpRuntimeParams,
-    SimMeta, SimSeed, SourceWaterProfile, SubstrateLayerState, TankGeometry, TankState, WaterState,
+    AnimalState, FilterState, MicrobeState, PlantGuild, PlantGuildState, ProcessParams,
+    ShrimpRuntimeParams, SimMeta, SimSeed, SourceWaterProfile, SubstrateLayerState, TankGeometry,
+    TankState, WaterState,
 };
 use tank_data::{load_scenario, ScenarioPreset};
 
@@ -21,8 +22,194 @@ impl Default for ScenarioGeometryOverrides {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartupSubstratePreset {
+    InertSand,
+    InertGravel,
+    ActivePlanted,
+    ActivePlantedWithCoarsePorous,
+}
+
+impl StartupSubstratePreset {
+    pub const ALL: [Self; 4] = [
+        Self::InertSand,
+        Self::InertGravel,
+        Self::ActivePlanted,
+        Self::ActivePlantedWithCoarsePorous,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::InertSand => "inert_sand",
+            Self::InertGravel => "inert_gravel",
+            Self::ActivePlanted => "active_planted",
+            Self::ActivePlantedWithCoarsePorous => "active_planted + coarse_porous",
+        }
+    }
+
+    fn preset_ids(self) -> &'static [&'static str] {
+        match self {
+            Self::InertSand => &["inert_sand"],
+            Self::InertGravel => &["inert_gravel"],
+            Self::ActivePlanted => &["active_planted"],
+            Self::ActivePlantedWithCoarsePorous => &["active_planted", "coarse_porous"],
+        }
+    }
+
+    fn from_ids(ids: &[String]) -> Option<Self> {
+        let ids = ids.iter().map(String::as_str).collect::<Vec<_>>();
+        match ids.as_slice() {
+            ["inert_sand"] => Some(Self::InertSand),
+            ["inert_gravel"] => Some(Self::InertGravel),
+            ["active_planted"] => Some(Self::ActivePlanted),
+            ["active_planted", "coarse_porous"] => Some(Self::ActivePlantedWithCoarsePorous),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartupPlantSelection {
+    FastStemOnly,
+    RootFeedingRosetteOnly,
+    BothGuilds,
+    None,
+}
+
+impl StartupPlantSelection {
+    pub const ALL: [Self; 4] = [
+        Self::FastStemOnly,
+        Self::RootFeedingRosetteOnly,
+        Self::BothGuilds,
+        Self::None,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::FastStemOnly => "FastStem only",
+            Self::RootFeedingRosetteOnly => "RootFeedingRosette only",
+            Self::BothGuilds => "Both guilds",
+            Self::None => "None",
+        }
+    }
+
+    fn preset_ids(self) -> &'static [&'static str] {
+        match self {
+            Self::FastStemOnly => &["fast_stem"],
+            Self::RootFeedingRosetteOnly => &["root_rosette"],
+            Self::BothGuilds => &["fast_stem", "root_rosette"],
+            Self::None => &[],
+        }
+    }
+
+    fn from_ids(ids: &[String]) -> Option<Self> {
+        let mut normalized = ids.iter().map(String::as_str).collect::<Vec<_>>();
+        normalized.sort_unstable();
+        match normalized.as_slice() {
+            [] => Some(Self::None),
+            ["fast_stem"] => Some(Self::FastStemOnly),
+            ["root_rosette"] => Some(Self::RootFeedingRosetteOnly),
+            ["fast_stem", "root_rosette"] => Some(Self::BothGuilds),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartupLightPreset {
+    Hours6,
+    Hours8,
+    Hours10,
+    Hours12,
+}
+
+impl StartupLightPreset {
+    pub const ALL: [Self; 4] = [Self::Hours6, Self::Hours8, Self::Hours10, Self::Hours12];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Hours6 => "6h",
+            Self::Hours8 => "8h",
+            Self::Hours10 => "10h",
+            Self::Hours12 => "12h",
+        }
+    }
+
+    pub fn hours(self) -> f64 {
+        match self {
+            Self::Hours6 => 6.0,
+            Self::Hours8 => 8.0,
+            Self::Hours10 => 10.0,
+            Self::Hours12 => 12.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StartupHeaterPreset {
+    Off,
+    Celsius24,
+    Celsius25,
+    Celsius26,
+}
+
+impl StartupHeaterPreset {
+    pub const ALL: [Self; 4] = [Self::Off, Self::Celsius24, Self::Celsius25, Self::Celsius26];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Off => "Off",
+            Self::Celsius24 => "24 C",
+            Self::Celsius25 => "25 C",
+            Self::Celsius26 => "26 C",
+        }
+    }
+
+    pub fn setpoint_c(self) -> Option<f64> {
+        match self {
+            Self::Off => None,
+            Self::Celsius24 => Some(24.0),
+            Self::Celsius25 => Some(25.0),
+            Self::Celsius26 => Some(26.0),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StartupOverrides {
+    pub geometry: ScenarioGeometryOverrides,
+    pub source_water_profile_id: Option<String>,
+    pub substrate_preset: Option<StartupSubstratePreset>,
+    pub plant_selection: Option<StartupPlantSelection>,
+    pub filter_enabled: Option<bool>,
+    pub light_preset: Option<StartupLightPreset>,
+    pub heater_preset: Option<StartupHeaterPreset>,
+    pub aeration_enabled: Option<bool>,
+    pub initial_adult_shrimp_count: Option<u32>,
+}
+
+impl Default for StartupOverrides {
+    fn default() -> Self {
+        Self {
+            geometry: ScenarioGeometryOverrides::default(),
+            source_water_profile_id: None,
+            substrate_preset: None,
+            plant_selection: None,
+            filter_enabled: None,
+            light_preset: None,
+            heater_preset: None,
+            aeration_enabled: None,
+            initial_adult_shrimp_count: None,
+        }
+    }
+}
+
 pub fn default_scenario_ids() -> &'static [&'static str] {
     tank_data::scenario_ids()
+}
+
+pub fn startup_source_water_ids() -> &'static [&'static str] {
+    tank_data::source_water_ids()
 }
 
 pub fn load_named_scenario(id: &str) -> Result<ScenarioPreset, tank_data::PresetError> {
@@ -34,16 +221,95 @@ pub fn seeded_state_with_overrides(
     scenario_id: &str,
     overrides: ScenarioGeometryOverrides,
 ) -> Result<TankState, tank_data::PresetError> {
-    validate_geometry_overrides(scenario_id, overrides)?;
+    seeded_state_with_full_overrides(
+        seed,
+        scenario_id,
+        StartupOverrides {
+            geometry: overrides,
+            ..StartupOverrides::default()
+        },
+    )
+}
+
+pub fn seeded_state_with_full_overrides(
+    seed: SimSeed,
+    scenario_id: &str,
+    overrides: StartupOverrides,
+) -> Result<TankState, tank_data::PresetError> {
+    validate_geometry_overrides(scenario_id, overrides.geometry)?;
     let mut scenario = load_named_scenario(scenario_id)?;
-    scenario.tank_length_cm *= overrides.size_scale;
-    scenario.tank_width_cm *= overrides.size_scale;
-    scenario.tank_height_cm *= overrides.size_scale;
+    scenario.tank_length_cm *= overrides.geometry.size_scale;
+    scenario.tank_width_cm *= overrides.geometry.size_scale;
+    scenario.tank_height_cm *= overrides.geometry.size_scale;
     scenario.fill_height_cm =
-        (scenario.fill_height_cm * overrides.size_scale * overrides.fill_ratio)
+        (scenario.fill_height_cm * overrides.geometry.size_scale * overrides.geometry.fill_ratio)
             .min(scenario.tank_height_cm);
 
-    materialize_scenario(seed, scenario)
+    let mut state = materialize_scenario(seed, scenario)?;
+    apply_startup_overrides(&mut state, overrides)?;
+    Ok(state)
+}
+
+pub fn startup_defaults_for_scenario(
+    scenario_id: &str,
+) -> Result<StartupOverrides, tank_data::PresetError> {
+    let scenario = load_named_scenario(scenario_id)?;
+    let substrate_preset =
+        StartupSubstratePreset::from_ids(&scenario.substrate_ids).ok_or_else(|| {
+            tank_data::PresetError::Validation {
+                category: "scenarios",
+                id: scenario_id.to_string(),
+                message: format!(
+                    "startup template does not support substrate combination {:?}",
+                    scenario.substrate_ids
+                ),
+            }
+        })?;
+    let plant_selection =
+        StartupPlantSelection::from_ids(&scenario.plant_ids).ok_or_else(|| {
+            tank_data::PresetError::Validation {
+                category: "scenarios",
+                id: scenario_id.to_string(),
+                message: format!(
+                    "startup template does not support plant combination {:?}",
+                    scenario.plant_ids
+                ),
+            }
+        })?;
+
+    let (light_preset, heater_preset, aeration_enabled, initial_adult_shrimp_count) =
+        match scenario_id {
+            "medium_planted" => (
+                StartupLightPreset::Hours10,
+                StartupHeaterPreset::Celsius25,
+                false,
+                10,
+            ),
+            "warm_room" => (
+                StartupLightPreset::Hours8,
+                StartupHeaterPreset::Off,
+                true,
+                5,
+            ),
+            _ => (
+                StartupLightPreset::Hours6,
+                StartupHeaterPreset::Off,
+                false,
+                0,
+            ),
+        };
+
+    Ok(StartupOverrides {
+        geometry: ScenarioGeometryOverrides::default(),
+        source_water_profile_id: Some(scenario.source_water_id),
+        substrate_preset: Some(substrate_preset),
+        plant_selection: Some(plant_selection),
+        filter_enabled: Some(true),
+        light_preset: Some(light_preset),
+        heater_preset: Some(heater_preset),
+        aeration_enabled: Some(aeration_enabled),
+        initial_adult_shrimp_count: Some(initial_adult_shrimp_count),
+    })
 }
 
 /// Converts a `tank_data::SourceWaterPreset` into a `tank_core::SourceWaterProfile`.
@@ -203,73 +469,10 @@ fn materialize_scenario(
     let process_params = process_preset_to_params(&process_preset);
 
     // Substrate layers
-    let mut substrate_layers = Vec::new();
-    for sub_id in &scenario.substrate_ids {
-        let sub_preset = tank_data::load_substrate(sub_id)?;
-        let footprint = geometry.footprint_area_cm2();
-        substrate_layers.push(SubstrateLayerState {
-            kind: match sub_preset.id.as_str() {
-                "inert_sand" => tank_core::SubstrateKind::InertSand,
-                "inert_gravel" => tank_core::SubstrateKind::InertGravel,
-                "active_planted" => tank_core::SubstrateKind::ActivePlanted,
-                "coarse_porous" => tank_core::SubstrateKind::CoarsePorous,
-                other => {
-                    return Err(tank_data::PresetError::Validation {
-                        category: "substrate",
-                        id: other.to_string(),
-                        message: format!("unsupported substrate kind: `{other}`"),
-                    });
-                }
-            },
-            depth_cm: sub_preset.depth_cm,
-            nutrient_store_mg_n_total: sub_preset.nutrient_charge_mg_n_total,
-            nutrient_store_mg_p_total: sub_preset.nutrient_charge_mg_p_total,
-            cation_exchange_capacity_index: sub_preset.cation_exchange_capacity_index,
-            detritus_trapping_index: sub_preset.detritus_trapping_index,
-            colonizable_area_cm2: footprint * sub_preset.colonizable_area_factor,
-            low_oxygen_tendency_index: sub_preset.low_oxygen_tendency_index,
-            grazing_surface_index: sub_preset.grazing_surface_index,
-        });
-    }
-    if substrate_layers.is_empty() {
-        substrate_layers.push(SubstrateLayerState::default());
-    }
+    let substrate_layers = build_substrate_layers(&geometry, &scenario.substrate_ids)?;
 
     // Plant guilds
-    let mut plant_guilds = Vec::new();
-    for plant_id in &scenario.plant_ids {
-        let plant_preset = tank_data::load_plant(plant_id)?;
-        let guild = match plant_preset.guild.as_str() {
-            "FastStem" => PlantGuild::FastStem,
-            "RootFeedingRosette" => PlantGuild::RootFeedingRosette,
-            other => {
-                return Err(tank_data::PresetError::Validation {
-                    category: "plants",
-                    id: plant_id.clone(),
-                    message: format!("unsupported plant guild: `{other}`"),
-                });
-            }
-        };
-        plant_guilds.push(PlantGuildState {
-            guild,
-            biomass_g: 5.0,
-            health_index: 0.8,
-            crowding_index: 0.1,
-            habitat_index: if guild == PlantGuild::RootFeedingRosette {
-                // Habitat factor depends on substrate quality
-                substrate_layers
-                    .iter()
-                    .map(|l| l.cation_exchange_capacity_index)
-                    .fold(0.0_f64, f64::max)
-                    .max(0.3)
-            } else {
-                0.8
-            },
-        });
-    }
-    if plant_guilds.is_empty() {
-        plant_guilds.push(PlantGuildState::default());
-    }
+    let plant_guilds = build_plant_guilds(&scenario.plant_ids, &substrate_layers, true)?;
 
     // Shrimp species parameters
     let shrimp_preset = tank_data::load_shrimp(&scenario.shrimp_profile_id)?;
@@ -307,6 +510,178 @@ fn materialize_scenario(
     state.shrimp_params = shrimp_params;
 
     Ok(state)
+}
+
+fn apply_startup_overrides(
+    state: &mut TankState,
+    overrides: StartupOverrides,
+) -> Result<(), tank_data::PresetError> {
+    if let Some(source_water_id) = overrides.source_water_profile_id.as_deref() {
+        let profile = if let Some(existing) = state.source_water_catalog.get(source_water_id) {
+            existing.clone()
+        } else {
+            let preset = tank_data::load_source_water(source_water_id)?;
+            let profile = source_water_to_profile(&preset);
+            state
+                .source_water_catalog
+                .insert(source_water_id.to_string(), profile.clone());
+            profile
+        };
+        state.water = WaterState::from_source_profile(&profile, &state.geometry);
+    }
+
+    if let Some(substrate_preset) = overrides.substrate_preset {
+        let substrate_ids = substrate_preset
+            .preset_ids()
+            .iter()
+            .map(|id| (*id).to_string())
+            .collect::<Vec<_>>();
+        state.substrate_layers = build_substrate_layers(&state.geometry, &substrate_ids)?;
+    }
+
+    if overrides.substrate_preset.is_some() || overrides.plant_selection.is_some() {
+        let plant_ids = if let Some(plant_selection) = overrides.plant_selection {
+            plant_selection
+                .preset_ids()
+                .iter()
+                .map(|id| (*id).to_string())
+                .collect::<Vec<_>>()
+        } else {
+            state
+                .plant_guilds
+                .iter()
+                .map(|plant| match plant.guild {
+                    PlantGuild::FastStem => "fast_stem".to_string(),
+                    PlantGuild::RootFeedingRosette => "root_rosette".to_string(),
+                })
+                .collect::<Vec<_>>()
+        };
+        state.plant_guilds = build_plant_guilds(&plant_ids, &state.substrate_layers, false)?;
+    }
+
+    if let Some(filter_enabled) = overrides.filter_enabled {
+        state.hardware.filter.enabled = filter_enabled;
+        if filter_enabled {
+            if state.hardware.filter.flow_lph <= 0.0 {
+                state.hardware.filter.flow_lph = 200.0;
+            }
+        } else {
+            state.hardware.filter.flow_lph = 0.0;
+        }
+    }
+
+    if let Some(light_preset) = overrides.light_preset {
+        state.hardware.light.enabled = true;
+        state.hardware.light.photoperiod_hours = light_preset.hours();
+    }
+
+    if let Some(heater_preset) = overrides.heater_preset {
+        match heater_preset.setpoint_c() {
+            Some(setpoint_c) => {
+                state.hardware.heater.enabled = true;
+                state.hardware.heater.setpoint_c = setpoint_c;
+            }
+            None => {
+                state.hardware.heater.enabled = false;
+                state.hardware.heater.setpoint_c = 24.0;
+            }
+        }
+        state.hardware.heater.last_output_w = 0.0;
+    }
+
+    if let Some(aeration_enabled) = overrides.aeration_enabled {
+        state.hardware.aeration.enabled = aeration_enabled;
+        state.hardware.aeration.intensity = if aeration_enabled { 0.35 } else { 0.0 };
+    }
+
+    if let Some(initial_adult_shrimp_count) = overrides.initial_adult_shrimp_count {
+        state.animal = AnimalState::with_adults(initial_adult_shrimp_count);
+    }
+
+    Ok(())
+}
+
+fn build_substrate_layers(
+    geometry: &TankGeometry,
+    substrate_ids: &[String],
+) -> Result<Vec<SubstrateLayerState>, tank_data::PresetError> {
+    let mut substrate_layers = Vec::new();
+    for sub_id in substrate_ids {
+        let sub_preset = tank_data::load_substrate(sub_id)?;
+        let footprint = geometry.footprint_area_cm2();
+        substrate_layers.push(SubstrateLayerState {
+            kind: match sub_preset.id.as_str() {
+                "inert_sand" => tank_core::SubstrateKind::InertSand,
+                "inert_gravel" => tank_core::SubstrateKind::InertGravel,
+                "active_planted" => tank_core::SubstrateKind::ActivePlanted,
+                "coarse_porous" => tank_core::SubstrateKind::CoarsePorous,
+                other => {
+                    return Err(tank_data::PresetError::Validation {
+                        category: "substrate",
+                        id: other.to_string(),
+                        message: format!("unsupported substrate kind: `{other}`"),
+                    });
+                }
+            },
+            depth_cm: sub_preset.depth_cm,
+            nutrient_store_mg_n_total: sub_preset.nutrient_charge_mg_n_total,
+            nutrient_store_mg_p_total: sub_preset.nutrient_charge_mg_p_total,
+            cation_exchange_capacity_index: sub_preset.cation_exchange_capacity_index,
+            detritus_trapping_index: sub_preset.detritus_trapping_index,
+            colonizable_area_cm2: footprint * sub_preset.colonizable_area_factor,
+            low_oxygen_tendency_index: sub_preset.low_oxygen_tendency_index,
+            grazing_surface_index: sub_preset.grazing_surface_index,
+        });
+    }
+    if substrate_layers.is_empty() {
+        substrate_layers.push(SubstrateLayerState::default());
+    }
+    Ok(substrate_layers)
+}
+
+fn build_plant_guilds(
+    plant_ids: &[String],
+    substrate_layers: &[SubstrateLayerState],
+    include_default_when_empty: bool,
+) -> Result<Vec<PlantGuildState>, tank_data::PresetError> {
+    let mut plant_guilds = Vec::new();
+    for plant_id in plant_ids {
+        let plant_preset = tank_data::load_plant(plant_id)?;
+        let guild = match plant_preset.guild.as_str() {
+            "FastStem" => PlantGuild::FastStem,
+            "RootFeedingRosette" => PlantGuild::RootFeedingRosette,
+            other => {
+                return Err(tank_data::PresetError::Validation {
+                    category: "plants",
+                    id: plant_id.clone(),
+                    message: format!("unsupported plant guild: `{other}`"),
+                });
+            }
+        };
+        plant_guilds.push(PlantGuildState {
+            guild,
+            biomass_g: 5.0,
+            health_index: 0.8,
+            crowding_index: 0.1,
+            habitat_index: if guild == PlantGuild::RootFeedingRosette {
+                root_rosette_habitat_index(substrate_layers)
+            } else {
+                0.8
+            },
+        });
+    }
+    if plant_guilds.is_empty() && include_default_when_empty {
+        plant_guilds.push(PlantGuildState::default());
+    }
+    Ok(plant_guilds)
+}
+
+fn root_rosette_habitat_index(substrate_layers: &[SubstrateLayerState]) -> f64 {
+    substrate_layers
+        .iter()
+        .map(|layer| layer.cation_exchange_capacity_index)
+        .fold(0.0_f64, f64::max)
+        .max(0.3)
 }
 
 fn validate_geometry_overrides(

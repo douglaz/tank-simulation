@@ -225,6 +225,13 @@ impl PlantGuildState {
 }
 
 impl AnimalState {
+    pub fn with_adults(adults_count: u32) -> Self {
+        Self {
+            adults_count,
+            ..Self::default()
+        }
+    }
+
     /// Ensures `berried_females_count <= adults_count` by trimming
     /// excess from the newest egg cohorts first.
     pub fn clamp_berried_to_adults(&mut self) {
