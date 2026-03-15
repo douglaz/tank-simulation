@@ -1,5 +1,5 @@
 use tank_core::{
-    Engine, EventKind, PlayerAction, ProcessParams, SimSeed, SimulationEngine, TankState,
+    EggCohort, Engine, EventKind, PlayerAction, ProcessParams, SimSeed, SimulationEngine, TankState,
 };
 
 fn threshold_state(seed: SimSeed) -> TankState {
@@ -194,6 +194,10 @@ fn egg_failure_event_has_cause_codes() -> Result<(), tank_core::SimError> {
     state.animal.adults_count = 5;
     state.animal.berried_females_count = 3;
     state.animal.egg_progress_days = 20.0;
+    state.animal.egg_cohorts = vec![EggCohort {
+        count: 3,
+        progress_days: 20.0,
+    }];
     state.animal.condition_index = 0.3;
     state.hardware.aeration.enabled = false;
 

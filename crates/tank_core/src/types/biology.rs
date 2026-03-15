@@ -2,6 +2,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::substrate::SubstrateLayerState;
 
+/// A cohort of berried females that became berried on the same day.
+/// Separate cohorts ensure that only completed clutches resolve,
+/// preserving the clutch-resolution invariant.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EggCohort {
+    pub count: u32,
+    pub progress_days: f64,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum PlantGuild {
     FastStem,
@@ -48,6 +57,9 @@ pub struct AnimalState {
     pub molt_stress_index: f64,
     pub reproductive_readiness_index: f64,
     pub egg_progress_days: f64,
+    /// Per-cohort egg tracking for clutch-resolution invariant.
+    #[serde(default)]
+    pub egg_cohorts: Vec<EggCohort>,
     /// Hidden hourly stress accumulators, reset after daily processing.
     #[serde(default)]
     pub hourly_nh3_stress_accum: f64,
@@ -147,6 +159,7 @@ impl Default for AnimalState {
             molt_stress_index: 0.1,
             reproductive_readiness_index: 0.4,
             egg_progress_days: 0.0,
+            egg_cohorts: Vec::new(),
             hourly_nh3_stress_accum: 0.0,
             hourly_nitrite_stress_accum: 0.0,
             hourly_low_do_stress_accum: 0.0,
@@ -207,6 +220,41 @@ impl PlantGuildState {
         match self.guild {
             PlantGuild::FastStem => 0.1,
             PlantGuild::RootFeedingRosette => 0.9,
+        }
+    }
+}
+
+impl AnimalState {
+    /// Ensures `berried_females_count <= adults_count` by trimming
+    /// excess from the newest egg cohorts first.
+    pub fn clamp_berried_to_adults(&mut self) {
+        if self.berried_females_count > self.adults_count {
+            let excess = self.berried_females_count - self.adults_count;
+            self.berried_females_count = self.adults_count;
+            trim_egg_cohorts(&mut self.egg_cohorts, excess);
+        }
+    }
+
+    /// Derives `egg_progress_days` from the most-advanced cohort for display.
+    pub fn sync_egg_progress_from_cohorts(&mut self) {
+        self.egg_progress_days = self
+            .egg_cohorts
+            .iter()
+            .map(|c| c.progress_days)
+            .fold(0.0_f64, f64::max);
+    }
+}
+
+/// Trims `to_remove` berried females from cohorts, starting from the newest (last).
+fn trim_egg_cohorts(cohorts: &mut Vec<EggCohort>, mut to_remove: u32) {
+    while to_remove > 0 && !cohorts.is_empty() {
+        let last = cohorts.last_mut().unwrap();
+        if last.count <= to_remove {
+            to_remove -= last.count;
+            cohorts.pop();
+        } else {
+            last.count -= to_remove;
+            to_remove = 0;
         }
     }
 }

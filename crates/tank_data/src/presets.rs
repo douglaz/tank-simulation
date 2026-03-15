@@ -114,6 +114,72 @@ pub struct ShrimpPreset {
     pub provenance: Option<Provenance>,
 }
 
+impl ShrimpPreset {
+    /// Validates that all shrimp species parameters are finite, non-negative,
+    /// and logically consistent.
+    pub fn validate(&self) -> Result<(), String> {
+        let fields: &[(&str, f64)] = &[
+            ("optimal_temp_min_c", self.optimal_temp_min_c),
+            ("optimal_temp_max_c", self.optimal_temp_max_c),
+            ("gh_min_d", self.gh_min_d),
+            ("gh_max_d", self.gh_max_d),
+            ("base_spawn_rate", self.base_spawn_rate),
+            ("hatch_success_base", self.hatch_success_base),
+            ("juvenile_sensitivity", self.juvenile_sensitivity),
+            (
+                "high_temp_repro_penalty_start_c",
+                self.high_temp_repro_penalty_start_c,
+            ),
+            (
+                "high_temp_repro_penalty_full_c",
+                self.high_temp_repro_penalty_full_c,
+            ),
+        ];
+        for (name, value) in fields {
+            if !value.is_finite() {
+                return Err(format!("field `{name}` must be finite, got {value}"));
+            }
+            if *value < 0.0 {
+                return Err(format!("field `{name}` must be non-negative, got {value}"));
+            }
+        }
+        if self.egg_duration_days == 0 {
+            return Err("egg_duration_days must be > 0".to_string());
+        }
+        if self.optimal_temp_min_c >= self.optimal_temp_max_c {
+            return Err(format!(
+                "optimal_temp_min_c ({}) must be < optimal_temp_max_c ({})",
+                self.optimal_temp_min_c, self.optimal_temp_max_c
+            ));
+        }
+        if self.gh_min_d >= self.gh_max_d {
+            return Err(format!(
+                "gh_min_d ({}) must be < gh_max_d ({})",
+                self.gh_min_d, self.gh_max_d
+            ));
+        }
+        if self.high_temp_repro_penalty_start_c >= self.high_temp_repro_penalty_full_c {
+            return Err(format!(
+                "high_temp_repro_penalty_start_c ({}) must be < high_temp_repro_penalty_full_c ({})",
+                self.high_temp_repro_penalty_start_c, self.high_temp_repro_penalty_full_c
+            ));
+        }
+        if self.base_spawn_rate > 1.0 {
+            return Err(format!(
+                "base_spawn_rate must be <= 1.0, got {}",
+                self.base_spawn_rate
+            ));
+        }
+        if self.hatch_success_base > 1.0 {
+            return Err(format!(
+                "hatch_success_base must be <= 1.0, got {}",
+                self.hatch_success_base
+            ));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProcessParamsPreset {
     pub id: String,
@@ -617,6 +683,64 @@ impl ProcessParamsPreset {
                 "comammox_vmax_fraction must be <= 1.0, got {}",
                 self.comammox_vmax_fraction
             ));
+        }
+        // Validate shrimp dynamics fields
+        let shrimp_fields: &[(&str, f64)] = &[
+            (
+                "shrimp_base_mortality_per_day",
+                self.shrimp_base_mortality_per_day,
+            ),
+            (
+                "shrimp_stress_mortality_scale",
+                self.shrimp_stress_mortality_scale,
+            ),
+            (
+                "shrimp_juvenile_maturation_days",
+                self.shrimp_juvenile_maturation_days,
+            ),
+            (
+                "shrimp_periphyton_grazing_g_per_shrimp_per_day",
+                self.shrimp_periphyton_grazing_g_per_shrimp_per_day,
+            ),
+            (
+                "shrimp_condition_smoothing",
+                self.shrimp_condition_smoothing,
+            ),
+        ];
+        for (name, value) in shrimp_fields {
+            if !value.is_finite() {
+                return Err(format!("field `{name}` must be finite, got {value}"));
+            }
+            if *value < 0.0 {
+                return Err(format!("field `{name}` must be non-negative, got {value}"));
+            }
+        }
+        // Validate microfauna turnover fields
+        let microfauna_fields: &[(&str, f64)] = &[
+            (
+                "microfauna_mineralization_boost",
+                self.microfauna_mineralization_boost,
+            ),
+            (
+                "microfauna_periphyton_consumption",
+                self.microfauna_periphyton_consumption,
+            ),
+            (
+                "microfauna_population_smoothing",
+                self.microfauna_population_smoothing,
+            ),
+            (
+                "microfauna_shrimp_pressure_threshold",
+                self.microfauna_shrimp_pressure_threshold,
+            ),
+        ];
+        for (name, value) in microfauna_fields {
+            if !value.is_finite() {
+                return Err(format!("field `{name}` must be finite, got {value}"));
+            }
+            if *value < 0.0 {
+                return Err(format!("field `{name}` must be non-negative, got {value}"));
+            }
         }
         Ok(())
     }

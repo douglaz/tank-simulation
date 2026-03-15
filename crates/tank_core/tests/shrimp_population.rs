@@ -1,5 +1,6 @@
 use tank_core::{
-    Engine, EventKind, PlayerAction, ProcessParams, SimError, SimSeed, SimulationEngine, TankState,
+    EggCohort, Engine, EventKind, PlayerAction, ProcessParams, SimError, SimSeed, SimulationEngine,
+    TankState,
 };
 
 /// Creates a well-conditioned tank with shrimp for population tests.
@@ -125,9 +126,13 @@ fn hatch_produces_juveniles() -> Result<(), SimError> {
 #[test]
 fn egg_failure_under_stress() -> Result<(), SimError> {
     let mut state = shrimp_test_state(SimSeed(7200));
-    // Force berried state
+    // Force berried state with cohort tracking
     state.animal.berried_females_count = 3;
     state.animal.egg_progress_days = 20.0; // About to hatch
+    state.animal.egg_cohorts = vec![EggCohort {
+        count: 3,
+        progress_days: 20.0,
+    }];
 
     // Create stressful conditions: low DO, high temp
     let vol = state.geometry.water_volume_l();

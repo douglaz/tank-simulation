@@ -1,6 +1,6 @@
 use crate::systems::chemistry::compute_nh3_mg_l;
 use crate::types::{
-    EventCause, EventKind, EventSeverity, ShrimpRuntimeParams, TankState,
+    EggCohort, EventCause, EventKind, EventSeverity, ShrimpRuntimeParams, TankState,
 };
 
 // ── Hourly ──────────────────────────────────────────────────────────────────
@@ -284,6 +284,11 @@ fn spawning(state: &mut TankState) {
 
     if new_berried > 0 {
         state.animal.berried_females_count += new_berried;
+        // Create a new cohort for this batch of berried females
+        state.animal.egg_cohorts.push(EggCohort {
+            count: new_berried,
+            progress_days: 0.0,
+        });
 
         crate::systems::events::emit_once_per_day_pub(
             state,
@@ -296,18 +301,19 @@ fn spawning(state: &mut TankState) {
 }
 
 fn egg_development(state: &mut TankState) {
-    if state.animal.berried_females_count == 0 {
-        return;
+    if state.animal.egg_cohorts.is_empty() {
+        // Legacy path: if berried females exist without cohorts (e.g. from old save),
+        // migrate them into a single cohort using the current egg_progress_days.
+        if state.animal.berried_females_count > 0 {
+            state.animal.egg_cohorts.push(EggCohort {
+                count: state.animal.berried_females_count,
+                progress_days: state.animal.egg_progress_days,
+            });
+        } else {
+            return;
+        }
     }
 
-    state.animal.egg_progress_days += 1.0;
-
-    if state.animal.egg_progress_days < state.shrimp_params.egg_duration_days as f64 {
-        return;
-    }
-
-    // Resolve clutch
-    let berried = state.animal.berried_females_count;
     let volume_l = state.geometry.water_volume_l().max(f64::EPSILON);
     let do_mg_l = state.water.dissolved_oxygen_mg_total / volume_l;
     let temp = state.water.temperature_c;
@@ -326,23 +332,44 @@ fn egg_development(state: &mut TankState) {
     let p_hatch =
         params.hatch_success_base * f_condition * f_oxygen * f_temp * f_stability * f_mineral;
 
-    let mut successful = 0u32;
-    let mut failed = 0u32;
-    for _ in 0..berried {
-        if state.rng.next_f64() < p_hatch {
-            successful += 1;
+    let egg_duration = params.egg_duration_days as f64;
+    let mut total_successful = 0u32;
+    let mut total_failed = 0u32;
+    let mut resolved_berried = 0u32;
+
+    // Advance each cohort; resolve only those that have reached duration
+    let mut i = 0;
+    while i < state.animal.egg_cohorts.len() {
+        state.animal.egg_cohorts[i].progress_days += 1.0;
+
+        if state.animal.egg_cohorts[i].progress_days >= egg_duration {
+            let cohort = state.animal.egg_cohorts.remove(i);
+            resolved_berried += cohort.count;
+
+            for _ in 0..cohort.count {
+                if state.rng.next_f64() < p_hatch {
+                    total_successful += 1;
+                } else {
+                    total_failed += 1;
+                }
+            }
+            // Don't increment i; the next cohort shifted into position
         } else {
-            failed += 1;
+            i += 1;
         }
     }
 
     // Successful hatches produce juveniles (~25 per clutch for Neocaridina)
     let juveniles_per_clutch = 25u32;
-    if successful > 0 {
-        state.animal.juveniles_count += successful * juveniles_per_clutch;
+    if total_successful > 0 {
+        state.animal.juveniles_count += total_successful * juveniles_per_clutch;
     }
 
-    if failed > 0 {
+    // Only resolved clutches leave berried_females_count
+    state.animal.berried_females_count =
+        state.animal.berried_females_count.saturating_sub(resolved_berried);
+
+    if total_failed > 0 {
         // Failure-mode invariant: on hatch failure, juveniles_count does NOT increase
         let mut causes = Vec::new();
         if f_oxygen < 0.6 {
@@ -366,13 +393,12 @@ fn egg_development(state: &mut TankState) {
             EventSeverity::Warning,
             EventKind::EggFailure,
             causes,
-            format!("{failed} clutch(es) failed to hatch"),
+            format!("{total_failed} clutch(es) failed to hatch"),
         );
     }
 
-    // All clutches resolved
-    state.animal.berried_females_count = 0;
-    state.animal.egg_progress_days = 0.0;
+    // Update egg_progress_days from remaining cohorts for display/snapshot
+    state.animal.sync_egg_progress_from_cohorts();
 }
 
 fn juvenile_recruitment(state: &mut TankState) {
@@ -422,10 +448,8 @@ fn mortality(state: &mut TankState) {
     state.animal.adults_count = state.animal.adults_count.saturating_sub(adult_deaths);
     state.animal.juveniles_count = state.animal.juveniles_count.saturating_sub(juv_deaths);
 
-    // Preserve berried_females <= adults invariant
-    if state.animal.berried_females_count > state.animal.adults_count {
-        state.animal.berried_females_count = state.animal.adults_count;
-    }
+    // Preserve berried_females <= adults invariant (also trims egg cohorts)
+    state.animal.clamp_berried_to_adults();
 }
 
 fn emit_molt_stress_warning(state: &mut TankState, volume_l: f64) {

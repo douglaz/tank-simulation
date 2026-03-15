@@ -198,10 +198,8 @@ impl Engine {
             PlayerAction::RemoveShrimp { count } => {
                 self.state.animal.adults_count =
                     self.state.animal.adults_count.saturating_sub(count);
-                // Preserve berried_females_count <= adults_count
-                if self.state.animal.berried_females_count > self.state.animal.adults_count {
-                    self.state.animal.berried_females_count = self.state.animal.adults_count;
-                }
+                // Preserve berried_females_count <= adults_count (also trims egg cohorts)
+                self.state.animal.clamp_berried_to_adults();
             }
             PlayerAction::ChangePhotoperiod { hours } => {
                 self.state.hardware.light.photoperiod_hours = hours;

@@ -47,7 +47,15 @@ pub fn load_plant(id: &str) -> Result<PlantPreset, PresetError> {
 }
 
 pub fn load_shrimp(id: &str) -> Result<ShrimpPreset, PresetError> {
-    load_from_registry("shrimp", id, SHRIMP_PRESETS)
+    let preset: ShrimpPreset = load_from_registry("shrimp", id, SHRIMP_PRESETS)?;
+    preset
+        .validate()
+        .map_err(|message| PresetError::Validation {
+            category: "shrimp",
+            id: id.to_string(),
+            message,
+        })?;
+    Ok(preset)
 }
 
 pub fn load_process_params(id: &str) -> Result<ProcessParamsPreset, PresetError> {
