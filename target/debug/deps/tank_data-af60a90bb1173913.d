@@ -21,5 +21,5 @@ crates/tank_data/src/../data/scenarios/medium_planted.toml:
 crates/tank_data/src/../data/scenarios/warm_room.toml:
 Cargo.toml:
 
-# env-dep:CLIPPY_ARGS=
+# env-dep:CLIPPY_ARGS=-D__CLIPPY_HACKERY__warnings__CLIPPY_HACKERY__
 # env-dep:CLIPPY_CONF_DIR
