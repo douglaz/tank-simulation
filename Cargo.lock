@@ -496,6 +496,7 @@ dependencies = [
  "rand_chacha",
  "serde",
  "serde_json",
+ "tank_scenarios",
  "thiserror",
 ]
 

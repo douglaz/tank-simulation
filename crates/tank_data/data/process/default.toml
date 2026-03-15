@@ -11,6 +11,42 @@ photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.12
 k_surface_w_per_m2_k = 10.0
 k_wall_w_per_m2_k = 5.0
 
+# Nitrogen cycle: feed leaching
+feed_leach_rate_per_hour = 0.12
+fine_detritus_dissolution_rate_per_hour = 0.08
+feed_n_to_c_ratio = 0.16
+
+# Decomposer mineralization
+decomposer_vmax_per_hour = 0.02
+decomposer_k_doc_mg = 5.0
+decomposer_growth_yield = 0.3
+decomposer_decay_rate_per_hour = 0.002
+
+# AOB kinetics
+aob_vmax_mg_n_per_g_per_hour = 1.5
+aob_k_tan_mg = 0.5
+aob_k_do_mg = 1.0
+aob_growth_yield = 0.001
+aob_decay_rate_per_hour = 0.003
+
+# NOB kinetics
+nob_vmax_mg_n_per_g_per_hour = 1.2
+nob_k_nitrite_mg = 0.3
+nob_k_do_mg = 1.0
+nob_growth_yield = 0.001
+nob_decay_rate_per_hour = 0.003
+
+# Comammox kinetics
+comammox_vmax_fraction = 0.4
+comammox_k_tan_mg = 0.8
+comammox_k_do_mg = 1.5
+comammox_growth_yield = 0.0008
+comammox_decay_rate_per_hour = 0.004
+
+# Stoichiometric constants
+o2_per_mg_n_nitrified = 4.57
+alkalinity_meq_per_mg_n_nitrified = 0.1428
+
 [provenance]
 source_title = "Starter preset pack"
 source_year = 2026

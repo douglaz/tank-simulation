@@ -1,0 +1,294 @@
+use crate::types::TankState;
+
+/// Result of one hourly nitrogen cycle step, carrying coupling values
+/// that downstream systems (DO, chemistry) need.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NitrogenCycleOutput {
+    /// Total mg N oxidized to nitrate this tick (AOB + NOB + comammox pathway).
+    pub total_mg_n_nitrified: f64,
+}
+
+/// Monod-style environmental factors shared across guilds.
+struct EnvFactors {
+    f_temp: f64,
+    f_ph: f64,
+    maturity_factor: f64,
+}
+
+fn safe_rate(v: f64) -> f64 {
+    if v.is_finite() { v.max(0.0) } else { 0.0 }
+}
+
+/// Runs the full nitrogen-cycle phase for one hourly tick.
+///
+/// Order: feed leaching -> detritus breakdown/mineralization -> nitrification + guild growth/decay.
+///
+/// Returns coupling values for downstream DO and alkalinity systems.
+pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
+    let volume_l = state.geometry.water_volume_l();
+    if volume_l <= f64::EPSILON {
+        return NitrogenCycleOutput::default();
+    }
+
+    let pp = &state.process_params;
+
+    // ---- 1. Feed leaching: particulate -> fine detritus ----
+    let leach_rate = safe_rate(pp.feed_leach_rate_per_hour);
+    let leached = (state.detritus.particulate_organics_g_total * leach_rate)
+        .min(state.detritus.particulate_organics_g_total);
+    state.detritus.particulate_organics_g_total -= leached;
+    state.detritus.fine_detritus_g_total += leached;
+
+    // ---- 2. Fine detritus dissolution: fine detritus -> dissolved organic pools ----
+    let diss_rate = safe_rate(pp.fine_detritus_dissolution_rate_per_hour);
+    let dissolved = (state.detritus.fine_detritus_g_total * diss_rate)
+        .min(state.detritus.fine_detritus_g_total);
+    state.detritus.fine_detritus_g_total -= dissolved;
+    // dissolved mass (g) -> mg for dissolved pools: 1 g = 1000 mg
+    // Split into DOC and DON using N:C ratio
+    let n_to_c = safe_rate(pp.feed_n_to_c_ratio);
+    let doc_mg = dissolved * 1000.0 / (1.0 + n_to_c); // carbon fraction
+    let don_mg = doc_mg * n_to_c; // nitrogen fraction
+    state.water.dissolved_organic_carbon_mg_c_total += doc_mg;
+    state.water.dissolved_organic_nitrogen_mg_n_total += don_mg;
+    // Track flow through dissolved_feed_residue (bookkeeping, decremented by mineralization)
+    state.detritus.dissolved_feed_residue_g_total += dissolved;
+
+    // ---- 3. Decomposer mineralization: DOC/DON -> TAN ----
+    let decomposer_biomass = state.microbe.decomposer_biomass_g;
+    let doc_total = state.water.dissolved_organic_carbon_mg_c_total;
+    let don_total = state.water.dissolved_organic_nitrogen_mg_n_total;
+    let do_total = state.water.dissolved_oxygen_mg_total;
+
+    // Environmental factors for decomposers
+    let temp = state.water.temperature_c;
+    let f_temp_decomp = temperature_factor(temp);
+    let f_do_decomp = do_total / (do_total + 2.0); // half-sat ~2 mg total
+
+    let decomp_vmax = safe_rate(pp.decomposer_vmax_per_hour);
+    let k_doc = pp.decomposer_k_doc_mg.max(0.01);
+    let monod_doc = doc_total / (doc_total + k_doc);
+
+    let potential_doc_consumed_mg = decomp_vmax * decomposer_biomass * 1000.0 // g->mg conversion for biomass effect
+        * f_temp_decomp * f_do_decomp * monod_doc;
+    let potential_doc_consumed_mg = safe_rate(potential_doc_consumed_mg);
+
+    // Clamp: cannot consume more DOC than exists
+    let doc_consumed_mg = potential_doc_consumed_mg.min(doc_total);
+    // Proportional DON consumed
+    let don_consumed_mg = if doc_total > f64::EPSILON {
+        doc_consumed_mg * (don_total / doc_total)
+    } else {
+        0.0
+    };
+    let don_consumed_mg = don_consumed_mg.min(don_total);
+
+    state.water.dissolved_organic_carbon_mg_c_total -= doc_consumed_mg;
+    state.water.dissolved_organic_nitrogen_mg_n_total -= don_consumed_mg;
+    // Mineralized DON becomes TAN
+    state.water.ammonia_total_mg_n_total += don_consumed_mg;
+    // Track residue pool depletion
+    let residue_consumed_g = doc_consumed_mg / 1000.0 * (1.0 + n_to_c);
+    state.detritus.dissolved_feed_residue_g_total =
+        (state.detritus.dissolved_feed_residue_g_total - residue_consumed_g).max(0.0);
+
+    // Decomposer growth/decay
+    let decomp_growth = safe_rate(pp.decomposer_growth_yield) * doc_consumed_mg / 1000.0; // mg->g
+    let decomp_decay = safe_rate(pp.decomposer_decay_rate_per_hour) * decomposer_biomass;
+    state.microbe.decomposer_biomass_g =
+        (state.microbe.decomposer_biomass_g + decomp_growth - decomp_decay).max(0.0);
+
+    // ---- 4. Nitrification: TAN -> nitrite -> nitrate (+ comammox TAN -> nitrate) ----
+    let env = compute_env_factors(state);
+
+    // 4a. AOB: TAN -> nitrite
+    let aob_potential = monod_rate(
+        safe_rate(pp.aob_vmax_mg_n_per_g_per_hour),
+        state.microbe.ammonia_oxidizer_biomass_g,
+        env.maturity_factor,
+        env.f_temp,
+        env.f_ph,
+        state.water.dissolved_oxygen_mg_total / (state.water.dissolved_oxygen_mg_total + pp.aob_k_do_mg.max(0.01)),
+        state.water.ammonia_total_mg_n_total,
+        pp.aob_k_tan_mg.max(0.01),
+    );
+    // Oxygen limitation: each mg N needs 3.43 mg O2 for TAN->nitrite step
+    let o2_for_aob = 3.43;
+    let aob_o2_limited = if o2_for_aob > 0.0 {
+        state.water.dissolved_oxygen_mg_total / o2_for_aob
+    } else {
+        f64::MAX
+    };
+    let aob_rate = safe_rate(aob_potential)
+        .min(state.water.ammonia_total_mg_n_total)
+        .min(aob_o2_limited);
+
+    // 4b. Comammox: TAN -> nitrate directly (lower vmax)
+    let comammox_vmax = safe_rate(pp.aob_vmax_mg_n_per_g_per_hour * pp.comammox_vmax_fraction);
+    let comammox_potential = monod_rate(
+        comammox_vmax,
+        state.microbe.comammox_biomass_g,
+        env.maturity_factor,
+        env.f_temp,
+        env.f_ph,
+        state.water.dissolved_oxygen_mg_total / (state.water.dissolved_oxygen_mg_total + pp.comammox_k_do_mg.max(0.01)),
+        state.water.ammonia_total_mg_n_total,
+        pp.comammox_k_tan_mg.max(0.01),
+    );
+    let o2_for_comammox = pp.o2_per_mg_n_nitrified; // full 4.57 for TAN->NO3
+    let comammox_o2_limited = if o2_for_comammox > 0.0 {
+        state.water.dissolved_oxygen_mg_total / o2_for_comammox
+    } else {
+        f64::MAX
+    };
+    // Comammox + AOB compete for TAN; cap total TAN consumed
+    let tan_available_for_comammox = (state.water.ammonia_total_mg_n_total - aob_rate).max(0.0);
+    let comammox_rate = safe_rate(comammox_potential)
+        .min(tan_available_for_comammox)
+        .min(comammox_o2_limited);
+
+    // Apply AOB + comammox TAN consumption
+    let total_tan_consumed = aob_rate + comammox_rate;
+    state.water.ammonia_total_mg_n_total =
+        (state.water.ammonia_total_mg_n_total - total_tan_consumed).max(0.0);
+    // AOB produces nitrite
+    state.water.nitrite_mg_n_total += aob_rate;
+    // Comammox produces nitrate directly
+    state.water.nitrate_mg_n_total += comammox_rate;
+
+    // O2 consumed so far by AOB and comammox
+    let o2_consumed_aob = aob_rate * o2_for_aob;
+    let o2_consumed_comammox = comammox_rate * o2_for_comammox;
+    state.water.dissolved_oxygen_mg_total =
+        (state.water.dissolved_oxygen_mg_total - o2_consumed_aob - o2_consumed_comammox).max(0.0);
+
+    // 4c. NOB: nitrite -> nitrate
+    let nob_potential = monod_rate(
+        safe_rate(pp.nob_vmax_mg_n_per_g_per_hour),
+        state.microbe.nitrite_oxidizer_biomass_g,
+        env.maturity_factor,
+        env.f_temp,
+        env.f_ph,
+        state.water.dissolved_oxygen_mg_total / (state.water.dissolved_oxygen_mg_total + pp.nob_k_do_mg.max(0.01)),
+        state.water.nitrite_mg_n_total,
+        pp.nob_k_nitrite_mg.max(0.01),
+    );
+    // O2 for nitrite->nitrate: 4.57 - 3.43 = 1.14 mg O2 per mg N
+    let o2_for_nob = 1.14;
+    let nob_o2_limited = if o2_for_nob > 0.0 {
+        state.water.dissolved_oxygen_mg_total / o2_for_nob
+    } else {
+        f64::MAX
+    };
+    let nob_rate = safe_rate(nob_potential)
+        .min(state.water.nitrite_mg_n_total)
+        .min(nob_o2_limited);
+
+    state.water.nitrite_mg_n_total = (state.water.nitrite_mg_n_total - nob_rate).max(0.0);
+    state.water.nitrate_mg_n_total += nob_rate;
+    let o2_consumed_nob = nob_rate * o2_for_nob;
+    state.water.dissolved_oxygen_mg_total =
+        (state.water.dissolved_oxygen_mg_total - o2_consumed_nob).max(0.0);
+
+    // Total N fully nitrified to nitrate (for alkalinity coupling)
+    // AOB only takes TAN -> nitrite, NOB takes nitrite -> nitrate, comammox takes TAN -> nitrate
+    // Full pathway N: nob_rate (came from AOB path) + comammox_rate
+    let total_mg_n_nitrified = nob_rate + comammox_rate;
+
+    // ---- 5. Guild growth and decay ----
+    // AOB growth from TAN oxidized
+    let aob_growth = safe_rate(pp.aob_growth_yield) * aob_rate;
+    let aob_decay = safe_rate(pp.aob_decay_rate_per_hour) * state.microbe.ammonia_oxidizer_biomass_g;
+    state.microbe.ammonia_oxidizer_biomass_g =
+        (state.microbe.ammonia_oxidizer_biomass_g + aob_growth - aob_decay).max(0.0);
+
+    // NOB growth from nitrite oxidized
+    let nob_growth = safe_rate(pp.nob_growth_yield) * nob_rate;
+    let nob_decay = safe_rate(pp.nob_decay_rate_per_hour) * state.microbe.nitrite_oxidizer_biomass_g;
+    state.microbe.nitrite_oxidizer_biomass_g =
+        (state.microbe.nitrite_oxidizer_biomass_g + nob_growth - nob_decay).max(0.0);
+
+    // Comammox growth from TAN fully oxidized
+    let comammox_growth = safe_rate(pp.comammox_growth_yield) * comammox_rate;
+    let comammox_decay = safe_rate(pp.comammox_decay_rate_per_hour) * state.microbe.comammox_biomass_g;
+    state.microbe.comammox_biomass_g =
+        (state.microbe.comammox_biomass_g + comammox_growth - comammox_decay).max(0.0);
+
+    // ---- 6. Alkalinity and DIC coupling from nitrification ----
+    let alk_consumed = total_mg_n_nitrified * safe_rate(pp.alkalinity_meq_per_mg_n_nitrified);
+    state.water.alkalinity_meq_total = (state.water.alkalinity_meq_total - alk_consumed).max(0.0);
+
+    // Nitrification is a chemoautotrophic process that produces some DIC fixation
+    // but for simplicity we model it as a net DIC producer via mineralization pathway above.
+
+    NitrogenCycleOutput {
+        total_mg_n_nitrified,
+    }
+}
+
+/// Temperature factor: peaks around 25-30°C, drops off at extremes.
+fn temperature_factor(temp_c: f64) -> f64 {
+    // Bell-shaped factor peaking at 28°C with a half-width of ~10°C
+    let opt = 28.0;
+    let sigma = 10.0;
+    let diff = temp_c - opt;
+    (-(diff * diff) / (2.0 * sigma * sigma)).exp()
+}
+
+/// pH factor: nitrifiers prefer 7-8, reduced at extremes.
+fn ph_factor(ph: f64) -> f64 {
+    let opt = 7.5;
+    let sigma = 1.5;
+    let diff = ph - opt;
+    (-(diff * diff) / (2.0 * sigma * sigma)).exp()
+}
+
+fn compute_env_factors(state: &TankState) -> EnvFactors {
+    let f_temp = temperature_factor(state.water.temperature_c);
+    let f_ph = ph_factor(state.water.ph);
+
+    // Maturity factor: immature filters slow nitrification
+    // Use filter_state.biofilter_maturity_index directly
+    let maturity_factor = state.filter_state.biofilter_maturity_index.clamp(0.05, 1.0);
+
+    EnvFactors {
+        f_temp,
+        f_ph,
+        maturity_factor,
+    }
+}
+
+/// Monod-style rate: vmax * biomass * maturity * f_temp * f_ph * f_do_monod * S/(K+S)
+fn monod_rate(
+    vmax: f64,
+    biomass_g: f64,
+    maturity_factor: f64,
+    f_temp: f64,
+    f_ph: f64,
+    f_do_monod: f64,
+    substrate: f64,
+    k_substrate: f64,
+) -> f64 {
+    let monod = substrate / (substrate + k_substrate);
+    safe_rate(vmax * biomass_g * maturity_factor * f_temp * f_ph * f_do_monod * monod)
+}
+
+/// Daily biofilter maturity update. Called every 24 ticks.
+/// Recomputes `filter_state.biofilter_maturity_index` from guild biomass.
+pub fn update_daily_biofilter_maturity(state: &mut TankState) -> f64 {
+    let prev = state.filter_state.biofilter_maturity_index;
+
+    // Capacity reference: a "mature" biofilter might have ~0.5g total nitrifier biomass
+    let capacity_g = 0.5;
+    let total_nitrifier_g = state.microbe.ammonia_oxidizer_biomass_g
+        + state.microbe.nitrite_oxidizer_biomass_g
+        + state.microbe.comammox_biomass_g;
+    let raw_maturity = (total_nitrifier_g / capacity_g).clamp(0.0, 1.0);
+
+    // Smooth towards raw_maturity
+    let alpha = 0.1;
+    let new_maturity = (prev + alpha * (raw_maturity - prev)).clamp(0.0, 1.0);
+    state.filter_state.biofilter_maturity_index = new_maturity;
+
+    new_maturity - prev
+}

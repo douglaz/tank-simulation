@@ -1,6 +1,6 @@
 use tank_core::{
-    Engine, PlayerAction, ProcessParams, SaveFile, SimSeed, SimulationEngine, SourceWaterProfile,
-    TankState,
+    Engine, MicrobeState, PlayerAction, ProcessParams, SaveFile, SimSeed, SimulationEngine,
+    SourceWaterProfile, TankState,
 };
 
 #[test]
@@ -63,6 +63,7 @@ fn save_load_with_source_water_catalog() -> Result<(), tank_core::SimError> {
         photosynthesis_dic_rate_mg_c_per_g_per_hour: 0.14,
         k_surface_w_per_m2_k: 12.0,
         k_wall_w_per_m2_k: 6.0,
+        ..ProcessParams::default()
     };
 
     let mut engine = Engine::from_parts(state, vec![]);
@@ -110,6 +111,44 @@ fn save_load_resume_determinism() -> Result<(), tank_core::SimError> {
         engine_continuous.full_state(),
         engine_resumed.full_state(),
         "Save/load/resume must produce identical state to uninterrupted run"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn save_load_with_active_cycle_state() -> Result<(), tank_core::SimError> {
+    let mut state = TankState::new(SimSeed(78));
+    // Set up active nitrogen cycle state
+    state.microbe = MicrobeState {
+        decomposer_biomass_g: 0.2,
+        ammonia_oxidizer_biomass_g: 0.15,
+        nitrite_oxidizer_biomass_g: 0.12,
+        comammox_biomass_g: 0.03,
+        maturity_index: 0.5,
+    };
+    state.filter_state.biofilter_maturity_index = 0.5;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+
+    // Feed and run to generate active cycle state
+    engine.apply_action(PlayerAction::Feed { grams: 1.0 })?;
+    engine.step_hours(48)?;
+
+    // Save, load, continue — compare with uninterrupted
+    let save = SaveFile::from_engine(&engine);
+    let json = save.to_json_pretty()?;
+    let restored = SaveFile::from_json(&json)?;
+    let mut resumed = restored.into_engine();
+
+    let mut continued = engine;
+    continued.step_hours(48)?;
+    resumed.step_hours(48)?;
+
+    assert_eq!(
+        continued.full_state(),
+        resumed.full_state(),
+        "Save/load with active cycle state must produce identical results"
     );
 
     Ok(())

@@ -135,3 +135,63 @@ fn lid_slows_surface_heat_exchange() -> Result<(), tank_core::SimError> {
 
     Ok(())
 }
+
+#[test]
+fn feed_pulse_tan_concentration_scales_with_volume() -> Result<(), tank_core::SimError> {
+    let mut state_10l = state_with_volume(SimSeed(2200), 10.0);
+    let mut state_100l = state_with_volume(SimSeed(2200), 100.0);
+
+    // Give both tanks some decomposer biomass to mineralize feed into TAN
+    state_10l.microbe.decomposer_biomass_g = 0.1;
+    state_100l.microbe.decomposer_biomass_g = 0.1;
+    // Same maturity so nitrification doesn't dominate the result
+    state_10l.filter_state.biofilter_maturity_index = 0.1;
+    state_100l.filter_state.biofilter_maturity_index = 0.1;
+    state_10l.microbe.ammonia_oxidizer_biomass_g = 0.01;
+    state_100l.microbe.ammonia_oxidizer_biomass_g = 0.01;
+    state_10l.microbe.nitrite_oxidizer_biomass_g = 0.01;
+    state_100l.microbe.nitrite_oxidizer_biomass_g = 0.01;
+    state_10l.microbe.comammox_biomass_g = 0.001;
+    state_100l.microbe.comammox_biomass_g = 0.001;
+
+    let mut engine_10l = Engine::from_parts(state_10l, vec![]);
+    let mut engine_100l = Engine::from_parts(state_100l, vec![]);
+
+    // Same feed pulse to both
+    let feed_g = 1.0;
+    engine_10l.apply_action(PlayerAction::Feed { grams: feed_g })?;
+    engine_100l.apply_action(PlayerAction::Feed { grams: feed_g })?;
+
+    // Track peak TAN mg/L over 7 days
+    let mut peak_tan_10l = 0.0_f64;
+    let mut peak_tan_100l = 0.0_f64;
+
+    for _ in 0..(7 * 24) {
+        engine_10l.step_hours(1)?;
+        engine_100l.step_hours(1)?;
+
+        let vol_10 = engine_10l.full_state().geometry.water_volume_l();
+        let vol_100 = engine_100l.full_state().geometry.water_volume_l();
+
+        let tan_10 = engine_10l.full_state().water.ammonia_total_mg_n_total / vol_10;
+        let tan_100 = engine_100l.full_state().water.ammonia_total_mg_n_total / vol_100;
+
+        peak_tan_10l = peak_tan_10l.max(tan_10);
+        peak_tan_100l = peak_tan_100l.max(tan_100);
+    }
+
+    assert!(
+        peak_tan_10l > 0.0,
+        "10L tank should have non-zero peak TAN"
+    );
+    assert!(
+        peak_tan_100l > 0.0,
+        "100L tank should have non-zero peak TAN"
+    );
+    assert!(
+        peak_tan_10l >= 5.0 * peak_tan_100l,
+        "Peak TAN in 10L ({peak_tan_10l:.4} mg/L) should be >= 5x the 100L peak ({peak_tan_100l:.4} mg/L)"
+    );
+
+    Ok(())
+}

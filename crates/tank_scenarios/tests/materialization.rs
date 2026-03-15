@@ -115,3 +115,32 @@ fn unknown_scenario_returns_error() {
     let result = tank_scenarios::seeded_state(SimSeed(1), "nonexistent_scenario");
     assert!(result.is_err());
 }
+
+#[test]
+fn cycling_fixtures_are_deterministic_and_differ_in_seeding() {
+    let (seeded_a, unseeded_a) = tank_scenarios::cycling_fixture_pair(SimSeed(100));
+    let (seeded_b, unseeded_b) = tank_scenarios::cycling_fixture_pair(SimSeed(100));
+
+    // Deterministic: same seed produces identical states
+    assert_eq!(seeded_a, seeded_b, "Seeded fixtures must be deterministic");
+    assert_eq!(
+        unseeded_a, unseeded_b,
+        "Unseeded fixtures must be deterministic"
+    );
+
+    // They differ only in seeding inputs (microbe state and filter state)
+    assert_ne!(
+        seeded_a.microbe, unseeded_a.microbe,
+        "Seeded and unseeded must have different microbe state"
+    );
+    assert_ne!(
+        seeded_a.filter_state, unseeded_a.filter_state,
+        "Seeded and unseeded must have different filter state"
+    );
+
+    // But share the same geometry, water, and process params
+    assert_eq!(seeded_a.geometry, unseeded_a.geometry);
+    assert_eq!(seeded_a.water, unseeded_a.water);
+    assert_eq!(seeded_a.process_params, unseeded_a.process_params);
+    assert_eq!(seeded_a.environment, unseeded_a.environment);
+}

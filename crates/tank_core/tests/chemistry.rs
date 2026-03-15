@@ -77,3 +77,56 @@ fn ph_formula_uses_state_storage_bounds() {
     assert!((5.5..=8.5).contains(&low));
     assert!((5.5..=8.5).contains(&high));
 }
+
+#[test]
+fn nitrification_lowers_alkalinity_and_ph() -> Result<(), tank_core::SimError> {
+    // Tank with active nitrification
+    let mut nitrifying_state = TankState::new(SimSeed(4100));
+    let vol = nitrifying_state.geometry.water_volume_l();
+    nitrifying_state.water.ammonia_total_mg_n_total = 2.0 * vol; // 2 mg/L TAN
+    nitrifying_state.microbe.ammonia_oxidizer_biomass_g = 0.2;
+    nitrifying_state.microbe.nitrite_oxidizer_biomass_g = 0.15;
+    nitrifying_state.microbe.comammox_biomass_g = 0.03;
+    nitrifying_state.filter_state.biofilter_maturity_index = 0.6;
+    nitrifying_state.process_params = ProcessParams::default();
+
+    // Control: identical but with zero nitrifier biomass
+    let mut control_state = nitrifying_state.clone();
+    control_state.microbe.ammonia_oxidizer_biomass_g = 0.0;
+    control_state.microbe.nitrite_oxidizer_biomass_g = 0.0;
+    control_state.microbe.comammox_biomass_g = 0.0;
+
+    let mut nitrifying = Engine::from_parts(nitrifying_state, vec![]);
+    let mut control = Engine::from_parts(control_state, vec![]);
+
+    let alk_before = nitrifying.full_state().water.alkalinity_meq_total;
+
+    nitrifying.step_hours(48)?;
+    control.step_hours(48)?;
+
+    let alk_nitrifying = nitrifying.full_state().water.alkalinity_meq_total;
+    let alk_control = control.full_state().water.alkalinity_meq_total;
+    let ph_nitrifying = nitrifying.full_state().water.ph;
+    let ph_control = control.full_state().water.ph;
+
+    // Active nitrification should lower alkalinity relative to control
+    assert!(
+        alk_nitrifying < alk_control,
+        "Nitrifying tank ({alk_nitrifying:.4}) should have lower alkalinity than control ({alk_control:.4})"
+    );
+    assert!(
+        alk_nitrifying < alk_before,
+        "Alkalinity should decrease from nitrification"
+    );
+
+    // Active nitrification should lower pH relative to control
+    assert!(
+        ph_nitrifying < ph_control,
+        "Nitrifying tank pH ({ph_nitrifying:.3}) should be lower than control ({ph_control:.3})"
+    );
+
+    // pH must still be within invariant bounds
+    assert!((5.5..=8.5).contains(&ph_nitrifying));
+
+    Ok(())
+}

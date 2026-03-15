@@ -2,5 +2,6 @@ pub mod chemistry;
 pub mod dissolved_oxygen;
 pub mod events;
 pub mod light;
+pub mod nitrogen_cycle;
 pub mod temperature;
 pub mod water_change;

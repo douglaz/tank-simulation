@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use tank_core::{
-    PlantGuild, PlantGuildState, ProcessParams, SimMeta, SimSeed, SourceWaterProfile,
-    SubstrateLayerState, TankGeometry, TankState, WaterState,
+    FilterState, MicrobeState, PlantGuild, PlantGuildState, ProcessParams, SimMeta, SimSeed,
+    SourceWaterProfile, SubstrateLayerState, TankGeometry, TankState, WaterState,
 };
 use tank_data::{load_scenario, ScenarioPreset};
 
@@ -53,6 +53,36 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
             .photosynthesis_dic_rate_mg_c_per_g_per_hour,
         k_surface_w_per_m2_k: preset.k_surface_w_per_m2_k,
         k_wall_w_per_m2_k: preset.k_wall_w_per_m2_k,
+
+        feed_leach_rate_per_hour: preset.feed_leach_rate_per_hour,
+        fine_detritus_dissolution_rate_per_hour: preset.fine_detritus_dissolution_rate_per_hour,
+        feed_n_to_c_ratio: preset.feed_n_to_c_ratio,
+
+        decomposer_vmax_per_hour: preset.decomposer_vmax_per_hour,
+        decomposer_k_doc_mg: preset.decomposer_k_doc_mg,
+        decomposer_growth_yield: preset.decomposer_growth_yield,
+        decomposer_decay_rate_per_hour: preset.decomposer_decay_rate_per_hour,
+
+        aob_vmax_mg_n_per_g_per_hour: preset.aob_vmax_mg_n_per_g_per_hour,
+        aob_k_tan_mg: preset.aob_k_tan_mg,
+        aob_k_do_mg: preset.aob_k_do_mg,
+        aob_growth_yield: preset.aob_growth_yield,
+        aob_decay_rate_per_hour: preset.aob_decay_rate_per_hour,
+
+        nob_vmax_mg_n_per_g_per_hour: preset.nob_vmax_mg_n_per_g_per_hour,
+        nob_k_nitrite_mg: preset.nob_k_nitrite_mg,
+        nob_k_do_mg: preset.nob_k_do_mg,
+        nob_growth_yield: preset.nob_growth_yield,
+        nob_decay_rate_per_hour: preset.nob_decay_rate_per_hour,
+
+        comammox_vmax_fraction: preset.comammox_vmax_fraction,
+        comammox_k_tan_mg: preset.comammox_k_tan_mg,
+        comammox_k_do_mg: preset.comammox_k_do_mg,
+        comammox_growth_yield: preset.comammox_growth_yield,
+        comammox_decay_rate_per_hour: preset.comammox_decay_rate_per_hour,
+
+        o2_per_mg_n_nitrified: preset.o2_per_mg_n_nitrified,
+        alkalinity_meq_per_mg_n_nitrified: preset.alkalinity_meq_per_mg_n_nitrified,
     }
 }
 
@@ -184,4 +214,85 @@ pub fn seeded_state(seed: SimSeed, scenario_id: &str) -> Result<TankState, tank_
     state.process_params = process_params;
 
     Ok(state)
+}
+
+/// Creates a deterministic cycling fixture pair: one seeded, one unseeded.
+/// Both tanks are otherwise identical (~20L nano tank with moderate source water,
+/// fed daily, with aeration enabled).
+/// The seeded tank starts with elevated nitrifier biomass and higher maturity;
+/// the unseeded tank starts with minimal microbes and low maturity.
+pub fn cycling_fixture_pair(seed: SimSeed) -> (TankState, TankState) {
+    let base = cycling_base_state(seed);
+
+    let mut seeded = base.clone();
+    seeded.meta.scenario_id = Some("cycling_seeded".to_string());
+    // Seeded: same decomposer biomass but much higher nitrifier biomass + maturity
+    seeded.microbe = MicrobeState {
+        decomposer_biomass_g: 0.1,
+        ammonia_oxidizer_biomass_g: 0.20,
+        nitrite_oxidizer_biomass_g: 0.15,
+        comammox_biomass_g: 0.05,
+        maturity_index: 0.6,
+    };
+    seeded.filter_state = FilterState {
+        biofilter_maturity_index: 0.6,
+        clogging_index: 0.0,
+        seeded_biomass_index: 0.8,
+    };
+
+    let mut unseeded = base;
+    unseeded.meta.scenario_id = Some("cycling_unseeded".to_string());
+    // Unseeded: same decomposer biomass but minimal nitrifier biomass + maturity
+    unseeded.microbe = MicrobeState {
+        decomposer_biomass_g: 0.1,
+        ammonia_oxidizer_biomass_g: 0.005,
+        nitrite_oxidizer_biomass_g: 0.005,
+        comammox_biomass_g: 0.001,
+        maturity_index: 0.05,
+    };
+    unseeded.filter_state = FilterState {
+        biofilter_maturity_index: 0.05,
+        clogging_index: 0.0,
+        seeded_biomass_index: 0.0,
+    };
+
+    (seeded, unseeded)
+}
+
+/// Base state shared by both cycling fixtures.
+fn cycling_base_state(seed: SimSeed) -> TankState {
+    let geometry = TankGeometry {
+        length_cm: 30.0,
+        width_cm: 25.0,
+        height_cm: 30.0,
+        fill_height_cm: 26.0,
+        glass_thickness_mm: 5.0,
+        open_top: true,
+        lid_exchange_factor: 0.25,
+    };
+
+    let water = WaterState::default_for_geometry(&geometry);
+
+    let mut state = TankState::new(seed);
+    state.geometry = geometry;
+    state.water = water;
+    state.water.temperature_c = 25.0;
+    state.environment.ambient_temp_c = 25.0;
+
+    // Enable moderate aeration
+    state.hardware.aeration.enabled = true;
+    state.hardware.aeration.intensity = 0.3;
+
+    // Single fast-stem plant
+    state.plant_guilds = vec![PlantGuildState {
+        guild: PlantGuild::FastStem,
+        biomass_g: 3.0,
+        health_index: 0.8,
+        crowding_index: 0.1,
+        habitat_index: 0.8,
+    }];
+
+    state.process_params = ProcessParams::default();
+
+    state
 }

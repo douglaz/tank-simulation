@@ -43,6 +43,16 @@ pub fn emit_hourly_threshold_events(state: &mut TankState) {
     }
 }
 
+pub fn emit_once_per_day_pub(
+    state: &mut TankState,
+    severity: EventSeverity,
+    kind: EventKind,
+    cause_codes: Vec<EventCause>,
+    summary: String,
+) {
+    emit_once_per_day(state, severity, kind, cause_codes, summary);
+}
+
 fn emit_once_per_day(
     state: &mut TankState,
     severity: EventSeverity,

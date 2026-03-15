@@ -17,6 +17,64 @@ pub struct ProcessParams {
     pub k_surface_w_per_m2_k: f64,
     /// Wall heat-transfer coefficient in W/(m²·K).
     pub k_wall_w_per_m2_k: f64,
+
+    // -- Nitrogen cycle: feed leaching --
+    /// Fraction of particulate organics that leach to fine detritus per hour.
+    pub feed_leach_rate_per_hour: f64,
+    /// Fraction of fine detritus that dissolves to DOC/DON per hour.
+    pub fine_detritus_dissolution_rate_per_hour: f64,
+    /// N:C mass ratio in feed/detritus (mg N per mg C).
+    pub feed_n_to_c_ratio: f64,
+
+    // -- Decomposer mineralization --
+    /// Max mineralization rate per g decomposer biomass per hour (g DOC consumed).
+    pub decomposer_vmax_per_hour: f64,
+    /// Half-saturation for DOC (mg C total) for decomposer Monod term.
+    pub decomposer_k_doc_mg: f64,
+    /// Growth yield of decomposer biomass per g DOC consumed.
+    pub decomposer_growth_yield: f64,
+    /// Hourly decay rate of decomposer biomass under starvation.
+    pub decomposer_decay_rate_per_hour: f64,
+
+    // -- Nitrifier guild kinetics --
+    /// AOB vmax: max mg N oxidized per g AOB biomass per hour.
+    pub aob_vmax_mg_n_per_g_per_hour: f64,
+    /// AOB half-saturation for TAN (mg N total).
+    pub aob_k_tan_mg: f64,
+    /// AOB half-saturation for DO (mg total).
+    pub aob_k_do_mg: f64,
+    /// AOB growth yield (g biomass per mg N oxidized).
+    pub aob_growth_yield: f64,
+    /// AOB decay rate per hour.
+    pub aob_decay_rate_per_hour: f64,
+
+    /// NOB vmax: max mg N oxidized per g NOB biomass per hour.
+    pub nob_vmax_mg_n_per_g_per_hour: f64,
+    /// NOB half-saturation for nitrite (mg N total).
+    pub nob_k_nitrite_mg: f64,
+    /// NOB half-saturation for DO (mg total).
+    pub nob_k_do_mg: f64,
+    /// NOB growth yield (g biomass per mg N oxidized).
+    pub nob_growth_yield: f64,
+    /// NOB decay rate per hour.
+    pub nob_decay_rate_per_hour: f64,
+
+    /// Comammox vmax multiplier relative to AOB (must be < 1.0).
+    pub comammox_vmax_fraction: f64,
+    /// Comammox half-saturation for TAN (mg N total).
+    pub comammox_k_tan_mg: f64,
+    /// Comammox half-saturation for DO (mg total).
+    pub comammox_k_do_mg: f64,
+    /// Comammox growth yield (g biomass per mg N oxidized).
+    pub comammox_growth_yield: f64,
+    /// Comammox decay rate per hour.
+    pub comammox_decay_rate_per_hour: f64,
+
+    // -- Stoichiometric constants --
+    /// mg O2 consumed per mg N fully nitrified to nitrate.
+    pub o2_per_mg_n_nitrified: f64,
+    /// meq alkalinity consumed per mg N nitrified.
+    pub alkalinity_meq_per_mg_n_nitrified: f64,
 }
 
 impl Default for ProcessParams {
@@ -32,6 +90,36 @@ impl Default for ProcessParams {
             photosynthesis_dic_rate_mg_c_per_g_per_hour: 0.0,
             k_surface_w_per_m2_k: 10.0,
             k_wall_w_per_m2_k: 5.0,
+
+            feed_leach_rate_per_hour: 0.12,
+            fine_detritus_dissolution_rate_per_hour: 0.08,
+            feed_n_to_c_ratio: 0.16,
+
+            decomposer_vmax_per_hour: 0.02,
+            decomposer_k_doc_mg: 5.0,
+            decomposer_growth_yield: 0.3,
+            decomposer_decay_rate_per_hour: 0.002,
+
+            aob_vmax_mg_n_per_g_per_hour: 1.5,
+            aob_k_tan_mg: 0.5,
+            aob_k_do_mg: 1.0,
+            aob_growth_yield: 0.001,
+            aob_decay_rate_per_hour: 0.003,
+
+            nob_vmax_mg_n_per_g_per_hour: 1.2,
+            nob_k_nitrite_mg: 0.3,
+            nob_k_do_mg: 1.0,
+            nob_growth_yield: 0.001,
+            nob_decay_rate_per_hour: 0.003,
+
+            comammox_vmax_fraction: 0.4,
+            comammox_k_tan_mg: 0.8,
+            comammox_k_do_mg: 1.5,
+            comammox_growth_yield: 0.0008,
+            comammox_decay_rate_per_hour: 0.004,
+
+            o2_per_mg_n_nitrified: 4.57,
+            alkalinity_meq_per_mg_n_nitrified: 0.1428,
         }
     }
 }

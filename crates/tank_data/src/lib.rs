@@ -51,7 +51,15 @@ pub fn load_shrimp(id: &str) -> Result<ShrimpPreset, PresetError> {
 }
 
 pub fn load_process_params(id: &str) -> Result<ProcessParamsPreset, PresetError> {
-    load_from_registry("process", id, PROCESS_PRESETS)
+    let preset: ProcessParamsPreset = load_from_registry("process", id, PROCESS_PRESETS)?;
+    preset
+        .validate()
+        .map_err(|message| PresetError::Validation {
+            category: "process",
+            id: id.to_string(),
+            message,
+        })?;
+    Ok(preset)
 }
 
 pub fn load_scenario(id: &str) -> Result<ScenarioPreset, PresetError> {

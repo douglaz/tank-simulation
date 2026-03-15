@@ -60,6 +60,13 @@ impl Engine {
                 self.state.hardware.light.photoperiod_hours,
             );
 
+        // Step 6-8: nitrogen cycle phase (feed leaching, detritus breakdown,
+        // mineralization, nitrification, guild growth/decay).
+        // This runs between light-state resolution and chemistry/DO/event phases.
+        // Nitrification O2 consumption and alkalinity depletion are handled
+        // internally by the nitrogen cycle system.
+        let _nc_output = systems::nitrogen_cycle::step_nitrogen_cycle(&mut self.state);
+
         // Step 9: update DIC, alkalinity, and pH.
         systems::chemistry::step_hourly_chemistry(&mut self.state, light_on);
 
@@ -73,9 +80,39 @@ impl Engine {
         self.state.environment.hour_of_day = (self.state.environment.hour_of_day + 1) % 24;
         if self.state.environment.hour_of_day == 0 {
             self.state.environment.day += 1;
+            // Daily pipeline
+            self.run_daily_update();
         }
 
         enforce_invariants(&mut self.state)
+    }
+
+    fn run_daily_update(&mut self) {
+        // Step 6 (daily): biofilter maturity summary update
+        let maturity_delta =
+            systems::nitrogen_cycle::update_daily_biofilter_maturity(&mut self.state);
+        if maturity_delta > 0.005 {
+            self.push_event(
+                EventSeverity::Info,
+                EventKind::BiofilmMaturityIncrease,
+                vec![EventCause::BiofilterImmature],
+                format!(
+                    "Biofilter maturity increased to {:.3}",
+                    self.state.filter_state.biofilter_maturity_index
+                ),
+            );
+        }
+        // Emit CycleProgressing when maturity is actively growing
+        let current_maturity = self.state.filter_state.biofilter_maturity_index;
+        if maturity_delta > 0.001 && current_maturity < 0.9 {
+            systems::events::emit_once_per_day_pub(
+                &mut self.state,
+                EventSeverity::Info,
+                EventKind::CycleProgressing,
+                vec![EventCause::BiofilterImmature],
+                format!("Nitrogen cycle progressing, maturity {current_maturity:.3}"),
+            );
+        }
     }
 
     fn process_action(&mut self, action: PlayerAction) {
@@ -129,6 +166,12 @@ impl Engine {
                 self.state.hardware.filter.cleanliness_index = 1.0;
                 self.state.filter_state.biofilter_maturity_index *= 1.0 - (intensity * 0.5);
                 self.state.filter_state.clogging_index *= 1.0 - intensity;
+                // Proportional setback in active nitrifier and decomposer biomass
+                let setback = intensity * 0.5;
+                self.state.microbe.decomposer_biomass_g *= 1.0 - setback;
+                self.state.microbe.ammonia_oxidizer_biomass_g *= 1.0 - setback;
+                self.state.microbe.nitrite_oxidizer_biomass_g *= 1.0 - setback;
+                self.state.microbe.comammox_biomass_g *= 1.0 - setback;
                 self.push_event(
                     EventSeverity::Warning,
                     EventKind::FilterCleaningSetback,
