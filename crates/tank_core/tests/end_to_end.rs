@@ -486,6 +486,19 @@ fn sad_filter_off_ammonia_rises() {
         "  Filter biofilter maturity: {:.4} vs no-filter: {:.4}",
         s_filtered.biofilter_maturity_index, s_no_filter.biofilter_maturity_index
     );
+
+    // The no-filter run should have equal or worse TAN (less processing)
+    // or lower biofilter maturity.
+    let filtered_better = s_filtered.tan_mg_l <= s_no_filter.tan_mg_l
+        || s_filtered.biofilter_maturity_index >= s_no_filter.biofilter_maturity_index;
+    assert!(
+        filtered_better,
+        "filter should help: TAN {:.3} vs {:.3}, maturity {:.4} vs {:.4}",
+        s_filtered.tan_mg_l,
+        s_no_filter.tan_mg_l,
+        s_filtered.biofilter_maturity_index,
+        s_no_filter.biofilter_maturity_index,
+    );
 }
 
 /// Overstocking — too many shrimp for a nano tank causes crowding stress.
@@ -574,10 +587,19 @@ fn sad_rapid_water_changes_cause_instability() {
     print_status("After rapid WCs", &s, &engine);
     assert_finite_snapshot(&s);
 
+    let instability_after = engine.full_state().stability_tracker.instability_index;
     println!(
         "  Instability: {:.4} -> {:.4}",
-        instability_before,
-        engine.full_state().stability_tracker.instability_index
+        instability_before, instability_after,
+    );
+
+    // After 5 rapid 80% water changes, instability should be non-trivial.
+    // The tracker may not strictly increase (source water is consistent),
+    // but it should reflect the cumulative parameter churn.
+    assert!(
+        instability_after > 0.1,
+        "instability should be elevated after rapid large water changes, got {:.4}",
+        instability_after
     );
 }
 
