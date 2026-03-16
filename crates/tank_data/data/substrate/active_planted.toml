@@ -1,0 +1,17 @@
+id = "active_planted"
+name = "Active Planted Substrate"
+depth_cm = 5.0
+cation_exchange_capacity_index = 0.9
+detritus_trapping_index = 0.6
+colonizable_area_factor = 0.8
+low_oxygen_tendency_index = 0.4
+grazing_surface_index = 0.6
+nutrient_charge_mg_n_total = 60.0
+nutrient_charge_mg_p_total = 18.0
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "medium"
+notes = "Nutrient-charged substrate for rooted plants."
+

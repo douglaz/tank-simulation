@@ -1,0 +1,14 @@
+[workspace]
+members = [
+    "crates/tank_core",
+    "crates/tank_data",
+    "crates/tank_tui",
+    "crates/tank_scenarios",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"
+license = "MIT"
+

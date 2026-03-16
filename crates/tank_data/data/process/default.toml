@@ -1,0 +1,82 @@
+id = "default"
+name = "Default Process Pack"
+mineralization_rate_per_day = 0.15
+nitrification_vmax = 0.08
+reaeration_kla_base = 0.35
+aeration_kla_boost = 0.9
+background_bod_mg_o2_per_g_biomass_per_hour = 0.05
+plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
+respiration_dic_rate_mg_c_per_g_per_hour = 0.08
+photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.12
+k_surface_w_per_m2_k = 10.0
+k_wall_w_per_m2_k = 5.0
+
+# Nitrogen cycle: feed leaching
+feed_leach_rate_per_hour = 0.12
+fine_detritus_dissolution_rate_per_hour = 0.08
+feed_n_to_c_ratio = 0.16
+
+# Decomposer mineralization
+decomposer_vmax_per_hour = 0.02
+decomposer_k_doc_mg = 5.0
+decomposer_growth_yield = 0.3
+decomposer_decay_rate_per_hour = 0.002
+
+# AOB kinetics
+aob_vmax_mg_n_per_g_per_hour = 1.5
+aob_k_tan_mg = 0.5
+aob_k_do_mg = 1.0
+aob_growth_yield = 0.001
+aob_decay_rate_per_hour = 0.003
+
+# NOB kinetics
+nob_vmax_mg_n_per_g_per_hour = 1.2
+nob_k_nitrite_mg = 0.3
+nob_k_do_mg = 1.0
+nob_growth_yield = 0.001
+nob_decay_rate_per_hour = 0.003
+
+# Comammox kinetics
+comammox_vmax_fraction = 0.4
+comammox_k_tan_mg = 0.8
+comammox_k_do_mg = 1.5
+comammox_growth_yield = 0.0008
+comammox_decay_rate_per_hour = 0.004
+
+# Stoichiometric constants
+o2_per_mg_n_nitrified = 4.57
+alkalinity_meq_per_mg_n_nitrified = 0.1428
+
+# Daily plant growth
+plant_max_growth_rate_fast_stem_per_day = 0.08
+plant_max_growth_rate_root_rosette_per_day = 0.06
+plant_respiration_fraction_per_day = 0.01
+plant_senescence_fraction_per_day = 0.005
+plant_health_recovery_per_day = 0.03
+plant_health_decline_per_day = 0.08
+plant_half_saturation_n_mg_total = 8.0
+plant_half_saturation_p_mg_total = 1.2
+plant_half_saturation_c_mg_total = 20.0
+plant_light_half_saturation = 0.45
+plant_temp_optimum_c = 25.0
+plant_temp_sigma_c = 7.0
+plant_crowding_biomass_g_per_m2 = 250.0
+
+# Daily algae/periphyton growth
+algae_max_growth_rate_per_day = 0.2
+periphyton_max_growth_rate_per_day = 0.15
+algae_respiration_fraction_per_day = 0.03
+algae_half_saturation_n_mg_total = 5.0
+algae_half_saturation_p_mg_total = 0.8
+algae_light_half_saturation = 0.35
+algae_temp_optimum_c = 27.0
+algae_temp_sigma_c = 8.0
+periphyton_capacity_g_per_m2 = 6.0
+algae_bloom_threshold_g_per_l = 0.08
+algae_nuisance_biomass_g_per_m2 = 10.0
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "medium"
+notes = "Default process coefficients including heat-transfer parameters for the hourly thermal model."

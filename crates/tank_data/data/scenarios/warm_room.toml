@@ -1,0 +1,19 @@
+id = "warm_room"
+name = "Warm Room"
+source_water_id = "moderate"
+substrate_ids = ["inert_gravel"]
+plant_ids = ["fast_stem"]
+shrimp_profile_id = "neocaridina_davidi"
+process_params_id = "default"
+tank_length_cm = 45.0
+tank_width_cm = 24.0
+tank_height_cm = 28.0
+fill_height_cm = 24.0
+ambient_temp_c = 29.0
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "medium"
+notes = "Warm-room baseline for temperature-sensitive tests."
+

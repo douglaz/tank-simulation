@@ -1,0 +1,13 @@
+id = "fast_stem"
+name = "Fast Stem"
+guild = "FastStem"
+growth_rate_index = 0.9
+water_column_uptake_bias = 0.9
+substrate_uptake_bias = 0.2
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "medium"
+notes = "Water-column feeder for early stabilization."
+

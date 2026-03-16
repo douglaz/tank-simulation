@@ -1,0 +1,24 @@
+id = "moderate"
+name = "Moderate"
+temperature_c = 24.0
+ammonia_mg_n_per_l = 0.0
+nitrite_mg_n_per_l = 0.0
+nitrate_mg_n_per_l = 5.0
+phosphate_mg_p_per_l = 0.1
+dic_mg_c_per_l = 15.0
+doc_mg_c_per_l = 0.0
+don_mg_n_per_l = 0.0
+alkalinity_meq_per_l = 1.249
+calcium_mg_per_l = 25.0
+magnesium_mg_per_l = 10.0
+sodium_mg_per_l = 12.0
+potassium_mg_per_l = 3.0
+bicarbonate_mg_per_l = 76.2
+chloride_mg_per_l = 18.0
+sulfate_mg_per_l = 15.8
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "medium"
+notes = "Balanced general-purpose freshwater profile. GH ~6.0, KH ~3.5, TDS ~160."

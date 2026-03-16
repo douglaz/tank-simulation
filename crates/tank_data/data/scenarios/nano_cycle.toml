@@ -1,0 +1,19 @@
+id = "nano_cycle"
+name = "Nano Cycle"
+source_water_id = "soft_acidic"
+substrate_ids = ["inert_sand"]
+plant_ids = ["fast_stem"]
+shrimp_profile_id = "neocaridina_davidi"
+process_params_id = "default"
+tank_length_cm = 30.0
+tank_width_cm = 20.0
+tank_height_cm = 20.0
+fill_height_cm = 18.0
+ambient_temp_c = 24.0
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "medium"
+notes = "Small starter tank with minimal bioload."
+

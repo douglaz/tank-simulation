@@ -1,0 +1,17 @@
+[package]
+name = "tank_tui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1"
+crossterm = "0.27"
+ratatui = "0.26"
+tank_data = { path = "../tank_data" }
+tank_core = { path = "../tank_core" }
+tank_scenarios = { path = "../tank_scenarios" }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+
+[[bin]]
+name = "tank_tui"
+path = "src/main.rs"
