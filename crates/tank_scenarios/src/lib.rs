@@ -245,8 +245,20 @@ pub fn seeded_state_with_full_overrides(
         (scenario.fill_height_cm * overrides.geometry.size_scale * overrides.geometry.fill_ratio)
             .min(scenario.tank_height_cm);
 
+    // Scale substrate nutrient stores proportionally to the footprint change.
+    // Preset charges are absolute totals designed for size_scale=1.0; a larger
+    // footprint should carry proportionally more nutrients.
+    let area_scale = overrides.geometry.size_scale * overrides.geometry.size_scale;
+
     let mut state = materialize_scenario(seed, scenario)?;
     apply_startup_overrides(&mut state, overrides)?;
+    if (area_scale - 1.0).abs() > f64::EPSILON {
+        for layer in &mut state.substrate_layers {
+            layer.nutrient_store_mg_n_total *= area_scale;
+            layer.nutrient_store_mg_p_total *= area_scale;
+        }
+    }
+
     Ok(state)
 }
 
@@ -620,9 +632,9 @@ fn build_substrate_layers(
     substrate_ids: &[String],
 ) -> Result<Vec<SubstrateLayerState>, tank_data::PresetError> {
     let mut substrate_layers = Vec::new();
+    let footprint = geometry.footprint_area_cm2();
     for sub_id in substrate_ids {
         let sub_preset = tank_data::load_substrate(sub_id)?;
-        let footprint = geometry.footprint_area_cm2();
         substrate_layers.push(SubstrateLayerState {
             kind: match sub_preset.id.as_str() {
                 "inert_sand" => tank_core::SubstrateKind::InertSand,

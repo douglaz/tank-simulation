@@ -1,5 +1,5 @@
 use crate::{
-    systems::temperature::do_sat_mg_l,
+    systems::{chemistry::compute_ph_from_totals, temperature::do_sat_mg_l},
     types::{SimError, SourceWaterProfile, TankState},
 };
 
@@ -84,4 +84,12 @@ pub fn apply_water_change(state: &mut TankState, percent: f64, source: &SourceWa
     // Mix temperature proportionally by exchanged volume
     state.water.temperature_c =
         state.water.temperature_c * retention + source.temperature_c * fraction;
+
+    // Recompute pH from the new alkalinity/DIC so downstream systems in the
+    // same tick (e.g. nitrification) use the post-change value.
+    state.water.ph = compute_ph_from_totals(
+        state.water.alkalinity_meq_total,
+        state.water.dissolved_inorganic_carbon_mg_c_total,
+        volume_l,
+    );
 }

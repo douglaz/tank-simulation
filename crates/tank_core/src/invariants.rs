@@ -92,6 +92,18 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
     }
     state.water.ph = state.water.ph.clamp(5.5, 8.5);
 
+    // Geometry: reject non-positive dimensions and impossible fill levels
+    check_positive("geometry.length_cm", state.geometry.length_cm)?;
+    check_positive("geometry.width_cm", state.geometry.width_cm)?;
+    check_positive("geometry.height_cm", state.geometry.height_cm)?;
+    check_positive("geometry.fill_height_cm", state.geometry.fill_height_cm)?;
+    if state.geometry.fill_height_cm > state.geometry.height_cm {
+        return Err(SimError::InvariantViolation {
+            field: "geometry.fill_height_cm",
+            value: state.geometry.fill_height_cm,
+        });
+    }
+
     state.geometry.lid_exchange_factor = state.geometry.lid_exchange_factor.clamp(0.0, 1.0);
     state.hardware.light.intensity_index = state.hardware.light.intensity_index.clamp(0.0, 1.0);
     state.hardware.filter.cleanliness_index =
@@ -142,6 +154,14 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
 
 fn check_non_negative(field: &'static str, value: f64) -> Result<(), SimError> {
     if !value.is_finite() || value < 0.0 {
+        Err(SimError::InvariantViolation { field, value })
+    } else {
+        Ok(())
+    }
+}
+
+fn check_positive(field: &'static str, value: f64) -> Result<(), SimError> {
+    if !value.is_finite() || value <= 0.0 {
         Err(SimError::InvariantViolation { field, value })
     } else {
         Ok(())
