@@ -45,4 +45,6 @@ pub fn step_dissolved_oxygen(state: &mut TankState, light_on: bool) {
 
     state.water.dissolved_oxygen_mg_total +=
         delta_do_reaeration_mg + photosynthetic_o2_mg - background_bod_mg;
+    // Floor at zero so downstream stress/event paths never see negative DO.
+    state.water.dissolved_oxygen_mg_total = state.water.dissolved_oxygen_mg_total.max(0.0);
 }

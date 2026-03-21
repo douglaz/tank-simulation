@@ -69,18 +69,31 @@ pub fn step_daily_plants(state: &mut TankState) {
         let senescence_g = biomass_g
             * state.process_params.plant_senescence_fraction_per_day
             * (1.0 + 0.5 * (1.0 - health_index));
-        let net_growth_g = gross_growth_g - respiration_g - senescence_g;
         let realized_growth_g = gross_growth_g.max(0.0);
 
-        remove_plant_nutrients(
-            state,
-            realized_growth_g * PLANT_N_MG_PER_G_GROWTH,
-            realized_growth_g * PLANT_P_MG_PER_G_GROWTH,
-            water_bias,
-            substrate_bias,
-        );
+        let n_demand = realized_growth_g * PLANT_N_MG_PER_G_GROWTH;
+        let p_demand = realized_growth_g * PLANT_P_MG_PER_G_GROWTH;
+        let (n_removed, p_removed) =
+            remove_plant_nutrients(state, n_demand, p_demand, water_bias, substrate_bias);
+        // Cap growth by what nutrients were actually available.
+        let nutrient_cap_g = if realized_growth_g > f64::EPSILON {
+            let n_frac = if n_demand > f64::EPSILON {
+                n_removed / n_demand
+            } else {
+                1.0
+            };
+            let p_frac = if p_demand > f64::EPSILON {
+                p_removed / p_demand
+            } else {
+                1.0
+            };
+            realized_growth_g * n_frac.min(p_frac)
+        } else {
+            0.0
+        };
+        let capped_net = nutrient_cap_g - respiration_g - senescence_g;
 
-        let new_biomass_g = (biomass_g + net_growth_g).max(0.0);
+        let new_biomass_g = (biomass_g + capped_net).max(0.0);
         state.plant_guilds[index].biomass_g = new_biomass_g;
         state.detritus.fine_detritus_g_total += senescence_g.max(0.0);
 
@@ -148,23 +161,28 @@ fn remove_plant_nutrients(
     p_demand_mg: f64,
     water_bias: f64,
     substrate_bias: f64,
-) {
+) -> (f64, f64) {
     let water_n_target = n_demand_mg * water_bias;
     let substrate_n_target = n_demand_mg * substrate_bias;
     let water_p_target = p_demand_mg * water_bias;
     let substrate_p_target = p_demand_mg * substrate_bias;
 
     let water_n_removed = remove_water_n(state, water_n_target);
-    remove_substrate_n(
+    let substrate_n_removed = remove_substrate_n(
         state,
         substrate_n_target + (water_n_target - water_n_removed).max(0.0),
     );
 
     let water_p_removed = remove_water_p(state, water_p_target);
-    remove_substrate_p(
+    let substrate_p_removed = remove_substrate_p(
         state,
         substrate_p_target + (water_p_target - water_p_removed).max(0.0),
     );
+
+    (
+        water_n_removed + substrate_n_removed,
+        water_p_removed + substrate_p_removed,
+    )
 }
 
 fn remove_water_n(state: &mut TankState, target_mg: f64) -> f64 {
