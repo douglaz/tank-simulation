@@ -14,13 +14,14 @@ pub async fn get_events(
     axum::extract::Query(query): axum::extract::Query<EventsQuery>,
 ) -> Json<Vec<SimEvent>> {
     let engine = state.engine.lock().unwrap();
-    let snapshot = engine.snapshot();
     let limit = query.limit.unwrap_or(20);
-    let events: Vec<_> = snapshot
-        .recent_events
-        .into_iter()
+    let events: Vec<_> = engine
+        .full_state()
+        .event_log
+        .iter()
         .rev()
         .take(limit)
+        .cloned()
         .collect();
     Json(events)
 }
