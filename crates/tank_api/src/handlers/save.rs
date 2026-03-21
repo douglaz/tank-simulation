@@ -27,7 +27,7 @@ pub async fn post_load(
         )));
     }
 
-    let engine: Engine = save.into_engine();
+    let engine: Engine = save.into_engine().map_err(ApiError::from)?;
     let snapshot: TankSnapshot = engine.snapshot();
     *state.engine.lock().unwrap() = engine;
 

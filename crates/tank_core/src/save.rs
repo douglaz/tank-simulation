@@ -47,7 +47,14 @@ impl SaveFile {
         Ok(save)
     }
 
-    pub fn into_engine(self) -> Engine {
-        Engine::from_parts(self.state, self.queued_actions)
+    pub fn into_engine(self) -> Result<Engine, SimError> {
+        // Validate all queued actions before installing them.
+        for action in &self.queued_actions {
+            action.validate()?;
+        }
+        // Validate state invariants before exposing the engine.
+        let mut state = self.state;
+        crate::invariants::enforce_invariants(&mut state)?;
+        Ok(Engine::from_parts(state, self.queued_actions))
     }
 }
