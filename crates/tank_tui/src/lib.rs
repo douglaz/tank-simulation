@@ -1,3 +1,4 @@
+pub mod api_client;
 pub mod input;
 pub mod screens;
 
@@ -14,7 +15,9 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Tabs},
 };
 use screens::actions::ActionFormState;
-use tank_core::{Engine, PlayerAction, SaveFile, SimulationEngine, TankSnapshot};
+use tank_core::{PlayerAction, SaveFile, TankSnapshot};
+
+use api_client::ApiClient;
 
 pub const AUTO_ADVANCE_INTERVAL: Duration = Duration::from_millis(150);
 const STATUS_TTL: Duration = Duration::from_secs(4);
@@ -134,7 +137,7 @@ pub struct StatusMessage {
 #[derive(Debug, Clone)]
 pub struct TuiApp {
     pub active_screen: Screen,
-    pub engine: Engine,
+    pub api: ApiClient,
     pub snapshot: TankSnapshot,
     pub auto_advance: bool,
     pub status_message: Option<StatusMessage>,
@@ -145,18 +148,23 @@ pub struct TuiApp {
 }
 
 impl TuiApp {
-    pub fn new(engine: Engine, save_file_path: PathBuf, scenario_label: impl Into<String>) -> Self {
-        let snapshot = engine.snapshot();
+    pub fn new(
+        api: ApiClient,
+        initial_snapshot: TankSnapshot,
+        save_file_path: PathBuf,
+        scenario_label: impl Into<String>,
+        source_water_ids: Vec<String>,
+    ) -> Self {
         let mut snapshot_history = VecDeque::with_capacity(HISTORY_CAPACITY);
-        snapshot_history.push_back(snapshot.clone());
+        snapshot_history.push_back(initial_snapshot.clone());
 
         Self {
             active_screen: Screen::Overview,
-            engine,
-            snapshot,
+            api,
+            snapshot: initial_snapshot,
             auto_advance: false,
             status_message: None,
-            action_form: ActionFormState::default(),
+            action_form: ActionFormState::new(source_water_ids),
             save_file_path,
             scenario_label: scenario_label.into(),
             snapshot_history,
@@ -182,21 +190,21 @@ impl TuiApp {
     }
 
     pub fn apply_action(&mut self, action: PlayerAction) {
-        match self.engine.apply_action(action.clone()) {
+        match self.api.apply_action(&action) {
             Ok(()) => {
-                self.refresh_snapshot();
                 self.set_status(StatusLevel::Info, format!("Queued action: {action:?}"));
             }
             Err(error) => {
-                self.set_status(StatusLevel::Error, format!("Action rejected: {error}"));
+                self.set_status(StatusLevel::Error, format!("Action rejected: {error:#}"));
             }
         }
     }
 
     pub fn step_hours(&mut self, hours: u32) {
-        match self.engine.step_hours(hours) {
-            Ok(()) => {
-                self.refresh_snapshot();
+        match self.api.step_hours(hours) {
+            Ok(snapshot) => {
+                self.snapshot = snapshot;
+                self.push_history();
                 let label = match hours {
                     1 => "Stepped 1 hour".to_string(),
                     24 => "Stepped 1 day".to_string(),
@@ -206,17 +214,15 @@ impl TuiApp {
                 self.set_status(StatusLevel::Info, label);
             }
             Err(error) => {
-                self.set_status(StatusLevel::Error, format!("Step failed: {error}"));
+                self.set_status(StatusLevel::Error, format!("Step failed: {error:#}"));
             }
         }
     }
 
     pub fn save_to_disk(&mut self) -> anyhow::Result<()> {
-        let save = SaveFile::from_engine(&self.engine);
-        let json = save
-            .to_json_pretty()
-            .context("failed to serialize save file")?;
-        fs::write(&self.save_file_path, json)
+        let save = self.api.get_save().context("failed to fetch save state")?;
+        let json = serde_json::to_string_pretty(&save).context("failed to serialize save file")?;
+        fs::write(&self.save_file_path, &json)
             .with_context(|| format!("failed to write {}", self.save_file_path.display()))?;
         self.set_status(
             StatusLevel::Info,
@@ -228,10 +234,14 @@ impl TuiApp {
     pub fn load_from_disk(&mut self) -> anyhow::Result<()> {
         let raw = fs::read_to_string(&self.save_file_path)
             .with_context(|| format!("failed to read {}", self.save_file_path.display()))?;
-        let save = SaveFile::from_json(&raw).context("failed to parse save file")?;
-        self.engine = save.into_engine();
+        let save: SaveFile = serde_json::from_str(&raw).context("failed to parse save file")?;
+        let snapshot = self
+            .api
+            .post_load(&save)
+            .context("failed to load save to API")?;
+        self.snapshot = snapshot;
         self.snapshot_history.clear();
-        self.refresh_snapshot();
+        self.push_history();
         self.set_status(
             StatusLevel::Info,
             format!("Loaded {}", self.save_file_path.display()),
@@ -310,8 +320,7 @@ impl TuiApp {
         frame.render_widget(footer, chunks[2]);
     }
 
-    fn refresh_snapshot(&mut self) {
-        self.snapshot = self.engine.snapshot();
+    fn push_history(&mut self) {
         if self.snapshot_history.len() == HISTORY_CAPACITY {
             self.snapshot_history.pop_front();
         }

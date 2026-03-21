@@ -16,13 +16,14 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Terminal,
 };
-use tank_core::{Engine, SimSeed, TankGeometry};
+use tank_core::{SaveFile, SimSeed, TankGeometry};
 use tank_scenarios::{
     load_named_scenario, seeded_state_with_full_overrides, startup_defaults_for_scenario,
     startup_source_water_ids, StartupHeaterPreset, StartupLightPreset, StartupOverrides,
     StartupPlantSelection, StartupSubstratePreset,
 };
 use tank_tui::{
+    api_client::ApiClient,
     input::{handle_key_event, InputOutcome},
     TuiApp, AUTO_ADVANCE_INTERVAL, FILL_PRESETS, TANK_SIZE_PRESETS,
 };
@@ -30,18 +31,33 @@ use tank_tui::{
 const STARTUP_SHRIMP_COUNTS: [u32; 5] = [0, 5, 10, 15, 20];
 
 fn main() -> anyhow::Result<()> {
+    let api_url = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "http://127.0.0.1:3000".to_string());
+
+    let api = ApiClient::new(&api_url).context("failed to create API client")?;
+
+    // Fetch source water IDs from the API server
+    let source_water_ids = api
+        .get_source_water_ids()
+        .context("failed to connect to tank_api server — is it running?")?;
+
     enable_raw_mode().context("failed to enable raw mode")?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen).context("failed to enter alternate screen")?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).context("failed to initialize terminal")?;
 
-    let result = run(&mut terminal);
+    let result = run(&mut terminal, api, source_water_ids);
     restore_terminal(&mut terminal)?;
     result
 }
 
-fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> anyhow::Result<()> {
+fn run(
+    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    api: ApiClient,
+    source_water_ids: Vec<String>,
+) -> anyhow::Result<()> {
     let Some(selection) = select_startup_config(terminal)? else {
         return Ok(());
     };
@@ -63,8 +79,20 @@ fn run(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> anyhow::Result<()> 
         selection.initial_shrimp_count
     );
     let save_file_path = default_save_path(selection.scenario_id());
-    let engine = Engine::from_parts(state, vec![]);
-    let mut app = TuiApp::new(engine, save_file_path, scenario_label);
+
+    // Push the constructed state to the API server
+    let save = SaveFile::new(state, vec![]);
+    let initial_snapshot = api
+        .post_load(&save)
+        .context("failed to push initial state to API server")?;
+
+    let mut app = TuiApp::new(
+        api,
+        initial_snapshot,
+        save_file_path,
+        scenario_label,
+        source_water_ids,
+    );
 
     loop {
         app.clear_expired_status();
