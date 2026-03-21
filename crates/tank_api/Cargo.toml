@@ -1,0 +1,18 @@
+[package]
+name = "tank_api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tank_core = { path = "../tank_core" }
+tank_data = { path = "../tank_data" }
+tank_scenarios = { path = "../tank_scenarios" }
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+tower-http = { version = "0.6", features = ["cors"] }
+
+[[bin]]
+name = "tank_api"
+path = "src/main.rs"
