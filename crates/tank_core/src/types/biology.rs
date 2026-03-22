@@ -84,6 +84,9 @@ pub struct AnimalState {
     pub hourly_instability_stress_accum: f64,
     #[serde(default)]
     pub daily_food_consumed_g: f64,
+    /// Fractional maturation accumulator for juvenile → adult promotion.
+    #[serde(default)]
+    pub maturation_accum: f64,
 }
 
 /// Species-specific shrimp parameters materialized from ShrimpPreset.
@@ -181,6 +184,7 @@ impl Default for AnimalState {
             hourly_heat_stress_accum: 0.0,
             hourly_instability_stress_accum: 0.0,
             daily_food_consumed_g: 0.0,
+            maturation_accum: 0.0,
         }
     }
 }

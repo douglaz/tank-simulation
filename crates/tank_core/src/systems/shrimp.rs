@@ -424,15 +424,12 @@ fn juvenile_recruitment(state: &mut TankState) {
             .process_params
             .shrimp_juvenile_maturation_days
             .max(1.0);
-    // Ensure at least 1 juvenile matures per day when any are present,
-    // so small cohorts below the maturation threshold don't freeze forever.
-    let computed = (state.animal.juveniles_count as f64 * maturation_rate).round() as u32;
-    let maturing = if state.animal.juveniles_count > 0 {
-        computed.max(1)
-    } else {
-        0
-    };
-    let maturing = maturing.min(state.animal.juveniles_count);
+    // Use a fractional accumulator so small cohorts don't freeze (floor=0)
+    // or mature too fast (max(1)). The fractional remainder carries over to
+    // the next day.
+    state.animal.maturation_accum += state.animal.juveniles_count as f64 * maturation_rate;
+    let maturing = (state.animal.maturation_accum.floor() as u32).min(state.animal.juveniles_count);
+    state.animal.maturation_accum -= maturing as f64;
 
     state.animal.juveniles_count -= maturing;
     state.animal.adults_count += maturing;

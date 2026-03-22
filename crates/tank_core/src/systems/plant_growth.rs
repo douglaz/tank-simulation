@@ -88,7 +88,7 @@ pub fn step_daily_plants(state: &mut TankState) {
             } else {
                 1.0
             };
-            n_frac.min(p_frac)
+            n_frac.min(p_frac).min(1.0)
         } else {
             0.0
         };
