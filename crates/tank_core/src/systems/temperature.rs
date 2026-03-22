@@ -68,8 +68,6 @@ pub fn step_temperature(state: &mut TankState) {
         0.0
     };
 
-    state.hardware.heater.last_output_w = q_heater_w;
-
     // Apply ambient heat exchange first, then add heater energy capped so it
     // cannot push the temperature above the setpoint.  This way a hot room can
     // still warm the tank beyond the setpoint (the heater has no cooling path)
@@ -80,7 +78,17 @@ pub fn step_temperature(state: &mut TankState) {
     if q_heater_w > 0.0 {
         let delta_heater_c = q_heater_w * dt_s / heat_capacity_j_per_k;
         let headroom = (state.hardware.heater.setpoint_c - state.water.temperature_c).max(0.0);
-        state.water.temperature_c += delta_heater_c.min(headroom);
+        let realized_heater_c = delta_heater_c.min(headroom);
+        state.water.temperature_c += realized_heater_c;
+        // Record the actually-used heater power, not the commanded watts.
+        let realized_fraction = if delta_heater_c > f64::EPSILON {
+            realized_heater_c / delta_heater_c
+        } else {
+            0.0
+        };
+        state.hardware.heater.last_output_w = q_heater_w * realized_fraction;
+    } else {
+        state.hardware.heater.last_output_w = 0.0;
     }
 }
 

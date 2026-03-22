@@ -24,6 +24,17 @@ pub struct PlantGuildState {
     pub health_index: f64,
     pub crowding_index: f64,
     pub habitat_index: f64,
+    #[serde(default = "default_water_column_uptake_bias")]
+    pub water_column_uptake_bias: f64,
+    #[serde(default = "default_substrate_uptake_bias")]
+    pub substrate_uptake_bias: f64,
+}
+
+fn default_water_column_uptake_bias() -> f64 {
+    0.5
+}
+fn default_substrate_uptake_bias() -> f64 {
+    0.5
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -116,6 +127,8 @@ impl Default for PlantGuildState {
             health_index: 0.8,
             crowding_index: 0.1,
             habitat_index: 0.8,
+            water_column_uptake_bias: 0.9,
+            substrate_uptake_bias: 0.1,
         }
     }
 }
@@ -228,17 +241,11 @@ impl Default for DetritusState {
 
 impl PlantGuildState {
     pub fn water_column_uptake_bias(&self) -> f64 {
-        match self.guild {
-            PlantGuild::FastStem => 0.9,
-            PlantGuild::RootFeedingRosette => 0.1,
-        }
+        self.water_column_uptake_bias
     }
 
     pub fn substrate_uptake_bias(&self) -> f64 {
-        match self.guild {
-            PlantGuild::FastStem => 0.1,
-            PlantGuild::RootFeedingRosette => 0.9,
-        }
+        self.substrate_uptake_bias
     }
 }
 
