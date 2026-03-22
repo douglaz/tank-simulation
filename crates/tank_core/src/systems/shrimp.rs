@@ -424,10 +424,14 @@ fn juvenile_recruitment(state: &mut TankState) {
             .process_params
             .shrimp_juvenile_maturation_days
             .max(1.0);
-    // Use round instead of floor so small cohorts (e.g. 25 juveniles with
-    // 30-day maturation = 0.83/day) still produce at least 1 maturing shrimp
-    // per day rather than rounding to zero permanently.
-    let maturing = (state.animal.juveniles_count as f64 * maturation_rate).round() as u32;
+    // Ensure at least 1 juvenile matures per day when any are present,
+    // so small cohorts below the maturation threshold don't freeze forever.
+    let computed = (state.animal.juveniles_count as f64 * maturation_rate).round() as u32;
+    let maturing = if state.animal.juveniles_count > 0 {
+        computed.max(1)
+    } else {
+        0
+    };
     let maturing = maturing.min(state.animal.juveniles_count);
 
     state.animal.juveniles_count -= maturing;

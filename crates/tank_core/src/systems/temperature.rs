@@ -70,14 +70,17 @@ pub fn step_temperature(state: &mut TankState) {
 
     state.hardware.heater.last_output_w = q_heater_w;
 
-    let delta_temp_c = (q_ambient_w + q_heater_w) * dt_s / heat_capacity_j_per_k;
-    state.water.temperature_c += delta_temp_c;
+    // Apply ambient heat exchange first, then add heater energy capped so it
+    // cannot push the temperature above the setpoint.  This way a hot room can
+    // still warm the tank beyond the setpoint (the heater has no cooling path)
+    // while the thermostat duty-cycle stops heating once the target is reached.
+    let delta_ambient_c = q_ambient_w * dt_s / heat_capacity_j_per_k;
+    state.water.temperature_c += delta_ambient_c;
 
-    // Cap heater overshoot: if the heater fired and temperature now exceeds the
-    // setpoint, clamp back to the setpoint. This models a thermostat duty-cycle
-    // that stops heating once the target is reached within the tick.
-    if q_heater_w > 0.0 && state.water.temperature_c > state.hardware.heater.setpoint_c {
-        state.water.temperature_c = state.hardware.heater.setpoint_c;
+    if q_heater_w > 0.0 {
+        let delta_heater_c = q_heater_w * dt_s / heat_capacity_j_per_k;
+        let headroom = (state.hardware.heater.setpoint_c - state.water.temperature_c).max(0.0);
+        state.water.temperature_c += delta_heater_c.min(headroom);
     }
 }
 
