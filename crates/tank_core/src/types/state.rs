@@ -51,7 +51,7 @@ pub struct TankState {
 impl TankState {
     pub fn new(seed: SimSeed) -> Self {
         let geometry = TankGeometry::default();
-        Self {
+        let mut state = Self {
             meta: SimMeta::default(),
             geometry: geometry.clone(),
             environment: EnvironmentState::default(),
@@ -81,7 +81,14 @@ impl TankState {
             process_params: ProcessParams::default(),
             shrimp_params: ShrimpRuntimeParams::default(),
             stability_tracker: StabilityTracker::default(),
-        }
+        };
+        // Seed stability baseline from the freshly built water state so the
+        // first daily update does not register a false chemistry swing.
+        let volume_l = state.geometry.water_volume_l();
+        state
+            .stability_tracker
+            .seed_from_water(&state.water, volume_l);
+        state
     }
 
     pub fn seeded_example(seed: SimSeed) -> Self {

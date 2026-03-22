@@ -49,8 +49,9 @@ impl SimRng {
 
     fn from_repr(repr: SimRngRepr) -> Self {
         let mut rng = ChaCha8Rng::from_seed(seed_to_bytes(repr.seed));
-        // O(1) restore: each next_u64() consumes one 64-bit word from the stream.
-        rng.set_word_pos(repr.draws as u128);
+        // O(1) restore: set_word_pos takes 32-bit word offsets, and each
+        // next_u64() call consumes two 32-bit words (64 bits).
+        rng.set_word_pos(repr.draws as u128 * 2);
         Self {
             seed: repr.seed,
             draws: repr.draws,
