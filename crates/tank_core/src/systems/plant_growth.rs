@@ -75,8 +75,9 @@ pub fn step_daily_plants(state: &mut TankState) {
         let p_demand = realized_growth_g * PLANT_P_MG_PER_G_GROWTH;
         let (n_removed, p_removed) =
             remove_plant_nutrients(state, n_demand, p_demand, water_bias, substrate_bias);
-        // Cap growth by what nutrients were actually available.
-        let nutrient_cap_g = if realized_growth_g > f64::EPSILON {
+        // Cap growth by what nutrients were actually available, and refund
+        // the non-limiting nutrient so mass balance is maintained.
+        let cap_frac = if realized_growth_g > f64::EPSILON {
             let n_frac = if n_demand > f64::EPSILON {
                 n_removed / n_demand
             } else {
@@ -87,10 +88,17 @@ pub fn step_daily_plants(state: &mut TankState) {
             } else {
                 1.0
             };
-            realized_growth_g * n_frac.min(p_frac)
+            n_frac.min(p_frac)
         } else {
             0.0
         };
+        let nutrient_cap_g = realized_growth_g * cap_frac;
+
+        // Refund the over-removed portion of the non-limiting nutrient.
+        let n_used = n_removed * cap_frac;
+        let p_used = p_removed * cap_frac;
+        refund_plant_nutrients(state, n_removed - n_used, p_removed - p_used, water_bias);
+
         let capped_net = nutrient_cap_g - respiration_g - senescence_g;
 
         let new_biomass_g = (biomass_g + capped_net).max(0.0);
@@ -152,6 +160,27 @@ fn habitat_factor(state: &TankState, guild: PlantGuild) -> f64 {
 
             (0.2 + (0.35 * depth_factor) + (0.3 * weighted_cec) + active_bonus).clamp(0.0, 1.0)
         }
+    }
+}
+
+/// Return excess nutrients to the water column when growth was capped by the
+/// limiting nutrient. Refunds go to the water column (simplification) since
+/// tracking per-layer substrate refunds adds complexity for minimal accuracy gain.
+fn refund_plant_nutrients(
+    state: &mut TankState,
+    n_refund_mg: f64,
+    p_refund_mg: f64,
+    water_bias: f64,
+) {
+    if n_refund_mg > f64::EPSILON {
+        // Refund N preferentially to ammonia (reverse of uptake order).
+        let ammonia_share = n_refund_mg * water_bias;
+        state.water.ammonia_total_mg_n_total += ammonia_share;
+        // Remainder goes to nitrate via substrate proxy; simplify to water.
+        state.water.nitrate_mg_n_total += (n_refund_mg - ammonia_share).max(0.0);
+    }
+    if p_refund_mg > f64::EPSILON {
+        state.water.phosphate_mg_p_total += p_refund_mg;
     }
 }
 

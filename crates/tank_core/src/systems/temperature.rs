@@ -66,6 +66,13 @@ pub fn step_temperature(state: &mut TankState) {
 
     let delta_temp_c = (q_ambient_w + q_heater_w) * dt_s / heat_capacity_j_per_k;
     state.water.temperature_c += delta_temp_c;
+
+    // Cap heater overshoot: if the heater fired and temperature now exceeds the
+    // setpoint, clamp back to the setpoint. This models a thermostat duty-cycle
+    // that stops heating once the target is reached within the tick.
+    if q_heater_w > 0.0 && state.water.temperature_c > state.hardware.heater.setpoint_c {
+        state.water.temperature_c = state.hardware.heater.setpoint_c;
+    }
 }
 
 #[cfg(test)]

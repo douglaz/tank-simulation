@@ -57,7 +57,7 @@ pub fn step_daily_algae(state: &mut TankState) {
     );
     let susp_n_demand = suspended_gross_growth_g * ALGAE_N_MG_PER_G_GROWTH;
     let susp_p_demand = suspended_gross_growth_g * ALGAE_P_MG_PER_G_GROWTH;
-    let susp_cap = if suspended_gross_growth_g > f64::EPSILON {
+    let susp_cap_frac = if suspended_gross_growth_g > f64::EPSILON {
         let n_frac = if susp_n_demand > f64::EPSILON {
             susp_n_removed / susp_n_demand
         } else {
@@ -68,10 +68,17 @@ pub fn step_daily_algae(state: &mut TankState) {
         } else {
             1.0
         };
-        suspended_gross_growth_g * n_frac.min(p_frac)
+        n_frac.min(p_frac)
     } else {
         0.0
     };
+    let susp_cap = suspended_gross_growth_g * susp_cap_frac;
+    // Refund excess non-limiting nutrient.
+    refund_algae_nutrients(
+        state,
+        susp_n_removed * (1.0 - susp_cap_frac),
+        susp_p_removed * (1.0 - susp_cap_frac),
+    );
     let suspended_new_g = (state.algae.suspended_biomass_g + susp_cap
         - suspended_respiration_g
         - suspended_grazing_g)
@@ -109,7 +116,7 @@ pub fn step_daily_algae(state: &mut TankState) {
     );
     let peri_n_demand = periphyton_gross_growth_g * ALGAE_N_MG_PER_G_GROWTH;
     let peri_p_demand = periphyton_gross_growth_g * ALGAE_P_MG_PER_G_GROWTH;
-    let peri_cap = if periphyton_gross_growth_g > f64::EPSILON {
+    let peri_cap_frac = if periphyton_gross_growth_g > f64::EPSILON {
         let n_frac = if peri_n_demand > f64::EPSILON {
             peri_n_removed / peri_n_demand
         } else {
@@ -120,10 +127,16 @@ pub fn step_daily_algae(state: &mut TankState) {
         } else {
             1.0
         };
-        periphyton_gross_growth_g * n_frac.min(p_frac)
+        n_frac.min(p_frac)
     } else {
         0.0
     };
+    let peri_cap = periphyton_gross_growth_g * peri_cap_frac;
+    refund_algae_nutrients(
+        state,
+        peri_n_removed * (1.0 - peri_cap_frac),
+        peri_p_removed * (1.0 - peri_cap_frac),
+    );
     let periphyton_new_g = (state.algae.periphyton_biomass_g + peri_cap
         - periphyton_respiration_g
         - periphyton_grazing_g)
@@ -157,6 +170,16 @@ fn algae_light_factor(state: &TankState) -> f64 {
         state.hardware.light.intensity_index * photoperiod_factor,
         state.process_params.algae_light_half_saturation,
     )
+}
+
+fn refund_algae_nutrients(state: &mut TankState, n_refund_mg: f64, p_refund_mg: f64) {
+    if n_refund_mg > f64::EPSILON {
+        // Return N to ammonia pool (simplification).
+        state.water.ammonia_total_mg_n_total += n_refund_mg;
+    }
+    if p_refund_mg > f64::EPSILON {
+        state.water.phosphate_mg_p_total += p_refund_mg;
+    }
 }
 
 fn consume_algae_nutrients(
