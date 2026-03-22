@@ -3,7 +3,13 @@ use crate::types::TankState;
 /// DO saturation in mg/L from linear interpolation over the reference table:
 /// 0°C → 14.6, 10°C → 11.3, 20°C → 9.1, 30°C → 7.6
 pub fn do_sat_mg_l(temp_c: f64) -> f64 {
-    const TABLE: [(f64, f64); 4] = [(0.0, 14.6), (10.0, 11.3), (20.0, 9.1), (30.0, 7.6)];
+    const TABLE: [(f64, f64); 5] = [
+        (0.0, 14.6),
+        (10.0, 11.3),
+        (20.0, 9.1),
+        (30.0, 7.6),
+        (40.0, 6.4),
+    ];
 
     if temp_c <= TABLE[0].0 {
         return TABLE[0].1;
@@ -97,6 +103,14 @@ mod tests {
     #[test]
     fn do_sat_clamp() {
         assert!((do_sat_mg_l(-5.0) - 14.6).abs() < 0.01);
-        assert!((do_sat_mg_l(40.0) - 7.6).abs() < 0.01);
+        assert!((do_sat_mg_l(50.0) - 6.4).abs() < 0.01);
+    }
+
+    #[test]
+    fn do_sat_above_30() {
+        let at_35 = do_sat_mg_l(35.0);
+        // Midpoint between 7.6 (30°C) and 6.4 (40°C) = 7.0
+        assert!((at_35 - 7.0).abs() < 0.01);
+        assert!(do_sat_mg_l(30.0) > do_sat_mg_l(35.0));
     }
 }

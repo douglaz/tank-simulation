@@ -91,10 +91,16 @@ impl Engine {
     }
 
     fn run_daily_update(&mut self) {
-        // Daily pipeline: plants → algae → microfauna → shrimp → biofilter → stability
+        // Daily pipeline: plants → algae → microfauna → stability → shrimp → biofilter
         systems::plant_growth::step_daily_plants(&mut self.state);
         systems::algae_growth::step_daily_algae(&mut self.state);
         systems::microfauna::step_daily_microfauna(&mut self.state);
+
+        // Update stability metrics before shrimp so that same-day chemistry
+        // swings (water changes, temperature shifts) are reflected in the
+        // instability_index that shrimp condition/mortality reads.
+        systems::shrimp::update_stability_tracker(&mut self.state);
+
         systems::shrimp::step_daily_shrimp(&mut self.state);
         systems::nitrogen_cycle::update_daily_filter_clogging(&mut self.state);
 
@@ -123,9 +129,6 @@ impl Engine {
                 format!("Nitrogen cycle progressing, maturity {current_maturity:.3}"),
             );
         }
-
-        // Long-term stability metrics
-        systems::shrimp::update_stability_tracker(&mut self.state);
     }
 
     fn process_action(&mut self, action: PlayerAction) {
