@@ -47,7 +47,8 @@ pub async fn load_scenario(
             .as_secs()
     }));
 
-    let overrides = tank_scenarios::StartupOverrides::default();
+    let overrides = tank_scenarios::startup_defaults_for_scenario(&req.scenario_id)
+        .map_err(|e| ApiError::bad_request(e.to_string()))?;
     let tank_state = seeded_state_with_full_overrides(seed, &req.scenario_id, overrides)
         .map_err(|e| ApiError::bad_request(e.to_string()))?;
 

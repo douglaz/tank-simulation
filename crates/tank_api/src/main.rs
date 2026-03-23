@@ -20,7 +20,8 @@ async fn main() {
         .unwrap_or_else(|| "127.0.0.1:3000".to_string());
 
     let seed = SimSeed(seed_from_clock());
-    let overrides = tank_scenarios::StartupOverrides::default();
+    let overrides = tank_scenarios::startup_defaults_for_scenario(&scenario_id)
+        .unwrap_or_else(|e| panic!("failed to load defaults for `{scenario_id}`: {e}"));
     let tank_state = seeded_state_with_full_overrides(seed, &scenario_id, overrides)
         .unwrap_or_else(|e| panic!("failed to load scenario `{scenario_id}`: {e}"));
 

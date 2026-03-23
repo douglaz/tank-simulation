@@ -191,10 +191,16 @@ fn remove_plant_nutrients(
     water_bias: f64,
     substrate_bias: f64,
 ) -> (f64, f64) {
-    let water_n_target = n_demand_mg * water_bias;
-    let substrate_n_target = n_demand_mg * substrate_bias;
-    let water_p_target = p_demand_mg * water_bias;
-    let substrate_p_target = p_demand_mg * substrate_bias;
+    // Normalize biases so they sum to 1.0, preventing over-removal when
+    // preset biases sum above 1.0 (e.g. fast_stem 0.9+0.2 = 1.1).
+    let bias_sum = (water_bias + substrate_bias).max(f64::MIN_POSITIVE);
+    let w = water_bias / bias_sum;
+    let s = substrate_bias / bias_sum;
+
+    let water_n_target = n_demand_mg * w;
+    let substrate_n_target = n_demand_mg * s;
+    let water_p_target = p_demand_mg * w;
+    let substrate_p_target = p_demand_mg * s;
 
     let water_n_removed = remove_water_n(state, water_n_target);
     let substrate_n_removed = remove_substrate_n(
