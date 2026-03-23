@@ -44,6 +44,10 @@ impl Engine {
 
     fn step_one_hour(&mut self) -> Result<(), SimError> {
         let actions_slice: Vec<_> = self.queued_actions.iter().cloned().collect();
+        // Validate all queued actions (covers from_parts callers that bypass apply_action).
+        for action in &actions_slice {
+            action.validate()?;
+        }
         systems::water_change::validate_water_changes(&self.state, &actions_slice)?;
 
         while let Some(action) = self.queued_actions.pop_front() {

@@ -144,6 +144,30 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
         layer.grazing_surface_index = layer.grazing_surface_index.clamp(0.0, 1.0);
     }
 
+    // Process parameters: reject negative coefficients that would produce
+    // nonsensical physics (negative heat transfer, negative reaeration, etc.).
+    let pp = &state.process_params;
+    check_non_negative("process.reaeration_kla_base", pp.reaeration_kla_base)?;
+    check_non_negative("process.aeration_kla_boost", pp.aeration_kla_boost)?;
+    check_non_negative("process.k_surface_w_per_m2_k", pp.k_surface_w_per_m2_k)?;
+    check_non_negative("process.k_wall_w_per_m2_k", pp.k_wall_w_per_m2_k)?;
+    check_non_negative(
+        "process.background_bod_mg_o2_per_g_biomass_per_hour",
+        pp.background_bod_mg_o2_per_g_biomass_per_hour,
+    )?;
+    check_non_negative(
+        "process.decomposer_vmax_per_hour",
+        pp.decomposer_vmax_per_hour,
+    )?;
+    check_non_negative(
+        "process.aob_vmax_mg_n_per_g_per_hour",
+        pp.aob_vmax_mg_n_per_g_per_hour,
+    )?;
+    check_non_negative(
+        "process.nob_vmax_mg_n_per_g_per_hour",
+        pp.nob_vmax_mg_n_per_g_per_hour,
+    )?;
+
     if state.event_log.len() > 200 {
         let keep_from = state.event_log.len() - 200;
         state.event_log.drain(0..keep_from);
