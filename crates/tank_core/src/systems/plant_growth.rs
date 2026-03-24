@@ -39,8 +39,13 @@ pub fn step_daily_plants(state: &mut TankState) {
         let substrate_p = total_substrate_p(state);
         let water_bias = state.plant_guilds[index].water_column_uptake_bias();
         let substrate_bias = state.plant_guilds[index].substrate_uptake_bias();
-        let accessible_n = (water_n * water_bias) + (substrate_n * substrate_bias);
-        let accessible_p = (water_p * water_bias) + (substrate_p * substrate_bias);
+        // Normalize biases for the accessibility calculation so presets that
+        // sum above 1.0 don't inflate the apparent nutrient availability.
+        let bias_sum = (water_bias + substrate_bias).max(f64::MIN_POSITIVE);
+        let w_norm = water_bias / bias_sum;
+        let s_norm = substrate_bias / bias_sum;
+        let accessible_n = (water_n * w_norm) + (substrate_n * s_norm);
+        let accessible_p = (water_p * w_norm) + (substrate_p * s_norm);
         let f_n = half_saturation(
             accessible_n,
             state.process_params.plant_half_saturation_n_mg_total,

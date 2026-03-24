@@ -60,11 +60,25 @@ pub fn emit_daily_algae_events(
 ) {
     let volume_l = state.geometry.water_volume_l();
     if previous_nuisance_index < 0.5 && state.algae.nuisance_index >= 0.5 {
+        let mut causes = vec![EventCause::HighNutrients];
+        // Only attribute PlantCrowding if the tank actually has significant plant biomass.
+        let total_plant_biomass: f64 = state.plant_guilds.iter().map(|p| p.biomass_g).sum();
+        if total_plant_biomass > 1.0 {
+            let avg_crowding = state
+                .plant_guilds
+                .iter()
+                .map(|p| p.crowding_index)
+                .sum::<f64>()
+                / state.plant_guilds.len().max(1) as f64;
+            if avg_crowding > 0.3 {
+                causes.push(EventCause::PlantCrowding);
+            }
+        }
         emit_once_per_day(
             state,
             EventSeverity::Warning,
             EventKind::AlgaeRiskRising,
-            vec![EventCause::HighNutrients, EventCause::PlantCrowding],
+            causes,
             format!(
                 "Algae nuisance pressure rose to {:.2}",
                 state.algae.nuisance_index
