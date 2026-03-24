@@ -3,7 +3,13 @@ use crate::types::TankState;
 /// DO saturation in mg/L from linear interpolation over the reference table:
 /// 0°C → 14.6, 10°C → 11.3, 20°C → 9.1, 30°C → 7.6
 pub fn do_sat_mg_l(temp_c: f64) -> f64 {
-    const TABLE: [(f64, f64); 4] = [(0.0, 14.6), (10.0, 11.3), (20.0, 9.1), (30.0, 7.6)];
+    const TABLE: [(f64, f64); 5] = [
+        (0.0, 14.6),
+        (10.0, 11.3),
+        (20.0, 9.1),
+        (30.0, 7.6),
+        (40.0, 6.4),
+    ];
 
     if temp_c <= TABLE[0].0 {
         return TABLE[0].1;
@@ -62,10 +68,28 @@ pub fn step_temperature(state: &mut TankState) {
         0.0
     };
 
-    state.hardware.heater.last_output_w = q_heater_w;
+    // Apply ambient heat exchange first, then add heater energy capped so it
+    // cannot push the temperature above the setpoint.  This way a hot room can
+    // still warm the tank beyond the setpoint (the heater has no cooling path)
+    // while the thermostat duty-cycle stops heating once the target is reached.
+    let delta_ambient_c = q_ambient_w * dt_s / heat_capacity_j_per_k;
+    state.water.temperature_c += delta_ambient_c;
 
-    let delta_temp_c = (q_ambient_w + q_heater_w) * dt_s / heat_capacity_j_per_k;
-    state.water.temperature_c += delta_temp_c;
+    if q_heater_w > 0.0 {
+        let delta_heater_c = q_heater_w * dt_s / heat_capacity_j_per_k;
+        let headroom = (state.hardware.heater.setpoint_c - state.water.temperature_c).max(0.0);
+        let realized_heater_c = delta_heater_c.min(headroom);
+        state.water.temperature_c += realized_heater_c;
+        // Record the actually-used heater power, not the commanded watts.
+        let realized_fraction = if delta_heater_c > f64::EPSILON {
+            realized_heater_c / delta_heater_c
+        } else {
+            0.0
+        };
+        state.hardware.heater.last_output_w = q_heater_w * realized_fraction;
+    } else {
+        state.hardware.heater.last_output_w = 0.0;
+    }
 }
 
 #[cfg(test)]
@@ -90,6 +114,14 @@ mod tests {
     #[test]
     fn do_sat_clamp() {
         assert!((do_sat_mg_l(-5.0) - 14.6).abs() < 0.01);
-        assert!((do_sat_mg_l(40.0) - 7.6).abs() < 0.01);
+        assert!((do_sat_mg_l(50.0) - 6.4).abs() < 0.01);
+    }
+
+    #[test]
+    fn do_sat_above_30() {
+        let at_35 = do_sat_mg_l(35.0);
+        // Midpoint between 7.6 (30°C) and 6.4 (40°C) = 7.0
+        assert!((at_35 - 7.0).abs() < 0.01);
+        assert!(do_sat_mg_l(30.0) > do_sat_mg_l(35.0));
     }
 }

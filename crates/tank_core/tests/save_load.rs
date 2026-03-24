@@ -16,7 +16,7 @@ fn save_load_roundtrip() -> Result<(), tank_core::SimError> {
     let save = SaveFile::from_engine(&engine);
     let json = save.to_json_pretty()?;
     let restored = SaveFile::from_json(&json)?;
-    let restored_engine = restored.clone().into_engine();
+    let restored_engine = restored.clone().into_engine()?;
 
     assert_eq!(save, restored);
     assert_eq!(engine.full_state(), restored_engine.full_state());
@@ -72,7 +72,7 @@ fn save_load_with_source_water_catalog() -> Result<(), tank_core::SimError> {
     let save = SaveFile::from_engine(&engine);
     let json = save.to_json_pretty()?;
     let restored = SaveFile::from_json(&json)?;
-    let restored_engine = restored.into_engine();
+    let restored_engine = restored.into_engine()?;
 
     // Source water catalog and process params must survive roundtrip
     assert_eq!(
@@ -104,7 +104,7 @@ fn save_load_resume_determinism() -> Result<(), tank_core::SimError> {
     let save = SaveFile::from_engine(&engine_split);
     let json = save.to_json_pretty()?;
     let restored = SaveFile::from_json(&json)?;
-    let mut engine_resumed = restored.into_engine();
+    let mut engine_resumed = restored.into_engine()?;
     engine_resumed.step_hours(480)?;
 
     assert_eq!(
@@ -139,7 +139,7 @@ fn save_load_with_active_cycle_state() -> Result<(), tank_core::SimError> {
     let save = SaveFile::from_engine(&engine);
     let json = save.to_json_pretty()?;
     let restored = SaveFile::from_json(&json)?;
-    let mut resumed = restored.into_engine();
+    let mut resumed = restored.into_engine()?;
 
     let mut continued = engine;
     continued.step_hours(48)?;

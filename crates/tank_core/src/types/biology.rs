@@ -24,6 +24,12 @@ pub struct PlantGuildState {
     pub health_index: f64,
     pub crowding_index: f64,
     pub habitat_index: f64,
+    /// `None` in old saves → accessor falls back to guild-specific preset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub water_column_uptake_bias: Option<f64>,
+    /// `None` in old saves → accessor falls back to guild-specific preset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub substrate_uptake_bias: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -73,6 +79,9 @@ pub struct AnimalState {
     pub hourly_instability_stress_accum: f64,
     #[serde(default)]
     pub daily_food_consumed_g: f64,
+    /// Fractional maturation accumulator for juvenile → adult promotion.
+    #[serde(default)]
+    pub maturation_accum: f64,
 }
 
 /// Species-specific shrimp parameters materialized from ShrimpPreset.
@@ -116,6 +125,8 @@ impl Default for PlantGuildState {
             health_index: 0.8,
             crowding_index: 0.1,
             habitat_index: 0.8,
+            water_column_uptake_bias: Some(0.9),
+            substrate_uptake_bias: Some(0.2),
         }
     }
 }
@@ -168,6 +179,7 @@ impl Default for AnimalState {
             hourly_heat_stress_accum: 0.0,
             hourly_instability_stress_accum: 0.0,
             daily_food_consumed_g: 0.0,
+            maturation_accum: 0.0,
         }
     }
 }
@@ -228,17 +240,17 @@ impl Default for DetritusState {
 
 impl PlantGuildState {
     pub fn water_column_uptake_bias(&self) -> f64 {
-        match self.guild {
+        self.water_column_uptake_bias.unwrap_or(match self.guild {
             PlantGuild::FastStem => 0.9,
-            PlantGuild::RootFeedingRosette => 0.1,
-        }
+            PlantGuild::RootFeedingRosette => 0.3,
+        })
     }
 
     pub fn substrate_uptake_bias(&self) -> f64 {
-        match self.guild {
-            PlantGuild::FastStem => 0.1,
+        self.substrate_uptake_bias.unwrap_or(match self.guild {
+            PlantGuild::FastStem => 0.2,
             PlantGuild::RootFeedingRosette => 0.9,
-        }
+        })
     }
 }
 

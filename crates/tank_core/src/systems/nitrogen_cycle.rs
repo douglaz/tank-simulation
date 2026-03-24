@@ -268,6 +268,11 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let total_alk_consumed = (aob_rate + comammox_rate) * alk_per_mg_n;
     state.water.alkalinity_meq_total =
         (state.water.alkalinity_meq_total - total_alk_consumed).max(0.0);
+    // Deplete bicarbonate proportionally so TDS/conductivity stay consistent
+    // with the alkalinity drop.  1 meq alkalinity ≈ 61 mg HCO₃⁻.
+    let bicarb_consumed_mg = total_alk_consumed * 61.0;
+    state.water.bicarbonate_mg_total =
+        (state.water.bicarbonate_mg_total - bicarb_consumed_mg).max(0.0);
 
     // Nitrification is a chemoautotrophic process that produces some DIC fixation
     // but for simplicity we model it as a net DIC producer via mineralization pathway above.

@@ -5,7 +5,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct ProcessParams {
+    /// Reserved: not yet wired into the nitrogen cycle. The decomposer and
+    /// nitrifier guild rates (`decomposer_vmax_per_hour`, `aob_vmax_*`, etc.)
+    /// are the effective controls. Changing this field has no effect.
     pub mineralization_rate_per_day: f64,
+    /// Reserved: not yet wired into the nitrogen cycle. See per-guild vmax
+    /// fields for the effective nitrification rate controls.
     pub nitrification_vmax: f64,
     pub reaeration_kla_base: f64,
     pub aeration_kla_boost: f64,

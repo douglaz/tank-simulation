@@ -164,10 +164,7 @@ fn happy_medium_planted_well_maintained() {
     );
 
     // Plants should still be alive
-    assert!(
-        s120.total_plant_biomass_g > 0.0,
-        "plants should be alive"
-    );
+    assert!(s120.total_plant_biomass_g > 0.0, "plants should be alive");
 
     // Nitrifier biomass should be present (cycle is active)
     assert!(
@@ -192,7 +189,7 @@ fn happy_nano_careful_husbandry() {
         "nano_cycle",
         StartupOverrides {
             initial_adult_shrimp_count: Some(5), // conservative stocking
-            aeration_enabled: Some(true),         // extra oxygenation for nano
+            aeration_enabled: Some(true),        // extra oxygenation for nano
             ..default_overrides()
         },
     );
@@ -532,10 +529,7 @@ fn sad_overstocking_nano() {
 
     // With 50 shrimp in 10L and heavy feeding, conditions should be poor
     // Ammonia should be elevated
-    assert!(
-        s.tan_mg_l > 0.5,
-        "TAN should be elevated from overstocking"
-    );
+    assert!(s.tan_mg_l > 0.5, "TAN should be elevated from overstocking");
 }
 
 /// User removes all shrimp — ecosystem should still function, just without fauna.

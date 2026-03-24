@@ -49,9 +49,9 @@ impl SimRng {
 
     fn from_repr(repr: SimRngRepr) -> Self {
         let mut rng = ChaCha8Rng::from_seed(seed_to_bytes(repr.seed));
-        for _ in 0..repr.draws {
-            let _ = rng.next_u64();
-        }
+        // O(1) restore: set_word_pos takes 32-bit word offsets, and each
+        // next_u64() call consumes two 32-bit words (64 bits).
+        rng.set_word_pos(repr.draws as u128 * 2);
         Self {
             seed: repr.seed,
             draws: repr.draws,
@@ -87,7 +87,7 @@ impl<'de> Deserialize<'de> for SimRng {
         D: Deserializer<'de>,
     {
         let repr = SimRngRepr::deserialize(deserializer)?;
-        if repr.draws > u32::MAX as u64 && cfg!(debug_assertions) {
+        if repr.draws > u32::MAX as u64 {
             return Err(D::Error::custom("draw count is unexpectedly large"));
         }
         Ok(Self::from_repr(repr))

@@ -27,7 +27,10 @@ pub fn step_dissolved_oxygen(state: &mut TankState, light_on: bool) {
     let k_la = (state.process_params.reaeration_kla_base * state.geometry.top_exchange_factor())
         + (state.process_params.aeration_kla_boost * aeration_intensity)
         + filter_kla_boost;
-    let delta_do_reaeration_mg = k_la * (do_sat_mg_l - do_mg_l) * volume_l;
+    // Cap k_la at 1.0 so the explicit Euler step cannot overshoot saturation.
+    // With k_la <= 1.0, gas exchange moves DO at most 100% toward the
+    // saturation target per hour, asymptotically approaching but never crossing.
+    let delta_do_reaeration_mg = k_la.min(1.0) * (do_sat_mg_l - do_mg_l) * volume_l;
 
     let background_bod_mg = state
         .process_params
@@ -45,4 +48,6 @@ pub fn step_dissolved_oxygen(state: &mut TankState, light_on: bool) {
 
     state.water.dissolved_oxygen_mg_total +=
         delta_do_reaeration_mg + photosynthetic_o2_mg - background_bod_mg;
+    // Floor at zero so downstream stress/event paths never see negative DO.
+    state.water.dissolved_oxygen_mg_total = state.water.dissolved_oxygen_mg_total.max(0.0);
 }

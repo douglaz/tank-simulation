@@ -92,6 +92,18 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
     }
     state.water.ph = state.water.ph.clamp(5.5, 8.5);
 
+    // Geometry: reject non-positive dimensions and impossible fill levels
+    check_positive("geometry.length_cm", state.geometry.length_cm)?;
+    check_positive("geometry.width_cm", state.geometry.width_cm)?;
+    check_positive("geometry.height_cm", state.geometry.height_cm)?;
+    check_positive("geometry.fill_height_cm", state.geometry.fill_height_cm)?;
+    if state.geometry.fill_height_cm > state.geometry.height_cm {
+        return Err(SimError::InvariantViolation {
+            field: "geometry.fill_height_cm",
+            value: state.geometry.fill_height_cm,
+        });
+    }
+
     state.geometry.lid_exchange_factor = state.geometry.lid_exchange_factor.clamp(0.0, 1.0);
     state.hardware.light.intensity_index = state.hardware.light.intensity_index.clamp(0.0, 1.0);
     state.hardware.filter.cleanliness_index =
@@ -132,6 +144,42 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
         layer.grazing_surface_index = layer.grazing_surface_index.clamp(0.0, 1.0);
     }
 
+    // Process parameters: reject negative coefficients that would produce
+    // nonsensical physics (negative heat transfer, negative reaeration, etc.).
+    let pp = &state.process_params;
+    check_non_negative("process.reaeration_kla_base", pp.reaeration_kla_base)?;
+    check_non_negative("process.aeration_kla_boost", pp.aeration_kla_boost)?;
+    check_non_negative("process.k_surface_w_per_m2_k", pp.k_surface_w_per_m2_k)?;
+    check_non_negative("process.k_wall_w_per_m2_k", pp.k_wall_w_per_m2_k)?;
+    check_non_negative(
+        "process.background_bod_mg_o2_per_g_biomass_per_hour",
+        pp.background_bod_mg_o2_per_g_biomass_per_hour,
+    )?;
+    check_non_negative(
+        "process.decomposer_vmax_per_hour",
+        pp.decomposer_vmax_per_hour,
+    )?;
+    check_non_negative(
+        "process.aob_vmax_mg_n_per_g_per_hour",
+        pp.aob_vmax_mg_n_per_g_per_hour,
+    )?;
+    check_non_negative(
+        "process.nob_vmax_mg_n_per_g_per_hour",
+        pp.nob_vmax_mg_n_per_g_per_hour,
+    )?;
+    check_non_negative(
+        "process.respiration_dic_rate_mg_c_per_g_per_hour",
+        pp.respiration_dic_rate_mg_c_per_g_per_hour,
+    )?;
+    check_non_negative(
+        "process.photosynthesis_dic_rate_mg_c_per_g_per_hour",
+        pp.photosynthesis_dic_rate_mg_c_per_g_per_hour,
+    )?;
+    check_non_negative(
+        "process.plant_photosynthesis_o2_mg_per_g_per_hour",
+        pp.plant_photosynthesis_o2_mg_per_g_per_hour,
+    )?;
+
     if state.event_log.len() > 200 {
         let keep_from = state.event_log.len() - 200;
         state.event_log.drain(0..keep_from);
@@ -142,6 +190,14 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
 
 fn check_non_negative(field: &'static str, value: f64) -> Result<(), SimError> {
     if !value.is_finite() || value < 0.0 {
+        Err(SimError::InvariantViolation { field, value })
+    } else {
+        Ok(())
+    }
+}
+
+fn check_positive(field: &'static str, value: f64) -> Result<(), SimError> {
+    if !value.is_finite() || value <= 0.0 {
         Err(SimError::InvariantViolation { field, value })
     } else {
         Ok(())

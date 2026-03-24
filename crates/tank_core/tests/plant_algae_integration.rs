@@ -27,6 +27,7 @@ fn plant_growth_improves_with_light_and_nutrients() -> Result<(), tank_core::Sim
         health_index: 0.8,
         crowding_index: 0.0,
         habitat_index: 0.8,
+        ..PlantGuildState::default()
     }];
 
     let mut poor = favorable.clone();
@@ -59,6 +60,7 @@ fn guild_differentiated_uptake_prefers_expected_pools() -> Result<(), tank_core:
         health_index: 0.85,
         crowding_index: 0.0,
         habitat_index: 0.8,
+        ..PlantGuildState::default()
     }];
     fast_stem_state.substrate_layers = vec![SubstrateLayerState {
         kind: SubstrateKind::ActivePlanted,
@@ -74,6 +76,8 @@ fn guild_differentiated_uptake_prefers_expected_pools() -> Result<(), tank_core:
 
     let mut rosette_state = fast_stem_state.clone();
     rosette_state.plant_guilds[0].guild = PlantGuild::RootFeedingRosette;
+    rosette_state.plant_guilds[0].water_column_uptake_bias = Some(0.3);
+    rosette_state.plant_guilds[0].substrate_uptake_bias = Some(0.9);
 
     let fast_initial_water = fast_stem_state.water.ammonia_total_mg_n_total
         + fast_stem_state.water.nitrate_mg_n_total
@@ -184,6 +188,7 @@ fn trim_plants_routes_mass_to_detritus() -> Result<(), tank_core::SimError> {
         health_index: 0.9,
         crowding_index: 0.0,
         habitat_index: 0.8,
+        ..PlantGuildState::default()
     }];
 
     let mut engine = Engine::from_parts(state, vec![]);

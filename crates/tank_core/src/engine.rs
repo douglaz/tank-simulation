@@ -44,6 +44,27 @@ impl Engine {
 
     fn step_one_hour(&mut self) -> Result<(), SimError> {
         let actions_slice: Vec<_> = self.queued_actions.iter().cloned().collect();
+        // Validate all queued actions (covers from_parts callers that bypass apply_action).
+        let mut available_shrimp = self.state.animal.adults_count as i64;
+        for action in &actions_slice {
+            action.validate()?;
+            // State-aware check: RemoveShrimp must not exceed available adults.
+            match action {
+                PlayerAction::RemoveShrimp { count } => {
+                    if (*count as i64) > available_shrimp {
+                        return Err(SimError::ShrimpRemovalExceedsAvailable {
+                            requested: *count,
+                            available: available_shrimp.max(0) as u32,
+                        });
+                    }
+                    available_shrimp -= *count as i64;
+                }
+                PlayerAction::AddShrimp { count } => {
+                    available_shrimp += *count as i64;
+                }
+                _ => {}
+            }
+        }
         systems::water_change::validate_water_changes(&self.state, &actions_slice)?;
 
         while let Some(action) = self.queued_actions.pop_front() {
@@ -91,10 +112,16 @@ impl Engine {
     }
 
     fn run_daily_update(&mut self) {
-        // Daily pipeline: plants → algae → microfauna → shrimp → biofilter → stability
+        // Daily pipeline: plants → algae → microfauna → stability → shrimp → biofilter
         systems::plant_growth::step_daily_plants(&mut self.state);
         systems::algae_growth::step_daily_algae(&mut self.state);
         systems::microfauna::step_daily_microfauna(&mut self.state);
+
+        // Update stability metrics before shrimp so that same-day chemistry
+        // swings (water changes, temperature shifts) are reflected in the
+        // instability_index that shrimp condition/mortality reads.
+        systems::shrimp::update_stability_tracker(&mut self.state);
+
         systems::shrimp::step_daily_shrimp(&mut self.state);
         systems::nitrogen_cycle::update_daily_filter_clogging(&mut self.state);
 
@@ -123,9 +150,6 @@ impl Engine {
                 format!("Nitrogen cycle progressing, maturity {current_maturity:.3}"),
             );
         }
-
-        // Long-term stability metrics
-        systems::shrimp::update_stability_tracker(&mut self.state);
     }
 
     fn process_action(&mut self, action: PlayerAction) {

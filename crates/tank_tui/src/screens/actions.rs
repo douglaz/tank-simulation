@@ -82,6 +82,7 @@ pub struct ActionFormState {
     ambient_temp_c: String,
     aeration_enabled: bool,
     aeration_intensity: String,
+    source_water_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,15 +99,15 @@ pub struct ActionFieldView {
     pub hint: &'static str,
 }
 
-impl Default for ActionFormState {
-    fn default() -> Self {
+impl ActionFormState {
+    pub fn new(source_water_ids: Vec<String>) -> Self {
         Self {
             selected_action: 0,
             selected_field: 0,
             replace_next_numeric: true,
             feed_grams: "0.20".to_string(),
             water_change_percent: "25.0".to_string(),
-            water_change_source_index: 1,
+            water_change_source_index: 1.min(source_water_ids.len().saturating_sub(1)),
             trim_fraction: "0.25".to_string(),
             siphon_fraction: "0.30".to_string(),
             clean_filter_intensity: "0.50".to_string(),
@@ -118,7 +119,19 @@ impl Default for ActionFormState {
             ambient_temp_c: "24.0".to_string(),
             aeration_enabled: true,
             aeration_intensity: "0.40".to_string(),
+            source_water_ids,
         }
+    }
+}
+
+impl Default for ActionFormState {
+    fn default() -> Self {
+        Self::new(vec![
+            "soft_acidic".to_string(),
+            "moderate".to_string(),
+            "hard_shrimp".to_string(),
+            "ro_like".to_string(),
+        ])
     }
 }
 
@@ -150,8 +163,11 @@ impl ActionFormState {
                 },
                 ActionFieldView {
                     label: "source".to_string(),
-                    value: tank_data::source_water_ids()[self.water_change_source_index]
-                        .to_string(),
+                    value: self
+                        .source_water_ids
+                        .get(self.water_change_source_index)
+                        .cloned()
+                        .unwrap_or_default(),
                     hint: "[ / ] cycle source profile",
                 },
             ],
@@ -247,12 +263,14 @@ impl ActionFormState {
             return false;
         }
 
-        let options = tank_data::source_water_ids();
+        let count = self.source_water_ids.len();
+        if count == 0 {
+            return true;
+        }
         if forward {
-            self.water_change_source_index = (self.water_change_source_index + 1) % options.len();
+            self.water_change_source_index = (self.water_change_source_index + 1) % count;
         } else {
-            self.water_change_source_index =
-                (self.water_change_source_index + options.len() - 1) % options.len();
+            self.water_change_source_index = (self.water_change_source_index + count - 1) % count;
         }
         true
     }
@@ -312,8 +330,11 @@ impl ActionFormState {
             },
             ActionKind::WaterChangePercent => PlayerAction::WaterChangePercent {
                 percent: parse_f64("percent", &self.water_change_percent)?,
-                source_profile_id: tank_data::source_water_ids()[self.water_change_source_index]
-                    .to_string(),
+                source_profile_id: self
+                    .source_water_ids
+                    .get(self.water_change_source_index)
+                    .cloned()
+                    .unwrap_or_default(),
             },
             ActionKind::TrimPlants => PlayerAction::TrimPlants {
                 fraction: parse_f64("fraction", &self.trim_fraction)?,

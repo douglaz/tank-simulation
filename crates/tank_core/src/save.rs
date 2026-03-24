@@ -47,7 +47,18 @@ impl SaveFile {
         Ok(save)
     }
 
-    pub fn into_engine(self) -> Engine {
-        Engine::from_parts(self.state, self.queued_actions)
+    pub fn into_engine(self) -> Result<Engine, SimError> {
+        // Validate state invariants before exposing the engine.
+        let mut state = self.state;
+        crate::invariants::enforce_invariants(&mut state)?;
+
+        // Validate queued actions including state-aware checks (source
+        // profile existence, shrimp removal counts) by routing through the
+        // same path as live action submission.
+        let mut engine = Engine::from_parts(state, vec![]);
+        for action in self.queued_actions {
+            engine.apply_action(action)?;
+        }
+        Ok(engine)
     }
 }
