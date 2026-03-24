@@ -76,8 +76,8 @@ fn guild_differentiated_uptake_prefers_expected_pools() -> Result<(), tank_core:
 
     let mut rosette_state = fast_stem_state.clone();
     rosette_state.plant_guilds[0].guild = PlantGuild::RootFeedingRosette;
-    rosette_state.plant_guilds[0].water_column_uptake_bias = 0.3;
-    rosette_state.plant_guilds[0].substrate_uptake_bias = 0.9;
+    rosette_state.plant_guilds[0].water_column_uptake_bias = Some(0.3);
+    rosette_state.plant_guilds[0].substrate_uptake_bias = Some(0.9);
 
     let fast_initial_water = fast_stem_state.water.ammonia_total_mg_n_total
         + fast_stem_state.water.nitrate_mg_n_total

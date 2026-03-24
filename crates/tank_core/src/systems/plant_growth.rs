@@ -78,8 +78,9 @@ pub fn step_daily_plants(state: &mut TankState) {
 
         let n_demand = realized_growth_g * PLANT_N_MG_PER_G_GROWTH;
         let p_demand = realized_growth_g * PLANT_P_MG_PER_G_GROWTH;
-        let (n_removed, p_removed) =
+        let (nh3_removed, no3_removed, sub_n_removed, p_removed) =
             remove_plant_nutrients(state, n_demand, p_demand, water_bias, substrate_bias);
+        let n_removed = nh3_removed + no3_removed + sub_n_removed;
         // Cap growth by what nutrients were actually available, and refund
         // the non-limiting nutrient so mass balance is maintained.
         let cap_frac = if realized_growth_g > f64::EPSILON {
@@ -99,10 +100,26 @@ pub fn step_daily_plants(state: &mut TankState) {
         };
         let nutrient_cap_g = realized_growth_g * cap_frac;
 
-        // Refund the over-removed portion of the non-limiting nutrient.
-        let n_used = n_removed * cap_frac;
-        let p_used = p_removed * cap_frac;
-        refund_plant_nutrients(state, n_removed - n_used, p_removed - p_used, water_bias);
+        // Refund the over-removed non-limiting nutrient only.
+        // n_used/p_used = what the capped growth actually consumed.
+        let n_used = n_demand * cap_frac;
+        let p_used = p_demand * cap_frac;
+        let n_refund = (n_removed - n_used).max(0.0);
+        let p_refund = (p_removed - p_used).max(0.0);
+        // Split N refund proportionally across the pools it was removed from.
+        let n_refund_frac = if n_removed > f64::EPSILON {
+            n_refund / n_removed
+        } else {
+            0.0
+        };
+        refund_plant_nutrients(
+            state,
+            n_refund_frac,
+            nh3_removed,
+            no3_removed,
+            sub_n_removed,
+            p_refund,
+        );
 
         let capped_net = nutrient_cap_g - respiration_g - senescence_g;
 
@@ -168,34 +185,44 @@ fn habitat_factor(state: &TankState, guild: PlantGuild) -> f64 {
     }
 }
 
-/// Return excess nutrients to the water column when growth was capped by the
-/// limiting nutrient. Refunds go to the water column (simplification) since
+/// Return excess nutrients proportionally to the pools they were removed from.
+/// Substrate N refunds go to water-column nitrate (simplification) since
 /// tracking per-layer substrate refunds adds complexity for minimal accuracy gain.
 fn refund_plant_nutrients(
     state: &mut TankState,
-    n_refund_mg: f64,
+    refund_frac: f64,
+    ammonia_removed: f64,
+    nitrate_removed: f64,
+    substrate_n_removed: f64,
     p_refund_mg: f64,
-    water_bias: f64,
 ) {
-    if n_refund_mg > f64::EPSILON {
-        // Refund N preferentially to ammonia (reverse of uptake order).
-        let ammonia_share = n_refund_mg * water_bias;
-        state.water.ammonia_total_mg_n_total += ammonia_share;
-        // Remainder goes to nitrate via substrate proxy; simplify to water.
-        state.water.nitrate_mg_n_total += (n_refund_mg - ammonia_share).max(0.0);
+    if refund_frac > f64::EPSILON {
+        let nh3_refund = ammonia_removed * refund_frac;
+        let no3_refund = nitrate_removed * refund_frac;
+        let sub_n_refund = substrate_n_removed * refund_frac;
+        if nh3_refund > f64::EPSILON {
+            state.water.ammonia_total_mg_n_total += nh3_refund;
+        }
+        // Nitrate + substrate N both refunded to water-column nitrate.
+        let nitrate_total_refund = no3_refund + sub_n_refund;
+        if nitrate_total_refund > f64::EPSILON {
+            state.water.nitrate_mg_n_total += nitrate_total_refund;
+        }
     }
     if p_refund_mg > f64::EPSILON {
         state.water.phosphate_mg_p_total += p_refund_mg;
     }
 }
 
+/// Returns (ammonia_removed, nitrate_removed, substrate_n_removed, total_p_removed)
+/// so refunds can go back to the correct pools.
 fn remove_plant_nutrients(
     state: &mut TankState,
     n_demand_mg: f64,
     p_demand_mg: f64,
     water_bias: f64,
     substrate_bias: f64,
-) -> (f64, f64) {
+) -> (f64, f64, f64, f64) {
     // Normalize biases so they sum to 1.0, preventing over-removal when
     // preset biases sum above 1.0 (e.g. fast_stem 0.9+0.2 = 1.1).
     let bias_sum = (water_bias + substrate_bias).max(f64::MIN_POSITIVE);
@@ -207,7 +234,8 @@ fn remove_plant_nutrients(
     let water_p_target = p_demand_mg * w;
     let substrate_p_target = p_demand_mg * s;
 
-    let water_n_removed = remove_water_n(state, water_n_target);
+    let (ammonia_removed, nitrate_removed) = remove_water_n(state, water_n_target);
+    let water_n_removed = ammonia_removed + nitrate_removed;
     let substrate_n_removed = remove_substrate_n(
         state,
         substrate_n_target + (water_n_target - water_n_removed).max(0.0),
@@ -220,12 +248,15 @@ fn remove_plant_nutrients(
     );
 
     (
-        water_n_removed + substrate_n_removed,
+        ammonia_removed,
+        nitrate_removed,
+        substrate_n_removed,
         water_p_removed + substrate_p_removed,
     )
 }
 
-fn remove_water_n(state: &mut TankState, target_mg: f64) -> f64 {
+/// Returns (ammonia_removed, nitrate_removed) so callers can track pool sources.
+fn remove_water_n(state: &mut TankState, target_mg: f64) -> (f64, f64) {
     let ammonia_removed = state.water.ammonia_total_mg_n_total.min(target_mg);
     state.water.ammonia_total_mg_n_total -= ammonia_removed;
 
@@ -233,7 +264,7 @@ fn remove_water_n(state: &mut TankState, target_mg: f64) -> f64 {
     let nitrate_removed = state.water.nitrate_mg_n_total.min(remaining);
     state.water.nitrate_mg_n_total -= nitrate_removed;
 
-    ammonia_removed + nitrate_removed
+    (ammonia_removed, nitrate_removed)
 }
 
 fn remove_water_p(state: &mut TankState, target_mg: f64) -> f64 {

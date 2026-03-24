@@ -416,6 +416,8 @@ fn egg_development(state: &mut TankState) {
 
 fn juvenile_recruitment(state: &mut TankState) {
     if state.animal.juveniles_count == 0 {
+        // Reset accumulator so stale progress doesn't leak to the next cohort.
+        state.animal.maturation_accum = 0.0;
         return;
     }
 
@@ -466,7 +468,13 @@ fn mortality(state: &mut TankState) {
     }
 
     state.animal.adults_count = state.animal.adults_count.saturating_sub(adult_deaths);
-    state.animal.juveniles_count = state.animal.juveniles_count.saturating_sub(juv_deaths);
+
+    // Scale maturation_accum so dead juveniles' progress doesn't leak to survivors.
+    let pre_juv = state.animal.juveniles_count;
+    state.animal.juveniles_count = pre_juv.saturating_sub(juv_deaths);
+    if juv_deaths > 0 && pre_juv > 0 {
+        state.animal.maturation_accum *= state.animal.juveniles_count as f64 / pre_juv as f64;
+    }
 
     // Preserve berried_females <= adults invariant (also trims egg cohorts)
     state.animal.clamp_berried_to_adults();

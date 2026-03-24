@@ -694,8 +694,8 @@ fn build_plant_guilds(
             } else {
                 0.8
             },
-            water_column_uptake_bias: plant_preset.water_column_uptake_bias,
-            substrate_uptake_bias: plant_preset.substrate_uptake_bias,
+            water_column_uptake_bias: Some(plant_preset.water_column_uptake_bias),
+            substrate_uptake_bias: Some(plant_preset.substrate_uptake_bias),
         });
     }
     if plant_guilds.is_empty() && include_default_when_empty {
@@ -815,11 +815,17 @@ fn cycling_base_state(seed: SimSeed) -> TankState {
         health_index: 0.8,
         crowding_index: 0.1,
         habitat_index: 0.8,
-        water_column_uptake_bias: 0.9,
-        substrate_uptake_bias: 0.2,
+        water_column_uptake_bias: Some(0.9),
+        substrate_uptake_bias: Some(0.2),
     }];
 
     state.process_params = ProcessParams::default();
+
+    // Re-seed stability baseline after replacing geometry/water above.
+    let volume_l = state.geometry.water_volume_l();
+    state
+        .stability_tracker
+        .seed_from_water(&state.water, volume_l);
 
     state
 }

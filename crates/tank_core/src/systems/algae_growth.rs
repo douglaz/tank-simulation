@@ -50,11 +50,12 @@ pub fn step_daily_algae(state: &mut TankState) {
     let suspended_respiration_g =
         state.algae.suspended_biomass_g * state.process_params.algae_respiration_fraction_per_day;
     let suspended_grazing_g = state.algae.suspended_biomass_g * 0.03 * microfauna_grazing;
-    let (susp_n_removed, susp_p_removed) = consume_algae_nutrients(
+    let (susp_nh3_removed, susp_no3_removed, susp_p_removed) = consume_algae_nutrients(
         state,
         suspended_gross_growth_g * ALGAE_N_MG_PER_G_GROWTH,
         suspended_gross_growth_g * ALGAE_P_MG_PER_G_GROWTH,
     );
+    let susp_n_removed = susp_nh3_removed + susp_no3_removed;
     let susp_n_demand = suspended_gross_growth_g * ALGAE_N_MG_PER_G_GROWTH;
     let susp_p_demand = suspended_gross_growth_g * ALGAE_P_MG_PER_G_GROWTH;
     let susp_cap_frac = if suspended_gross_growth_g > f64::EPSILON {
@@ -73,11 +74,22 @@ pub fn step_daily_algae(state: &mut TankState) {
         0.0
     };
     let susp_cap = suspended_gross_growth_g * susp_cap_frac;
-    // Refund excess non-limiting nutrient.
+    // Refund only the non-limiting nutrient's excess.
+    let susp_n_used = susp_n_demand * susp_cap_frac;
+    let susp_p_used = susp_p_demand * susp_cap_frac;
+    let susp_n_refund = (susp_n_removed - susp_n_used).max(0.0);
+    let susp_p_refund = (susp_p_removed - susp_p_used).max(0.0);
+    // Split N refund proportionally across ammonia/nitrate.
+    let susp_n_frac = if susp_n_removed > f64::EPSILON {
+        susp_n_refund / susp_n_removed
+    } else {
+        0.0
+    };
     refund_algae_nutrients(
         state,
-        susp_n_removed * (1.0 - susp_cap_frac),
-        susp_p_removed * (1.0 - susp_cap_frac),
+        susp_nh3_removed * susp_n_frac,
+        susp_no3_removed * susp_n_frac,
+        susp_p_refund,
     );
     let suspended_new_g = (state.algae.suspended_biomass_g + susp_cap
         - suspended_respiration_g
@@ -109,11 +121,12 @@ pub fn step_daily_algae(state: &mut TankState) {
     let periphyton_respiration_g =
         state.algae.periphyton_biomass_g * state.process_params.algae_respiration_fraction_per_day;
     let periphyton_grazing_g = state.algae.periphyton_biomass_g * 0.06 * microfauna_grazing;
-    let (peri_n_removed, peri_p_removed) = consume_algae_nutrients(
+    let (peri_nh3_removed, peri_no3_removed, peri_p_removed) = consume_algae_nutrients(
         state,
         periphyton_gross_growth_g * ALGAE_N_MG_PER_G_GROWTH,
         periphyton_gross_growth_g * ALGAE_P_MG_PER_G_GROWTH,
     );
+    let peri_n_removed = peri_nh3_removed + peri_no3_removed;
     let peri_n_demand = periphyton_gross_growth_g * ALGAE_N_MG_PER_G_GROWTH;
     let peri_p_demand = periphyton_gross_growth_g * ALGAE_P_MG_PER_G_GROWTH;
     let peri_cap_frac = if periphyton_gross_growth_g > f64::EPSILON {
@@ -132,10 +145,20 @@ pub fn step_daily_algae(state: &mut TankState) {
         0.0
     };
     let peri_cap = periphyton_gross_growth_g * peri_cap_frac;
+    let peri_n_used = peri_n_demand * peri_cap_frac;
+    let peri_p_used = peri_p_demand * peri_cap_frac;
+    let peri_n_refund = (peri_n_removed - peri_n_used).max(0.0);
+    let peri_p_refund = (peri_p_removed - peri_p_used).max(0.0);
+    let peri_n_frac = if peri_n_removed > f64::EPSILON {
+        peri_n_refund / peri_n_removed
+    } else {
+        0.0
+    };
     refund_algae_nutrients(
         state,
-        peri_n_removed * (1.0 - peri_cap_frac),
-        peri_p_removed * (1.0 - peri_cap_frac),
+        peri_nh3_removed * peri_n_frac,
+        peri_no3_removed * peri_n_frac,
+        peri_p_refund,
     );
     let periphyton_new_g = (state.algae.periphyton_biomass_g + peri_cap
         - periphyton_respiration_g
@@ -172,21 +195,30 @@ fn algae_light_factor(state: &TankState) -> f64 {
     )
 }
 
-fn refund_algae_nutrients(state: &mut TankState, n_refund_mg: f64, p_refund_mg: f64) {
-    if n_refund_mg > f64::EPSILON {
-        // Return N to ammonia pool (simplification).
-        state.water.ammonia_total_mg_n_total += n_refund_mg;
+fn refund_algae_nutrients(
+    state: &mut TankState,
+    ammonia_refund_mg: f64,
+    nitrate_refund_mg: f64,
+    p_refund_mg: f64,
+) {
+    if ammonia_refund_mg > f64::EPSILON {
+        state.water.ammonia_total_mg_n_total += ammonia_refund_mg;
+    }
+    if nitrate_refund_mg > f64::EPSILON {
+        state.water.nitrate_mg_n_total += nitrate_refund_mg;
     }
     if p_refund_mg > f64::EPSILON {
         state.water.phosphate_mg_p_total += p_refund_mg;
     }
 }
 
+/// Returns (ammonia_removed, nitrate_removed, phosphate_removed) so
+/// refunds can go back to the correct nitrogen pool.
 fn consume_algae_nutrients(
     state: &mut TankState,
     n_demand_mg: f64,
     p_demand_mg: f64,
-) -> (f64, f64) {
+) -> (f64, f64, f64) {
     let ammonia_removed = state.water.ammonia_total_mg_n_total.min(n_demand_mg * 0.6);
     state.water.ammonia_total_mg_n_total -= ammonia_removed;
 
@@ -197,7 +229,7 @@ fn consume_algae_nutrients(
     let phosphate_removed = state.water.phosphate_mg_p_total.min(p_demand_mg);
     state.water.phosphate_mg_p_total -= phosphate_removed;
 
-    (ammonia_removed + nitrate_removed, phosphate_removed)
+    (ammonia_removed, nitrate_removed, phosphate_removed)
 }
 
 fn half_saturation(value: f64, half_sat: f64) -> f64 {

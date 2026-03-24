@@ -19,8 +19,8 @@ fn rosette_state(seed: SimSeed, substrate_kind: SubstrateKind) -> TankState {
         health_index: 0.85,
         crowding_index: 0.0,
         habitat_index: 0.5,
-        water_column_uptake_bias: 0.3,
-        substrate_uptake_bias: 0.9,
+        water_column_uptake_bias: Some(0.3),
+        substrate_uptake_bias: Some(0.9),
     }];
     state.algae.suspended_biomass_g = 0.0;
     state.algae.periphyton_biomass_g = 0.0;
