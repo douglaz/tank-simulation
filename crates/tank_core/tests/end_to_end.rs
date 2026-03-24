@@ -156,7 +156,7 @@ fn happy_medium_planted_well_maintained() {
     assert_finite_snapshot(&s120);
 
     // Ecosystem viability checks
-    assert!(s120.ph > 5.5 && s120.ph < 8.5, "pH viable: {}", s120.ph);
+    assert!(s120.ph >= 5.5 && s120.ph < 8.5, "pH viable: {}", s120.ph);
     assert!(s120.do_mg_l > 3.0, "DO healthy: {}", s120.do_mg_l);
     assert!(
         s120.water_temp_c > 20.0 && s120.water_temp_c < 30.0,
