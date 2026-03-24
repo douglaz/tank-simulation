@@ -167,6 +167,18 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
         "process.nob_vmax_mg_n_per_g_per_hour",
         pp.nob_vmax_mg_n_per_g_per_hour,
     )?;
+    check_non_negative(
+        "process.respiration_dic_rate_mg_c_per_g_per_hour",
+        pp.respiration_dic_rate_mg_c_per_g_per_hour,
+    )?;
+    check_non_negative(
+        "process.photosynthesis_dic_rate_mg_c_per_g_per_hour",
+        pp.photosynthesis_dic_rate_mg_c_per_g_per_hour,
+    )?;
+    check_non_negative(
+        "process.plant_photosynthesis_o2_mg_per_g_per_hour",
+        pp.plant_photosynthesis_o2_mg_per_g_per_hour,
+    )?;
 
     if state.event_log.len() > 200 {
         let keep_from = state.event_log.len() - 200;

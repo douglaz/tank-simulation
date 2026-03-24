@@ -242,6 +242,11 @@ impl TuiApp {
         self.snapshot = snapshot;
         self.snapshot_history.clear();
         self.push_history();
+        // Refresh source water IDs from the API so the action form reflects
+        // the loaded save's catalog (which may differ from the startup set).
+        if let Ok(ids) = self.api.get_source_water_ids() {
+            self.action_form = ActionFormState::new(ids);
+        }
         self.set_status(
             StatusLevel::Info,
             format!("Loaded {}", self.save_file_path.display()),
