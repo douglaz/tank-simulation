@@ -86,6 +86,10 @@ fn run(
         .post_load(&save)
         .context("failed to push initial state to API server")?;
 
+    // Refresh source water IDs from the just-loaded engine state so the
+    // action form matches the scenario's catalog, not the pre-load server.
+    let source_water_ids = api.get_source_water_ids().unwrap_or(source_water_ids);
+
     let mut app = TuiApp::new(
         api,
         initial_snapshot,

@@ -15,13 +15,8 @@ pub async fn get_events(
 ) -> Json<Vec<SimEvent>> {
     let engine = state.engine.lock().unwrap();
     let limit = query.limit.unwrap_or(20);
-    let events: Vec<_> = engine
-        .full_state()
-        .event_log
-        .iter()
-        .rev()
-        .take(limit)
-        .cloned()
-        .collect();
+    let log = &engine.full_state().event_log;
+    let skip = log.len().saturating_sub(limit);
+    let events: Vec<_> = log.iter().skip(skip).cloned().collect();
     Json(events)
 }

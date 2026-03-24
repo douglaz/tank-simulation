@@ -45,7 +45,8 @@ pub fn apply_water_change(state: &mut TankState, percent: f64, source: &SourceWa
     let retention = 1.0 - fraction;
     let exchanged_l = volume_l * fraction;
 
-    // Remove fraction of each dissolved total
+    // Remove fraction of each dissolved total and suspended biomass
+    state.algae.suspended_biomass_g *= retention;
     state.water.ammonia_total_mg_n_total *= retention;
     state.water.nitrite_mg_n_total *= retention;
     state.water.nitrate_mg_n_total *= retention;

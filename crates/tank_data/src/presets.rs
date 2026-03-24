@@ -60,6 +60,13 @@ impl SourceWaterPreset {
                 return Err(format!("field `{name}` must be non-negative, got {value}"));
             }
         }
+        // Temperature must be strictly positive (0°C is rejected at runtime).
+        if self.temperature_c <= 0.0 {
+            return Err(format!(
+                "field `temperature_c` must be > 0.0, got {}",
+                self.temperature_c
+            ));
+        }
         Ok(())
     }
 }

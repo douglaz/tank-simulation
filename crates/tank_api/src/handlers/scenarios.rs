@@ -28,17 +28,7 @@ pub async fn list_source_water(State(state): State<AppState>) -> Json<Vec<String
         .keys()
         .cloned()
         .collect();
-    if catalog_ids.is_empty() {
-        // Fallback to built-in IDs if the engine has no catalog.
-        Json(
-            tank_data::source_water_ids()
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
-        )
-    } else {
-        Json(catalog_ids)
-    }
+    Json(catalog_ids)
 }
 
 #[derive(Deserialize)]
