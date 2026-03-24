@@ -30,9 +30,7 @@ pub fn handle_key_event(app: &mut TuiApp, key: KeyEvent) -> InputOutcome {
                 app.show_status(StatusLevel::Error, format!("Load failed: {error:#}"));
             }
         }
-        KeyCode::Char(digit)
-            if Screen::from_digit(digit).is_some() && app.active_screen != Screen::Actions =>
-        {
+        KeyCode::Char(digit) if Screen::from_digit(digit).is_some() => {
             if let Some(screen) = Screen::from_digit(digit) {
                 app.set_screen(screen);
             }
