@@ -31,8 +31,13 @@ pub fn handle_key_event(app: &mut TuiApp, key: KeyEvent) -> InputOutcome {
             }
         }
         KeyCode::Char(digit) if Screen::from_digit(digit).is_some() => {
-            if let Some(screen) = Screen::from_digit(digit) {
-                app.set_screen(screen);
+            // On Actions screen, digits go to the numeric field editor first;
+            // only switch screens if the field rejects the input.
+            let consumed = app.active_screen == Screen::Actions && app.action_form.edit_char(digit);
+            if !consumed {
+                if let Some(screen) = Screen::from_digit(digit) {
+                    app.set_screen(screen);
+                }
             }
         }
         _ => {
