@@ -254,10 +254,14 @@ fn filter_flow_affects_cycling() -> Result<(), tank_core::SimError> {
         "higher filter flow should reduce cumulative TAN exposure: high={high_exposure:.3}, low={low_exposure:.3}"
     );
     // Higher flow should have lower or equal final TAN.
-    // Cumulative exposure (checked above) is the primary differentiator.
     assert!(
         high_final_tan <= low_final_tan,
         "higher flow should not have more TAN: high={high_final_tan:.3} mg/L, low={low_final_tan:.3} mg/L"
+    );
+    // Both should remain below 20 mg/L — cycling is active even if not fully cleared.
+    assert!(
+        high_final_tan < 20.0 && low_final_tan < 20.0,
+        "TAN should stay manageable: high={high_final_tan:.3} mg/L, low={low_final_tan:.3} mg/L"
     );
 
     Ok(())
