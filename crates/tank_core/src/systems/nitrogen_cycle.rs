@@ -241,22 +241,30 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let total_mg_n_nitrified = nob_rate + comammox_rate;
 
     // ---- 5. Guild growth and decay ----
+    // Logistic carrying capacity: biofilter surface area limits total nitrifier
+    // biomass. Growth is suppressed as total biomass approaches the capacity.
+    let capacity_g = 0.5;
+    let total_nitrifier_g = state.microbe.ammonia_oxidizer_biomass_g
+        + state.microbe.nitrite_oxidizer_biomass_g
+        + state.microbe.comammox_biomass_g;
+    let logistic_factor = (1.0 - total_nitrifier_g / capacity_g).clamp(0.0, 1.0);
+
     // AOB growth from TAN oxidized
-    let aob_growth = safe_rate(pp.aob_growth_yield) * aob_rate;
+    let aob_growth = safe_rate(pp.aob_growth_yield) * aob_rate * logistic_factor;
     let aob_decay =
         safe_rate(pp.aob_decay_rate_per_hour) * state.microbe.ammonia_oxidizer_biomass_g;
     state.microbe.ammonia_oxidizer_biomass_g =
         (state.microbe.ammonia_oxidizer_biomass_g + aob_growth - aob_decay).max(0.0);
 
     // NOB growth from nitrite oxidized
-    let nob_growth = safe_rate(pp.nob_growth_yield) * nob_rate;
+    let nob_growth = safe_rate(pp.nob_growth_yield) * nob_rate * logistic_factor;
     let nob_decay =
         safe_rate(pp.nob_decay_rate_per_hour) * state.microbe.nitrite_oxidizer_biomass_g;
     state.microbe.nitrite_oxidizer_biomass_g =
         (state.microbe.nitrite_oxidizer_biomass_g + nob_growth - nob_decay).max(0.0);
 
     // Comammox growth from TAN fully oxidized
-    let comammox_growth = safe_rate(pp.comammox_growth_yield) * comammox_rate;
+    let comammox_growth = safe_rate(pp.comammox_growth_yield) * comammox_rate * logistic_factor;
     let comammox_decay =
         safe_rate(pp.comammox_decay_rate_per_hour) * state.microbe.comammox_biomass_g;
     state.microbe.comammox_biomass_g =
