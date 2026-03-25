@@ -368,7 +368,7 @@ fn default_aob_k_do() -> f64 {
     1.0
 }
 fn default_aob_growth_yield() -> f64 {
-    0.001
+    0.05
 }
 fn default_aob_decay_rate() -> f64 {
     0.003
@@ -383,7 +383,7 @@ fn default_nob_k_do() -> f64 {
     1.0
 }
 fn default_nob_growth_yield() -> f64 {
-    0.001
+    0.04
 }
 fn default_nob_decay_rate() -> f64 {
     0.003
@@ -398,7 +398,7 @@ fn default_comammox_k_do() -> f64 {
     1.5
 }
 fn default_comammox_growth_yield() -> f64 {
-    0.0008
+    0.03
 }
 fn default_comammox_decay_rate() -> f64 {
     0.004

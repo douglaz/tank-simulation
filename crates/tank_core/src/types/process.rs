@@ -149,19 +149,19 @@ impl Default for ProcessParams {
             aob_vmax_mg_n_per_g_per_hour: 1.5,
             aob_k_tan_mg: 0.5,
             aob_k_do_mg: 1.0,
-            aob_growth_yield: 0.001,
+            aob_growth_yield: 0.05,
             aob_decay_rate_per_hour: 0.003,
 
             nob_vmax_mg_n_per_g_per_hour: 1.2,
             nob_k_nitrite_mg: 0.3,
             nob_k_do_mg: 1.0,
-            nob_growth_yield: 0.001,
+            nob_growth_yield: 0.04,
             nob_decay_rate_per_hour: 0.003,
 
             comammox_vmax_fraction: 0.4,
             comammox_k_tan_mg: 0.8,
             comammox_k_do_mg: 1.5,
-            comammox_growth_yield: 0.0008,
+            comammox_growth_yield: 0.03,
             comammox_decay_rate_per_hour: 0.004,
 
             o2_per_mg_n_nitrified: 4.57,
