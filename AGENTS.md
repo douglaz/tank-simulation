@@ -7,10 +7,11 @@
 This repository uses `br` (beads_rust) and `bv` for issue tracking and backlog inspection.
 
 - The authoritative backlog lives in `.beads/issues.jsonl`.
+- The original project/spec reference materials remain in `docs/` (for example prior scientific review/spec notes), but active task planning and execution state live in the beads.
 - Read task context from the beads themselves with `br show <id>`.
 - Use `br ready` to find the next unblocked task.
 - Use `br list --pretty` or `bv` to inspect the backlog more broadly.
-- Use `br dep graph` when dependency shape matters.
+- Use `br graph` or `br dep tree <id>` when dependency shape matters.
 - Keep task knowledge in the beads. Do not recreate parallel backlog scripts or mirror plan docs unless explicitly requested.
 
 Common commands:
@@ -19,7 +20,8 @@ Common commands:
 br ready
 br show <id>
 br list --pretty
-br dep graph
+br graph
+br dep tree <id>
 bv
 br sync --flush-only
 git add .beads/
