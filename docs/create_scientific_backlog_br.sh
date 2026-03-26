@@ -6,9 +6,9 @@ set -euo pipefail
 # =============================================================================
 # Scientific Core Overhaul Backlog — Aquarium Ecosystem Simulator
 #
-# Creates a comprehensive, hierarchical backlog of ~65 beads (1 root epic,
-# 7 phase epics, ~33 tasks, ~26 subtasks) using `br` (beads_rust) to track
-# the scientific refactor from v0.1 through v0.6.
+# Creates a comprehensive, hierarchical backlog of 76 beads (1 root epic,
+# 7 phase epics, 42 tasks/spikes, 26 subtasks) using `br` (beads_rust) to
+# track the scientific refactor from v0.1 through v0.6.
 #
 # BACKGROUND AND MOTIVATION
 # -------------------------
@@ -98,21 +98,28 @@ set -euo pipefail
 #         B ──→ E ────┘     │
 #         All phases ───────┘
 #
+# These are conceptual phase-ordering edges. In the actual `br` graph,
+# blockers live mostly on child tasks rather than on the phase epics
+# themselves so that early-start exceptions like G1 remain possible.
+#
 #   Phases 1A (B) and 1B (C) can proceed partly in parallel after Phase 0.
-#   Tasks B1/B2 and C1 are independent starting points once A1 completes.
+#   B1, C1, and A2a are true starting points once A1 completes.
+#   B2 follows immediately after B1 plus basic instrumentation (A2a).
 #   Phase 2 (D) and Phase 3 (E) can also overlap once Phase 1A completes.
 #   Phase 5 task G1 (provenance schema) can start early, gated only on A1.
 #
 # SUBTASK PHILOSOPHY
 # ------------------
 # Subtasks are added to tasks that bundle multiple distinct deliverables,
-# touch different subsystems, or exceed 240 minutes of estimated work.
+# touch different subsystems, or have meaningful internal sequencing or
+# parallelism that would otherwise be hidden inside one large task.
 # Each subtask should be independently completable and verifiable.
 #
-# External inter-task dependencies point to parent tasks. Subtask ordering
-# is internal to the parent task. This keeps the cross-task dependency
-# graph at the same granularity as the original while gaining trackability
-# within large work items.
+# External inter-task dependencies usually point to parent tasks. The main
+# exception is when a decomposed task contains independently useful
+# deliverables that should unblock later work early (for example A2's
+# instrumentation vs save-migration scaffolding). In those cases, later work
+# may depend on the specific gating subtask instead of the umbrella parent.
 #
 # Decomposed tasks:
 #   A2 (instrumentation + migration)                 → 3 subtasks
@@ -191,7 +198,6 @@ create_bead() {
   local priority="$1"; shift
   local parent="$1"; shift
   local labels="$1"; shift
-  local estimate="$1"; shift
   local description="$1"; shift
   local comment="$1"; shift
   local id
@@ -201,11 +207,7 @@ create_bead() {
     id=$("${BR[@]}" create "$title" --type "$type" --priority "$priority" --silent)
   fi
   printf -v "$__outvar" '%s' "$id"
-  if [[ -n "$estimate" ]]; then
-    "${BR[@]}" update "$id" --estimate "$estimate" --set-labels "$labels" --description "$description"
-  else
-    "${BR[@]}" update "$id" --set-labels "$labels" --description "$description"
-  fi
+  "${BR[@]}" update "$id" --set-labels "$labels" --description "$description"
   "${BR[@]}" comments add "$id" "$comment"
   echo "Created $id :: $title"
 }
@@ -252,12 +254,13 @@ Future-self notes:
 - The project already has a strong foundation: 5-crate workspace, deterministic engine, 19 integration tests, REST API, TUI. This roadmap repairs the scientific core without rearchitecting what works.
 
 Parallelism notes for planning:
-- After Phase 0 (A) completes, Phase 1A (B) and Phase 1B (C) can proceed in parallel because B targets kinetic semantics while C targets mass routing. The key cross-phase link is that C2 and C3 depend on B2 (concentration helpers), but B2 sits early in Phase 1A and can unblock C work quickly.
+- After A1 lands, B1, C1, A2a, and G1 can all start in parallel. This is the real first fan-out point in the graph.
+- B2 should follow immediately after B1 plus A2a (basic instrumentation), so C2/C3 are not forced to wait on unrelated migration work.
 - After Phase 1A (B) completes, Phase 2 (D) and Phase 3 (E) can overlap. D addresses chemistry depth while E addresses spatial/habitat structure. The only cross-link is E4 depending on D3 (gas exchange patterns for redox).
 - Phase 5 task G1 (provenance schema) depends only on A1 and can start as soon as the semantics inventory exists, even while other phases are still in progress.
 EOF
 
-create_bead ROOT 'Scientific core overhaul roadmap (v0.2–v0.6)' epic 1 "" scientific-core,roadmap,planning '' "${ROOT_DESC}" "${ROOT_COMMENT}"
+create_bead ROOT 'Scientific core overhaul roadmap (v0.2–v0.6)' epic 1 "" scientific-core,roadmap,planning "${ROOT_DESC}" "${ROOT_COMMENT}"
 
 # ===========================================================================
 # PHASE EPICS
@@ -281,7 +284,7 @@ Scope of existing infrastructure to build on:
 - Save/load with version field already exists in save.rs.
 EOF
 
-create_bead A 'Phase 0 — guardrails, baselines, and migration safety' epic 1 "$ROOT" scientific-core,phase-0,guardrails,testing '' "${A_DESC}" "${A_COMMENT}"
+create_bead A 'Phase 0 — guardrails, baselines, and migration safety' epic 1 "$ROOT" scientific-core,phase-0,guardrails,testing "${A_DESC}" "${A_COMMENT}"
 
 read -r -d '' B_DESC <<'EOF' || true
 This phase repairs the most fundamental scientific issue in the current model: many rate laws are parameterized against absolute tank totals rather than concentrations.
@@ -300,7 +303,7 @@ Parallelism with Phase 1B (C):
 - B3-B5 (kinetic normalization) and C2-C5 (conservation fixes) can then proceed in parallel on separate PRs.
 EOF
 
-create_bead B 'Phase 1A — units, concentration semantics, and kinetic normalization' epic 0 "$ROOT" scientific-core,phase-1,units,kinetics,chemistry '' "${B_DESC}" "${B_COMMENT}"
+create_bead B 'Phase 1A — units, concentration semantics, and kinetic normalization' epic 0 "$ROOT" scientific-core,phase-1,units,kinetics,chemistry "${B_DESC}" "${B_COMMENT}"
 
 read -r -d '' C_DESC <<'EOF' || true
 This phase closes the most important open loops in the food web and maintenance model.
@@ -320,7 +323,7 @@ Parallelism with Phase 1A (B):
 - C4 (bookkeeping audit) depends on B3 because it needs nitrogen kinetics to be correct before auditing the full pathway.
 EOF
 
-create_bead C 'Phase 1B — mass conservation and husbandry action semantics' epic 0 "$ROOT" scientific-core,phase-1,mass-balance,ecology,actions '' "${C_DESC}" "${C_COMMENT}"
+create_bead C 'Phase 1B — mass conservation and husbandry action semantics' epic 0 "$ROOT" scientific-core,phase-1,mass-balance,ecology,actions "${C_DESC}" "${C_COMMENT}"
 
 read -r -d '' D_DESC <<'EOF' || true
 This phase replaces the current pH shortcut with an explicit carbonate-system model and couples gas exchange to both oxygen and carbon dioxide.
@@ -342,7 +345,7 @@ Scientific foundation:
 - The simulator doesn't need a general geochemistry package — it needs a robust freshwater carbonate solver for pH 5.5–8.5 and alkalinity 0–10 meq/L.
 EOF
 
-create_bead D 'Phase 2 — carbonate chemistry, CO2 exchange, and pH realism' epic 1 "$ROOT" scientific-core,phase-2,carbonates,chemistry,gas-exchange '' "${D_DESC}" "${D_COMMENT}"
+create_bead D 'Phase 2 — carbonate chemistry, CO2 exchange, and pH realism' epic 1 "$ROOT" scientific-core,phase-2,carbonates,chemistry,gas-exchange "${D_DESC}" "${D_COMMENT}"
 
 read -r -d '' E_DESC <<'EOF' || true
 This phase makes "where things live" matter.
@@ -369,7 +372,7 @@ Parallelism with Phase 2 (D):
 - E5-E7 can overlap with D4-D6.
 EOF
 
-create_bead E 'Phase 3 — habitatized ecology, substrate redox, and geometry-aware scaling' epic 1 "$ROOT" scientific-core,phase-3,habitats,geometry,ecology '' "${E_DESC}" "${E_COMMENT}"
+create_bead E 'Phase 3 — habitatized ecology, substrate redox, and geometry-aware scaling' epic 1 "$ROOT" scientific-core,phase-3,habitats,geometry,ecology "${E_DESC}" "${E_COMMENT}"
 
 read -r -d '' F_DESC <<'EOF' || true
 This phase deepens shrimp realism once chemistry, conservation, and habitats are trustworthy enough to support it.
@@ -389,7 +392,7 @@ Scientific notes on Neocaridina davidi:
 - Juvenile survival is strongly stage-dependent; newly hatched shrimp are more sensitive to water chemistry than adults.
 EOF
 
-create_bead F 'Phase 4 — shrimp life history, toxicity, and reproduction realism' epic 2 "$ROOT" scientific-core,phase-4,shrimp,biology,toxicology '' "${F_DESC}" "${F_COMMENT}"
+create_bead F 'Phase 4 — shrimp life history, toxicity, and reproduction realism' epic 2 "$ROOT" scientific-core,phase-4,shrimp,biology,toxicology "${F_DESC}" "${F_COMMENT}"
 
 read -r -d '' G_DESC <<'EOF' || true
 This phase turns the upgraded scientific core into something that can be explained, calibrated, and defended.
@@ -410,7 +413,7 @@ What "scientifically grounded" means for this project:
 - Yes: the model's limitations are documented and honest.
 EOF
 
-create_bead G 'Phase 5 — provenance, calibration, validation, and release narrative' epic 2 "$ROOT" scientific-core,phase-5,validation,calibration,research,docs '' "${G_DESC}" "${G_COMMENT}"
+create_bead G 'Phase 5 — provenance, calibration, validation, and release narrative' epic 2 "$ROOT" scientific-core,phase-5,validation,calibration,research,docs "${G_DESC}" "${G_COMMENT}"
 
 # ===========================================================================
 # PHASE 0 — GUARDRAILS (A1–A3)
@@ -461,7 +464,7 @@ Specific things to document:
 - Where the existing 19 integration tests depend on specific numeric values vs qualitative behavior
 EOF
 
-create_bead A1 'Inventory current scientific semantics, units, invariants, and shortcuts' task 1 "$A" scientific-core,phase-0,guardrails,analysis 180 "${A1_DESC}" "${A1_COMMENT}"
+create_bead A1 'Inventory current scientific semantics, units, invariants, and shortcuts' task 1 "$A" scientific-core,phase-0,guardrails,analysis "${A1_DESC}" "${A1_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # A2 — Instrumentation + Migration Scaffolding (decomposed into 3 subtasks)
@@ -502,14 +505,14 @@ Future-self notes:
 - Not every action should conserve mass inside the tank. Water changes and "trim-and-remove" intentionally export matter, so instrumentation should distinguish internal conservation from explicit exports.
 - Keep diagnostics developer-facing first; surface only the most useful summaries in the TUI later.
 - Versioning early is cheaper than backfilling migrations after multiple incompatible changes land.
-- The existing save.rs already has a version field in SaveData. Build on that rather than creating a parallel system.
+- The existing save.rs already has a schema_version field on SaveFile. Build on that rather than creating a parallel system.
 
 Architecture note:
 - Consider a BudgetLedger struct that records sources and sinks per element (N, C, O2) per tick. Engine::step_hours can snapshot the ledger before and after each system step, making it easy to pinpoint which system is violating conservation.
 - The ledger should be opt-in (behind a debug flag or test helper) to avoid runtime cost in normal gameplay.
 EOF
 
-create_bead A2 'Add conservation/debug instrumentation and save-schema migration scaffolding' task 1 "$A" scientific-core,phase-0,guardrails,testing,migration 240 "${A2_DESC}" "${A2_COMMENT}"
+create_bead A2 'Add conservation/debug instrumentation and save-schema migration scaffolding' task 1 "$A" scientific-core,phase-0,guardrails,testing,migration "${A2_DESC}" "${A2_COMMENT}"
 
 # A2 subtask a: per-tick mass budget tracking
 read -r -d '' A2a_DESC <<'EOF' || true
@@ -540,7 +543,7 @@ Implementation guidance:
 - "Total N" means: ammonia_total + nitrite_total + nitrate_total + don_total + N_in_all_biomass_pools. Define this sum once as a helper.
 EOF
 
-create_bead A2a 'Implement per-tick mass budget tracking for N, C, and O2' task 1 "$A2" scientific-core,phase-0,instrumentation,testing 90 "${A2a_DESC}" "${A2a_COMMENT}"
+create_bead A2a 'Implement per-tick mass budget tracking for N, C, and O2' task 1 "$A2" scientific-core,phase-0,instrumentation,testing "${A2a_DESC}" "${A2a_COMMENT}"
 
 # A2 subtask b: debug hooks and test helpers
 read -r -d '' A2b_DESC <<'EOF' || true
@@ -570,12 +573,12 @@ Design note:
 - The debug output should identify the system responsible for the largest budget imbalance, making it easy to locate conservation bugs.
 EOF
 
-create_bead A2b 'Add debug hooks and test helpers for budget inspection' task 1 "$A2" scientific-core,phase-0,testing,api 60 "${A2b_DESC}" "${A2b_COMMENT}"
+create_bead A2b 'Add debug hooks and test helpers for budget inspection' task 1 "$A2" scientific-core,phase-0,testing,api "${A2b_DESC}" "${A2b_COMMENT}"
 
 # A2 subtask c: save-schema migration scaffolding
 read -r -d '' A2c_DESC <<'EOF' || true
 Context:
-- save.rs already serializes TankState with a version field. The next phases will add fields (carbonate state in D2, habitat state in E1, stage-structured shrimp in F2) and rename fields (nitrogen pool names in B7).
+- save.rs already serializes TankState inside SaveFile and tags the file with schema_version. The next phases will add fields (carbonate state in D2, habitat state in E1, richer shrimp state in F2) and rename fields (nitrogen pool names in B7).
 - Without migration scaffolding, each change risks breaking saves or requiring manual re-creation.
 
 Deliverable:
@@ -601,7 +604,7 @@ Future-self notes:
 - Keep the migration code in save.rs close to the serialization logic it modifies.
 EOF
 
-create_bead A2c 'Add save-schema versioning and migration scaffolding' task 1 "$A2" scientific-core,phase-0,migration,save 90 "${A2c_DESC}" "${A2c_COMMENT}"
+create_bead A2c 'Add save-schema versioning and migration scaffolding' task 1 "$A2" scientific-core,phase-0,migration,save "${A2c_DESC}" "${A2c_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # A3 — Baseline scenario envelopes
@@ -646,7 +649,7 @@ Each test should capture: "after N hours of scenario X, quantity Y should be in 
 The "because Z" part is critical — it prevents cargo-cult tolerance widening when numbers change.
 EOF
 
-create_bead A3 'Capture baseline scenario envelopes for current v0.1 behavior' task 1 "$A" scientific-core,phase-0,guardrails,testing,scenarios 240 "${A3_DESC}" "${A3_COMMENT}"
+create_bead A3 'Capture baseline scenario envelopes for current v0.1 behavior' task 1 "$A" scientific-core,phase-0,guardrails,testing,scenarios "${A3_DESC}" "${A3_COMMENT}"
 
 # ===========================================================================
 # PHASE 1A — UNITS, CONCENTRATION SEMANTICS, AND KINETIC NORMALIZATION (B1–B8)
@@ -696,7 +699,7 @@ Scientific context on units:
 - The unit policy should make this dual audience explicit.
 EOF
 
-create_bead B1 'Decide internal unit taxonomy and display policy' spike 0 "$B" scientific-core,phase-1,units,api,tui 180 "${B1_DESC}" "${B1_COMMENT}"
+create_bead B1 'Decide internal unit taxonomy and display policy' spike 0 "$B" scientific-core,phase-1,units,api,tui "${B1_DESC}" "${B1_COMMENT}"
 
 read -r -d '' B2_DESC <<'EOF' || true
 Context:
@@ -740,7 +743,7 @@ Future-self notes:
 - snapshot.rs already does some of these conversions (lines 66-78). Consolidate there to avoid duplication.
 EOF
 
-create_bead B2 'Implement canonical concentration and compartment helper APIs' task 0 "$B" scientific-core,phase-1,units,helpers,chemistry 240 "${B2_DESC}" "${B2_COMMENT}"
+create_bead B2 'Implement canonical concentration and compartment helper APIs' task 0 "$B" scientific-core,phase-1,units,helpers,chemistry "${B2_DESC}" "${B2_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # B3 — Normalize nitrogen-cycle kinetics (decomposed into 5 subtasks)
@@ -803,7 +806,7 @@ Retuning expectations:
 - This is expected. The point is to get the math right first, then tune for qualitative behavior.
 EOF
 
-create_bead B3 'Normalize nitrogen-cycle kinetics to concentration-based terms' task 0 "$B" scientific-core,phase-1,kinetics,nitrogen,chemistry 300 "${B3_DESC}" "${B3_COMMENT}"
+create_bead B3 'Normalize nitrogen-cycle kinetics to concentration-based terms' task 0 "$B" scientific-core,phase-1,kinetics,nitrogen,chemistry "${B3_DESC}" "${B3_COMMENT}"
 
 # B3 subtask a: AOB normalization (establishes the pattern for all guilds)
 read -r -d '' B3a_DESC <<'EOF' || true
@@ -837,7 +840,7 @@ Retuning note:
 - Current aob_k_tan_mg = 0.5 mg total. In a default 12L nano tank (30×20×20cm), this is ~0.042 mg N/L. That's unusually low — literature values are 0.5–2.0 mg N/L. The old value likely compensated for the total-mass formulation. Set the new concentration-based value to a literature-reasonable range.
 EOF
 
-create_bead B3a 'Normalize AOB TAN and DO limitation to concentration-based kinetics' task 0 "$B3" scientific-core,phase-1,kinetics,nitrogen,aob 90 "${B3a_DESC}" "${B3a_COMMENT}"
+create_bead B3a 'Normalize AOB TAN and DO limitation to concentration-based kinetics' task 0 "$B3" scientific-core,phase-1,kinetics,nitrogen,aob "${B3a_DESC}" "${B3a_COMMENT}"
 
 # B3 subtask b: NOB normalization
 read -r -d '' B3b_DESC <<'EOF' || true
@@ -864,7 +867,7 @@ NOB-specific notes:
 - The relative K_s(DO) values between AOB and NOB should be preserved after retuning — NOB should have higher K_s(DO) to maintain the correct selectivity.
 EOF
 
-create_bead B3b 'Normalize NOB nitrite and DO limitation to concentration-based kinetics' task 0 "$B3" scientific-core,phase-1,kinetics,nitrogen,nob 60 "${B3b_DESC}" "${B3b_COMMENT}"
+create_bead B3b 'Normalize NOB nitrite and DO limitation to concentration-based kinetics' task 0 "$B3" scientific-core,phase-1,kinetics,nitrogen,nob "${B3b_DESC}" "${B3b_COMMENT}"
 
 # B3 subtask c: comammox normalization
 read -r -d '' B3c_DESC <<'EOF' || true
@@ -892,7 +895,7 @@ Comammox-specific notes:
 - The current comammox_vmax_fraction (process.rs:68) scales comammox rate relative to AOB. This is a reasonable simplification to maintain.
 EOF
 
-create_bead B3c 'Normalize comammox TAN and DO limitation to concentration-based kinetics' task 0 "$B3" scientific-core,phase-1,kinetics,nitrogen,comammox 60 "${B3c_DESC}" "${B3c_COMMENT}"
+create_bead B3c 'Normalize comammox TAN and DO limitation to concentration-based kinetics' task 0 "$B3" scientific-core,phase-1,kinetics,nitrogen,comammox "${B3c_DESC}" "${B3c_COMMENT}"
 
 # B3 subtask d: decomposer normalization
 read -r -d '' B3d_DESC <<'EOF' || true
@@ -922,7 +925,7 @@ Decomposer-specific notes:
 - Decomposer activity drives the DOC → DIC pathway, which later connects to carbonate chemistry (Phase 2). Getting the rate right here matters for the entire carbon cycle.
 EOF
 
-create_bead B3d 'Normalize decomposer DOC and DO limitation to concentration-based kinetics' task 0 "$B3" scientific-core,phase-1,kinetics,decomposer,doc 60 "${B3d_DESC}" "${B3d_COMMENT}"
+create_bead B3d 'Normalize decomposer DOC and DO limitation to concentration-based kinetics' task 0 "$B3" scientific-core,phase-1,kinetics,decomposer,doc "${B3d_DESC}" "${B3d_COMMENT}"
 
 # B3 subtask e: tank-size-independence regression test
 read -r -d '' B3e_DESC <<'EOF' || true
@@ -952,7 +955,7 @@ Test design notes:
 - This test becomes a permanent guardrail: any future code that accidentally reintroduces total-mass kinetics will break it.
 EOF
 
-create_bead B3e 'Add tank-size-independence regression test for all nitrogen kinetics' task 0 "$B3" scientific-core,phase-1,testing,kinetics,nitrogen 60 "${B3e_DESC}" "${B3e_COMMENT}"
+create_bead B3e 'Add tank-size-independence regression test for all nitrogen kinetics' task 0 "$B3" scientific-core,phase-1,testing,kinetics,nitrogen "${B3e_DESC}" "${B3e_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # B4 — Plant normalization (not decomposed — cohesive single-system work)
@@ -994,7 +997,7 @@ Scientific notes:
 - The current model treats both plant types similarly. Phase 3 (E4) will add substrate-zone differentiation.
 EOF
 
-create_bead B4 'Normalize plant nutrient uptake and growth limitation semantics' task 1 "$B" scientific-core,phase-1,plants,kinetics,ecology 240 "${B4_DESC}" "${B4_COMMENT}"
+create_bead B4 'Normalize plant nutrient uptake and growth limitation semantics' task 1 "$B" scientific-core,phase-1,plants,kinetics,ecology "${B4_DESC}" "${B4_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # B5 — Algae normalization (not decomposed — cohesive single-system work)
@@ -1034,7 +1037,7 @@ Scientific notes:
 - Periphyton (attached algae) and planktonic algae have different light and nutrient strategies. The current model lumps them. Phase 3 (E3) will split them.
 EOF
 
-create_bead B5 'Normalize algae kinetics around concentration, light, and temperature interactions' task 1 "$B" scientific-core,phase-1,algae,kinetics,ecology 240 "${B5_DESC}" "${B5_COMMENT}"
+create_bead B5 'Normalize algae kinetics around concentration, light, and temperature interactions' task 1 "$B" scientific-core,phase-1,algae,kinetics,ecology "${B5_DESC}" "${B5_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # B6 — Parameter retuning after normalization
@@ -1077,7 +1080,7 @@ Process:
 5. Document the new values with rationale and confidence level.
 EOF
 
-create_bead B6 'Retune process parameters and scenario defaults after normalization' task 1 "$B" scientific-core,phase-1,retuning,data,scenarios 240 "${B6_DESC}" "${B6_COMMENT}"
+create_bead B6 'Retune process parameters and scenario defaults after normalization' task 1 "$B" scientific-core,phase-1,retuning,data,scenarios "${B6_DESC}" "${B6_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # B7 — Snapshot/API field names
@@ -1126,7 +1129,7 @@ Conversion factors (for reference):
 These conversions should be defined as named constants, not magic numbers scattered through rendering code.
 EOF
 
-create_bead B7 'Update snapshot/API field names and display conversions' task 1 "$B" scientific-core,phase-1,api,tui,units 180 "${B7_DESC}" "${B7_COMMENT}"
+create_bead B7 'Update snapshot/API field names and display conversions' task 1 "$B" scientific-core,phase-1,api,tui,units "${B7_DESC}" "${B7_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # B8 — TDS/conductivity accounting
@@ -1166,7 +1169,7 @@ Scientific notes:
 - Consider renaming to "estimated TDS (major ions)" or similar.
 EOF
 
-create_bead B8 'Expand TDS/conductivity accounting and label any remaining estimates honestly' task 2 "$B" scientific-core,phase-1,tds,conductivity,ui 180 "${B8_DESC}" "${B8_COMMENT}"
+create_bead B8 'Expand TDS/conductivity accounting and label any remaining estimates honestly' task 2 "$B" scientific-core,phase-1,tds,conductivity,ui "${B8_DESC}" "${B8_COMMENT}"
 
 # ===========================================================================
 # PHASE 1B — MASS CONSERVATION AND HUSBANDRY ACTION SEMANTICS (C1–C6)
@@ -1215,7 +1218,7 @@ Scientific reference points:
 - These are order-of-magnitude guidelines, not precise values. The routing conventions should use named parameters so they can be tuned later.
 EOF
 
-create_bead C1 'Define closed-loop matter-routing conventions for consumers and maintenance actions' task 0 "$C" scientific-core,phase-1,mass-balance,design,actions 180 "${C1_DESC}" "${C1_COMMENT}"
+create_bead C1 'Define closed-loop matter-routing conventions for consumers and maintenance actions' task 0 "$C" scientific-core,phase-1,mass-balance,design,actions "${C1_DESC}" "${C1_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # C2 — Shrimp ingestion loop (decomposed into 4 subtasks)
@@ -1268,7 +1271,7 @@ Mass balance example (for 1g of periphyton consumed):
 - These fractions should be named parameters, not hardcoded.
 EOF
 
-create_bead C2 'Implement shrimp ingestion → assimilation → excretion → feces → respiration loop' task 0 "$C" scientific-core,phase-1,mass-balance,shrimp,ecology 240 "${C2_DESC}" "${C2_COMMENT}"
+create_bead C2 'Implement shrimp ingestion → assimilation → excretion → feces → respiration loop' task 0 "$C" scientific-core,phase-1,mass-balance,shrimp,ecology "${C2_DESC}" "${C2_COMMENT}"
 
 # C2 subtask a: assimilation pathway
 read -r -d '' C2a_DESC <<'EOF' || true
@@ -1291,7 +1294,7 @@ Implementation notes:
 - The C:N ratio of consumed food matters for how much N vs C enters the assimilation pathway. Periphyton C:N ≈ 6-10 (relatively N-rich); detritus C:N ≈ 10-20 (more C-rich).
 EOF
 
-create_bead C2a 'Implement shrimp assimilation pathway with body reserve tracking' task 0 "$C2" scientific-core,phase-1,mass-balance,shrimp,assimilation 60 "${C2a_DESC}" "${C2a_COMMENT}"
+create_bead C2a 'Implement shrimp assimilation pathway with body reserve tracking' task 0 "$C2" scientific-core,phase-1,mass-balance,shrimp,assimilation "${C2a_DESC}" "${C2a_COMMENT}"
 
 # C2 subtask b: excretion pathway
 read -r -d '' C2b_DESC <<'EOF' || true
@@ -1314,7 +1317,7 @@ Scientific background:
 - The TAN production from shrimp excretion should be proportional to the N content of assimilated food, not just the total mass.
 EOF
 
-create_bead C2b 'Implement shrimp excretion pathway returning TAN to water' task 0 "$C2" scientific-core,phase-1,mass-balance,shrimp,excretion 60 "${C2b_DESC}" "${C2b_COMMENT}"
+create_bead C2b 'Implement shrimp excretion pathway returning TAN to water' task 0 "$C2" scientific-core,phase-1,mass-balance,shrimp,excretion "${C2b_DESC}" "${C2b_COMMENT}"
 
 # C2 subtask c: fecal pathway
 read -r -d '' C2c_DESC <<'EOF' || true
@@ -1335,7 +1338,7 @@ Implementation notes:
 - Shrimp feces are a significant source of fine particulate organic matter in real aquaria. In heavily stocked tanks, fecal accumulation drives decomposer activity and oxygen demand.
 EOF
 
-create_bead C2c 'Implement shrimp fecal pathway returning undigested matter to detritus' task 0 "$C2" scientific-core,phase-1,mass-balance,shrimp,feces 45 "${C2c_DESC}" "${C2c_COMMENT}"
+create_bead C2c 'Implement shrimp fecal pathway returning undigested matter to detritus' task 0 "$C2" scientific-core,phase-1,mass-balance,shrimp,feces "${C2c_DESC}" "${C2c_COMMENT}"
 
 # C2 subtask d: respiration pathway and conservation test
 read -r -d '' C2d_DESC <<'EOF' || true
@@ -1362,7 +1365,7 @@ Conservation test design:
 - Also assert: DO decreased, DIC increased, TAN increased, detritus changed as expected.
 EOF
 
-create_bead C2d 'Implement shrimp respiration O2/DIC pathway and add conservation regression test' task 0 "$C2" scientific-core,phase-1,mass-balance,shrimp,respiration,testing 75 "${C2d_DESC}" "${C2d_COMMENT}"
+create_bead C2d 'Implement shrimp respiration O2/DIC pathway and add conservation regression test' task 0 "$C2" scientific-core,phase-1,mass-balance,shrimp,respiration,testing "${C2d_DESC}" "${C2d_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # C3 — Microfauna matter routing (not decomposed — smaller scope)
@@ -1402,7 +1405,7 @@ Implementation note:
 - Microfauna excretion products go to the same pools as shrimp excretion: TAN for N waste, DIC for respired C, fine detritus for feces.
 EOF
 
-create_bead C3 'Implement microfauna matter routing and recycling' task 1 "$C" scientific-core,phase-1,mass-balance,microfauna,ecology 180 "${C3_DESC}" "${C3_COMMENT}"
+create_bead C3 'Implement microfauna matter routing and recycling' task 1 "$C" scientific-core,phase-1,mass-balance,microfauna,ecology "${C3_DESC}" "${C3_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # C4 — Feed/detritus/DOC bookkeeping audit
@@ -1447,7 +1450,7 @@ Future-self notes:
 - Pay special attention to the DOC pathway: feed leaching (process.rs:28 feed_leach_rate_per_hour) and detritus dissolution (process.rs:30 fine_detritus_dissolution_rate_per_hour) both produce DOC. Decomposers then consume DOC. Make sure these three processes are consistent.
 EOF
 
-create_bead C4 'Audit feeding, detritus, DOC, and mineralization bookkeeping end to end' task 1 "$C" scientific-core,phase-1,mass-balance,detritus,nitrogen 240 "${C4_DESC}" "${C4_COMMENT}"
+create_bead C4 'Audit feeding, detritus, DOC, and mineralization bookkeeping end to end' task 1 "$C" scientific-core,phase-1,mass-balance,detritus,nitrogen "${C4_DESC}" "${C4_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # C5 — Split plant trimming into export vs leave-cuttings
@@ -1489,7 +1492,7 @@ Design consideration:
 - Default should probably be TrimPlantsAndRemove (more common in practice) to avoid accidentally leaving clippings in the tank.
 EOF
 
-create_bead C5 'Split plant trimming into export vs leave-cuttings actions' task 1 "$C" scientific-core,phase-1,actions,plants,husbandry 120 "${C5_DESC}" "${C5_COMMENT}"
+create_bead C5 'Split plant trimming into export vs leave-cuttings actions' task 1 "$C" scientific-core,phase-1,actions,plants,husbandry "${C5_DESC}" "${C5_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # C6 — Conservation diagnostics and regression tests
@@ -1531,7 +1534,7 @@ Future-self notes:
 - Use the budget helpers from A2a-b to make assertions concise: assert!(budget.net_n_delta().abs() < 1e-6, "N budget violated: {}", budget.explain());
 EOF
 
-create_bead C6 'Add conservation diagnostics and regression tests for grazing and maintenance loops' task 1 "$C" scientific-core,phase-1,testing,mass-balance,diagnostics 180 "${C6_DESC}" "${C6_COMMENT}"
+create_bead C6 'Add conservation diagnostics and regression tests for grazing and maintenance loops' task 1 "$C" scientific-core,phase-1,testing,mass-balance,diagnostics "${C6_DESC}" "${C6_COMMENT}"
 
 # ===========================================================================
 # PHASE 2 — CARBONATE CHEMISTRY, CO2 EXCHANGE, AND pH REALISM (D1–D6)
@@ -1589,7 +1592,7 @@ Scientific reference:
 - Temperature corrections: pKa1(T) ≈ 6.352 - 0.0238 × (T-25), which is good enough for 15-35°C.
 EOF
 
-create_bead D1 'Define carbonate-state contract and solver strategy' spike 1 "$D" scientific-core,phase-2,carbonates,design,chemistry 180 "${D1_DESC}" "${D1_COMMENT}"
+create_bead D1 'Define carbonate-state contract and solver strategy' spike 1 "$D" scientific-core,phase-2,carbonates,design,chemistry "${D1_DESC}" "${D1_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # D2 — Carbonate equilibrium solver (decomposed into 4 subtasks)
@@ -1631,7 +1634,7 @@ Future-self notes:
 - The existing dissolved_inorganic_carbon_mg_c_total field in WaterState can continue as the DIC state variable. The solver derives CO2(aq), HCO3-, CO3--, and pH from it + alkalinity + temperature.
 EOF
 
-create_bead D2 'Implement explicit carbonate equilibrium and pH solver' task 0 "$D" scientific-core,phase-2,carbonates,chemistry,pH 300 "${D2_DESC}" "${D2_COMMENT}"
+create_bead D2 'Implement explicit carbonate equilibrium and pH solver' task 0 "$D" scientific-core,phase-2,carbonates,chemistry,pH "${D2_DESC}" "${D2_COMMENT}"
 
 # D2 subtask a: add carbonate state to WaterState
 read -r -d '' D2a_DESC <<'EOF' || true
@@ -1654,7 +1657,7 @@ Design recommendation:
 - Don't store derived values as state — this avoids stale-value bugs.
 EOF
 
-create_bead D2a 'Add carbonate state variables or derived-value struct to WaterState' task 0 "$D2" scientific-core,phase-2,carbonates,state 90 "${D2a_DESC}" "${D2a_COMMENT}"
+create_bead D2a 'Add carbonate state variables or derived-value struct to WaterState' task 0 "$D2" scientific-core,phase-2,carbonates,state "${D2a_DESC}" "${D2a_COMMENT}"
 
 # D2 subtask b: implement the pH solver
 read -r -d '' D2b_DESC <<'EOF' || true
@@ -1693,7 +1696,7 @@ Then refine with 1-2 Newton-Raphson iterations for precision.
 This is fast (no iterative loop in the common case), stable, and accurate enough for aquarium simulation.
 EOF
 
-create_bead D2b 'Implement carbonate equilibrium pH solver with temperature-dependent constants' task 0 "$D2" scientific-core,phase-2,carbonates,chemistry,solver 120 "${D2b_DESC}" "${D2b_COMMENT}"
+create_bead D2b 'Implement carbonate equilibrium pH solver with temperature-dependent constants' task 0 "$D2" scientific-core,phase-2,carbonates,chemistry,solver "${D2b_DESC}" "${D2b_COMMENT}"
 
 # D2 subtask c: replace old pH shortcut
 read -r -d '' D2c_DESC <<'EOF' || true
@@ -1720,7 +1723,7 @@ Expected behavior change:
 - Consider keeping the old formula as a #[cfg(test)] comparison function for validation during the transition.
 EOF
 
-create_bead D2c 'Replace old pH shortcut with new carbonate equilibrium solver' task 0 "$D2" scientific-core,phase-2,chemistry,migration 45 "${D2c_DESC}" "${D2c_COMMENT}"
+create_bead D2c 'Replace old pH shortcut with new carbonate equilibrium solver' task 0 "$D2" scientific-core,phase-2,chemistry,migration "${D2c_DESC}" "${D2c_COMMENT}"
 
 # D2 subtask d: update serialization for new carbonate state
 read -r -d '' D2d_DESC <<'EOF' || true
@@ -1743,7 +1746,7 @@ Migration notes:
 - The snapshot should show CO2(aq) in mg/L because planted tank hobbyists commonly measure this via KH/pH drop-checker tables.
 EOF
 
-create_bead D2d 'Update serialization and snapshot for carbonate state changes' task 1 "$D2" scientific-core,phase-2,save,snapshot,api 45 "${D2d_DESC}" "${D2d_COMMENT}"
+create_bead D2d 'Update serialization and snapshot for carbonate state changes' task 1 "$D2" scientific-core,phase-2,save,snapshot,api "${D2d_DESC}" "${D2d_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # D3 — CO2 gas exchange
@@ -1795,7 +1798,7 @@ Scientific notes:
 - Henry's law: [CO2(aq)] = K_H × pCO2. K_H ≈ 3.4 × 10^-2 mol/(L·atm) at 25°C.
 EOF
 
-create_bead D3 'Integrate CO2 gas exchange with aeration, surface exchange, and ambient coupling' task 0 "$D" scientific-core,phase-2,co2,gas-exchange,hardware 240 "${D3_DESC}" "${D3_COMMENT}"
+create_bead D3 'Integrate CO2 gas exchange with aeration, surface exchange, and ambient coupling' task 0 "$D" scientific-core,phase-2,co2,gas-exchange,hardware "${D3_DESC}" "${D3_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # D4 — Photosynthesis/respiration ↔ DIC/CO2 coupling
@@ -1837,7 +1840,7 @@ Future-self notes:
 - The dissolved_oxygen.rs system already has a photosynthesis O2 production rate (plant_photosynthesis_o2_mg_per_g_per_hour). The DIC rate should be stoichiometrically consistent: for every mg O2 produced by photosynthesis, ~0.375 mg C is consumed from DIC (from CH2O stoichiometry: CO2 + H2O → CH2O + O2, so 12g C consumed per 32g O2 produced).
 EOF
 
-create_bead D4 'Connect photosynthesis and respiration to DIC / CO2 and day–night pH behavior' task 1 "$D" scientific-core,phase-2,plants,carbonates,day-night 240 "${D4_DESC}" "${D4_COMMENT}"
+create_bead D4 'Connect photosynthesis and respiration to DIC / CO2 and day–night pH behavior' task 1 "$D" scientific-core,phase-2,plants,carbonates,day-night "${D4_DESC}" "${D4_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # D5 — Source-water profile upgrade
@@ -1883,7 +1886,7 @@ Real-world reference points:
 - RO/DI remineralized: KH 0-1°, GH 3-5° (added minerals), pH 6.0-7.0
 EOF
 
-create_bead D5 'Upgrade source-water profiles to carry carbonate-relevant inputs and differentiated defaults' task 1 "$D" scientific-core,phase-2,source-water,data,carbonates 180 "${D5_DESC}" "${D5_COMMENT}"
+create_bead D5 'Upgrade source-water profiles to carry carbonate-relevant inputs and differentiated defaults' task 1 "$D" scientific-core,phase-2,source-water,data,carbonates "${D5_DESC}" "${D5_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # D6 — Carbonate regression tests
@@ -1921,7 +1924,7 @@ Future-self notes:
 - Revisit these tests after habitat and shrimp phases if new coupled dynamics widen the realistic envelope.
 EOF
 
-create_bead D6 'Add carbonate regression tests and scenario probes' task 1 "$D" scientific-core,phase-2,testing,carbonates,scenarios 180 "${D6_DESC}" "${D6_COMMENT}"
+create_bead D6 'Add carbonate regression tests and scenario probes' task 1 "$D" scientific-core,phase-2,testing,carbonates,scenarios "${D6_DESC}" "${D6_COMMENT}"
 
 # ===========================================================================
 # PHASE 3 — HABITATIZED ECOLOGY, SUBSTRATE REDOX, GEOMETRY-AWARE SCALING (E1–E7)
@@ -1978,7 +1981,7 @@ Design principle:
 - Biomass pools (nitrifiers, decomposers, periphyton) will later be indexed by habitat. For now, the registry just provides the geometry and modifiers.
 EOF
 
-create_bead E1 'Introduce habitat registry and colonizable-area model' task 1 "$E" scientific-core,phase-3,habitats,geometry,architecture 240 "${E1_DESC}" "${E1_COMMENT}"
+create_bead E1 'Introduce habitat registry and colonizable-area model' task 1 "$E" scientific-core,phase-3,habitats,geometry,architecture "${E1_DESC}" "${E1_COMMENT}"
 
 # E1 subtask a: habitat type and registry data structure
 read -r -d '' E1a_DESC <<'EOF' || true
@@ -2002,7 +2005,7 @@ Design notes:
 - light_exposure indicates how much light reaches the habitat. Filter media inside a canister has 0.0; glass at water surface might be 0.5; substrate surface depends on depth.
 EOF
 
-create_bead E1a 'Define habitat type enum and registry data structure' task 1 "$E1" scientific-core,phase-3,habitats,types 90 "${E1a_DESC}" "${E1a_COMMENT}"
+create_bead E1a 'Define habitat type enum and registry data structure' task 1 "$E1" scientific-core,phase-3,habitats,types "${E1a_DESC}" "${E1a_COMMENT}"
 
 # E1 subtask b: compute colonizable areas from geometry
 read -r -d '' E1b_DESC <<'EOF' || true
@@ -2029,7 +2032,7 @@ Computation notes:
 - Filter media area: the current HardwareState has filter flow (flow_lph) but not media surface area. May need to add media_surface_cm2 or estimate from flow (e.g., 100 cm²/lph as a rough starting point).
 EOF
 
-create_bead E1b 'Compute colonizable areas from geometry, hardware, and plant state' task 1 "$E1" scientific-core,phase-3,habitats,geometry 90 "${E1b_DESC}" "${E1b_COMMENT}"
+create_bead E1b 'Compute colonizable areas from geometry, hardware, and plant state' task 1 "$E1" scientific-core,phase-3,habitats,geometry "${E1b_DESC}" "${E1b_COMMENT}"
 
 # E1 subtask c: flow and oxygen exposure modifiers
 read -r -d '' E1c_DESC <<'EOF' || true
@@ -2056,7 +2059,7 @@ Design notes:
 - Consider making o2_exposure for SubstrateDeep responsive to rooted plant presence (roots oxygenate the rhizosphere).
 EOF
 
-create_bead E1c 'Set flow and oxygen exposure modifiers per habitat' task 1 "$E1" scientific-core,phase-3,habitats,modifiers 60 "${E1c_DESC}" "${E1c_COMMENT}"
+create_bead E1c 'Set flow and oxygen exposure modifiers per habitat' task 1 "$E1" scientific-core,phase-3,habitats,modifiers "${E1c_DESC}" "${E1c_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # E2 — Biofilter scaling
@@ -2092,7 +2095,7 @@ Future-self notes:
 - The key insight: a nano tank with a small sponge filter and a medium tank with a large canister filter should have very different nitrifier capacity ceilings, and this should emerge from habitat area × flow exposure, not from a tank-size lookup table.
 EOF
 
-create_bead E2 'Scale biofilter carrying capacity with habitat, media, flow, and oxygen' task 1 "$E" scientific-core,phase-3,biofilter,habitats,nitrogen 240 "${E2_DESC}" "${E2_COMMENT}"
+create_bead E2 'Scale biofilter carrying capacity with habitat, media, flow, and oxygen' task 1 "$E" scientific-core,phase-3,biofilter,habitats,nitrogen "${E2_DESC}" "${E2_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # E3 — Periphyton/decomposer split by habitat
@@ -2134,7 +2137,7 @@ Ecological notes:
 - Substrate deep: no periphyton (no light), anaerobic/suboxic bacteria, denitrifiers.
 EOF
 
-create_bead E3 'Split periphyton and decomposer pools by habitat' task 1 "$E" scientific-core,phase-3,habitats,periphyton,decomposition 240 "${E3_DESC}" "${E3_COMMENT}"
+create_bead E3 'Split periphyton and decomposer pools by habitat' task 1 "$E" scientific-core,phase-3,habitats,periphyton,decomposition "${E3_DESC}" "${E3_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # E4 — Substrate redox (decomposed into 3 subtasks)
@@ -2182,7 +2185,7 @@ Scientific background:
 - Plant roots oxygenate the rhizosphere (root-adjacent substrate), creating micro-oxic zones within otherwise suboxic substrate. This is the "root oxidation" effect visible as lighter-colored substrate around roots.
 EOF
 
-create_bead E4 'Implement substrate oxic/suboxic layers, denitrification, and root-zone redox hooks' task 1 "$E" scientific-core,phase-3,substrate,denitrification,plants,redox 300 "${E4_DESC}" "${E4_COMMENT}"
+create_bead E4 'Implement substrate oxic/suboxic layers, denitrification, and root-zone redox hooks' task 1 "$E" scientific-core,phase-3,substrate,denitrification,plants,redox "${E4_DESC}" "${E4_COMMENT}"
 
 # E4 subtask a: oxic/suboxic zone state
 read -r -d '' E4a_DESC <<'EOF' || true
@@ -2205,7 +2208,7 @@ Simplified model for O2 penetration depth:
 - The key behavior: heavily loaded tanks → shallower O2 penetration → larger suboxic zone → more denitrification.
 EOF
 
-create_bead E4a 'Add oxic/suboxic zone state to substrate model' task 1 "$E4" scientific-core,phase-3,substrate,redox,state 90 "${E4a_DESC}" "${E4a_COMMENT}"
+create_bead E4a 'Add oxic/suboxic zone state to substrate model' task 1 "$E4" scientific-core,phase-3,substrate,redox,state "${E4a_DESC}" "${E4a_COMMENT}"
 
 # E4 subtask b: denitrification in suboxic zone
 read -r -d '' E4b_DESC <<'EOF' || true
@@ -2230,7 +2233,7 @@ Scientific notes:
 - Keep the first pass simple: rate = denitrification_vmax × [NO3] / ([NO3] + K_no3) × [DOC] / ([DOC] + K_doc) × suboxic_volume_fraction.
 EOF
 
-create_bead E4b 'Implement simplified denitrification in suboxic substrate zones' task 1 "$E4" scientific-core,phase-3,substrate,denitrification,nitrogen 120 "${E4b_DESC}" "${E4b_COMMENT}"
+create_bead E4b 'Implement simplified denitrification in suboxic substrate zones' task 1 "$E4" scientific-core,phase-3,substrate,denitrification,nitrogen "${E4b_DESC}" "${E4b_COMMENT}"
 
 # E4 subtask c: root-zone oxygenation hooks
 read -r -d '' E4c_DESC <<'EOF' || true
@@ -2253,7 +2256,7 @@ Scientific background:
 - Keep it simple: root_oxidation_effect = plant.root_biomass_g × o2_release_rate. This widens the oxic zone, reducing the effective suboxic volume.
 EOF
 
-create_bead E4c 'Add root-zone oxygenation hooks for rooted plants' task 1 "$E4" scientific-core,phase-3,substrate,plants,roots 90 "${E4c_DESC}" "${E4c_COMMENT}"
+create_bead E4c 'Add root-zone oxygenation hooks for rooted plants' task 1 "$E4" scientific-core,phase-3,substrate,plants,roots "${E4c_DESC}" "${E4c_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # E5 — Light attenuation
@@ -2299,7 +2302,7 @@ Scientific notes:
 - Average light across the water column (more relevant for planktonic algae): I_avg = I_0 × (1 - exp(-k×H)) / (k×H).
 EOF
 
-create_bead E5 'Add depth/turbidity light attenuation and habitat-specific light exposure' task 1 "$E" scientific-core,phase-3,light,geometry,plants,algae 180 "${E5_DESC}" "${E5_COMMENT}"
+create_bead E5 'Add depth/turbidity light attenuation and habitat-specific light exposure' task 1 "$E" scientific-core,phase-3,light,geometry,plants,algae "${E5_DESC}" "${E5_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # E6 — Geometry-aware equipment/biomass scaling
@@ -2345,7 +2348,7 @@ Common aquarium sizing guidelines:
 - Shrimp: 2-5 shrimp per liter for Neocaridina (varies with filtration and plant density)
 EOF
 
-create_bead E6 'Scale equipment, plant mass, and stocking defaults with tank geometry' task 1 "$E" scientific-core,phase-3,geometry,hardware,scenarios 180 "${E6_DESC}" "${E6_COMMENT}"
+create_bead E6 'Scale equipment, plant mass, and stocking defaults with tank geometry' task 1 "$E" scientific-core,phase-3,geometry,hardware,scenarios "${E6_DESC}" "${E6_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # E7 — Habitat/geometry scenario tests
@@ -2384,7 +2387,7 @@ Rationale:
 - This bead is also the proof that geometry now matters through ecology instead of accidental totals.
 EOF
 
-create_bead E7 'Add habitat/geometry scenario tests and probes' task 1 "$E" scientific-core,phase-3,testing,habitats,geometry 180 "${E7_DESC}" "${E7_COMMENT}"
+create_bead E7 'Add habitat/geometry scenario tests and probes' task 1 "$E" scientific-core,phase-3,testing,habitats,geometry "${E7_DESC}" "${E7_COMMENT}"
 
 # ===========================================================================
 # PHASE 4 — SHRIMP LIFE HISTORY, TOXICITY, AND REPRODUCTION REALISM (F1–F6)
@@ -2428,7 +2431,7 @@ Recommended approach: stage-structured cohort model
 - This is the same level of abstraction used in many fisheries models (Leslie matrix / stage-structured matrix model) and is well-suited to hourly discrete-time simulation.
 EOF
 
-create_bead F1 'Define shrimp state model for reserve, condition, stage, molt, and reproduction' spike 1 "$F" scientific-core,phase-4,shrimp,design,biology 180 "${F1_DESC}" "${F1_COMMENT}"
+create_bead F1 'Define shrimp state model for reserve, condition, stage, molt, and reproduction' spike 1 "$F" scientific-core,phase-4,shrimp,design,biology "${F1_DESC}" "${F1_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # F2 — Stage-structured shrimp population (decomposed into 4 subtasks)
@@ -2439,11 +2442,11 @@ create_bead F1 'Define shrimp state model for reserve, condition, stage, molt, a
 
 read -r -d '' F2_DESC <<'EOF' || true
 Context:
-- A single undifferentiated shrimp population cannot express juvenile vulnerability, adult reproduction, or growth-stage tradeoffs very well.
-- The next version should differentiate shrimp enough that lifecycle dynamics are visible and tunable.
+- The current shrimp model already distinguishes adults, juveniles, berried females, egg cohorts, and maturation progress, but it still shares most condition/readiness state globally and lacks an explicit sub-adult or reserve-aware stage layer.
+- The next version should extend that coarse cohort model enough that lifecycle dynamics are visible, tunable, and chemically grounded.
 
 Deliverable:
-- Add stage or size structure to the shrimp population model consistent with F1.
+- Extend the existing shrimp cohort model into a richer stage or size structure consistent with F1.
 - Ensure feeding, mortality, reproduction, and stress pathways can see the new structure.
 - Keep save/load and snapshot implications under control.
 
@@ -2468,31 +2471,30 @@ Future-self notes:
 - Pay attention to snapshot/UI burden; more state is only useful if it remains interpretable.
 EOF
 
-create_bead F2 'Implement stage- or size-structured shrimp population dynamics' task 1 "$F" scientific-core,phase-4,shrimp,population,life-history 300 "${F2_DESC}" "${F2_COMMENT}"
+create_bead F2 'Implement stage- or size-structured shrimp population dynamics' task 1 "$F" scientific-core,phase-4,shrimp,population,life-history "${F2_DESC}" "${F2_COMMENT}"
 
 # F2 subtask a: stage state structure
 read -r -d '' F2a_DESC <<'EOF' || true
 Deliverable:
-- Replace the current single population count in AnimalState with a stage-structured model.
-- At minimum: juvenile_count, subadult_count, adult_count, berried_count.
-- Each stage should carry: count, average_condition (0-1), average_reserve_g.
-- Total population = sum of all stage counts.
-- Maintain backward compatibility: the existing shrimp_count field should become a derived sum.
+- Refactor AnimalState from coarse stage counts plus shared aggregate indices into a stage-aware structure.
+- Preserve the existing adult / juvenile / berried semantics while adding at least one additional growth stage (for example sub-adult) and per-stage reserve/condition data.
+- Each stage should carry: count, average_condition (0-1), and average_reserve_g (or an equivalent aggregate energy metric).
+- Keep total-population access ergonomic through helper methods or accessors rather than duplicating state.
 
 Acceptance:
 - AnimalState has per-stage population data
-- existing code that reads total shrimp count still works (via sum or accessor)
+- existing code that reads total or legacy stage counts still works via compatibility accessors or migration helpers
 - serialization includes new fields with appropriate defaults for old saves
 EOF
 
 read -r -d '' F2a_COMMENT <<'EOF' || true
 Design notes:
 - Consider a ShrimpStage struct { count: u32, avg_condition: f64, avg_reserve_g: f64 } and a stages: [ShrimpStage; 4] array on AnimalState (indexed by StageKind enum).
-- The current shrimp_count becomes stages.iter().map(|s| s.count).sum().
-- For old saves without stage data: use #[serde(default)] to initialize all shrimp as adults with the saved count and default condition.
+- The current code already stores adults_count, juveniles_count, berried_females_count, egg_cohorts, and maturation_accum. Treat those as migration inputs, not proof that stage structure is already "done."
+- For old saves without richer stage data: migrate existing adults/juveniles/berried counts into the new stage layout with sensible default reserve/condition values rather than collapsing everything into one bucket.
 EOF
 
-create_bead F2a 'Add stage-structured state to shrimp population model' task 1 "$F2" scientific-core,phase-4,shrimp,state,biology 90 "${F2a_DESC}" "${F2a_COMMENT}"
+create_bead F2a 'Add stage-structured state to shrimp population model' task 1 "$F2" scientific-core,phase-4,shrimp,state,biology "${F2a_DESC}" "${F2a_COMMENT}"
 
 # F2 subtask b: stage transitions
 read -r -d '' F2b_DESC <<'EOF' || true
@@ -2518,7 +2520,7 @@ Biological parameters for Neocaridina davidi:
 - These can be parameterized in the shrimp species data file.
 EOF
 
-create_bead F2b 'Implement stage transitions (juvenile → sub-adult → adult → berried)' task 1 "$F2" scientific-core,phase-4,shrimp,transitions,life-history 90 "${F2b_DESC}" "${F2b_COMMENT}"
+create_bead F2b 'Implement stage transitions (juvenile → sub-adult → adult → berried)' task 1 "$F2" scientific-core,phase-4,shrimp,transitions,life-history "${F2b_DESC}" "${F2b_COMMENT}"
 
 # F2 subtask c: integrate stages with feeding, mortality, and reproduction
 read -r -d '' F2c_DESC <<'EOF' || true
@@ -2543,18 +2545,18 @@ Stage-specific parameters:
 - These multiplicative factors should be in the species data file, not hardcoded.
 EOF
 
-create_bead F2c 'Integrate stage structure with feeding, mortality, and reproduction systems' task 1 "$F2" scientific-core,phase-4,shrimp,integration 60 "${F2c_DESC}" "${F2c_COMMENT}"
+create_bead F2c 'Integrate stage structure with feeding, mortality, and reproduction systems' task 1 "$F2" scientific-core,phase-4,shrimp,integration "${F2c_DESC}" "${F2c_COMMENT}"
 
 # F2 subtask d: update snapshot and save for structured population
 read -r -d '' F2d_DESC <<'EOF' || true
 Deliverable:
-- Update TankSnapshot to expose per-stage counts (juvenile_count, adult_count, berried_count).
-- Update API response to include stage breakdown.
-- Update TUI display to show stage information where relevant.
+- Update TankSnapshot to expose any new stage data beyond the current adult / juvenile / berried breakdown (for example sub-adult count or stage-specific reserve summaries).
+- Update API response to include the richer stage breakdown while preserving compatibility for existing overview consumers where reasonable.
+- Update TUI display to show the new stage information where relevant without regressing the current readable summaries.
 - Register save migration for the new AnimalState structure (via A2c scaffolding).
 
 Acceptance:
-- snapshot shows stage breakdown, not just total count
+- snapshot/API/TUI expose the new stage information cleanly alongside the existing counts
 - old saves load with reasonable defaults for the new stage structure
 - TUI remains readable (don't overwhelm with too many numbers)
 EOF
@@ -2566,7 +2568,7 @@ Display considerations:
 - API response should include both the total and the breakdown for flexibility.
 EOF
 
-create_bead F2d 'Update snapshot, save, and TUI for stage-structured shrimp population' task 1 "$F2" scientific-core,phase-4,shrimp,snapshot,save,tui 60 "${F2d_DESC}" "${F2d_COMMENT}"
+create_bead F2d 'Update snapshot, save, and TUI for stage-structured shrimp population' task 1 "$F2" scientific-core,phase-4,shrimp,snapshot,save,tui "${F2d_DESC}" "${F2d_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # F3 — Mineral budget and molt mechanics
@@ -2614,7 +2616,7 @@ Scientific notes:
 - Recommended GH for Neocaridina: 6-8° (≈ 100-140 mg/L as CaCO3).
 EOF
 
-create_bead F3 'Add mineral budget and molt success/failure mechanics' task 1 "$F" scientific-core,phase-4,shrimp,molting,minerals,water-chemistry 240 "${F3_DESC}" "${F3_COMMENT}"
+create_bead F3 'Add mineral budget and molt success/failure mechanics' task 1 "$F" scientific-core,phase-4,shrimp,molting,minerals,water-chemistry "${F3_DESC}" "${F3_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # F4 — Reproduction realism
@@ -2662,7 +2664,7 @@ Scientific notes:
 - A "stable, mature tank" breeds well because: temperature is consistent, chemistry is stable, food supply is reliable, and bioload is managed. The simulator should reward this through the interplay of all the above factors.
 EOF
 
-create_bead F4 'Model reproduction success as a function of temperature, stability, condition, density, and osmotic stress' task 1 "$F" scientific-core,phase-4,shrimp,reproduction,stress 240 "${F4_DESC}" "${F4_COMMENT}"
+create_bead F4 'Model reproduction success as a function of temperature, stability, condition, density, and osmotic stress' task 1 "$F" scientific-core,phase-4,shrimp,reproduction,stress "${F4_DESC}" "${F4_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # F5 — Chloride-nitrite toxicity
@@ -2708,7 +2710,7 @@ Scientific background:
 - Source: chloride reduces nitrite accumulation and associated stress in freshwater organisms (ResearchGate: Chloride uptake in freshwater teleosts).
 EOF
 
-create_bead F5 'Model chloride protection against nitrite hazard and integrate toxic stress accounting' task 2 "$F" scientific-core,phase-4,shrimp,toxicology,nitrite,chloride 180 "${F5_DESC}" "${F5_COMMENT}"
+create_bead F5 'Model chloride protection against nitrite hazard and integrate toxic stress accounting' task 2 "$F" scientific-core,phase-4,shrimp,toxicology,nitrite,chloride "${F5_DESC}" "${F5_COMMENT}"
 
 # ---------------------------------------------------------------------------
 # F6 — Shrimp scenario tests
@@ -2747,7 +2749,7 @@ Future-self notes:
 - These will become inputs to the calibration phase (G3, G4), so keep them readable.
 EOF
 
-create_bead F6 'Add shrimp-focused scenario tests for breeding, heat stress, molt failure, and crash modes' task 1 "$F" scientific-core,phase-4,testing,shrimp,scenarios 180 "${F6_DESC}" "${F6_COMMENT}"
+create_bead F6 'Add shrimp-focused scenario tests for breeding, heat stress, molt failure, and crash modes' task 1 "$F" scientific-core,phase-4,testing,shrimp,scenarios "${F6_DESC}" "${F6_COMMENT}"
 
 # ===========================================================================
 # PHASE 5 — PROVENANCE, CALIBRATION, VALIDATION, AND RELEASE NARRATIVE (G1–G6)
@@ -2790,11 +2792,11 @@ Rationale:
 - Think about developer ergonomics so provenance becomes a habit, not a burden.
 
 Early-start note:
-- G1 depends only on A1 (semantics inventory). It can start as soon as Phase 0 completes, well before the later science phases finish.
+- G1 depends only on A1 (semantics inventory). It can start as soon as A1 completes, well before the later science phases finish.
 - This is intentional: having the provenance schema in place early means later phases (B6 retuning, D5 source water, F3 minerals) can attach provenance metadata as they go, rather than backfilling it all in Phase 5.
 EOF
 
-create_bead G1 'Add parameter provenance schema and loader support' task 1 "$G" scientific-core,phase-5,provenance,data,architecture 180 "${G1_DESC}" "${G1_COMMENT}"
+create_bead G1 'Add parameter provenance schema and loader support' task 1 "$G" scientific-core,phase-5,provenance,data,architecture "${G1_DESC}" "${G1_COMMENT}"
 
 read -r -d '' G2_DESC <<'EOF' || true
 Context:
@@ -2833,7 +2835,7 @@ Future-self notes:
 - Use this bead to identify where more literature review is still needed.
 EOF
 
-create_bead G2 'Attach provenance and confidence metadata to high-value chemistry and ecology parameters' task 1 "$G" scientific-core,phase-5,provenance,chemistry,biology 240 "${G2_DESC}" "${G2_COMMENT}"
+create_bead G2 'Attach provenance and confidence metadata to high-value chemistry and ecology parameters' task 1 "$G" scientific-core,phase-5,provenance,chemistry,biology "${G2_DESC}" "${G2_COMMENT}"
 
 read -r -d '' G3_DESC <<'EOF' || true
 Context:
@@ -2863,7 +2865,7 @@ Rationale:
 - Keep the validation set small enough to maintain and rich enough to matter.
 EOF
 
-create_bead G3 'Build literature-backed scenario envelopes and expected qualitative outcomes' task 1 "$G" scientific-core,phase-5,validation,scenarios,research 240 "${G3_DESC}" "${G3_COMMENT}"
+create_bead G3 'Build literature-backed scenario envelopes and expected qualitative outcomes' task 1 "$G" scientific-core,phase-5,validation,scenarios,research "${G3_DESC}" "${G3_COMMENT}"
 
 read -r -d '' G4_DESC <<'EOF' || true
 Context:
@@ -2893,7 +2895,7 @@ Future-self notes:
 - This will become the backbone for future release confidence.
 EOF
 
-create_bead G4 'Create calibration-report workflow comparing simulated outputs to target envelopes' task 2 "$G" scientific-core,phase-5,calibration,tooling,reports 240 "${G4_DESC}" "${G4_COMMENT}"
+create_bead G4 'Create calibration-report workflow comparing simulated outputs to target envelopes' task 2 "$G" scientific-core,phase-5,calibration,tooling,reports "${G4_DESC}" "${G4_COMMENT}"
 
 read -r -d '' G5_DESC <<'EOF' || true
 Context:
@@ -2923,7 +2925,7 @@ Rationale:
 - Keep the tone educational: the simulator should teach players what it knows and what it is still approximating.
 EOF
 
-create_bead G5 'Update developer docs, TUI/API messaging, and scientific-scope narrative' task 2 "$G" scientific-core,phase-5,docs,tui,api,communication 180 "${G5_DESC}" "${G5_COMMENT}"
+create_bead G5 'Update developer docs, TUI/API messaging, and scientific-scope narrative' task 2 "$G" scientific-core,phase-5,docs,tui,api,communication "${G5_DESC}" "${G5_COMMENT}"
 
 read -r -d '' G6_DESC <<'EOF' || true
 Context:
@@ -2954,7 +2956,7 @@ Future-self notes:
 - Capture what was intentionally postponed so future roadmaps can pick it up without re-opening old debates.
 EOF
 
-create_bead G6 'Run end-to-end rebalance pass and capture release narrative for the scientific-core upgrade' task 2 "$G" scientific-core,phase-5,retuning,release,calibration 180 "${G6_DESC}" "${G6_COMMENT}"
+create_bead G6 'Run end-to-end rebalance pass and capture release narrative for the scientific-core upgrade' task 2 "$G" scientific-core,phase-5,retuning,release,calibration "${G6_DESC}" "${G6_COMMENT}"
 
 # ===========================================================================
 # DEPENDENCY GRAPH
@@ -2967,8 +2969,9 @@ create_bead G6 'Run end-to-end rebalance pass and capture release narrative for 
 # - Epic-level deps are NOT added because they are fully captured by
 #   task-level deps and would add noise to cycle detection.
 # - Subtask internal ordering is added (fan-out/fan-in patterns).
-# - Cross-task deps point to parent tasks, not subtasks, keeping the
-#   inter-task graph at constant granularity.
+# - Cross-task deps normally point to parent tasks, but A2 intentionally
+#   exposes subtask-level gates because instrumentation and migration are
+#   independently useful and unblock different downstream work.
 # - Transitive dependencies (e.g., F4→C2 which is already covered by
 #   F4→F2→F1→C2) are omitted to reduce graph weight. The only exception
 #   is where removing a transitive dep would make the intent unclear.
@@ -2985,7 +2988,7 @@ add_dep "$A2c" "$A2a"         # save scaffolding can use budget types; parallel 
 # --- Phase 1A internal ordering ---
 add_dep "$B1" "$A1"           # unit taxonomy needs semantics inventory
 add_dep "$B2" "$B1"           # helpers implement the unit policy
-add_dep "$B2" "$A2"           # helpers may use instrumentation types
+add_dep "$B2" "$A2a"          # helper layer should follow basic instrumentation, not the whole A2 umbrella
 add_dep "$B3" "$B2"           # nitrogen kinetics use concentration helpers
 add_dep "$B3" "$A3"           # normalization validates against baselines
 add_dep "$B4" "$B2"           # plant normalization uses helpers
@@ -3015,10 +3018,10 @@ add_dep "$C4" "$C2"           # audit after shrimp loop is in place
 add_dep "$C4" "$C3"           # audit after microfauna loop is in place
 add_dep "$C4" "$B3"           # audit needs nitrogen kinetics correct
 add_dep "$C5" "$C1"           # trim semantics follow routing conventions
-add_dep "$C5" "$A2"           # trim needs migration scaffolding for action rename
+add_dep "$C5" "$A2c"          # trim action rename needs migration scaffolding specifically
 add_dep "$C6" "$C4"           # conservation tests after bookkeeping audit
 add_dep "$C6" "$C5"           # conservation tests after trim split
-add_dep "$C6" "$A2"           # conservation tests use instrumentation
+add_dep "$C6" "$A2b"          # conservation tests need budget inspection hooks, not save migration
 
 # --- C2 subtask ordering ---
 add_dep "$C2b" "$C2a"         # excretion builds on assimilation
@@ -3031,7 +3034,7 @@ add_dep "$D1" "$B1"           # carbonate design needs unit policy
 add_dep "$D1" "$A1"           # carbonate design needs semantics inventory
 add_dep "$D2" "$D1"           # solver implements the design
 add_dep "$D2" "$B2"           # solver uses concentration helpers
-add_dep "$D2" "$A2"           # solver needs migration scaffolding
+add_dep "$D2" "$A2c"          # carbonate state changes need migration scaffolding
 add_dep "$D3" "$D2"           # gas exchange needs carbonate state
 add_dep "$D4" "$D2"           # DIC coupling needs carbonate solver
 add_dep "$D4" "$B4"           # DIC coupling needs plant normalization
@@ -3052,7 +3055,7 @@ add_dep "$D2d" "$D2c"         # serialization after code change
 # --- Phase 3 internal ordering ---
 add_dep "$E1" "$B1"           # habitat types need unit policy
 add_dep "$E1" "$A1"           # habitats need semantics inventory
-add_dep "$E1" "$A2"           # habitats need save scaffolding
+add_dep "$E1" "$A2c"          # habitat state additions need save scaffolding
 add_dep "$E2" "$E1"           # biofilter scaling needs habitats
 add_dep "$E2" "$B3"           # biofilter scaling needs normalized N kinetics
 add_dep "$E3" "$E1"           # periphyton split needs habitats
