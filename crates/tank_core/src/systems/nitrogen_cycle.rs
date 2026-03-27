@@ -271,6 +271,9 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let comammox_o2_cost = comammox_step.oxidized_n_mg * o2_for_comammox;
     let comammox_alk_cost = comammox_step.oxidized_n_mg * alk_per_mg_n;
     do_budget = (do_budget - comammox_o2_cost).max(0.0);
+    // Keep alk_budget consistent even though NOB does not currently check it;
+    // a future guild inserted after comammox would need the correct remainder.
+    let _alk_budget = (alk_budget - comammox_alk_cost).max(0.0);
     state.water.dissolved_oxygen_mg_total =
         (state.water.dissolved_oxygen_mg_total - comammox_o2_cost).max(0.0);
 

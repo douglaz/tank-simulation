@@ -234,7 +234,7 @@ impl TuiApp {
     pub fn load_from_disk(&mut self) -> anyhow::Result<()> {
         let raw = fs::read_to_string(&self.save_file_path)
             .with_context(|| format!("failed to read {}", self.save_file_path.display()))?;
-        let save: SaveFile = serde_json::from_str(&raw).context("failed to parse save file")?;
+        let save = SaveFile::from_json(&raw).context("failed to parse save file")?;
         let snapshot = self
             .api
             .post_load(&save)

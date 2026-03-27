@@ -157,8 +157,8 @@ fn shrimp_feeding(state: &mut TankState) {
     // ProcessParams and acceptable because both food sources are mixed
     // organic matter at similar N:C in a shrimp tank.
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
-    let consumed_n_mg = algae_nitrogen_mg(periph_consumed)
-        + detritus_nitrogen_mg(detritus_consumed, n_to_c_ratio);
+    let consumed_n_mg =
+        algae_nitrogen_mg(periph_consumed) + detritus_nitrogen_mg(detritus_consumed, n_to_c_ratio);
     let consumed_c_mg = algae_carbon_mg(periph_consumed, n_to_c_ratio)
         + detritus_carbon_mg(detritus_consumed, n_to_c_ratio);
 
@@ -694,7 +694,6 @@ fn reset_hourly_accumulators(state: &mut TankState) {
     state.animal.hourly_instability_stress_accum = 0.0;
     state.animal.daily_food_consumed_g = 0.0;
 }
-
 
 // ── Factor functions ────────────────────────────────────────────────────────
 

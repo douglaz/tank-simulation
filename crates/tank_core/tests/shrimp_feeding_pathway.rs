@@ -5,7 +5,9 @@
 ///   assimilated = respired + excreted + retained
 ///   fecal_fraction = 1.0 - assimilation_efficiency
 ///   respiration_fraction + excretion_fraction + growth_fraction = 1.0
-use tank_core::{Engine, ProcessParams, SimError, SimSeed, SimulationEngine, TankState, WaterState};
+use tank_core::{
+    Engine, ProcessParams, SimError, SimSeed, SimulationEngine, TankState, WaterState,
+};
 
 fn assert_close(actual: f64, expected: f64, tolerance: f64) {
     assert!(
@@ -60,7 +62,9 @@ fn feeding_test_state() -> TankState {
 
     state.process_params = ProcessParams::default();
     // Zero out background BOD so only shrimp feeding O2 demand shows
-    state.process_params.background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
+    state
+        .process_params
+        .background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
     // Zero out detritus dissolution so feeding is the only source of change
     state.process_params.fine_detritus_dissolution_rate_per_hour = 0.0;
     state.process_params.feed_leach_rate_per_hour = 0.0;
@@ -74,8 +78,7 @@ fn default_fraction_sums_are_valid() {
     let params = ProcessParams::default();
     // fecal_fraction = 1.0 - assimilation_efficiency (implicit)
     assert!(
-        params.shrimp_assimilation_efficiency > 0.0
-            && params.shrimp_assimilation_efficiency < 1.0,
+        params.shrimp_assimilation_efficiency > 0.0 && params.shrimp_assimilation_efficiency < 1.0,
         "assimilation efficiency must be in (0, 1)"
     );
     // respiration + excretion + growth = 1.0
@@ -184,10 +187,10 @@ fn shrimp_mortality_transfers_reserve_to_detritus() -> Result<(), SimError> {
     state.animal.reserve_g = 0.05;
 
     // Kill all shrimp by extreme stress
-    state.water.ammonia_total_mg_n_total = 200.0; // lethal TAN
-    state.water.dissolved_oxygen_mg_total = 0.1; // near-zero DO
-    state.water.temperature_c = 38.0; // extreme heat
-    // Maximize mortality rates
+    // Lethal stress conditions
+    state.water.ammonia_total_mg_n_total = 200.0;
+    state.water.dissolved_oxygen_mg_total = 0.1;
+    state.water.temperature_c = 38.0;
     state.process_params.shrimp_base_mortality_per_day = 0.3;
     state.process_params.shrimp_stress_mortality_scale = 0.5;
 

@@ -182,7 +182,6 @@ pub struct ProcessParams {
     //   respiration_fraction + excretion_fraction + growth_fraction = 1.0
     //
     // See docs/ROUTING.md for the full consumer routing contract.
-
     /// Fraction of ingested organic matter that is assimilated (remainder is feces).
     /// Literature range for detritivorous shrimp: 0.4–0.7.
     #[serde(default = "default_shrimp_assimilation_efficiency")]

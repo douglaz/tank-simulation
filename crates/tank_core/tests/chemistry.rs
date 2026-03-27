@@ -1,6 +1,8 @@
 use tank_core::{
-    systems::chemistry::{compute_nh3_mg_l, solve_carbonate_equilibrium},
-    Engine, ProcessParams, SimSeed, SimulationEngine, TankState,
+    systems::chemistry::{
+        compute_nh3_mg_l, resolve_carbonate_state, solve_carbonate_equilibrium,
+    },
+    Engine, ProcessParams, SimSeed, SimulationEngine, TankState, WaterState,
 };
 
 fn chemistry_state(seed: SimSeed, hour_of_day: u8) -> TankState {
@@ -85,7 +87,10 @@ fn ph_formula_uses_state_storage_bounds() {
     // The carbonate solver clamps output to 4.0–10.0.
     assert!((4.0..=10.0).contains(&low), "low pH {low} out of bounds");
     assert!((4.0..=10.0).contains(&high), "high pH {high} out of bounds");
-    assert!(low < high, "low pH ({low}) should be less than high pH ({high})");
+    assert!(
+        low < high,
+        "low pH ({low}) should be less than high pH ({high})"
+    );
 }
 
 #[test]
@@ -160,6 +165,217 @@ fn nitrification_lowers_alkalinity_and_ph() -> Result<(), tank_core::SimError> {
 
     // pH must still be within invariant bounds
     assert!((5.5..=8.5).contains(&ph_nitrifying));
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Additional solver unit tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn solver_reference_case_25c() -> Result<(), tank_core::SimError> {
+    // DIC = 20 mg C/L, Alk = 1.5 meq/L, T = 25°C in a 20L tank.
+    // Reference: Henderson-Hasselbalch with pKa1 ≈ 6.351 gives pH ≈ 7.30.
+    let volume_l = 20.0;
+    let dic_total = 20.0 * volume_l;
+    let alk_total = 1.5 * volume_l;
+    let eq = solve_carbonate_equilibrium(dic_total, alk_total, 25.0, volume_l);
+
+    assert!(
+        (eq.ph - 7.30).abs() < 0.05,
+        "expected pH ≈ 7.30, got {:.3}",
+        eq.ph
+    );
+
+    // Species should sum to DIC (in mmol/L).
+    let dic_mmol = 20.0 / 12.0;
+    let species_sum = eq.co2_aq_mmol_per_l + eq.hco3_mmol_per_l + eq.co3_mmol_per_l;
+    assert!(
+        (species_sum - dic_mmol).abs() < 0.001,
+        "species sum {species_sum:.4} should equal DIC {dic_mmol:.4}"
+    );
+
+    // HCO3- should dominate at pH ~7.3.
+    assert!(eq.hco3_mmol_per_l > eq.co2_aq_mmol_per_l);
+    assert!(eq.hco3_mmol_per_l > eq.co3_mmol_per_l);
+
+    Ok(())
+}
+
+#[test]
+fn solver_high_dic_low_ph() -> Result<(), tank_core::SimError> {
+    // DIC = 40 mg C/L, Alk = 2.0 meq/L, T = 25°C → more CO2, lower pH.
+    let volume_l = 20.0;
+    let eq = solve_carbonate_equilibrium(40.0 * volume_l, 2.0 * volume_l, 25.0, volume_l);
+
+    assert!(
+        eq.ph < 7.0,
+        "high DIC relative to Alk should give pH < 7.0, got {:.3}",
+        eq.ph
+    );
+    assert!(eq.co2_aq_mmol_per_l > 0.0);
+
+    Ok(())
+}
+
+#[test]
+fn solver_temperature_response() -> Result<(), tank_core::SimError> {
+    // Same DIC/Alk at 15°C vs 35°C. Higher temp → slightly lower pH.
+    let volume_l = 20.0;
+    let dic_total = 20.0 * volume_l;
+    let alk_total = 1.5 * volume_l;
+
+    let eq_cold = solve_carbonate_equilibrium(dic_total, alk_total, 15.0, volume_l);
+    let eq_warm = solve_carbonate_equilibrium(dic_total, alk_total, 35.0, volume_l);
+
+    assert!(
+        eq_cold.ph > eq_warm.ph,
+        "cold pH ({:.3}) should be > warm pH ({:.3})",
+        eq_cold.ph,
+        eq_warm.ph
+    );
+
+    assert!((6.0..=9.0).contains(&eq_cold.ph));
+    assert!((6.0..=9.0).contains(&eq_warm.ph));
+
+    Ok(())
+}
+
+#[test]
+fn solver_edge_case_zero_volume() {
+    let eq = solve_carbonate_equilibrium(100.0, 10.0, 25.0, 0.0);
+    assert_eq!(eq.ph, 7.0);
+    assert_eq!(eq.co2_aq_mmol_per_l, 0.0);
+}
+
+#[test]
+fn solver_edge_case_zero_dic() {
+    let eq = solve_carbonate_equilibrium(0.0, 30.0, 25.0, 20.0);
+    assert_eq!(eq.ph, 7.0);
+    assert_eq!(eq.co2_aq_mmol_per_l, 0.0);
+}
+
+#[test]
+fn solver_edge_case_zero_alkalinity() {
+    let eq = solve_carbonate_equilibrium(400.0, 0.0, 25.0, 20.0);
+    assert_eq!(eq.ph, 7.0);
+    let dic_mmol = 20.0 / 12.0;
+    assert!((eq.co2_aq_mmol_per_l - dic_mmol).abs() < 0.001);
+    assert_eq!(eq.hco3_mmol_per_l, 0.0);
+}
+
+#[test]
+fn solver_deterministic() {
+    let eq1 = solve_carbonate_equilibrium(400.0, 30.0, 24.0, 20.0);
+    let eq2 = solve_carbonate_equilibrium(400.0, 30.0, 24.0, 20.0);
+    assert_eq!(eq1, eq2);
+}
+
+#[test]
+fn solver_species_conservation_sweep() -> Result<(), tank_core::SimError> {
+    let volume_l = 20.0;
+    for dic_mg_l in [2.0, 10.0, 20.0, 40.0] {
+        for alk_meq_l in [0.25, 1.0, 1.5, 3.0] {
+            for temp in [15.0, 25.0, 35.0] {
+                let eq = solve_carbonate_equilibrium(
+                    dic_mg_l * volume_l,
+                    alk_meq_l * volume_l,
+                    temp,
+                    volume_l,
+                );
+                let dic_mmol = dic_mg_l / 12.0;
+                let species_sum = eq.co2_aq_mmol_per_l + eq.hco3_mmol_per_l + eq.co3_mmol_per_l;
+
+                assert!(
+                    (species_sum - dic_mmol).abs() < 0.01,
+                    "conservation failed: DIC={dic_mg_l}, Alk={alk_meq_l}, T={temp}: \
+                     sum={species_sum:.4} vs DIC={dic_mmol:.4}"
+                );
+
+                assert!(
+                    eq.ph.is_finite() && eq.ph >= 4.0 && eq.ph <= 10.0,
+                    "pH out of guard band: DIC={dic_mg_l}, Alk={alk_meq_l}, T={temp}: pH={:.3}",
+                    eq.ph
+                );
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
+fn solver_no_nan_or_inf_in_sweep() {
+    let volume_l = 20.0;
+    let extremes = [
+        (0.01, 0.01, 15.0),
+        (0.01, 10.0, 35.0),
+        (100.0, 0.01, 15.0),
+        (100.0, 10.0, 35.0),
+        (0.001, 0.001, 25.0),
+    ];
+    for (dic_mg_l, alk_meq_l, temp) in extremes {
+        let eq = solve_carbonate_equilibrium(
+            dic_mg_l * volume_l,
+            alk_meq_l * volume_l,
+            temp,
+            volume_l,
+        );
+        assert!(
+            eq.ph.is_finite(),
+            "pH NaN/Inf at DIC={dic_mg_l}, Alk={alk_meq_l}"
+        );
+        assert!(eq.co2_aq_mmol_per_l.is_finite());
+        assert!(eq.hco3_mmol_per_l.is_finite());
+        assert!(eq.co3_mmol_per_l.is_finite());
+    }
+}
+
+#[test]
+fn resolve_updates_ph_and_bicarbonate() {
+    let volume_l = 20.0;
+    let mut water = WaterState::default_for_volume_l(volume_l);
+
+    water.dissolved_inorganic_carbon_mg_c_total = 20.0 * volume_l;
+    water.alkalinity_meq_total = 1.5 * volume_l;
+    water.temperature_c = 25.0;
+    water.ph = 0.0;
+    water.bicarbonate_mg_total = 0.0;
+
+    resolve_carbonate_state(&mut water, volume_l);
+
+    assert!(
+        (water.ph - 7.30).abs() < 0.05,
+        "resolve should set pH ≈ 7.30, got {:.3}",
+        water.ph
+    );
+    assert!(
+        water.bicarbonate_mg_total > 0.0,
+        "resolve should set positive bicarbonate"
+    );
+}
+
+#[test]
+fn photosynthesis_raises_ph_without_changing_alkalinity() -> Result<(), tank_core::SimError> {
+    let state = chemistry_state(SimSeed(4200), 12);
+    let alk_before = state.water.alkalinity_meq_total;
+    let ph_before = state.water.ph;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.step_hours(1)?;
+
+    let alk_after = engine.full_state().water.alkalinity_meq_total;
+    let ph_after = engine.full_state().water.ph;
+
+    assert!(
+        (alk_after - alk_before).abs() < 1e-12,
+        "photosynthesis should not change alkalinity"
+    );
+    assert!(
+        ph_after > ph_before,
+        "photosynthesis should raise pH: before={ph_before:.3}, after={ph_after:.3}"
+    );
 
     Ok(())
 }
