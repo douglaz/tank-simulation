@@ -111,14 +111,28 @@ impl SaveFile {
     }
 
     pub fn from_json(json: &str) -> Result<Self, SimError> {
-        let mut value: Value = serde_json::from_str(json)
+        let value: Value = serde_json::from_str(json)
             .map_err(|error| SimError::Deserialization(error.to_string()))?;
+        Self::from_value(value)
+    }
 
-        let file_version = value
+    /// Load a `SaveFile` from a pre-parsed JSON `Value`, applying any
+    /// necessary schema migrations. This avoids a redundant
+    /// `Value → String → Value` round-trip when the caller already has a
+    /// `Value` (e.g. from an HTTP JSON body).
+    pub fn from_value(mut value: Value) -> Result<Self, SimError> {
+        let raw_version = value
             .get("schema_version")
             .and_then(Value::as_u64)
-            .map(|v| v as u32)
             .unwrap_or(0);
+
+        // Reject versions that overflow u32 — they are from an unknown future
+        // format and must not silently wrap to a lower version.
+        let file_version =
+            u32::try_from(raw_version).map_err(|_| SimError::SchemaVersionTooNew {
+                actual: u32::MAX,
+                max_supported: SCHEMA_VERSION,
+            })?;
 
         // Reject saves from the future.
         if file_version > SCHEMA_VERSION {

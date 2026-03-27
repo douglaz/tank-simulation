@@ -69,8 +69,6 @@ pub enum SimError {
         field: &'static str,
         value: f64,
     },
-    #[error("schema version mismatch: expected {expected}, got {actual}")]
-    SchemaVersionMismatch { expected: u32, actual: u32 },
     #[error(
         "save file version {actual} is newer than supported version {max_supported}; \
          upgrade the application to load this save"
