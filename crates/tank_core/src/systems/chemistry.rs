@@ -28,6 +28,12 @@ pub fn step_hourly_chemistry(state: &mut TankState, light_on: bool) {
         return;
     }
 
+    // These DIC terms are an intentional atmospheric-exchange simplification:
+    // respiration adds CO2 into the lumped DIC pool and light-driven uptake
+    // removes it again, even though there is no paired organic-C store inside
+    // this hourly chemistry pass. Closed-system carbon conservation therefore
+    // only holds when these rates are zeroed (the code default used by the
+    // conservation tests); preset packs may opt into this open-system shortcut.
     let respiration_dic_mg = state
         .process_params
         .respiration_dic_rate_mg_c_per_g_per_hour

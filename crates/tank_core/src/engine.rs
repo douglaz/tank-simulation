@@ -10,6 +10,8 @@ use crate::{
     },
 };
 
+const BUDGET_GUARD_TOLERANCE_MG: f64 = 1e-6;
+
 pub trait SimulationEngine {
     fn apply_action(&mut self, action: PlayerAction) -> Result<(), SimError>;
     fn step_hours(&mut self, hours: u32) -> Result<(), SimError>;
@@ -164,6 +166,10 @@ impl Engine {
         self.maybe_record_stage(&mut tick, "system:invariants", |engine| {
             enforce_invariants(&mut engine.state)
         })?;
+
+        if let Some(tick_record) = tick.as_ref() {
+            enforce_tracked_tick_budget_guard(tick_record)?;
+        }
 
         if let (Some(ledger), Some(tick)) = (self.budget_ledger.as_mut(), tick) {
             ledger.push_tick(tick);
@@ -484,4 +490,56 @@ fn action_budget_label(action: &PlayerAction) -> &'static str {
         PlayerAction::ChangeAmbientTemperature { .. } => "action:change_ambient_temperature",
         PlayerAction::ChangeAeration { .. } => "action:change_aeration",
     }
+}
+
+fn enforce_tracked_tick_budget_guard(tick: &TickBudgetRecord) -> Result<(), SimError> {
+    if tick_has_closed_system_nitrogen(tick)
+        && tick.net_delta.nitrogen.net_mg().abs() > BUDGET_GUARD_TOLERANCE_MG
+    {
+        return Err(SimError::BudgetImbalance {
+            element: "nitrogen",
+            delta_mg: tick.net_delta.nitrogen.net_mg(),
+            tick_index: tick.tick_index,
+            day: tick.day,
+            hour: tick.hour,
+        });
+    }
+
+    if tick_has_closed_system_carbon(tick)
+        && tick.net_delta.carbon.net_mg().abs() > BUDGET_GUARD_TOLERANCE_MG
+    {
+        return Err(SimError::BudgetImbalance {
+            element: "carbon",
+            delta_mg: tick.net_delta.carbon.net_mg(),
+            tick_index: tick.tick_index,
+            day: tick.day,
+            hour: tick.hour,
+        });
+    }
+
+    Ok(())
+}
+
+fn tick_has_closed_system_nitrogen(tick: &TickBudgetRecord) -> bool {
+    !tick.entries.iter().any(|entry| {
+        matches!(
+            entry.label.as_str(),
+            "action:feed"
+                | "action:water_change"
+                | "action:siphon_detritus"
+                | "action:clean_filter"
+                | "action:add_shrimp"
+                | "action:remove_shrimp"
+        )
+    })
+}
+
+fn tick_has_closed_system_carbon(tick: &TickBudgetRecord) -> bool {
+    tick_has_closed_system_nitrogen(tick)
+        && tick
+            .entries
+            .iter()
+            .find(|entry| entry.label == "system:chemistry")
+            .map(|entry| entry.delta.carbon.net_mg().abs() <= BUDGET_GUARD_TOLERANCE_MG)
+            .unwrap_or(true)
 }

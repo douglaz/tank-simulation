@@ -137,6 +137,46 @@ fn shrimp_mortality_budget_state(seed: SimSeed) -> TankState {
     state
 }
 
+fn shrimp_reproduction_budget_state(seed: SimSeed) -> TankState {
+    let mut state = TankState::new(seed);
+    state.hardware.light.enabled = true;
+    state.hardware.light.photoperiod_hours = 12.0;
+    state.hardware.light.intensity_index = 0.8;
+    state.hardware.aeration.enabled = true;
+    state.hardware.aeration.intensity = 0.4;
+    state.environment.ambient_temp_c = 24.0;
+    state.water.temperature_c = 24.0;
+    state.water.dissolved_oxygen_mg_total = 8.0 * state.water_volume_l();
+    state.water.dissolved_inorganic_carbon_mg_c_total = 420.0;
+    state.water.dissolved_organic_carbon_mg_c_total = 260.0;
+    state.water.dissolved_organic_nitrogen_mg_n_total = 48.0;
+    state.algae.periphyton_biomass_g = 5.0;
+    state.algae.suspended_biomass_g = 0.2;
+    state.microbe.decomposer_biomass_g = 0.1;
+    state.microbe.ammonia_oxidizer_biomass_g = 0.8;
+    state.microbe.nitrite_oxidizer_biomass_g = 1.2;
+    state.microbe.comammox_biomass_g = 0.4;
+    state.filter_state.biofilter_maturity_index = 1.0;
+    state.animal.adults_count = 10;
+    state.animal.condition_index = 0.95;
+    state.animal.molt_stress_index = 0.02;
+    state.animal.reproductive_readiness_index = 0.95;
+    state.process_params.aob_vmax_mg_n_per_g_per_hour = 5.0;
+    state.process_params.nob_vmax_mg_n_per_g_per_hour = 8.0;
+    state.process_params.comammox_vmax_fraction = 0.8;
+    state.process_params.periphyton_capacity_g_per_m2 = 30.0;
+    state
+        .process_params
+        .respiration_dic_rate_mg_c_per_g_per_hour = 0.0;
+    state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
+    state.shrimp_params.base_spawn_rate = 1.0;
+    state.shrimp_params.hatch_success_base = 1.0;
+    state.reseed_stability_tracker();
+    state
+}
+
 fn manual_organic_nitrogen_mg(mass_g: f64, n_to_c_ratio: f64) -> f64 {
     mass_g * 1000.0 * n_to_c_ratio / (1.0 + n_to_c_ratio)
 }
@@ -307,6 +347,8 @@ fn test_budget_path_rules_catch_convention_based_future_fields() {
 
 #[test]
 fn test_closed_system_n_conservation() -> Result<(), SimError> {
+    // Closed-system conservation assertions intentionally use the code-default
+    // ProcessParams, where hourly DIC respiration/photosynthesis exchange is off.
     let state = active_budget_state(SimSeed(9_001));
     let initial_total_n = state.total_nitrogen();
     let mut engine = Engine::from_parts(state, vec![]);
@@ -340,6 +382,8 @@ fn test_closed_system_n_conservation() -> Result<(), SimError> {
 
 #[test]
 fn test_closed_system_c_conservation() -> Result<(), SimError> {
+    // Closed-system conservation assertions intentionally use the code-default
+    // ProcessParams, where hourly DIC respiration/photosynthesis exchange is off.
     let state = active_budget_state(SimSeed(9_002));
     let initial_total_c = state.total_carbon();
     let mut engine = Engine::from_parts(state, vec![]);
@@ -426,6 +470,43 @@ fn test_closed_system_shrimp_mortality_conserves_n_and_c() -> Result<(), SimErro
             .entries
             .iter()
             .any(|entry| entry.label == "system:daily_shrimp")));
+
+    Ok(())
+}
+
+#[test]
+fn test_closed_system_shrimp_reproduction_conserves_n_and_c() -> Result<(), SimError> {
+    let state = shrimp_reproduction_budget_state(SimSeed(9_014));
+    let initial_total_n = state.total_nitrogen();
+    let initial_total_c = state.total_carbon();
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_budget_tracking();
+
+    engine.step_hours(24 * 60)?;
+
+    assert!(
+        engine.full_state().animal.juveniles_count > 0,
+        "expected deterministic hatching to occur in the reproducing shrimp fixture"
+    );
+    assert_close(engine.full_state().total_nitrogen(), initial_total_n, 1e-6);
+    assert_close(engine.full_state().total_carbon(), initial_total_c, 1e-6);
+
+    let reproduction_entry = engine
+        .budget_ledger()
+        .expect("budget tracking enabled")
+        .ticks
+        .iter()
+        .flat_map(|tick| tick.entries.iter())
+        .find(|entry| {
+            entry.label == "system:daily_shrimp"
+                && entry.delta.nitrogen.in_mg > 0.0
+                && entry.delta.nitrogen.out_mg > 0.0
+                && entry.delta.carbon.in_mg > 0.0
+                && entry.delta.carbon.out_mg > 0.0
+        })
+        .expect("reproduction should produce a gross in/out daily_shrimp budget entry");
+    assert_close(reproduction_entry.delta.nitrogen.net_mg(), 0.0, 1e-6);
+    assert_close(reproduction_entry.delta.carbon.net_mg(), 0.0, 1e-6);
 
     Ok(())
 }
@@ -554,6 +635,48 @@ fn test_dissolved_oxygen_stage_tracks_gross_in_and_out() -> Result<(), SimError>
         .expect("dissolved oxygen entry should be recorded");
     assert!(do_entry.delta.oxygen.in_mg > 0.0);
     assert!(do_entry.delta.oxygen.out_mg > 0.0);
+
+    Ok(())
+}
+
+#[test]
+fn test_preset_dic_exchange_is_treated_as_open_system_carbon() -> Result<(), SimError> {
+    // These values mirror crates/tank_data/data/process/default.toml and model
+    // the current atmospheric DIC shortcut, so tracked carbon should drift while
+    // budget tracking stays permissive for the chemistry stage.
+    let mut state = active_budget_state(SimSeed(9_015));
+    state.environment.hour_of_day = 12;
+    state.hardware.light.enabled = true;
+    state.hardware.light.photoperiod_hours = 12.0;
+    state.hardware.light.intensity_index = 1.0;
+    state
+        .process_params
+        .respiration_dic_rate_mg_c_per_g_per_hour = 0.08;
+    state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.12;
+    let initial_total_c = state.total_carbon();
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_budget_tracking();
+
+    engine.step_hours(1)?;
+
+    let chemistry_entry = engine
+        .budget_ledger()
+        .expect("budget tracking enabled")
+        .ticks[0]
+        .entries
+        .iter()
+        .find(|entry| entry.label == "system:chemistry")
+        .expect("chemistry stage should be recorded");
+    assert!(
+        chemistry_entry.delta.carbon.net_mg().abs() > 1e-6,
+        "default preset DIC exchange should move carbon through system:chemistry"
+    );
+    assert!(
+        (engine.full_state().total_carbon() - initial_total_c).abs() > 1e-6,
+        "preset DIC exchange should prevent closed-system carbon conservation"
+    );
 
     Ok(())
 }

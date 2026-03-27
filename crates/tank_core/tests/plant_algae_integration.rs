@@ -1,7 +1,8 @@
 use tank_core::{
+    plant_carbon_mg, plant_nitrogen_mg,
     systems::{algae_growth::step_daily_algae, plant_growth::step_daily_plants},
-    plant_carbon_mg, plant_nitrogen_mg, Engine, EventKind, PlantGuild, PlantGuildState,
-    PlayerAction, SimSeed, SimulationEngine, SubstrateKind, SubstrateLayerState, TankState,
+    Engine, EventKind, PlantGuild, PlantGuildState, PlayerAction, SimSeed, SimulationEngine,
+    SubstrateKind, SubstrateLayerState, TankState,
 };
 
 fn base_growth_state(seed: SimSeed) -> TankState {

@@ -1,11 +1,13 @@
 use crate::systems::chemistry::compute_nh3_mg_l;
 use crate::types::{
     algae_carbon_mg, algae_nitrogen_mg, detritus_carbon_mg, detritus_nitrogen_mg,
-    live_biomass_detrital_mass_g, EggCohort, EventCause, EventKind, EventSeverity,
-    ShrimpRuntimeParams, TankState, ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G,
+    live_biomass_carbon_mg, live_biomass_detrital_mass_g, live_biomass_nitrogen_mg, EggCohort,
+    EventCause, EventKind, EventSeverity, ShrimpRuntimeParams, TankState, ADULT_SHRIMP_BIOMASS_G,
+    JUVENILE_SHRIMP_BIOMASS_G,
 };
 
 const SHRIMP_MINERALIZED_WASTE_FRACTION: f64 = 0.35;
+const JUVENILES_PER_CLUTCH: u32 = 25;
 
 // ── Hourly ──────────────────────────────────────────────────────────────────
 
@@ -344,6 +346,7 @@ fn egg_development(state: &mut TankState) {
     let egg_duration = params.egg_duration_days as f64;
     let mut total_successful = 0u32;
     let mut total_failed = 0u32;
+    let mut total_resource_limited = 0u32;
     let mut resolved_berried = 0u32;
 
     // Advance each cohort; resolve only those that have reached duration
@@ -357,7 +360,11 @@ fn egg_development(state: &mut TankState) {
 
             for _ in 0..cohort.count {
                 if state.rng.next_f64() < p_hatch {
-                    total_successful += 1;
+                    if fund_hatched_clutch_from_water(state) {
+                        total_successful += 1;
+                    } else {
+                        total_resource_limited += 1;
+                    }
                 } else {
                     total_failed += 1;
                 }
@@ -369,9 +376,8 @@ fn egg_development(state: &mut TankState) {
     }
 
     // Successful hatches produce juveniles (~25 per clutch for Neocaridina)
-    let juveniles_per_clutch = 25u32;
     if total_successful > 0 {
-        state.animal.juveniles_count += total_successful * juveniles_per_clutch;
+        state.animal.juveniles_count += total_successful * JUVENILES_PER_CLUTCH;
     }
 
     // Only resolved clutches leave berried_females_count
@@ -380,7 +386,7 @@ fn egg_development(state: &mut TankState) {
         .berried_females_count
         .saturating_sub(resolved_berried);
 
-    if total_failed > 0 {
+    if total_failed > 0 || total_resource_limited > 0 {
         // Failure-mode invariant: on hatch failure, juveniles_count does NOT increase
         let mut causes = Vec::new();
         if f_oxygen < 0.6 {
@@ -395,6 +401,9 @@ fn egg_development(state: &mut TankState) {
         if f_stability < 0.6 {
             causes.push(EventCause::ChemistryInstability);
         }
+        if total_resource_limited > 0 {
+            causes.push(EventCause::Starvation);
+        }
         if causes.is_empty() {
             causes.push(EventCause::PoorCondition);
         }
@@ -404,7 +413,10 @@ fn egg_development(state: &mut TankState) {
             EventSeverity::Warning,
             EventKind::EggFailure,
             causes,
-            format!("{total_failed} clutch(es) failed to hatch"),
+            format!(
+                "{} clutch(es) failed to hatch",
+                total_failed + total_resource_limited
+            ),
         );
     }
 
@@ -428,11 +440,24 @@ fn juvenile_recruitment(state: &mut TankState) {
     // or mature too fast (max(1)). The fractional remainder carries over to
     // the next day.
     state.animal.maturation_accum += state.animal.juveniles_count as f64 * maturation_rate;
-    let maturing = (state.animal.maturation_accum.floor() as u32).min(state.animal.juveniles_count);
-    state.animal.maturation_accum -= maturing as f64;
+    let candidate_maturing =
+        (state.animal.maturation_accum.floor() as u32).min(state.animal.juveniles_count);
+    state.animal.maturation_accum -= candidate_maturing as f64;
 
-    state.animal.juveniles_count -= maturing;
-    state.animal.adults_count += maturing;
+    let growth_biomass_g = (ADULT_SHRIMP_BIOMASS_G - JUVENILE_SHRIMP_BIOMASS_G).max(0.0);
+    let mut funded_maturing = 0u32;
+    for _ in 0..candidate_maturing {
+        if fund_live_shrimp_biomass_from_water(state, growth_biomass_g) {
+            funded_maturing += 1;
+        } else {
+            break;
+        }
+    }
+
+    let unfunded_maturing = candidate_maturing.saturating_sub(funded_maturing);
+    state.animal.maturation_accum += f64::from(unfunded_maturing);
+    state.animal.juveniles_count -= funded_maturing;
+    state.animal.adults_count += funded_maturing;
 }
 
 fn mortality(state: &mut TankState) {
@@ -489,6 +514,55 @@ fn route_dead_shrimp_to_detritus(state: &mut TankState, adult_deaths: u32, juv_d
         + (f64::from(juv_deaths) * JUVENILE_SHRIMP_BIOMASS_G);
     state.detritus.fine_detritus_g_total +=
         live_biomass_detrital_mass_g(dead_biomass_g, state.process_params.feed_n_to_c_ratio);
+}
+
+fn fund_hatched_clutch_from_water(state: &mut TankState) -> bool {
+    fund_live_shrimp_biomass_from_water(
+        state,
+        f64::from(JUVENILES_PER_CLUTCH) * JUVENILE_SHRIMP_BIOMASS_G,
+    )
+}
+
+fn withdraw_from_preferred_pools(preferred: &mut f64, fallback: &mut f64, amount_mg: f64) {
+    let preferred_withdrawal = preferred.min(amount_mg);
+    *preferred -= preferred_withdrawal;
+    let remaining = amount_mg - preferred_withdrawal;
+    if remaining > f64::EPSILON {
+        *fallback = (*fallback - remaining).max(0.0);
+    }
+}
+
+fn fund_live_shrimp_biomass_from_water(state: &mut TankState, biomass_g: f64) -> bool {
+    if biomass_g <= f64::EPSILON {
+        return true;
+    }
+
+    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
+    let required_nitrogen_mg = live_biomass_nitrogen_mg(biomass_g, n_to_c_ratio);
+    let required_carbon_mg = live_biomass_carbon_mg(biomass_g, n_to_c_ratio);
+    let available_nitrogen_mg =
+        state.water.dissolved_organic_nitrogen_mg_n_total + state.water.ammonia_total_mg_n_total;
+    let available_carbon_mg = state.water.dissolved_organic_carbon_mg_c_total
+        + state.water.dissolved_inorganic_carbon_mg_c_total;
+
+    if available_nitrogen_mg + f64::EPSILON < required_nitrogen_mg
+        || available_carbon_mg + f64::EPSILON < required_carbon_mg
+    {
+        return false;
+    }
+
+    withdraw_from_preferred_pools(
+        &mut state.water.dissolved_organic_nitrogen_mg_n_total,
+        &mut state.water.ammonia_total_mg_n_total,
+        required_nitrogen_mg,
+    );
+    withdraw_from_preferred_pools(
+        &mut state.water.dissolved_organic_carbon_mg_c_total,
+        &mut state.water.dissolved_inorganic_carbon_mg_c_total,
+        required_carbon_mg,
+    );
+
+    true
 }
 
 fn emit_molt_stress_warning(state: &mut TankState) {

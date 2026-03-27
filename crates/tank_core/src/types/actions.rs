@@ -77,6 +77,16 @@ pub enum SimError {
     Deserialization(String),
     #[error("cannot remove {requested} shrimp, only {available} available")]
     ShrimpRemovalExceedsAvailable { requested: u32, available: u32 },
+    #[error(
+        "budget tracking detected unexplained {element} drift of {delta_mg} mg at tick {tick_index} (day {day}, hour {hour})"
+    )]
+    BudgetImbalance {
+        element: &'static str,
+        delta_mg: f64,
+        tick_index: usize,
+        day: u32,
+        hour: u32,
+    },
 }
 
 impl PlayerAction {
