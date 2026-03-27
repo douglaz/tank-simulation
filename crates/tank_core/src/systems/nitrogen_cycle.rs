@@ -37,7 +37,7 @@ fn safe_rate(v: f64) -> f64 {
 ///
 /// Returns coupling values for downstream DO and alkalinity systems.
 pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     if volume_l <= f64::EPSILON {
         return NitrogenCycleOutput::default();
     }
@@ -322,7 +322,7 @@ fn compute_env_factors(state: &TankState) -> EnvFactors {
     } else {
         0.1
     };
-    let volume_l = state.geometry.water_volume_l().max(f64::EPSILON);
+    let volume_l = state.water_volume_l().max(f64::EPSILON);
     let flow_factor = if state.hardware.filter.enabled {
         (state.hardware.filter.flow_lph / volume_l).clamp(0.1, 1.0)
     } else {
@@ -376,7 +376,7 @@ pub fn update_daily_filter_clogging(state: &mut TankState) -> f64 {
         return 0.0;
     }
 
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     if volume_l <= f64::EPSILON {
         return 0.0;
     }

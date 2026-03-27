@@ -8,7 +8,7 @@ use crate::types::TankState;
 /// - Consumes some periphyton/bacterial resource
 /// - Declines under heavy shrimp grazing
 pub fn step_daily_microfauna(state: &mut TankState) {
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     if volume_l <= f64::EPSILON {
         return;
     }

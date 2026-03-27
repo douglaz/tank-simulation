@@ -4,15 +4,15 @@ use crate::{
 };
 
 pub fn emit_hourly_threshold_events(state: &mut TankState) {
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     if volume_l <= f64::EPSILON {
         return;
     }
 
-    let tan_mg_l = state.water.ammonia_total_mg_n_total / volume_l;
+    let tan_mg_l = state.tan_mg_n_per_l();
     let nh3_mg_l = compute_nh3_mg_l(tan_mg_l, state.water.ph, state.water.temperature_c);
-    let nitrite_mg_l = state.water.nitrite_mg_n_total / volume_l;
-    let do_mg_l = state.water.dissolved_oxygen_mg_total / volume_l;
+    let nitrite_mg_l = state.nitrite_mg_n_per_l();
+    let do_mg_l = state.do_mg_per_l();
 
     if nh3_mg_l >= 0.02 {
         emit_once_per_day(
@@ -58,7 +58,7 @@ pub fn emit_daily_algae_events(
     previous_nuisance_index: f64,
     periphyton_capacity_g: f64,
 ) {
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     if previous_nuisance_index < 0.5 && state.algae.nuisance_index >= 0.5 {
         let mut causes = vec![EventCause::HighNutrients];
         // Only attribute PlantCrowding if the tank actually has significant plant biomass.

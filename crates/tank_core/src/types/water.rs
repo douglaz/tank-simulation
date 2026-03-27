@@ -30,8 +30,8 @@ pub struct WaterState {
 }
 
 impl WaterState {
-    pub fn default_for_geometry(geometry: &TankGeometry) -> Self {
-        let volume_l = geometry.water_volume_l();
+    pub fn default_for_volume_l(volume_l: f64) -> Self {
+        let volume_l = volume_l.max(0.0);
         let mut state = Self {
             temperature_c: 24.0,
             ammonia_total_mg_n_total: 0.0,
@@ -60,10 +60,20 @@ impl WaterState {
         state
     }
 
+    pub fn default_for_geometry(geometry: &TankGeometry) -> Self {
+        Self::default_for_volume_l(geometry.water_volume_l())
+    }
+
     /// Creates initial water state from a source-water profile and tank geometry.
     /// All dissolved totals are the profile's per-liter values multiplied by volume.
     pub fn from_source_profile(profile: &SourceWaterProfile, geometry: &TankGeometry) -> Self {
-        let volume_l = geometry.water_volume_l();
+        Self::from_source_profile_for_volume_l(profile, geometry.water_volume_l())
+    }
+
+    /// Creates initial water state from a source-water profile and explicit volume.
+    /// All dissolved totals are the profile's per-liter values multiplied by volume.
+    pub fn from_source_profile_for_volume_l(profile: &SourceWaterProfile, volume_l: f64) -> Self {
+        let volume_l = volume_l.max(0.0);
         let do_sat = crate::systems::temperature::do_sat_mg_l(profile.temperature_c);
         let mut state = Self {
             temperature_c: profile.temperature_c,
@@ -93,6 +103,86 @@ impl WaterState {
         state
     }
 
+    pub fn tan_mg_n_per_l(&self, volume_l: f64) -> f64 {
+        concentration(self.ammonia_total_mg_n_total, volume_l)
+    }
+
+    pub fn nitrite_mg_n_per_l(&self, volume_l: f64) -> f64 {
+        concentration(self.nitrite_mg_n_total, volume_l)
+    }
+
+    pub fn nitrate_mg_n_per_l(&self, volume_l: f64) -> f64 {
+        concentration(self.nitrate_mg_n_total, volume_l)
+    }
+
+    pub fn doc_mg_c_per_l(&self, volume_l: f64) -> f64 {
+        concentration(self.dissolved_organic_carbon_mg_c_total, volume_l)
+    }
+
+    pub fn dic_mg_c_per_l(&self, volume_l: f64) -> f64 {
+        concentration(self.dissolved_inorganic_carbon_mg_c_total, volume_l)
+    }
+
+    pub fn do_mg_per_l(&self, volume_l: f64) -> f64 {
+        concentration(self.dissolved_oxygen_mg_total, volume_l)
+    }
+
+    pub fn phosphate_mg_p_per_l(&self, volume_l: f64) -> f64 {
+        concentration(self.phosphate_mg_p_total, volume_l)
+    }
+
+    pub fn alkalinity_meq_per_l(&self, volume_l: f64) -> f64 {
+        concentration(self.alkalinity_meq_total, volume_l)
+    }
+
+    pub fn calcium_mg_per_l(&self, volume_l: f64) -> f64 {
+        concentration(self.calcium_mg_total, volume_l)
+    }
+
+    pub fn magnesium_mg_per_l(&self, volume_l: f64) -> f64 {
+        concentration(self.magnesium_mg_total, volume_l)
+    }
+
+    pub fn gh_d(&self, volume_l: f64) -> f64 {
+        let calcium_mg_per_l = self.calcium_mg_per_l(volume_l);
+        let magnesium_mg_per_l = self.magnesium_mg_per_l(volume_l);
+
+        (((2.497 * calcium_mg_per_l) + (4.118 * magnesium_mg_per_l)) / 17.848).max(0.0)
+    }
+
+    pub fn tds_mg_per_l(&self, volume_l: f64) -> f64 {
+        concentration(self.total_tracked_ions_mg(), volume_l)
+    }
+
+    pub fn conductivity_us_cm(&self, volume_l: f64) -> f64 {
+        (self.tds_mg_per_l(volume_l) / 0.65).max(0.0)
+    }
+
+    pub fn rescale_totals_for_volume(&mut self, old_volume_l: f64, new_volume_l: f64) {
+        let scale = if old_volume_l > f64::EPSILON && old_volume_l.is_finite() {
+            (new_volume_l.max(0.0) / old_volume_l).max(0.0)
+        } else {
+            0.0
+        };
+
+        self.ammonia_total_mg_n_total *= scale;
+        self.nitrite_mg_n_total *= scale;
+        self.nitrate_mg_n_total *= scale;
+        self.phosphate_mg_p_total *= scale;
+        self.dissolved_oxygen_mg_total *= scale;
+        self.dissolved_inorganic_carbon_mg_c_total *= scale;
+        self.dissolved_organic_carbon_mg_c_total *= scale;
+        self.dissolved_organic_nitrogen_mg_n_total *= scale;
+        self.alkalinity_meq_total *= scale;
+        self.calcium_mg_total *= scale;
+        self.magnesium_mg_total *= scale;
+        self.sodium_mg_total *= scale;
+        self.potassium_mg_total *= scale;
+        self.bicarbonate_mg_total *= scale;
+        self.chloride_mg_total *= scale;
+        self.sulfate_mg_total *= scale;
+    }
+
     pub fn total_tracked_ions_mg(&self) -> f64 {
         self.calcium_mg_total
             + self.magnesium_mg_total
@@ -107,5 +197,13 @@ impl WaterState {
 impl Default for WaterState {
     fn default() -> Self {
         Self::default_for_geometry(&TankGeometry::default())
+    }
+}
+
+fn concentration(total: f64, volume_l: f64) -> f64 {
+    if !total.is_finite() || !volume_l.is_finite() || volume_l <= f64::EPSILON {
+        0.0
+    } else {
+        (total / volume_l).max(0.0)
     }
 }

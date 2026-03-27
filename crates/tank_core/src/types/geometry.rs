@@ -15,8 +15,22 @@ pub struct TankGeometry {
 }
 
 impl TankGeometry {
+    /// Gross filled-prism volume before substrate displacement.
     pub fn water_volume_l(&self) -> f64 {
         self.length_cm * self.width_cm * self.fill_height_cm / 1000.0
+    }
+
+    pub fn substrate_displacement_l(&self, substrate_depth_cm: f64) -> f64 {
+        if !substrate_depth_cm.is_finite() {
+            return 0.0;
+        }
+
+        let capped_depth_cm = substrate_depth_cm.clamp(0.0, self.fill_height_cm.max(0.0));
+        self.footprint_area_cm2() * capped_depth_cm / 1000.0
+    }
+
+    pub fn water_volume_l_with_substrate_depth(&self, substrate_depth_cm: f64) -> f64 {
+        (self.water_volume_l() - self.substrate_displacement_l(substrate_depth_cm)).max(0.0)
     }
 
     pub fn surface_area_cm2(&self) -> f64 {

@@ -6,7 +6,7 @@ use tank_core::{
 #[test]
 fn water_change_do_mixing() -> Result<(), tank_core::SimError> {
     let mut state = TankState::new(SimSeed(10_501));
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
 
     state.water.temperature_c = 20.0;
     state.water.dissolved_oxygen_mg_total = 4.0 * volume_l;

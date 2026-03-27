@@ -40,7 +40,7 @@ pub fn apply_water_change(state: &mut TankState, percent: f64, source: &SourceWa
         return;
     }
 
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     let fraction = percent / 100.0;
     let retention = 1.0 - fraction;
     let exchanged_l = volume_l * fraction;

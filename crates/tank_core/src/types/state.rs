@@ -51,13 +51,22 @@ pub struct TankState {
 impl TankState {
     pub fn new(seed: SimSeed) -> Self {
         let geometry = TankGeometry::default();
+        let substrate_layers = vec![SubstrateLayerState::default()];
+        let water = WaterState::default_for_volume_l(
+            geometry.water_volume_l_with_substrate_depth(
+                substrate_layers
+                    .iter()
+                    .map(|layer| layer.depth_cm.max(0.0))
+                    .sum(),
+            ),
+        );
         let mut state = Self {
             meta: SimMeta::default(),
             geometry: geometry.clone(),
             environment: EnvironmentState::default(),
             hardware: HardwareState::default(),
-            water: WaterState::default_for_geometry(&geometry),
-            substrate_layers: vec![SubstrateLayerState::default()],
+            water,
+            substrate_layers,
             filter_state: FilterState::default(),
             plant_guilds: vec![
                 PlantGuildState::default(),
@@ -86,7 +95,7 @@ impl TankState {
         };
         // Seed stability baseline from the freshly built water state so the
         // first daily update does not register a false chemistry swing.
-        let volume_l = state.geometry.water_volume_l();
+        let volume_l = state.water_volume_l();
         state
             .stability_tracker
             .seed_from_water(&state.water, volume_l);
@@ -147,6 +156,77 @@ impl TankState {
             .sum::<f64>();
 
         (weighted_sum / total_depth).clamp(0.0, 1.0)
+    }
+
+    pub fn substrate_depth_cm(&self) -> f64 {
+        self.substrate_layers
+            .iter()
+            .map(|layer| layer.depth_cm.max(0.0))
+            .sum()
+    }
+
+    pub fn substrate_volume_l(&self) -> f64 {
+        self.geometry
+            .substrate_displacement_l(self.substrate_depth_cm())
+            .max(0.0)
+    }
+
+    pub fn water_volume_l(&self) -> f64 {
+        self.geometry
+            .water_volume_l_with_substrate_depth(self.substrate_depth_cm())
+            .max(0.0)
+    }
+
+    pub fn tan_mg_n_per_l(&self) -> f64 {
+        self.water.tan_mg_n_per_l(self.water_volume_l())
+    }
+
+    pub fn nitrite_mg_n_per_l(&self) -> f64 {
+        self.water.nitrite_mg_n_per_l(self.water_volume_l())
+    }
+
+    pub fn nitrate_mg_n_per_l(&self) -> f64 {
+        self.water.nitrate_mg_n_per_l(self.water_volume_l())
+    }
+
+    pub fn doc_mg_c_per_l(&self) -> f64 {
+        self.water.doc_mg_c_per_l(self.water_volume_l())
+    }
+
+    pub fn dic_mg_c_per_l(&self) -> f64 {
+        self.water.dic_mg_c_per_l(self.water_volume_l())
+    }
+
+    pub fn do_mg_per_l(&self) -> f64 {
+        self.water.do_mg_per_l(self.water_volume_l())
+    }
+
+    pub fn phosphate_mg_p_per_l(&self) -> f64 {
+        self.water.phosphate_mg_p_per_l(self.water_volume_l())
+    }
+
+    pub fn alkalinity_meq_per_l(&self) -> f64 {
+        self.water.alkalinity_meq_per_l(self.water_volume_l())
+    }
+
+    pub fn calcium_mg_per_l(&self) -> f64 {
+        self.water.calcium_mg_per_l(self.water_volume_l())
+    }
+
+    pub fn magnesium_mg_per_l(&self) -> f64 {
+        self.water.magnesium_mg_per_l(self.water_volume_l())
+    }
+
+    pub fn gh_d(&self) -> f64 {
+        self.water.gh_d(self.water_volume_l())
+    }
+
+    pub fn tds_mg_per_l(&self) -> f64 {
+        self.water.tds_mg_per_l(self.water_volume_l())
+    }
+
+    pub fn conductivity_us_cm(&self) -> f64 {
+        self.water.conductivity_us_cm(self.water_volume_l())
     }
 }
 

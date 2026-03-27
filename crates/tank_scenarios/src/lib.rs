@@ -462,12 +462,23 @@ fn materialize_scenario(
         lid_exchange_factor: 0.25,
     };
 
+    // Substrate layers
+    let substrate_layers = build_substrate_layers(&geometry, &scenario.substrate_ids)?;
+
     // Source water profile for initial fill
     let source_water_preset = tank_data::load_source_water(&scenario.source_water_id)?;
     let source_profile = source_water_to_profile(&source_water_preset);
 
     // Initial water state from source-water profile
-    let water = WaterState::from_source_profile(&source_profile, &geometry);
+    let water = WaterState::from_source_profile_for_volume_l(
+        &source_profile,
+        geometry.water_volume_l_with_substrate_depth(
+            substrate_layers
+                .iter()
+                .map(|layer| layer.depth_cm.max(0.0))
+                .sum(),
+        ),
+    );
 
     // Build source-water catalog with all known presets
     let mut source_water_catalog = BTreeMap::new();
@@ -479,9 +490,6 @@ fn materialize_scenario(
     // Process parameters
     let process_preset = tank_data::load_process_params(&scenario.process_params_id)?;
     let process_params = process_preset_to_params(&process_preset);
-
-    // Substrate layers
-    let substrate_layers = build_substrate_layers(&geometry, &scenario.substrate_ids)?;
 
     // Plant guilds
     let plant_guilds = build_plant_guilds(&scenario.plant_ids, &substrate_layers, true)?;
@@ -523,7 +531,7 @@ fn materialize_scenario(
 
     // Seed stability tracker baselines from actual water state to prevent
     // false chemistry-swing detection on the first update.
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     state
         .stability_tracker
         .seed_from_water(&state.water, volume_l);
@@ -535,19 +543,24 @@ fn apply_startup_overrides(
     state: &mut TankState,
     overrides: StartupOverrides,
 ) -> Result<(), tank_data::PresetError> {
-    if let Some(source_water_id) = overrides.source_water_profile_id.as_deref() {
-        let profile = if let Some(existing) = state.source_water_catalog.get(source_water_id) {
-            existing.clone()
+    let old_volume_l = state.water_volume_l();
+    let source_profile_override =
+        if let Some(source_water_id) = overrides.source_water_profile_id.as_deref() {
+            Some(
+                if let Some(existing) = state.source_water_catalog.get(source_water_id) {
+                    existing.clone()
+                } else {
+                    let preset = tank_data::load_source_water(source_water_id)?;
+                    let profile = source_water_to_profile(&preset);
+                    state
+                        .source_water_catalog
+                        .insert(source_water_id.to_string(), profile.clone());
+                    profile
+                },
+            )
         } else {
-            let preset = tank_data::load_source_water(source_water_id)?;
-            let profile = source_water_to_profile(&preset);
-            state
-                .source_water_catalog
-                .insert(source_water_id.to_string(), profile.clone());
-            profile
+            None
         };
-        state.water = WaterState::from_source_profile(&profile, &state.geometry);
-    }
 
     if let Some(substrate_preset) = overrides.substrate_preset {
         let substrate_ids = substrate_preset
@@ -576,6 +589,15 @@ fn apply_startup_overrides(
                 .collect::<Vec<_>>()
         };
         state.plant_guilds = build_plant_guilds(&plant_ids, &state.substrate_layers, false)?;
+    }
+
+    if let Some(profile) = source_profile_override {
+        state.water =
+            WaterState::from_source_profile_for_volume_l(&profile, state.water_volume_l());
+    } else if overrides.substrate_preset.is_some() {
+        state
+            .water
+            .rescale_totals_for_volume(old_volume_l, state.water_volume_l());
     }
 
     if let Some(filter_enabled) = overrides.filter_enabled {
@@ -619,7 +641,7 @@ fn apply_startup_overrides(
 
     // Reseed stability baselines so that overridden water chemistry is not
     // treated as a "swing" on the first daily update.
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     state
         .stability_tracker
         .seed_from_water(&state.water, volume_l);
@@ -796,11 +818,9 @@ fn cycling_base_state(seed: SimSeed) -> TankState {
         lid_exchange_factor: 0.25,
     };
 
-    let water = WaterState::default_for_geometry(&geometry);
-
     let mut state = TankState::new(seed);
     state.geometry = geometry;
-    state.water = water;
+    state.water = WaterState::default_for_volume_l(state.water_volume_l());
     state.water.temperature_c = 25.0;
     state.environment.ambient_temp_c = 25.0;
 
@@ -822,7 +842,7 @@ fn cycling_base_state(seed: SimSeed) -> TankState {
     state.process_params = ProcessParams::default();
 
     // Re-seed stability baseline after replacing geometry/water above.
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     state
         .stability_tracker
         .seed_from_water(&state.water, volume_l);

@@ -11,5 +11,5 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 thiserror = "1"
 
 [dev-dependencies]
+proptest = "1"
 tank_scenarios = { path = "../tank_scenarios" }
-

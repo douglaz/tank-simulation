@@ -217,13 +217,10 @@ impl StabilityTracker {
     /// Re-seed baselines from actual water state so the first stability update
     /// does not register a false chemistry swing.
     pub fn seed_from_water(&mut self, water: &super::WaterState, volume_l: f64) {
-        let vol = volume_l.max(f64::EPSILON);
         self.prev_temp_c = water.temperature_c;
         self.prev_ph = water.ph;
-        let ca_mg_l = water.calcium_mg_total / vol;
-        let mg_mg_l = water.magnesium_mg_total / vol;
-        self.prev_gh_d = ((2.497 * ca_mg_l) + (4.118 * mg_mg_l)) / 17.848;
-        self.prev_do_mg_l = water.dissolved_oxygen_mg_total / vol;
+        self.prev_gh_d = water.gh_d(volume_l);
+        self.prev_do_mg_l = water.do_mg_per_l(volume_l);
         self.instability_index = 0.0;
     }
 }

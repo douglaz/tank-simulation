@@ -26,7 +26,7 @@ pub fn compute_nh3_mg_l(tan_mg_l: f64, ph: f64, temp_c: f64) -> f64 {
 }
 
 pub fn step_hourly_chemistry(state: &mut TankState, light_on: bool) {
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     if volume_l <= f64::EPSILON {
         return;
     }

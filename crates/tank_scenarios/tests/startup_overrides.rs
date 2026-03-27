@@ -47,7 +47,7 @@ fn startup_overrides_replace_source_water_profile() {
     )
     .expect("source water override should materialize");
 
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     let profile = &state.source_water_catalog["ro_like"];
 
     assert!((state.water.temperature_c - profile.temperature_c).abs() < 0.001);

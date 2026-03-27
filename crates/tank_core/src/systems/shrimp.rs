@@ -13,15 +13,15 @@ pub fn step_hourly_shrimp_stress(state: &mut TankState) {
         return;
     }
 
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     if volume_l <= f64::EPSILON {
         return;
     }
 
-    let tan_mg_l = state.water.ammonia_total_mg_n_total / volume_l;
+    let tan_mg_l = state.tan_mg_n_per_l();
     let nh3_mg_l = compute_nh3_mg_l(tan_mg_l, state.water.ph, state.water.temperature_c);
-    let nitrite_mg_l = state.water.nitrite_mg_n_total / volume_l;
-    let do_mg_l = state.water.dissolved_oxygen_mg_total / volume_l;
+    let nitrite_mg_l = state.nitrite_mg_n_per_l();
+    let do_mg_l = state.do_mg_per_l();
     let temp = state.water.temperature_c;
 
     // NH3 stress (threshold 0.02 mg/L, stronger than TAN alone)
@@ -62,7 +62,7 @@ pub fn step_daily_shrimp(state: &mut TankState) {
         return;
     }
 
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     if volume_l <= f64::EPSILON {
         reset_hourly_accumulators(state);
         return;
@@ -83,11 +83,8 @@ pub fn step_daily_shrimp(state: &mut TankState) {
 
 /// Updates the stability tracker at the end of each daily cycle.
 pub fn update_stability_tracker(state: &mut TankState) {
-    let volume_l = state.geometry.water_volume_l().max(f64::EPSILON);
-    let ca_mg_l = state.water.calcium_mg_total / volume_l;
-    let mg_mg_l = state.water.magnesium_mg_total / volume_l;
-    let gh_d = ((2.497 * ca_mg_l) + (4.118 * mg_mg_l)) / 17.848;
-    let do_mg_l = state.water.dissolved_oxygen_mg_total / volume_l;
+    let gh_d = state.gh_d();
+    let do_mg_l = state.do_mg_per_l();
 
     let tracker = &mut state.stability_tracker;
 
@@ -147,16 +144,14 @@ fn shrimp_feeding(state: &mut TankState, _volume_l: f64) {
     state.animal.daily_food_consumed_g = periph_consumed + detritus_consumed;
 }
 
-fn update_condition(state: &mut TankState, volume_l: f64) {
-    let tan_mg_l = state.water.ammonia_total_mg_n_total / volume_l;
+fn update_condition(state: &mut TankState, _volume_l: f64) {
+    let tan_mg_l = state.tan_mg_n_per_l();
     let nh3_mg_l = compute_nh3_mg_l(tan_mg_l, state.water.ph, state.water.temperature_c);
-    let nitrite_mg_l = state.water.nitrite_mg_n_total / volume_l;
-    let do_mg_l = state.water.dissolved_oxygen_mg_total / volume_l;
+    let nitrite_mg_l = state.nitrite_mg_n_per_l();
+    let do_mg_l = state.do_mg_per_l();
     let temp = state.water.temperature_c;
 
-    let ca_mg_l = state.water.calcium_mg_total / volume_l;
-    let mg_mg_l = state.water.magnesium_mg_total / volume_l;
-    let gh_d = ((2.497 * ca_mg_l) + (4.118 * mg_mg_l)) / 17.848;
+    let gh_d = state.gh_d();
 
     let total_feeding_units =
         state.animal.adults_count as f64 + state.animal.juveniles_count as f64 * 0.3;
@@ -202,10 +197,8 @@ fn update_condition(state: &mut TankState, volume_l: f64) {
     state.animal.condition_index = state.animal.condition_index.clamp(0.0, 1.0);
 }
 
-fn update_molt_stress(state: &mut TankState, volume_l: f64) {
-    let ca_mg_l = state.water.calcium_mg_total / volume_l;
-    let mg_mg_l = state.water.magnesium_mg_total / volume_l;
-    let gh_d = ((2.497 * ca_mg_l) + (4.118 * mg_mg_l)) / 17.848;
+fn update_molt_stress(state: &mut TankState, _volume_l: f64) {
+    let gh_d = state.gh_d();
     let params = &state.shrimp_params;
 
     let gh_stress = if gh_d < params.gh_min_d {
@@ -278,10 +271,7 @@ fn spawning(state: &mut TankState) {
     let f_condition = state.animal.condition_index;
     let f_stability = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
 
-    let volume_l = state.geometry.water_volume_l().max(f64::EPSILON);
-    let ca_mg_l = state.water.calcium_mg_total / volume_l;
-    let mg_mg_l = state.water.magnesium_mg_total / volume_l;
-    let gh_d = ((2.497 * ca_mg_l) + (4.118 * mg_mg_l)) / 17.848;
+    let gh_d = state.gh_d();
     let f_mineral = gh_mineral_factor(gh_d, params);
 
     let p_spawn = params.base_spawn_rate * f_temp * f_condition * f_stability * f_mineral;
@@ -325,8 +315,7 @@ fn egg_development(state: &mut TankState) {
         }
     }
 
-    let volume_l = state.geometry.water_volume_l().max(f64::EPSILON);
-    let do_mg_l = state.water.dissolved_oxygen_mg_total / volume_l;
+    let do_mg_l = state.do_mg_per_l();
     let temp = state.water.temperature_c;
     let params = &state.shrimp_params;
 
@@ -335,9 +324,7 @@ fn egg_development(state: &mut TankState) {
     let f_temp = temp_repro_factor(temp, params);
     let f_stability = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
 
-    let ca_mg_l = state.water.calcium_mg_total / volume_l;
-    let mg_mg_l = state.water.magnesium_mg_total / volume_l;
-    let gh_d = ((2.497 * ca_mg_l) + (4.118 * mg_mg_l)) / 17.848;
+    let gh_d = state.gh_d();
     let f_mineral = gh_mineral_factor(gh_d, params);
 
     let p_hatch =
@@ -480,15 +467,13 @@ fn mortality(state: &mut TankState) {
     state.animal.clamp_berried_to_adults();
 }
 
-fn emit_molt_stress_warning(state: &mut TankState, volume_l: f64) {
+fn emit_molt_stress_warning(state: &mut TankState, _volume_l: f64) {
     if state.animal.molt_stress_index <= 0.6 {
         return;
     }
 
     let mut causes = Vec::new();
-    let ca_mg_l = state.water.calcium_mg_total / volume_l;
-    let mg_mg_l = state.water.magnesium_mg_total / volume_l;
-    let gh_d = ((2.497 * ca_mg_l) + (4.118 * mg_mg_l)) / 17.848;
+    let gh_d = state.gh_d();
 
     if gh_d < state.shrimp_params.gh_min_d {
         causes.push(EventCause::LowMinerals);

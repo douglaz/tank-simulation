@@ -62,22 +62,17 @@ pub struct TankSnapshot {
 
 impl TankSnapshot {
     pub fn from_state(state: &TankState) -> Self {
-        let volume_l = state.geometry.water_volume_l();
-        let tan_mg_l = safe_div(state.water.ammonia_total_mg_n_total, volume_l);
-        let nitrite_mg_l = safe_div(state.water.nitrite_mg_n_total, volume_l);
-        let nitrate_mg_l = safe_div(state.water.nitrate_mg_n_total, volume_l);
-        let phosphate_mg_l = safe_div(state.water.phosphate_mg_p_total, volume_l);
-        let dissolved_inorganic_carbon_mg_l =
-            safe_div(state.water.dissolved_inorganic_carbon_mg_c_total, volume_l);
-        let do_mg_l_val = safe_div(state.water.dissolved_oxygen_mg_total, volume_l);
-        let ca_mg_l = safe_div(state.water.calcium_mg_total, volume_l);
-        let mg_mg_l = safe_div(state.water.magnesium_mg_total, volume_l);
-        let alkalinity_meq_l = safe_div(state.water.alkalinity_meq_total, volume_l);
-        let total_tracked_ions_mg = state.water.total_tracked_ions_mg();
-        let tds_mg_l = safe_div(total_tracked_ions_mg, volume_l);
-        let conductivity_us_cm = tds_mg_l / 0.65;
-        let gh_d = ((2.497 * ca_mg_l) + (4.118 * mg_mg_l)) / 17.848;
-        let kh_d = (alkalinity_meq_l * 50.0) / 17.848;
+        let volume_l = state.water_volume_l();
+        let tan_mg_l = state.tan_mg_n_per_l();
+        let nitrite_mg_l = state.nitrite_mg_n_per_l();
+        let nitrate_mg_l = state.nitrate_mg_n_per_l();
+        let phosphate_mg_l = state.phosphate_mg_p_per_l();
+        let dissolved_inorganic_carbon_mg_l = state.dic_mg_c_per_l();
+        let do_mg_l_val = state.do_mg_per_l();
+        let gh_d = state.gh_d();
+        let kh_d = (state.alkalinity_meq_per_l() * 50.0) / 17.848;
+        let tds_mg_l = state.tds_mg_per_l();
+        let conductivity_us_cm = state.conductivity_us_cm();
         let ph = state.water.ph;
         let nh3_mg_l = compute_nh3_mg_l(tan_mg_l, ph, state.water.temperature_c);
         let fast_stem_biomass_g: f64 = state
@@ -162,14 +157,6 @@ impl TankSnapshot {
             last_heater_output_w: state.hardware.heater.last_output_w,
             recent_events,
         }
-    }
-}
-
-fn safe_div(numerator: f64, denominator: f64) -> f64 {
-    if denominator <= f64::EPSILON {
-        0.0
-    } else {
-        numerator / denominator
     }
 }
 

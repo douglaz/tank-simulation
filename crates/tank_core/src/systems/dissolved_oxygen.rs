@@ -7,13 +7,13 @@ use crate::{
 };
 
 pub fn step_dissolved_oxygen(state: &mut TankState, light_on: bool) {
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     if volume_l <= f64::EPSILON {
         return;
     }
 
     let do_sat_mg_l = do_sat_mg_l(state.water.temperature_c);
-    let do_mg_l = state.water.dissolved_oxygen_mg_total / volume_l;
+    let do_mg_l = state.do_mg_per_l();
     let aeration_intensity = if state.hardware.aeration.enabled {
         state.hardware.aeration.intensity
     } else {

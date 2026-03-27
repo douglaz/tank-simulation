@@ -7,7 +7,7 @@ const ALGAE_N_MG_PER_G_GROWTH: f64 = 35.0;
 const ALGAE_P_MG_PER_G_GROWTH: f64 = 5.0;
 
 pub fn step_daily_algae(state: &mut TankState) {
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     if volume_l <= f64::EPSILON {
         return;
     }

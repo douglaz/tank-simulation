@@ -34,7 +34,7 @@ fn nano_cycle_materializes_correctly() {
 
     // Initial water chemistry comes from soft_acidic profile
     let sw = &state.source_water_catalog["soft_acidic"];
-    let vol = state.geometry.water_volume_l();
+    let vol = state.water_volume_l();
     assert!(
         (state.water.calcium_mg_total - sw.calcium_mg_per_l * vol).abs() < 0.01,
         "Calcium should match source water * volume"
@@ -130,7 +130,7 @@ fn geometry_overrides_scale_size_and_fill() {
     assert!((state.geometry.height_cm - 25.0).abs() < f64::EPSILON);
     assert!((state.geometry.fill_height_cm - 18.0).abs() < f64::EPSILON);
 
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     let profile = &state.source_water_catalog["soft_acidic"];
     assert!(
         (state.water.calcium_mg_total - profile.calcium_mg_per_l * volume_l).abs() < 0.01,
