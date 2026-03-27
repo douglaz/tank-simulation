@@ -175,6 +175,7 @@ fn shrimp_feeding(state: &mut TankState) {
 /// Destinations:
 /// - feces → fine_detritus_g_total (as organic matter grams)
 /// - excreted N → ammonia_total_mg_n_total (TAN)
+/// - excreted C → dissolved_organic_carbon_mg_c_total (DOC)
 /// - respired C → dissolved_inorganic_carbon_mg_c_total (DIC)
 /// - respired → O2 demand (dissolved_oxygen_mg_total)
 /// - retained → animal.reserve_g (organic matter grams)
@@ -202,12 +203,13 @@ fn route_consumed_food(state: &mut TankState, consumed_n_mg: f64, consumed_c_mg:
     let assimilated_n_mg = consumed_n_mg * ae;
     let assimilated_c_mg = consumed_c_mg * ae;
 
-    // ── Excretion: dissolved TAN ──
-    // Phase-1 lumping: all dissolved N excretion goes to TAN (no urea/DON).
+    // ── Excretion: TAN + DOC ──
+    // Phase-1 lumping: dissolved N excretion goes to TAN and dissolved C
+    // excretion goes to DOC. We still do not create separate urea or DON pools.
     let excreted_n_mg = assimilated_n_mg * excr_frac;
     state.water.ammonia_total_mg_n_total += excreted_n_mg;
 
-    // Excreted C goes to DOC (dissolved organic carbon — urea-like organics).
+    // Excreted C goes to the canonical DOC pool.
     let excreted_c_mg = assimilated_c_mg * excr_frac;
     state.water.dissolved_organic_carbon_mg_c_total += excreted_c_mg;
 

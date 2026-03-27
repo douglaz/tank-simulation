@@ -41,7 +41,7 @@ periphyton or fine detritus
   -> consumer ingestion
   -> retained biomass/reserve
   -> feces -> fine_detritus_g_total
-  -> excretion -> ammonia_total_mg_n_total
+  -> excretion -> ammonia_total_mg_n_total + dissolved_organic_carbon_mg_c_total
   -> respiration -> O2 demand + dissolved_inorganic_carbon_mg_c_total
 
 plant biomass
@@ -67,7 +67,7 @@ All consumer implementations in this phase follow one template on a clearly defi
 Required destinations:
 
 - `feces` always route to `fine_detritus_g_total`
-- `dissolved_excretion` routes to `ammonia_total_mg_n_total`
+- `dissolved_excretion` routes elemental N to `ammonia_total_mg_n_total` and elemental C to `dissolved_organic_carbon_mg_c_total`
 - `respiration` contributes oxygen demand and adds to `dissolved_inorganic_carbon_mg_c_total`
 - `retained` stays in the organism state as biomass, reserve, or another explicit retained store
 
@@ -93,7 +93,7 @@ Implementation notes:
 
 - Shrimp may ingest from `periphyton_biomass_g` and `fine_detritus_g_total`, but consumed material must not disappear after those source pools are decremented.
 - Microfauna use the same routing template even though the model currently stores them as `population_index` rather than explicit biomass. In phase 1 this remains an intentional approximation: the implementation may map retained material to a reserve/index-support term rather than a standalone biomass pool, but waste routing still needs explicit destinations.
-- Consumer dissolved N waste is intentionally lumped into TAN in phase 1. Do not create separate urea or amino-acid pools yet.
+- Consumer dissolved excretion is intentionally lumped into TAN for nitrogen and DOC for carbon in phase 1. Do not create separate urea or DON pools yet.
 - Respiration should affect oxygen demand and DIC, but carbonate speciation stays deferred; the DIC destination is the one lumped pool `dissolved_inorganic_carbon_mg_c_total`.
 
 ## Detritus Breakdown And Decay Routing
@@ -157,7 +157,7 @@ Export definition for this phase:
 The following simplifications are deliberate for phase 1:
 
 - Single fine-detritus pool: feces, carcasses, plant cuttings, and general fine organics all route to `fine_detritus_g_total`.
-- TAN-only dissolved excretion: consumer dissolved N waste goes to `ammonia_total_mg_n_total`, not to separate urea or DON pools.
+- TAN + DOC dissolved excretion: consumer dissolved N waste goes to `ammonia_total_mg_n_total`, consumer dissolved carbon waste goes to `dissolved_organic_carbon_mg_c_total`, and there are still no separate urea or DON pools.
 - Lumped DIC: respiration adds to `dissolved_inorganic_carbon_mg_c_total` without splitting `CO2(aq)`, `HCO3-`, and `CO3--`.
 - Microfauna are index-based: their retained share may stay approximate until a later biomass-backed model exists.
 - Filter fouling removal stays implicit: `CleanFilter` does not create a separate captured-solids pool, and the removed microbial biomass is rerouted into dissolved organics instead of being exported.

@@ -324,3 +324,66 @@ fn migration_chain_applies_v2_to_current() -> Result<(), SimError> {
     let _engine = loaded.into_engine()?;
     Ok(())
 }
+
+#[test]
+fn malformed_v4_save_with_negative_reserve_is_rejected() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(101));
+    state.animal.reserve_g = -0.01;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    let err = loaded.into_engine().unwrap_err();
+
+    assert_eq!(
+        err,
+        SimError::InvariantViolation {
+            field: "animal.reserve_g",
+            value: -0.01,
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn malformed_v4_save_with_invalid_shrimp_partition_sum_is_rejected() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(102));
+    state
+        .process_params
+        .shrimp_respiration_fraction_of_assimilated = 0.6;
+    state
+        .process_params
+        .shrimp_excretion_fraction_of_assimilated = 0.1;
+    state.process_params.shrimp_growth_fraction_of_assimilated = 0.1;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    let err = loaded.into_engine().unwrap_err();
+
+    match err {
+        SimError::InvariantViolation { field, value } => {
+            assert_eq!(field, "process.shrimp_assimilated_partition_sum");
+            assert!(
+                (value - 0.8).abs() < 1e-12,
+                "unexpected partition sum: {value}"
+            );
+        }
+        other => panic!("expected shrimp partition invariant violation, got: {other:?}"),
+    }
+
+    Ok(())
+}

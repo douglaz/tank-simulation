@@ -1,5 +1,7 @@
 use crate::types::{SimError, TankState};
 
+const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
+
 pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
     if state.water.dissolved_oxygen_mg_total.is_finite() {
         state.water.dissolved_oxygen_mg_total = state.water.dissolved_oxygen_mg_total.max(0.0);
@@ -124,6 +126,7 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
     state.animal.reproductive_readiness_index =
         state.animal.reproductive_readiness_index.clamp(0.0, 1.0);
     state.animal.daily_food_consumed_g = state.animal.daily_food_consumed_g.max(0.0);
+    check_non_negative("animal.reserve_g", state.animal.reserve_g)?;
     // Shrimp population invariants: berried <= adults, no negative egg progress
     state.animal.clamp_berried_to_adults();
     state.animal.egg_progress_days = state.animal.egg_progress_days.max(0.0);
@@ -179,6 +182,32 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
         "process.plant_photosynthesis_o2_mg_per_g_per_hour",
         pp.plant_photosynthesis_o2_mg_per_g_per_hour,
     )?;
+    check_unit_interval(
+        "process.shrimp_assimilation_efficiency",
+        pp.shrimp_assimilation_efficiency,
+    )?;
+    check_unit_interval(
+        "process.shrimp_respiration_fraction_of_assimilated",
+        pp.shrimp_respiration_fraction_of_assimilated,
+    )?;
+    check_unit_interval(
+        "process.shrimp_excretion_fraction_of_assimilated",
+        pp.shrimp_excretion_fraction_of_assimilated,
+    )?;
+    check_unit_interval(
+        "process.shrimp_growth_fraction_of_assimilated",
+        pp.shrimp_growth_fraction_of_assimilated,
+    )?;
+    check_positive(
+        "process.shrimp_o2_per_mg_c_respired",
+        pp.shrimp_o2_per_mg_c_respired,
+    )?;
+    check_sum_close_to_one(
+        "process.shrimp_assimilated_partition_sum",
+        pp.shrimp_respiration_fraction_of_assimilated
+            + pp.shrimp_excretion_fraction_of_assimilated
+            + pp.shrimp_growth_fraction_of_assimilated,
+    )?;
 
     if state.event_log.len() > 200 {
         let keep_from = state.event_log.len() - 200;
@@ -198,6 +227,22 @@ fn check_non_negative(field: &'static str, value: f64) -> Result<(), SimError> {
 
 fn check_positive(field: &'static str, value: f64) -> Result<(), SimError> {
     if !value.is_finite() || value <= 0.0 {
+        Err(SimError::InvariantViolation { field, value })
+    } else {
+        Ok(())
+    }
+}
+
+fn check_unit_interval(field: &'static str, value: f64) -> Result<(), SimError> {
+    if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+        Err(SimError::InvariantViolation { field, value })
+    } else {
+        Ok(())
+    }
+}
+
+fn check_sum_close_to_one(field: &'static str, value: f64) -> Result<(), SimError> {
+    if !value.is_finite() || (value - 1.0).abs() > SHRIMP_ROUTE_SUM_TOLERANCE {
         Err(SimError::InvariantViolation { field, value })
     } else {
         Ok(())

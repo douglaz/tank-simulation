@@ -57,10 +57,14 @@ fn configured_state(seed: SimSeed) -> tank_core::TankState {
         tank_scenarios::seeded_state(seed, "warm_room").expect("scenario should materialize");
     state.hardware.aeration.enabled = false;
     state.hardware.aeration.intensity = 0.0;
+    state.hardware.filter.enabled = false;
     state.hardware.light.photoperiod_hours = 12.0;
     state.hardware.light.intensity_index = 1.0;
-    state.process_params.reaeration_kla_base *= 0.4;
-    state.process_params.aeration_kla_boost *= 0.25;
+    state.process_params.reaeration_kla_base = 0.0;
+    state.process_params.aeration_kla_boost = 0.0;
+    state
+        .process_params
+        .background_bod_mg_o2_per_g_biomass_per_hour = 0.15;
     state.environment.ambient_temp_c = 29.5;
     state.algae.suspended_biomass_g = 0.08;
     state.algae.periphyton_biomass_g = 0.6;

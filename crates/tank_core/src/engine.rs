@@ -488,6 +488,7 @@ impl SimulationEngine for Engine {
     }
 
     fn step_hours(&mut self, hours: u32) -> Result<(), SimError> {
+        enforce_invariants(&mut self.state)?;
         for _ in 0..hours {
             self.step_one_hour()?;
         }
