@@ -19,6 +19,7 @@ feed_n_to_c_ratio = 0.16
 # Decomposer mineralization
 decomposer_vmax_per_hour = 0.02
 decomposer_k_doc_mg = 5.0
+decomposer_k_do_mg = 2.0
 decomposer_growth_yield = 0.3
 decomposer_decay_rate_per_hour = 0.002
 

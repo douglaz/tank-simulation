@@ -36,6 +36,8 @@ pub struct ProcessParams {
     pub decomposer_vmax_per_hour: f64,
     /// Half-saturation for DOC (mg C total) for decomposer Monod term.
     pub decomposer_k_doc_mg: f64,
+    /// Half-saturation for dissolved oxygen (mg total) for decomposer Monod term.
+    pub decomposer_k_do_mg: f64,
     /// Growth yield of decomposer biomass per g DOC consumed.
     pub decomposer_growth_yield: f64,
     /// Hourly decay rate of decomposer biomass under starvation.
@@ -143,6 +145,7 @@ impl Default for ProcessParams {
 
             decomposer_vmax_per_hour: 0.02,
             decomposer_k_doc_mg: 5.0,
+            decomposer_k_do_mg: 2.0,
             decomposer_growth_yield: 0.3,
             decomposer_decay_rate_per_hour: 0.002,
 

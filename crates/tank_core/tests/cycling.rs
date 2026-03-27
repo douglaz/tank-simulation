@@ -1,4 +1,7 @@
-use tank_core::{Engine, EventKind, PlayerAction, SimSeed, SimulationEngine, TankState};
+use tank_core::{
+    systems::nitrogen_cycle::step_nitrogen_cycle, Engine, EventKind, PlayerAction, SimSeed,
+    SimulationEngine, TankState,
+};
 
 /// Feed the engine a small pellet each day for the given number of days.
 fn feed_daily(engine: &mut Engine, days: u32, grams: f64) -> Result<(), tank_core::SimError> {
@@ -356,4 +359,39 @@ fn dirty_filter_slows_nitrification() -> Result<(), tank_core::SimError> {
     );
 
     Ok(())
+}
+
+#[test]
+fn decomposer_do_half_saturation_is_tunable() {
+    let build_state = |k_do_mg: f64| {
+        let mut state = TankState::new(SimSeed(9700));
+        state.microbe.decomposer_biomass_g = 0.5;
+        state.microbe.ammonia_oxidizer_biomass_g = 0.0;
+        state.microbe.nitrite_oxidizer_biomass_g = 0.0;
+        state.microbe.comammox_biomass_g = 0.0;
+        state.microfauna.population_index = 0.0;
+        state.water.dissolved_organic_carbon_mg_c_total = 100.0;
+        state.water.dissolved_organic_nitrogen_mg_n_total = 10.0;
+        state.water.dissolved_oxygen_mg_total = 1.0;
+        state.process_params.decomposer_vmax_per_hour = 0.05;
+        state.process_params.decomposer_k_do_mg = k_do_mg;
+        state.process_params.microfauna_mineralization_boost = 0.0;
+        state
+    };
+
+    let mut permissive = build_state(0.1);
+    let mut restrictive = build_state(10.0);
+
+    step_nitrogen_cycle(&mut permissive);
+    step_nitrogen_cycle(&mut restrictive);
+
+    assert!(
+        permissive.water.ammonia_total_mg_n_total > restrictive.water.ammonia_total_mg_n_total,
+        "Lower decomposer DO half-saturation should mineralize more DON into TAN under the same low-DO conditions"
+    );
+    assert!(
+        permissive.water.dissolved_organic_carbon_mg_c_total
+            < restrictive.water.dissolved_organic_carbon_mg_c_total,
+        "Lower decomposer DO half-saturation should consume more DOC under the same low-DO conditions"
+    );
 }

@@ -238,6 +238,7 @@ pub fn seeded_state_with_full_overrides(
 ) -> Result<TankState, tank_data::PresetError> {
     validate_geometry_overrides(scenario_id, overrides.geometry)?;
     let mut scenario = load_named_scenario(scenario_id)?;
+    let scenario_source_water_id = scenario.source_water_id.clone();
     scenario.tank_length_cm *= overrides.geometry.size_scale;
     scenario.tank_width_cm *= overrides.geometry.size_scale;
     scenario.tank_height_cm *= overrides.geometry.size_scale;
@@ -251,7 +252,7 @@ pub fn seeded_state_with_full_overrides(
     let area_scale = overrides.geometry.size_scale * overrides.geometry.size_scale;
 
     let mut state = materialize_scenario(seed, scenario)?;
-    apply_startup_overrides(&mut state, overrides)?;
+    apply_startup_overrides(&mut state, &scenario_source_water_id, overrides)?;
     if (area_scale - 1.0).abs() > f64::EPSILON {
         for layer in &mut state.substrate_layers {
             layer.nutrient_store_mg_n_total *= area_scale;
@@ -368,6 +369,7 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
 
         decomposer_vmax_per_hour: preset.decomposer_vmax_per_hour,
         decomposer_k_doc_mg: preset.decomposer_k_doc_mg,
+        decomposer_k_do_mg: preset.decomposer_k_do_mg,
         decomposer_growth_yield: preset.decomposer_growth_yield,
         decomposer_decay_rate_per_hour: preset.decomposer_decay_rate_per_hour,
 
@@ -541,28 +543,32 @@ fn materialize_scenario(
 
 fn apply_startup_overrides(
     state: &mut TankState,
+    scenario_source_water_id: &str,
     overrides: StartupOverrides,
 ) -> Result<(), tank_data::PresetError> {
-    let old_volume_l = state.water_volume_l();
-    let source_profile_override =
-        if let Some(source_water_id) = overrides.source_water_profile_id.as_deref() {
-            Some(
-                if let Some(existing) = state.source_water_catalog.get(source_water_id) {
-                    existing.clone()
-                } else {
-                    let preset = tank_data::load_source_water(source_water_id)?;
-                    let profile = source_water_to_profile(&preset);
-                    state
-                        .source_water_catalog
-                        .insert(source_water_id.to_string(), profile.clone());
-                    profile
-                },
-            )
+    let StartupOverrides {
+        geometry: _,
+        source_water_profile_id,
+        substrate_preset,
+        plant_selection,
+        filter_enabled,
+        light_preset,
+        heater_preset,
+        aeration_enabled,
+        initial_adult_shrimp_count,
+    } = overrides;
+
+    let effective_source_profile =
+        if source_water_profile_id.is_some() || substrate_preset.is_some() {
+            let source_water_id = source_water_profile_id
+                .as_deref()
+                .unwrap_or(scenario_source_water_id);
+            Some(resolve_source_profile(state, source_water_id)?)
         } else {
             None
         };
 
-    if let Some(substrate_preset) = overrides.substrate_preset {
+    if let Some(substrate_preset) = substrate_preset {
         let substrate_ids = substrate_preset
             .preset_ids()
             .iter()
@@ -571,8 +577,8 @@ fn apply_startup_overrides(
         state.substrate_layers = build_substrate_layers(&state.geometry, &substrate_ids)?;
     }
 
-    if overrides.substrate_preset.is_some() || overrides.plant_selection.is_some() {
-        let plant_ids = if let Some(plant_selection) = overrides.plant_selection {
+    if substrate_preset.is_some() || plant_selection.is_some() {
+        let plant_ids = if let Some(plant_selection) = plant_selection {
             plant_selection
                 .preset_ids()
                 .iter()
@@ -591,16 +597,12 @@ fn apply_startup_overrides(
         state.plant_guilds = build_plant_guilds(&plant_ids, &state.substrate_layers, false)?;
     }
 
-    if let Some(profile) = source_profile_override {
+    if let Some(profile) = effective_source_profile {
         state.water =
             WaterState::from_source_profile_for_volume_l(&profile, state.water_volume_l());
-    } else if overrides.substrate_preset.is_some() {
-        state
-            .water
-            .rescale_totals_for_volume(old_volume_l, state.water_volume_l());
     }
 
-    if let Some(filter_enabled) = overrides.filter_enabled {
+    if let Some(filter_enabled) = filter_enabled {
         state.hardware.filter.enabled = filter_enabled;
         if filter_enabled {
             if state.hardware.filter.flow_lph <= 0.0 {
@@ -611,12 +613,12 @@ fn apply_startup_overrides(
         }
     }
 
-    if let Some(light_preset) = overrides.light_preset {
+    if let Some(light_preset) = light_preset {
         state.hardware.light.enabled = true;
         state.hardware.light.photoperiod_hours = light_preset.hours();
     }
 
-    if let Some(heater_preset) = overrides.heater_preset {
+    if let Some(heater_preset) = heater_preset {
         match heater_preset.setpoint_c() {
             Some(setpoint_c) => {
                 state.hardware.heater.enabled = true;
@@ -630,12 +632,12 @@ fn apply_startup_overrides(
         state.hardware.heater.last_output_w = 0.0;
     }
 
-    if let Some(aeration_enabled) = overrides.aeration_enabled {
+    if let Some(aeration_enabled) = aeration_enabled {
         state.hardware.aeration.enabled = aeration_enabled;
         state.hardware.aeration.intensity = if aeration_enabled { 0.35 } else { 0.0 };
     }
 
-    if let Some(initial_adult_shrimp_count) = overrides.initial_adult_shrimp_count {
+    if let Some(initial_adult_shrimp_count) = initial_adult_shrimp_count {
         state.animal = AnimalState::with_adults(initial_adult_shrimp_count);
     }
 
@@ -647,6 +649,22 @@ fn apply_startup_overrides(
         .seed_from_water(&state.water, volume_l);
 
     Ok(())
+}
+
+fn resolve_source_profile(
+    state: &mut TankState,
+    source_water_id: &str,
+) -> Result<SourceWaterProfile, tank_data::PresetError> {
+    if let Some(existing) = state.source_water_catalog.get(source_water_id) {
+        Ok(existing.clone())
+    } else {
+        let preset = tank_data::load_source_water(source_water_id)?;
+        let profile = source_water_to_profile(&preset);
+        state
+            .source_water_catalog
+            .insert(source_water_id.to_string(), profile.clone());
+        Ok(profile)
+    }
 }
 
 fn build_substrate_layers(

@@ -68,15 +68,15 @@ pub fn step_daily_shrimp(state: &mut TankState) {
         return;
     }
 
-    shrimp_feeding(state, volume_l);
-    update_condition(state, volume_l);
-    update_molt_stress(state, volume_l);
+    shrimp_feeding(state);
+    update_condition(state);
+    update_molt_stress(state);
     update_reproductive_readiness(state);
     spawning(state);
     egg_development(state);
     juvenile_recruitment(state);
     mortality(state);
-    emit_molt_stress_warning(state, volume_l);
+    emit_molt_stress_warning(state);
 
     reset_hourly_accumulators(state);
 }
@@ -113,7 +113,7 @@ pub fn update_stability_tracker(state: &mut TankState) {
 
 // ── Private helpers ─────────────────────────────────────────────────────────
 
-fn shrimp_feeding(state: &mut TankState, _volume_l: f64) {
+fn shrimp_feeding(state: &mut TankState) {
     let adults = state.animal.adults_count as f64;
     let juveniles = state.animal.juveniles_count as f64;
     let total_feeding_units = adults + juveniles * 0.3;
@@ -144,7 +144,7 @@ fn shrimp_feeding(state: &mut TankState, _volume_l: f64) {
     state.animal.daily_food_consumed_g = periph_consumed + detritus_consumed;
 }
 
-fn update_condition(state: &mut TankState, _volume_l: f64) {
+fn update_condition(state: &mut TankState) {
     let tan_mg_l = state.tan_mg_n_per_l();
     let nh3_mg_l = compute_nh3_mg_l(tan_mg_l, state.water.ph, state.water.temperature_c);
     let nitrite_mg_l = state.nitrite_mg_n_per_l();
@@ -197,7 +197,7 @@ fn update_condition(state: &mut TankState, _volume_l: f64) {
     state.animal.condition_index = state.animal.condition_index.clamp(0.0, 1.0);
 }
 
-fn update_molt_stress(state: &mut TankState, _volume_l: f64) {
+fn update_molt_stress(state: &mut TankState) {
     let gh_d = state.gh_d();
     let params = &state.shrimp_params;
 
@@ -467,7 +467,7 @@ fn mortality(state: &mut TankState) {
     state.animal.clamp_berried_to_adults();
 }
 
-fn emit_molt_stress_warning(state: &mut TankState, _volume_l: f64) {
+fn emit_molt_stress_warning(state: &mut TankState) {
     if state.animal.molt_stress_index <= 0.6 {
         return;
     }

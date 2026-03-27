@@ -215,6 +215,8 @@ pub struct ProcessParamsPreset {
     pub decomposer_vmax_per_hour: f64,
     #[serde(default = "default_decomposer_k_doc")]
     pub decomposer_k_doc_mg: f64,
+    #[serde(default = "default_decomposer_k_do")]
+    pub decomposer_k_do_mg: f64,
     #[serde(default = "default_decomposer_growth_yield")]
     pub decomposer_growth_yield: f64,
     #[serde(default = "default_decomposer_decay_rate")]
@@ -351,6 +353,9 @@ fn default_decomposer_vmax() -> f64 {
 }
 fn default_decomposer_k_doc() -> f64 {
     5.0
+}
+fn default_decomposer_k_do() -> f64 {
+    2.0
 }
 fn default_decomposer_growth_yield() -> f64 {
     0.3
@@ -557,6 +562,7 @@ impl ProcessParamsPreset {
             ("feed_n_to_c_ratio", self.feed_n_to_c_ratio),
             ("decomposer_vmax_per_hour", self.decomposer_vmax_per_hour),
             ("decomposer_k_doc_mg", self.decomposer_k_doc_mg),
+            ("decomposer_k_do_mg", self.decomposer_k_do_mg),
             ("decomposer_growth_yield", self.decomposer_growth_yield),
             (
                 "decomposer_decay_rate_per_hour",

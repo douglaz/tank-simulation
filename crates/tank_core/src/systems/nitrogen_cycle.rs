@@ -80,7 +80,7 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     // Environmental factors for decomposers
     let temp = state.water.temperature_c;
     let f_temp_decomp = temperature_factor(temp);
-    let f_do_decomp = do_total / (do_total + 2.0); // half-sat ~2 mg total
+    let f_do_decomp = do_total / (do_total + pp.decomposer_k_do_mg.max(0.01));
 
     // Microfauna modestly improve mineralization efficiency
     let microfauna_boost =
