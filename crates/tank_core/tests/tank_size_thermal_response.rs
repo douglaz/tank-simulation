@@ -45,8 +45,8 @@ fn smaller_tank_responds_faster_to_ambient_change() -> Result<(), tank_core::Sim
     let state_10l = state_with_volume(SimSeed(2000), 10.0);
     let state_100l = state_with_volume(SimSeed(2000), 100.0);
 
-    let vol_10 = state_10l.geometry.water_volume_l();
-    let vol_100 = state_100l.geometry.water_volume_l();
+    let vol_10 = state_10l.geometry.gross_water_volume_l();
+    let vol_100 = state_100l.geometry.gross_water_volume_l();
     assert!(
         (vol_10 - 10.0).abs() < 0.1,
         "10L tank should be ~10L, got {vol_10}"

@@ -190,14 +190,15 @@ pub struct TankGeometry {
 
 The engine MUST derive:
 
-- `water_volume_l`
+- `gross_water_volume_l`
+- `water_volume_l_with_substrate_depth(...)`
 - `surface_area_cm2` = length * width
 - `footprint_area_cm2`
 - `wall_area_cm2`
 - `substrate_plan_area_cm2`
 - `mean_depth_cm`
-- `surface_area_to_volume_ratio`
-- `wall_area_to_volume_ratio`
+- `surface_area_to_gross_volume_ratio`
+- `wall_area_to_gross_volume_ratio`
 
 ## 6.3 Why geometry matters
 

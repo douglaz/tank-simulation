@@ -363,7 +363,9 @@ fn compute_env_factors(state: &TankState) -> EnvFactors {
     }
 }
 
-/// Monod-style rate: vmax * biomass * environmental_factor * S/(K+S)
+/// Monod-style rate: vmax * biomass * environmental_factor * S/(K+S).
+/// `substrate` and `k_substrate` must use the same units; after the
+/// concentration migration, current call sites pass mg/L rather than totals.
 fn monod_rate(
     vmax: f64,
     biomass_g: f64,
@@ -375,6 +377,8 @@ fn monod_rate(
     safe_rate(vmax * biomass_g * environmental_factor * monod)
 }
 
+/// Monod factor `S / (K + S)` for substrate and half-saturation values in the
+/// same units. Current call sites use concentration terms in mg/L.
 fn monod_factor(substrate: f64, k_substrate: f64) -> f64 {
     let substrate = safe_rate(substrate);
     let k_substrate = safe_rate(k_substrate).max(f64::MIN_POSITIVE);

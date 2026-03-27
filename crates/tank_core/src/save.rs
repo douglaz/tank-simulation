@@ -82,7 +82,7 @@ impl SaveFile {
 }
 
 fn migrate_schema_v2_to_v3(state: &mut TankState) {
-    let gross_volume_l = state.geometry.water_volume_l();
+    let gross_volume_l = state.geometry.gross_water_volume_l();
     let net_volume_l = state.water_volume_l();
     state
         .water

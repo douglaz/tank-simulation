@@ -157,7 +157,7 @@ fn save_load_with_active_cycle_state() -> Result<(), tank_core::SimError> {
 #[test]
 fn legacy_schema_v2_saves_are_migrated_to_net_water_volume() -> Result<(), tank_core::SimError> {
     let mut legacy_state = TankState::new(SimSeed(99));
-    let gross_volume_l = legacy_state.geometry.water_volume_l();
+    let gross_volume_l = legacy_state.geometry.gross_water_volume_l();
     let net_volume_l = legacy_state.water_volume_l();
     legacy_state.water = WaterState::default_for_volume_l(gross_volume_l);
     legacy_state.water.ammonia_total_mg_n_total = 1.5 * gross_volume_l;
@@ -187,7 +187,7 @@ fn legacy_schema_v2_saves_are_migrated_to_net_water_volume() -> Result<(), tank_
 fn legacy_schema_v2_saves_without_tracker_reseed_stability_baselines(
 ) -> Result<(), tank_core::SimError> {
     let mut legacy_state = TankState::new(SimSeed(100));
-    let gross_volume_l = legacy_state.geometry.water_volume_l();
+    let gross_volume_l = legacy_state.geometry.gross_water_volume_l();
     legacy_state.water = WaterState::default_for_volume_l(gross_volume_l);
     legacy_state.water.temperature_c = 26.5;
     legacy_state.water.ph = 6.6;

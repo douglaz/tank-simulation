@@ -48,7 +48,7 @@ fn expected_kh_d(alkalinity_meq_per_l: f64) -> f64 {
 #[test]
 fn canonical_helpers_use_net_water_volume() {
     let mut state = helper_state();
-    assert_close(state.geometry.water_volume_l(), 12.0);
+    assert_close(state.geometry.gross_water_volume_l(), 12.0);
     assert_close(state.substrate_volume_l(), 2.0);
     assert_close(state.water_volume_l(), 10.0);
 

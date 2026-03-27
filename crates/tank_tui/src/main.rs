@@ -584,7 +584,7 @@ fn render_startup(frame: &mut Frame<'_>, selection: &StartupSelection) {
                 item.tank_height_cm,
                 item.fill_height_cm,
             );
-            let gross_volume_l = geometry.water_volume_l();
+            let gross_volume_l = geometry.gross_water_volume_l();
             let net_volume_l = geometry
                 .water_volume_l_with_substrate_depth(selection.substrate_preset.total_depth_cm());
             vec![

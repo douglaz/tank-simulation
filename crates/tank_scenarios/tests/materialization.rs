@@ -13,7 +13,7 @@ fn nano_cycle_materializes_correctly() {
 
     // Volume: 30 * 20 * 18 / 1000 = 10.8L
     let expected_vol = 30.0 * 20.0 * 18.0 / 1000.0;
-    let actual_vol = state.geometry.water_volume_l();
+    let actual_vol = state.geometry.gross_water_volume_l();
     assert!(
         (actual_vol - expected_vol).abs() < 0.01,
         "Volume should be {expected_vol}, got {actual_vol}"
@@ -85,7 +85,7 @@ fn medium_planted_materializes_with_two_substrates_and_plants() {
 
     // Volume
     let expected_vol = 60.0 * 30.0 * 32.0 / 1000.0;
-    let actual_vol = state.geometry.water_volume_l();
+    let actual_vol = state.geometry.gross_water_volume_l();
     assert!(
         (actual_vol - expected_vol).abs() < 0.01,
         "Expected {expected_vol}L, got {actual_vol}L"

@@ -65,7 +65,7 @@ Examples in `crates/tank_core/src/types/source_water.rs`:
 
 ### 3. Save files store canonical totals plus geometry
 
-Save files serialize `TankState`, so the canonical persisted chemistry remains the internal total-based fields plus `geometry.water_volume_l()` derivation inputs. Save payloads should not duplicate concentration mirrors alongside those totals; duplicated totals and concentrations would drift.
+Save files serialize `TankState`, so the canonical persisted chemistry remains the internal total-based fields plus `geometry.gross_water_volume_l()` derivation inputs. Save payloads should not duplicate concentration mirrors alongside those totals; duplicated totals and concentrations would drift.
 
 Policy for save/schema work:
 
