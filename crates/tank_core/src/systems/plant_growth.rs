@@ -6,11 +6,7 @@ const PLANT_N_MG_PER_G_GROWTH: f64 = 28.0;
 const PLANT_P_MG_PER_G_GROWTH: f64 = 4.0;
 
 pub fn step_daily_plants(state: &mut TankState) {
-    let chemistry = state.concentrations();
-    let tan_mg_n_per_l = chemistry.tan_mg_n_per_l();
-    let nitrate_mg_n_per_l = chemistry.nitrate_mg_n_per_l();
-    let phosphate_mg_p_per_l = chemistry.phosphate_mg_p_per_l();
-    let dic_mg_c_per_l = chemistry.dic_mg_c_per_l();
+    let dic_mg_c_per_l = state.concentrations().dic_mg_c_per_l();
     let plant_half_saturation_n_mg_n_per_l =
         legacy_total_param_to_mg_per_l(state.process_params.plant_half_saturation_n_mg_total);
     let plant_half_saturation_p_mg_p_per_l =
@@ -51,6 +47,14 @@ pub fn step_daily_plants(state: &mut TankState) {
         let substrate_p = state.substrate_p_mg_p_per_m2();
         let water_bias = state.plant_guilds[index].water_column_uptake_bias();
         let substrate_bias = state.plant_guilds[index].substrate_uptake_bias();
+        let (tan_mg_n_per_l, nitrate_mg_n_per_l, phosphate_mg_p_per_l) = {
+            let chemistry = state.concentrations();
+            (
+                chemistry.tan_mg_n_per_l(),
+                chemistry.nitrate_mg_n_per_l(),
+                chemistry.phosphate_mg_p_per_l(),
+            )
+        };
         // Normalize biases for the accessibility calculation so presets that
         // sum above 1.0 don't inflate the apparent nutrient availability.
         let bias_sum = (water_bias + substrate_bias).max(f64::MIN_POSITIVE);

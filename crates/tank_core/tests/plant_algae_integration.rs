@@ -246,6 +246,49 @@ fn plant_water_column_limitation_is_volume_invariant_at_fixed_concentration() {
 }
 
 #[test]
+fn later_plant_guilds_see_updated_water_column_chemistry() {
+    let mut state = base_growth_state(SimSeed(8108));
+    state.substrate_layers.clear();
+    state.plant_guilds = vec![
+        PlantGuildState {
+            guild: PlantGuild::FastStem,
+            biomass_g: 4.0,
+            health_index: 0.8,
+            crowding_index: 0.0,
+            habitat_index: 0.8,
+            water_column_uptake_bias: Some(1.0),
+            substrate_uptake_bias: Some(0.0),
+        },
+        PlantGuildState {
+            guild: PlantGuild::FastStem,
+            biomass_g: 4.0,
+            health_index: 0.8,
+            crowding_index: 0.0,
+            habitat_index: 0.8,
+            water_column_uptake_bias: Some(1.0),
+            substrate_uptake_bias: Some(0.0),
+        },
+    ];
+
+    let volume_l = state.water_volume_l();
+    state.water.ammonia_total_mg_n_total = 0.1 * volume_l;
+    state.water.nitrate_mg_n_total = 0.6 * volume_l;
+    state.water.phosphate_mg_p_total = 0.08 * volume_l;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 30.0 * volume_l;
+
+    step_daily_plants(&mut state);
+
+    assert!(
+        state.plant_guilds[0].biomass_g > state.plant_guilds[1].biomass_g + 0.005,
+        "later guilds should compute growth against the depleted water column after earlier guild uptake"
+    );
+    assert!(
+        state.plant_guilds[0].health_index > state.plant_guilds[1].health_index,
+        "later guilds should also register the stronger nutrient stress after earlier guild uptake"
+    );
+}
+
+#[test]
 fn plant_substrate_limitation_drops_when_areal_store_is_depleted() {
     let build_state = |substrate_n_mg_total: f64, substrate_p_mg_total: f64| {
         let mut state = base_growth_state(SimSeed(8107));
