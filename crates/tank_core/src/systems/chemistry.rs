@@ -1,7 +1,4 @@
-use crate::types::TankState;
-
-const ADULT_SHRIMP_BIOMASS_G: f64 = 0.12;
-const JUVENILE_SHRIMP_BIOMASS_G: f64 = 0.05;
+use crate::types::{TankState, ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G};
 
 pub fn compute_ph_from_totals(
     alkalinity_meq_total: f64,

@@ -5,10 +5,10 @@ use serde::{Deserialize, Serialize};
 use crate::rng::{SimRng, SimSeed};
 
 use super::{
-    AlgaeState, AnimalState, ConcentrationView, DetritusState, EnvironmentState, FilterState,
-    HardwareState, MicrobeState, MicrofaunaState, PlantGuild, PlantGuildState, ProcessParams,
-    ShrimpRuntimeParams, SimEvent, SourceWaterProfile, StabilityTracker, SubstrateKind,
-    SubstrateLayerState, TankGeometry, WaterState,
+    AlgaeState, AnimalState, BudgetTotals, ConcentrationView, DetritusState, EnvironmentState,
+    FilterState, HardwareState, MicrobeState, MicrofaunaState, PlantGuild, PlantGuildState,
+    ProcessParams, ShrimpRuntimeParams, SimEvent, SourceWaterProfile, StabilityTracker,
+    SubstrateKind, SubstrateLayerState, TankGeometry, WaterState,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -236,6 +236,18 @@ impl TankState {
 
     pub fn do_mg_per_l(&self) -> f64 {
         self.concentrations().do_mg_per_l()
+    }
+
+    pub fn total_nitrogen(&self) -> f64 {
+        BudgetTotals::from_state(self).nitrogen_mg
+    }
+
+    pub fn total_carbon(&self) -> f64 {
+        BudgetTotals::from_state(self).carbon_mg
+    }
+
+    pub fn budget_totals(&self) -> BudgetTotals {
+        BudgetTotals::from_state(self)
     }
 
     pub fn phosphate_mg_p_per_l(&self) -> f64 {

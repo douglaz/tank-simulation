@@ -1,9 +1,11 @@
 use crate::{
     systems::events,
-    types::{legacy_total_param_to_mg_per_l, total_colonizable_area_cm2, TankState},
+    types::{
+        legacy_total_param_to_mg_per_l, total_colonizable_area_cm2, TankState,
+        ALGAE_N_MG_PER_G_BIOMASS,
+    },
 };
 
-const ALGAE_N_MG_PER_G_GROWTH: f64 = 35.0;
 const ALGAE_P_MG_PER_G_GROWTH: f64 = 5.0;
 
 pub fn step_daily_algae(state: &mut TankState) {
@@ -60,11 +62,11 @@ pub fn step_daily_algae(state: &mut TankState) {
     let suspended_grazing_g = state.algae.suspended_biomass_g * 0.03 * microfauna_grazing;
     let (susp_nh3_removed, susp_no3_removed, susp_p_removed) = consume_algae_nutrients(
         state,
-        suspended_gross_growth_g * ALGAE_N_MG_PER_G_GROWTH,
+        suspended_gross_growth_g * ALGAE_N_MG_PER_G_BIOMASS,
         suspended_gross_growth_g * ALGAE_P_MG_PER_G_GROWTH,
     );
     let susp_n_removed = susp_nh3_removed + susp_no3_removed;
-    let susp_n_demand = suspended_gross_growth_g * ALGAE_N_MG_PER_G_GROWTH;
+    let susp_n_demand = suspended_gross_growth_g * ALGAE_N_MG_PER_G_BIOMASS;
     let susp_p_demand = suspended_gross_growth_g * ALGAE_P_MG_PER_G_GROWTH;
     let susp_cap_frac = if suspended_gross_growth_g > f64::EPSILON {
         let n_frac = if susp_n_demand > f64::EPSILON {
@@ -131,11 +133,11 @@ pub fn step_daily_algae(state: &mut TankState) {
     let periphyton_grazing_g = state.algae.periphyton_biomass_g * 0.06 * microfauna_grazing;
     let (peri_nh3_removed, peri_no3_removed, peri_p_removed) = consume_algae_nutrients(
         state,
-        periphyton_gross_growth_g * ALGAE_N_MG_PER_G_GROWTH,
+        periphyton_gross_growth_g * ALGAE_N_MG_PER_G_BIOMASS,
         periphyton_gross_growth_g * ALGAE_P_MG_PER_G_GROWTH,
     );
     let peri_n_removed = peri_nh3_removed + peri_no3_removed;
-    let peri_n_demand = periphyton_gross_growth_g * ALGAE_N_MG_PER_G_GROWTH;
+    let peri_n_demand = periphyton_gross_growth_g * ALGAE_N_MG_PER_G_BIOMASS;
     let peri_p_demand = periphyton_gross_growth_g * ALGAE_P_MG_PER_G_GROWTH;
     let peri_cap_frac = if periphyton_gross_growth_g > f64::EPSILON {
         let n_frac = if peri_n_demand > f64::EPSILON {

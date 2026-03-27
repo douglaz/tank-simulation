@@ -1,4 +1,5 @@
 pub mod actions;
+pub mod budget;
 pub mod biology;
 pub mod environment;
 pub mod events;
@@ -12,6 +13,14 @@ pub mod substrate;
 pub mod water;
 
 pub use actions::{PlayerAction, SimError};
+pub use budget::{
+    algae_carbon_mg, algae_nitrogen_mg, detritus_carbon_mg, detritus_nitrogen_mg,
+    live_biomass_carbon_mg, live_biomass_nitrogen_mg, plant_carbon_mg, plant_nitrogen_mg,
+    shrimp_biomass_g, shrimp_carbon_mg, shrimp_nitrogen_mg, BudgetDelta, BudgetEntry,
+    BudgetLedger, BudgetTotals, ElementBudget, ADULT_SHRIMP_BIOMASS_G,
+    ALGAE_N_MG_PER_G_BIOMASS, JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
+    PLANT_N_MG_PER_G_BIOMASS,
+};
 pub use biology::{
     total_colonizable_area_cm2, AlgaeState, AnimalState, DetritusState, EggCohort, MicrobeState,
     MicrofaunaState, PlantGuild, PlantGuildState, ShrimpRuntimeParams, StabilityTracker,

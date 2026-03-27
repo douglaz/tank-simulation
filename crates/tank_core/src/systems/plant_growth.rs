@@ -1,8 +1,8 @@
 use crate::types::{
     legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2, PlantGuild, TankState,
+    PLANT_N_MG_PER_G_BIOMASS,
 };
 
-const PLANT_N_MG_PER_G_GROWTH: f64 = 28.0;
 const PLANT_P_MG_PER_G_GROWTH: f64 = 4.0;
 
 pub fn step_daily_plants(state: &mut TankState) {
@@ -92,7 +92,7 @@ pub fn step_daily_plants(state: &mut TankState) {
             * (1.0 + 0.5 * (1.0 - health_index));
         let realized_growth_g = gross_growth_g.max(0.0);
 
-        let n_demand = realized_growth_g * PLANT_N_MG_PER_G_GROWTH;
+        let n_demand = realized_growth_g * PLANT_N_MG_PER_G_BIOMASS;
         let p_demand = realized_growth_g * PLANT_P_MG_PER_G_GROWTH;
         let (nh3_removed, no3_removed, sub_n_removed, p_removed) =
             remove_plant_nutrients(state, n_demand, p_demand, water_bias, substrate_bias);
