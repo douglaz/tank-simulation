@@ -74,12 +74,14 @@ That approximation is acceptable for the aquarium envelope this simulator curren
 
 ### Equilibrium constants
 
-Use temperature-corrected `pKa1` and fixed first-pass `pKa2`:
+Use temperature-corrected `pKa1` (Harned & Davis, 1943) and fixed first-pass `pKa2`:
 
-- `pKa1(T) = 6.352 - 0.0238 * (temperature_c - 25.0)`
+- `pKa1(T) = 3404.71 / (temperature_c + 273.15) + 0.032786 * (temperature_c + 273.15) - 14.8435`
 - `pKa2 = 10.33`
 - `Ka1 = 10^-pKa1`
 - `Ka2 = 10^-pKa2`
+
+The Harned & Davis formula is three arithmetic operations and accurate across the full 15-35°C target range without linearization error. A linear approximation `pKa1(T) ≈ 6.352 - 0.0055 * (temperature_c - 25.0)` is acceptable (~±0.03 pK units across 15-35°C) but should be replaced with the full formula if the temperature range expands.
 
 `pKa2` stays fixed in the first pass because `CO3--` is a minor fraction across most of the `pH 5.5..=8.5` target range. The solver interface should still keep both constants explicit so a later bead can temperature-correct `pKa2` without changing the state layout.
 
