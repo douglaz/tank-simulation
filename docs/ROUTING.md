@@ -143,7 +143,7 @@ Notes:
 | `TrimPlantsAndExport` | none | Remove plant biomass from the model entirely | This is the default real-world maintenance interpretation and should become the explicit export action. |
 | Current `TrimPlants { fraction }` | Today it behaves like `TrimPlantsAndLeaveCuttings` | none | Future action work should split the current behavior into the two explicit variants above. |
 | `SiphonDetritus { fraction }` | none | Remove the chosen fraction of `particulate_organics_g_total` and `fine_detritus_g_total` from the model | Siphoned solids are exported waste, not recycled. |
-| `CleanFilter { intensity }` | Reduce cleanliness and implicit biofilter biomass only | Removed fouling is treated as maintenance export | Filter biofilm is implicit in current state, so no new detritus pool is created during cleaning. |
+| `CleanFilter { intensity }` | Reduce cleanliness and reroute the removed decomposer/nitrifier biomass into dissolved organics (`DOC`/`DON`) | none | Filter biofilm is still implicit in state, so cleaning does not create a separate captured-solids pool; it now models an in-tank setback rather than an export. |
 | `WaterChangePercent { percent, ... }` | Replace removed water with source-water totals | Remove the same fraction of dissolved water-column pools with the old water | This includes TAN, nitrite, nitrate, phosphate, DOC, DON, DIC, alkalinity, and tracked ions. |
 | `RemoveShrimp { count }` | none | Export removed shrimp biomass | User removal is an explicit export action, not mortality detritus. |
 
@@ -160,7 +160,7 @@ The following simplifications are deliberate for phase 1:
 - TAN-only dissolved excretion: consumer dissolved N waste goes to `ammonia_total_mg_n_total`, not to separate urea or DON pools.
 - Lumped DIC: respiration adds to `dissolved_inorganic_carbon_mg_c_total` without splitting `CO2(aq)`, `HCO3-`, and `CO3--`.
 - Microfauna are index-based: their retained share may stay approximate until a later biomass-backed model exists.
-- Filter fouling removal is implicit: `CleanFilter` exports maintenance waste without modeling a separate captured-solids pool.
+- Filter fouling removal stays implicit: `CleanFilter` does not create a separate captured-solids pool, and the removed microbial biomass is rerouted into dissolved organics instead of being exported.
 - No detritus subtype stoichiometry pool: the source identity of feces vs corpse vs cuttings is not persisted once material enters `fine_detritus_g_total`.
 
 What would justify un-lumping later:
