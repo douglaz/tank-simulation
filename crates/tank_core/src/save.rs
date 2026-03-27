@@ -10,7 +10,7 @@ use crate::{
 ///
 /// When you bump from N to N+1, you **must** also append a migration function
 /// to [`MIGRATIONS`]. See the migration contract below.
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Oldest schema version that the migration chain can handle.
@@ -71,6 +71,10 @@ const MIGRATIONS: &[MigrationFn] = &[
     // Rescale dissolved-chemistry totals from gross-volume basis to net-water
     // volume (accounting for substrate displacement).
     migrate_v2_to_v3,
+    // Index 1: schema 3 → 4
+    // Add shrimp feeding pathway parameters and animal.reserve_g.
+    // All new fields use #[serde(default)], so a no-op migration suffices.
+    migrate_v3_to_v4,
 ];
 
 // Compile-time check: MIGRATIONS length must equal SCHEMA_VERSION - MIN_SUPPORTED_SCHEMA.
@@ -265,6 +269,14 @@ fn migrate_v2_to_v3(value: &mut Value) {
             }
         }
     }
+}
+
+/// Schema 3 → 4: add shrimp feeding pathway parameters (assimilation efficiency,
+/// respiration/excretion/growth fractions, O2:C quotient) and `animal.reserve_g`.
+/// All new fields use `#[serde(default)]`, so deserialization fills them in
+/// automatically. No raw JSON transformation needed.
+fn migrate_v3_to_v4(_value: &mut Value) {
+    // No-op: serde defaults handle all new fields.
 }
 
 // ---------------------------------------------------------------------------

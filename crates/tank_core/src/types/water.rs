@@ -61,11 +61,7 @@ impl WaterState {
             sulfate_mg_total: 8.0 * volume_l,
             ph: default_ph(),
         };
-        state.ph = crate::systems::chemistry::compute_ph_from_totals(
-            state.alkalinity_meq_total,
-            state.dissolved_inorganic_carbon_mg_c_total,
-            volume_l,
-        );
+        crate::systems::chemistry::resolve_carbonate_state(&mut state, volume_l);
         state
     }
 
@@ -111,11 +107,7 @@ impl WaterState {
             sulfate_mg_total: profile.sulfate_mg_per_l * volume_l,
             ph: default_ph(),
         };
-        state.ph = crate::systems::chemistry::compute_ph_from_totals(
-            state.alkalinity_meq_total,
-            state.dissolved_inorganic_carbon_mg_c_total,
-            volume_l,
-        );
+        crate::systems::chemistry::resolve_carbonate_state(&mut state, volume_l);
         state
     }
 

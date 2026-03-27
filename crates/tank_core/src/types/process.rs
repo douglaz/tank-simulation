@@ -293,10 +293,37 @@ impl Default for ProcessParams {
             shrimp_periphyton_grazing_g_per_shrimp_per_day: 0.01,
             shrimp_condition_smoothing: 0.15,
 
+            shrimp_assimilation_efficiency: default_shrimp_assimilation_efficiency(),
+            shrimp_respiration_fraction_of_assimilated: default_shrimp_respiration_fraction(),
+            shrimp_excretion_fraction_of_assimilated: default_shrimp_excretion_fraction(),
+            shrimp_growth_fraction_of_assimilated: default_shrimp_growth_fraction(),
+            shrimp_o2_per_mg_c_respired: default_shrimp_o2_per_mg_c_respired(),
+
             microfauna_mineralization_boost: 0.15,
             microfauna_periphyton_consumption: 0.02,
             microfauna_population_smoothing: 0.1,
             microfauna_shrimp_pressure_threshold: 3.0,
         }
     }
+}
+
+// -- Shrimp feeding pathway defaults --
+// Phase-1 values chosen from literature on Neocaridina/Caridina detritivory.
+// respiration (0.70) + excretion (0.10) + growth (0.20) = 1.0
+
+fn default_shrimp_assimilation_efficiency() -> f64 {
+    0.50
+}
+fn default_shrimp_respiration_fraction() -> f64 {
+    0.70
+}
+fn default_shrimp_excretion_fraction() -> f64 {
+    0.10
+}
+fn default_shrimp_growth_fraction() -> f64 {
+    0.20
+}
+/// Stoichiometric O2:C for organic matter oxidation (32/12 ≈ 2.67).
+fn default_shrimp_o2_per_mg_c_respired() -> f64 {
+    2.67
 }

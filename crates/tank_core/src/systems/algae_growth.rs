@@ -1,5 +1,5 @@
 use crate::{
-    systems::chemistry::compute_ph_from_totals,
+    systems::chemistry::resolve_carbonate_state,
     systems::events,
     types::{
         algae_carbon_mg, algae_nitrogen_mg, legacy_total_param_to_mg_per_l,
@@ -221,11 +221,7 @@ pub fn step_daily_algae(state: &mut TankState) {
         (0.55 * suspended_pressure + 0.45 * periphyton_pressure).clamp(0.0, 1.0);
 
     events::emit_daily_algae_events(state, previous_nuisance_index, periphyton_capacity_g);
-    state.water.ph = compute_ph_from_totals(
-        state.water.alkalinity_meq_total,
-        state.water.dissolved_inorganic_carbon_mg_c_total,
-        volume_l,
-    );
+    resolve_carbonate_state(&mut state.water, volume_l);
 }
 
 fn algae_light_factor(state: &TankState) -> f64 {

@@ -348,11 +348,8 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let total_alk_consumed = aob_alk_cost + comammox_alk_cost;
     state.water.alkalinity_meq_total =
         (state.water.alkalinity_meq_total - total_alk_consumed).max(0.0);
-    // Deplete bicarbonate proportionally so TDS/conductivity stay consistent
-    // with the alkalinity drop.  1 meq alkalinity ≈ 61 mg HCO₃⁻.
-    let bicarb_consumed_mg = total_alk_consumed * 61.0;
-    state.water.bicarbonate_mg_total =
-        (state.water.bicarbonate_mg_total - bicarb_consumed_mg).max(0.0);
+    // bicarbonate_mg_total is now a cached projection from the carbonate
+    // equilibrium solver; the chemistry step resolve will update it.
 
     // Nitrifier growth consumes DIC for assimilatory uptake, while the broader
     // chemistry model still omits a more detailed inorganic-carbon coupling.

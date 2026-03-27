@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use super::{PlantGuild, SimEvent, TankState};
-use crate::systems::{chemistry::compute_nh3_mg_l, temperature::do_sat_mg_l};
+use crate::systems::{
+    chemistry::{compute_nh3_mg_l, solve_carbonate_equilibrium},
+    temperature::do_sat_mg_l,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TankSnapshot {
@@ -16,6 +19,7 @@ pub struct TankSnapshot {
     pub nitrate_mg_l: f64,
     pub phosphate_mg_l: f64,
     pub dissolved_inorganic_carbon_mg_l: f64,
+    pub co2_aq_mmol_per_l: f64,
     pub do_mg_l: f64,
     pub do_sat_mg_l: f64,
     pub gh_d: f64,
@@ -69,6 +73,12 @@ impl TankSnapshot {
         let nitrate_mg_l = chemistry.nitrate_mg_n_per_l();
         let phosphate_mg_l = chemistry.phosphate_mg_p_per_l();
         let dissolved_inorganic_carbon_mg_l = chemistry.dic_mg_c_per_l();
+        let carbonate_eq = solve_carbonate_equilibrium(
+            state.water.dissolved_inorganic_carbon_mg_c_total,
+            state.water.alkalinity_meq_total,
+            state.water.temperature_c,
+            volume_l,
+        );
         let do_mg_l_val = chemistry.do_mg_per_l();
         let gh_d = chemistry.gh_d();
         let kh_d = chemistry.kh_d();
@@ -107,6 +117,7 @@ impl TankSnapshot {
             nitrate_mg_l,
             phosphate_mg_l,
             dissolved_inorganic_carbon_mg_l,
+            co2_aq_mmol_per_l: carbonate_eq.co2_aq_mmol_per_l,
             do_mg_l: do_mg_l_val,
             do_sat_mg_l: do_sat_mg_l(state.water.temperature_c),
             gh_d,

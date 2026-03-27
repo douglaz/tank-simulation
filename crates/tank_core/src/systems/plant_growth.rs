@@ -1,4 +1,4 @@
-use crate::systems::chemistry::compute_ph_from_totals;
+use crate::systems::chemistry::resolve_carbonate_state;
 use crate::types::{
     legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2, plant_carbon_mg,
     plant_nitrogen_mg, PlantGuild, TankState, PLANT_N_MG_PER_G_BIOMASS,
@@ -168,11 +168,8 @@ pub fn step_daily_plants(state: &mut TankState) {
         state.plant_guilds[index].health_index = new_health.clamp(0.0, 1.0);
     }
 
-    state.water.ph = compute_ph_from_totals(
-        state.water.alkalinity_meq_total,
-        state.water.dissolved_inorganic_carbon_mg_c_total,
-        state.water_volume_l(),
-    );
+    let volume_l = state.water_volume_l();
+    resolve_carbonate_state(&mut state.water, volume_l);
 }
 
 fn weighted_limitation_factor(

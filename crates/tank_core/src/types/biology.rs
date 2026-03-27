@@ -82,6 +82,13 @@ pub struct AnimalState {
     /// Fractional maturation accumulator for juvenile → adult promotion.
     #[serde(default)]
     pub maturation_accum: f64,
+    /// Assimilated organic reserve (grams of organic matter).
+    /// Tracks the retained share of feeding that has not yet been used for
+    /// growth/reproduction. Carries both N and C at the feed_n_to_c_ratio.
+    /// This pool is the explicit "retained" destination in the consumer
+    /// routing contract (see docs/ROUTING.md).
+    #[serde(default)]
+    pub reserve_g: f64,
 }
 
 /// Species-specific shrimp parameters materialized from ShrimpPreset.
@@ -180,6 +187,7 @@ impl Default for AnimalState {
             hourly_instability_stress_accum: 0.0,
             daily_food_consumed_g: 0.0,
             maturation_accum: 0.0,
+            reserve_g: 0.0,
         }
     }
 }

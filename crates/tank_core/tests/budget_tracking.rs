@@ -244,7 +244,10 @@ fn is_shared_budget_path(path: &str) -> bool {
     path.ends_with("biomass_g")
         || path.ends_with("particulate_organics_g_total")
         || path.ends_with("fine_detritus_g_total")
-        || matches!(path, "animal.adults_count" | "animal.juveniles_count")
+        || matches!(
+            path,
+            "animal.adults_count" | "animal.juveniles_count" | "animal.reserve_g"
+        )
 }
 
 fn is_nitrogen_budget_path(path: &str) -> bool {
@@ -282,6 +285,7 @@ fn test_total_n_helper_sums_all_pools() {
             manual_shrimp_biomass_g(state.animal.adults_count, state.animal.juveniles_count),
             ratio,
         )
+        + manual_organic_nitrogen_mg(state.animal.reserve_g, ratio)
         + manual_organic_nitrogen_mg(
             state.detritus.particulate_organics_g_total + state.detritus.fine_detritus_g_total,
             ratio,
@@ -309,6 +313,7 @@ fn test_total_c_helper_sums_all_pools() {
             manual_shrimp_biomass_g(state.animal.adults_count, state.animal.juveniles_count),
             ratio,
         )
+        + manual_organic_carbon_mg(state.animal.reserve_g, ratio)
         + manual_organic_carbon_mg(
             state.detritus.particulate_organics_g_total + state.detritus.fine_detritus_g_total,
             ratio,

@@ -86,8 +86,8 @@ pub struct BudgetComponent {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct BudgetSnapshot {
     pub(crate) totals: BudgetTotals,
-    nitrogen_components: [BudgetComponent; 16],
-    carbon_components: [BudgetComponent; 13],
+    nitrogen_components: [BudgetComponent; 17],
+    carbon_components: [BudgetComponent; 14],
 }
 
 impl BudgetSnapshot {
@@ -167,7 +167,7 @@ impl BudgetLedger {
 /// When adding a new explicit nitrogen-bearing field, update this function in
 /// the same change. If the field uses a non-standard name, also extend the
 /// budget-path discovery rules used by the coverage test.
-pub fn nitrogen_budget_components(state: &TankState) -> [BudgetComponent; 16] {
+pub fn nitrogen_budget_components(state: &TankState) -> [BudgetComponent; 17] {
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let substrate_n_mg: f64 = state
         .substrate_layers
@@ -244,6 +244,10 @@ pub fn nitrogen_budget_components(state: &TankState) -> [BudgetComponent; 16] {
             amount_mg: shrimp_nitrogen_mg(0, state.animal.juveniles_count, n_to_c_ratio),
         },
         BudgetComponent {
+            label: "animal.reserve_g",
+            amount_mg: detritus_nitrogen_mg(state.animal.reserve_g, n_to_c_ratio),
+        },
+        BudgetComponent {
             label: "detritus.particulate_organics_g_total",
             amount_mg: detritus_nitrogen_mg(
                 state.detritus.particulate_organics_g_total,
@@ -265,7 +269,7 @@ pub fn nitrogen_budget_components(state: &TankState) -> [BudgetComponent; 16] {
 /// When adding a new explicit carbon-bearing field, update this function in the
 /// same change. If the field uses a non-standard name, also extend the
 /// budget-path discovery rules used by the coverage test.
-pub fn carbon_budget_components(state: &TankState) -> [BudgetComponent; 13] {
+pub fn carbon_budget_components(state: &TankState) -> [BudgetComponent; 14] {
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let plant_c_mg: f64 = state
         .plant_guilds
@@ -323,6 +327,10 @@ pub fn carbon_budget_components(state: &TankState) -> [BudgetComponent; 13] {
         BudgetComponent {
             label: "animal.juveniles_count",
             amount_mg: shrimp_carbon_mg(0, state.animal.juveniles_count, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "animal.reserve_g",
+            amount_mg: detritus_carbon_mg(state.animal.reserve_g, n_to_c_ratio),
         },
         BudgetComponent {
             label: "detritus.particulate_organics_g_total",

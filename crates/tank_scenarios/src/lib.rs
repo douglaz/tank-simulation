@@ -424,6 +424,16 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
             .shrimp_periphyton_grazing_g_per_shrimp_per_day,
         shrimp_condition_smoothing: preset.shrimp_condition_smoothing,
 
+        // Shrimp feeding pathway parameters — not yet in presets, use defaults.
+        shrimp_assimilation_efficiency: ProcessParams::default().shrimp_assimilation_efficiency,
+        shrimp_respiration_fraction_of_assimilated: ProcessParams::default()
+            .shrimp_respiration_fraction_of_assimilated,
+        shrimp_excretion_fraction_of_assimilated: ProcessParams::default()
+            .shrimp_excretion_fraction_of_assimilated,
+        shrimp_growth_fraction_of_assimilated: ProcessParams::default()
+            .shrimp_growth_fraction_of_assimilated,
+        shrimp_o2_per_mg_c_respired: ProcessParams::default().shrimp_o2_per_mg_c_respired,
+
         microfauna_mineralization_boost: preset.microfauna_mineralization_boost,
         microfauna_periphyton_consumption: preset.microfauna_periphyton_consumption,
         microfauna_population_smoothing: preset.microfauna_population_smoothing,

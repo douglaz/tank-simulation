@@ -82,6 +82,17 @@ periphyton_capacity_g_per_m2 = 6.0
 algae_bloom_threshold_g_per_l = 0.08
 algae_nuisance_biomass_g_per_m2 = 10.0
 
+# Shrimp feeding pathway fractions (consumer routing contract)
+# Phase-1 simplification: periphyton and fine detritus share one food-quality
+# assumption (feed_n_to_c_ratio). See docs/ROUTING.md for the full contract.
+# Constraint: respiration + excretion + growth = 1.0
+shrimp_assimilation_efficiency = 0.50
+shrimp_respiration_fraction_of_assimilated = 0.70
+shrimp_excretion_fraction_of_assimilated = 0.10
+shrimp_growth_fraction_of_assimilated = 0.20
+# Stoichiometric O2:C for organic matter oxidation (32/12 ≈ 2.67)
+shrimp_o2_per_mg_c_respired = 2.67
+
 [provenance]
 source_title = "Starter preset pack"
 source_year = 2026

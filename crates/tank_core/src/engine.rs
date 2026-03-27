@@ -400,6 +400,12 @@ impl Engine {
                 None
             }
             PlayerAction::RemoveShrimp { count } => {
+                // Export proportional share of reserve with removed shrimp.
+                let total = self.state.animal.adults_count;
+                if total > 0 && self.state.animal.reserve_g > f64::EPSILON {
+                    let removed_frac = f64::from(count.min(total)) / f64::from(total);
+                    self.state.animal.reserve_g -= self.state.animal.reserve_g * removed_frac;
+                }
                 self.state.animal.adults_count =
                     self.state.animal.adults_count.saturating_sub(count);
                 // Preserve berried_females_count <= adults_count (also trims egg cohorts)

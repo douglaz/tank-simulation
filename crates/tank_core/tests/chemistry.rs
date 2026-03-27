@@ -1,5 +1,5 @@
 use tank_core::{
-    systems::chemistry::{compute_nh3_mg_l, compute_ph_from_totals},
+    systems::chemistry::{compute_nh3_mg_l, solve_carbonate_equilibrium},
     Engine, ProcessParams, SimSeed, SimulationEngine, TankState,
 };
 
@@ -77,11 +77,15 @@ fn nh3_speciation_matches_reference_formula() {
 
 #[test]
 fn ph_formula_uses_state_storage_bounds() {
-    let low = compute_ph_from_totals(0.01, 500.0, 20.0);
-    let high = compute_ph_from_totals(12.0, 0.01, 20.0);
+    // Low alkalinity + high DIC → low pH
+    let low = solve_carbonate_equilibrium(500.0, 0.01, 25.0, 20.0).ph;
+    // High alkalinity + low DIC → high pH
+    let high = solve_carbonate_equilibrium(0.01, 12.0, 25.0, 20.0).ph;
 
-    assert!((5.5..=8.5).contains(&low));
-    assert!((5.5..=8.5).contains(&high));
+    // The carbonate solver clamps output to 4.0–10.0.
+    assert!((4.0..=10.0).contains(&low), "low pH {low} out of bounds");
+    assert!((4.0..=10.0).contains(&high), "high pH {high} out of bounds");
+    assert!(low < high, "low pH ({low}) should be less than high pH ({high})");
 }
 
 #[test]

@@ -6,7 +6,6 @@ use crate::types::{
     JUVENILE_SHRIMP_BIOMASS_G,
 };
 
-const SHRIMP_MINERALIZED_WASTE_FRACTION: f64 = 0.35;
 const JUVENILES_PER_CLUTCH: u32 = 25;
 
 // ── Hourly ──────────────────────────────────────────────────────────────────
@@ -130,7 +129,6 @@ fn shrimp_feeding(state: &mut TankState) {
         return;
     }
 
-    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let rate = state
         .process_params
         .shrimp_periphyton_grazing_g_per_shrimp_per_day;
@@ -143,7 +141,6 @@ fn shrimp_feeding(state: &mut TankState) {
     let periph_consumed = food_demand.min(max_periph).max(0.0);
     state.algae.periphyton_biomass_g =
         (state.algae.periphyton_biomass_g - periph_consumed).max(0.0);
-    route_algae_food_to_waste(state, periph_consumed, n_to_c_ratio);
 
     // Shrimp also eat fine detritus (biofilm, decomposing organic matter)
     let detritus_demand = total_feeding_units * rate * grazing_access_factor;
@@ -151,8 +148,88 @@ fn shrimp_feeding(state: &mut TankState) {
     let detritus_consumed = detritus_demand.min(max_detritus).max(0.0);
     state.detritus.fine_detritus_g_total =
         (state.detritus.fine_detritus_g_total - detritus_consumed).max(0.0);
-    route_detritus_food_to_waste(state, detritus_consumed, n_to_c_ratio);
+
     state.animal.daily_food_consumed_g = periph_consumed + detritus_consumed;
+
+    // Convert consumed food to elemental N and C for routing.
+    // Phase-1 simplification: periphyton and fine detritus share the same
+    // food-quality assumption (feed_n_to_c_ratio). This is documented in
+    // ProcessParams and acceptable because both food sources are mixed
+    // organic matter at similar N:C in a shrimp tank.
+    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
+    let consumed_n_mg = algae_nitrogen_mg(periph_consumed)
+        + detritus_nitrogen_mg(detritus_consumed, n_to_c_ratio);
+    let consumed_c_mg = algae_carbon_mg(periph_consumed, n_to_c_ratio)
+        + detritus_carbon_mg(detritus_consumed, n_to_c_ratio);
+
+    route_consumed_food(state, consumed_n_mg, consumed_c_mg);
+}
+
+/// Routes consumed food through the consumer routing contract:
+///
+/// ```text
+/// consumed = feces + assimilated
+/// assimilated = respired + excreted + retained
+/// ```
+///
+/// Destinations:
+/// - feces → fine_detritus_g_total (as organic matter grams)
+/// - excreted N → ammonia_total_mg_n_total (TAN)
+/// - respired C → dissolved_inorganic_carbon_mg_c_total (DIC)
+/// - respired → O2 demand (dissolved_oxygen_mg_total)
+/// - retained → animal.reserve_g (organic matter grams)
+fn route_consumed_food(state: &mut TankState, consumed_n_mg: f64, consumed_c_mg: f64) {
+    if consumed_n_mg <= f64::EPSILON && consumed_c_mg <= f64::EPSILON {
+        return;
+    }
+
+    let params = &state.process_params;
+    let ae = params.shrimp_assimilation_efficiency;
+    let fecal_fraction = 1.0 - ae;
+    let resp_frac = params.shrimp_respiration_fraction_of_assimilated;
+    let excr_frac = params.shrimp_excretion_fraction_of_assimilated;
+    let growth_frac = params.shrimp_growth_fraction_of_assimilated;
+    let o2_per_c = params.shrimp_o2_per_mg_c_respired;
+    // ── Feces: unassimilated share → fine detritus ──
+    let fecal_n_mg = consumed_n_mg * fecal_fraction;
+    let fecal_c_mg = consumed_c_mg * fecal_fraction;
+    // Convert elemental mg back to organic-matter grams for the detritus pool.
+    // organic_matter_g = (N_mg + C_mg) / 1000.0
+    let fecal_mass_g = (fecal_n_mg + fecal_c_mg) / 1000.0;
+    state.detritus.fine_detritus_g_total += fecal_mass_g;
+
+    // ── Assimilated share ──
+    let assimilated_n_mg = consumed_n_mg * ae;
+    let assimilated_c_mg = consumed_c_mg * ae;
+
+    // ── Excretion: dissolved TAN ──
+    // Phase-1 lumping: all dissolved N excretion goes to TAN (no urea/DON).
+    let excreted_n_mg = assimilated_n_mg * excr_frac;
+    state.water.ammonia_total_mg_n_total += excreted_n_mg;
+
+    // Excreted C goes to DOC (dissolved organic carbon — urea-like organics).
+    let excreted_c_mg = assimilated_c_mg * excr_frac;
+    state.water.dissolved_organic_carbon_mg_c_total += excreted_c_mg;
+
+    // ── Respiration: O2 demand + DIC ──
+    let respired_c_mg = assimilated_c_mg * resp_frac;
+    state.water.dissolved_inorganic_carbon_mg_c_total += respired_c_mg;
+
+    // O2 consumption: mg O2 = mg C respired × respiratory quotient
+    let o2_demand_mg = respired_c_mg * o2_per_c;
+    state.water.dissolved_oxygen_mg_total =
+        (state.water.dissolved_oxygen_mg_total - o2_demand_mg).max(0.0);
+
+    // Respired N is released as TAN (nitrogen from oxidized amino acids).
+    let respired_n_mg = assimilated_n_mg * resp_frac;
+    state.water.ammonia_total_mg_n_total += respired_n_mg;
+
+    // ── Retained: body reserve ──
+    let retained_n_mg = assimilated_n_mg * growth_frac;
+    let retained_c_mg = assimilated_c_mg * growth_frac;
+    // Convert back to organic-matter grams for the reserve pool.
+    let retained_mass_g = (retained_n_mg + retained_c_mg) / 1000.0;
+    state.animal.reserve_g += retained_mass_g;
 }
 
 fn update_condition(state: &mut TankState) {
@@ -510,10 +587,21 @@ fn route_dead_shrimp_to_detritus(state: &mut TankState, adult_deaths: u32, juv_d
         return;
     }
 
+    let total_shrimp = state.animal.adults_count + state.animal.juveniles_count;
+    let total_dead = adult_deaths + juv_deaths;
+
     let dead_biomass_g = (f64::from(adult_deaths) * ADULT_SHRIMP_BIOMASS_G)
         + (f64::from(juv_deaths) * JUVENILE_SHRIMP_BIOMASS_G);
     state.detritus.fine_detritus_g_total +=
         live_biomass_detrital_mass_g(dead_biomass_g, state.process_params.feed_n_to_c_ratio);
+
+    // Proportionally transfer dead shrimp's share of the reserve pool to detritus.
+    if total_shrimp > 0 && state.animal.reserve_g > f64::EPSILON {
+        let dead_fraction = f64::from(total_dead) / f64::from(total_shrimp);
+        let reserve_transfer_g = state.animal.reserve_g * dead_fraction;
+        state.animal.reserve_g -= reserve_transfer_g;
+        state.detritus.fine_detritus_g_total += reserve_transfer_g;
+    }
 }
 
 fn fund_hatched_clutch_from_water(state: &mut TankState) -> bool {
@@ -607,42 +695,6 @@ fn reset_hourly_accumulators(state: &mut TankState) {
     state.animal.daily_food_consumed_g = 0.0;
 }
 
-fn route_algae_food_to_waste(state: &mut TankState, biomass_g: f64, n_to_c_ratio: f64) {
-    if biomass_g <= f64::EPSILON {
-        return;
-    }
-
-    route_food_to_waste_pools(
-        state,
-        algae_nitrogen_mg(biomass_g),
-        algae_carbon_mg(biomass_g, n_to_c_ratio),
-    );
-}
-
-fn route_detritus_food_to_waste(state: &mut TankState, mass_g: f64, n_to_c_ratio: f64) {
-    if mass_g <= f64::EPSILON {
-        return;
-    }
-
-    route_food_to_waste_pools(
-        state,
-        detritus_nitrogen_mg(mass_g, n_to_c_ratio),
-        detritus_carbon_mg(mass_g, n_to_c_ratio),
-    );
-}
-
-fn route_food_to_waste_pools(state: &mut TankState, nitrogen_mg: f64, carbon_mg: f64) {
-    if nitrogen_mg <= f64::EPSILON && carbon_mg <= f64::EPSILON {
-        return;
-    }
-
-    let dissolved_fraction = 1.0 - SHRIMP_MINERALIZED_WASTE_FRACTION;
-    state.water.ammonia_total_mg_n_total += nitrogen_mg * SHRIMP_MINERALIZED_WASTE_FRACTION;
-    state.water.dissolved_organic_nitrogen_mg_n_total += nitrogen_mg * dissolved_fraction;
-    state.water.dissolved_inorganic_carbon_mg_c_total +=
-        carbon_mg * SHRIMP_MINERALIZED_WASTE_FRACTION;
-    state.water.dissolved_organic_carbon_mg_c_total += carbon_mg * dissolved_fraction;
-}
 
 // ── Factor functions ────────────────────────────────────────────────────────
 
