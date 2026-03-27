@@ -188,7 +188,6 @@ pub struct StartupOverrides {
     pub initial_adult_shrimp_count: Option<u32>,
 }
 
-
 pub fn default_scenario_ids() -> &'static [&'static str] {
     tank_data::scenario_ids()
 }
