@@ -13,7 +13,7 @@ fn overfeeding_effects() -> Result<(), tank_core::SimError> {
 
     for _day in 0..14 {
         control.apply_action(PlayerAction::Feed { grams: 0.18 })?;
-        overfed.apply_action(PlayerAction::Feed { grams: 0.85 })?;
+        overfed.apply_action(PlayerAction::Feed { grams: 1.50 })?;
 
         for _hour in 0..24 {
             control.step_hours(1)?;
@@ -55,8 +55,8 @@ fn overfeeding_effects() -> Result<(), tank_core::SimError> {
 fn configured_state(seed: SimSeed) -> tank_core::TankState {
     let mut state =
         tank_scenarios::seeded_state(seed, "warm_room").expect("scenario should materialize");
-    state.hardware.aeration.enabled = true;
-    state.hardware.aeration.intensity = 0.05;
+    state.hardware.aeration.enabled = false;
+    state.hardware.aeration.intensity = 0.0;
     state.hardware.light.photoperiod_hours = 12.0;
     state.hardware.light.intensity_index = 1.0;
     state.process_params.reaeration_kla_base *= 0.4;

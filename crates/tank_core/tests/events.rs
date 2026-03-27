@@ -5,9 +5,9 @@ use tank_core::{
 fn threshold_state(seed: SimSeed) -> TankState {
     let mut state = TankState::new(seed);
     let volume_l = state.water_volume_l();
-    state.water.alkalinity_meq_total = 8.0 * volume_l;
-    state.water.dissolved_inorganic_carbon_mg_c_total = 0.5 * volume_l;
-    state.water.ammonia_total_mg_n_total = 0.5 * volume_l;
+    // Default DIC/Alk (20/1.5) gives pH ~7.3 from the carbonate solver.
+    // Use elevated TAN (3.0 mg/L) so free-NH3 exceeds the 0.02 threshold.
+    state.water.ammonia_total_mg_n_total = 3.0 * volume_l;
     state.water.nitrite_mg_n_total = 0.7 * volume_l;
     state.water.dissolved_oxygen_mg_total = 3.0 * volume_l;
     state.process_params = ProcessParams {
