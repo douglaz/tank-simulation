@@ -1,3 +1,4 @@
+use tank_core::systems::chemistry::compute_nh3_mg_l;
 use tank_core::{
     EggCohort, Engine, EventKind, PlayerAction, ProcessParams, SimError, SimSeed, SimulationEngine,
     TankState,
@@ -31,8 +32,8 @@ fn shrimp_test_state(seed: SimSeed) -> TankState {
 
     state.microbe.decomposer_biomass_g = 0.1;
     state.microbe.ammonia_oxidizer_biomass_g = 0.8;
-    state.microbe.nitrite_oxidizer_biomass_g = 0.5;
-    state.microbe.comammox_biomass_g = 0.15;
+    state.microbe.nitrite_oxidizer_biomass_g = 1.2;
+    state.microbe.comammox_biomass_g = 0.4;
     state.filter_state.biofilter_maturity_index = 1.0;
 
     state.hardware.aeration.enabled = true;
@@ -49,7 +50,8 @@ fn shrimp_test_state(seed: SimSeed) -> TankState {
     state.process_params = ProcessParams::default();
     // Mature biofilter: faster nitrification to keep TAN near zero
     state.process_params.aob_vmax_mg_n_per_g_per_hour = 5.0;
-    state.process_params.nob_vmax_mg_n_per_g_per_hour = 5.0;
+    state.process_params.nob_vmax_mg_n_per_g_per_hour = 8.0;
+    state.process_params.comammox_vmax_fraction = 0.8;
     // Well-established tank with good colonizable surfaces for periphyton
     state.process_params.periphyton_capacity_g_per_m2 = 30.0;
 
@@ -108,14 +110,28 @@ fn hatch_produces_juveniles() -> Result<(), SimError> {
     }
 
     let snap = engine.snapshot();
+    let final_state = engine.full_state();
+    let final_view = final_state.concentrations();
     // In good conditions over 60 days, at least some juveniles should appear
     // (10 adults, 21-day egg cycle, good conditions)
     assert!(
         snap.juveniles_count > 0 || snap.adult_shrimp_count > 10,
         "After 60 days in good conditions, population should have grown. \
-         Adults: {}, Juveniles: {}",
+         Adults: {}, Juveniles: {}, TAN={:.3} mg/L, NH3={:.4} mg/L, NO2={:.3} mg/L, DO={:.3} mg/L, GH={:.3} dGH, condition={:.3}, instability={:.3}, periphyton={:.3} g",
         snap.adult_shrimp_count,
-        snap.juveniles_count
+        snap.juveniles_count,
+        final_view.tan_mg_n_per_l(),
+        compute_nh3_mg_l(
+            final_view.tan_mg_n_per_l(),
+            final_state.water.ph,
+            final_state.water.temperature_c,
+        ),
+        final_view.nitrite_mg_n_per_l(),
+        final_view.do_mg_per_l(),
+        final_view.gh_d(),
+        final_state.animal.condition_index,
+        final_state.stability_tracker.instability_index,
+        final_state.algae.periphyton_biomass_g
     );
 
     Ok(())

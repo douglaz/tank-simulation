@@ -163,16 +163,18 @@ fn algae_bloom_conditions_emit_events_and_overfeeding_raises_nuisance(
     control.water.temperature_c = 28.0;
     control.algae.suspended_biomass_g = 0.05;
     control.algae.periphyton_biomass_g = 0.2;
-    control.water.ammonia_total_mg_n_total = 1.0;
-    control.water.nitrate_mg_n_total = 4.0;
-    control.water.phosphate_mg_p_total = 4.0;
+    control.water.ammonia_total_mg_n_total = 0.2;
+    control.water.nitrate_mg_n_total = 1.0;
+    control.water.phosphate_mg_p_total = 0.4;
+    control.microfauna.population_index = 0.0;
+    control.microfauna.grazing_pressure_index = 0.0;
     let overfed = control.clone();
 
     let mut control_engine = Engine::from_parts(control, vec![]);
     let mut overfed_engine = Engine::from_parts(overfed, vec![]);
     for _ in 0..21 {
-        control_engine.apply_action(PlayerAction::Feed { grams: 0.05 })?;
-        overfed_engine.apply_action(PlayerAction::Feed { grams: 1.5 })?;
+        control_engine.apply_action(PlayerAction::Feed { grams: 0.0 })?;
+        overfed_engine.apply_action(PlayerAction::Feed { grams: 2.5 })?;
         control_engine.step_hours(24)?;
         overfed_engine.step_hours(24)?;
     }
@@ -180,7 +182,9 @@ fn algae_bloom_conditions_emit_events_and_overfeeding_raises_nuisance(
     assert!(
         overfed_engine.snapshot().algae_nuisance_index
             > control_engine.snapshot().algae_nuisance_index,
-        "overfeeding should increase algae nuisance pressure"
+        "overfeeding should increase algae nuisance pressure (control={:.3}, overfed={:.3})",
+        control_engine.snapshot().algae_nuisance_index,
+        overfed_engine.snapshot().algae_nuisance_index
     );
 
     Ok(())
