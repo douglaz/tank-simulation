@@ -1,6 +1,6 @@
 use tank_core::{
     Engine, MicrobeState, PlayerAction, ProcessParams, SaveFile, SimSeed, SimulationEngine,
-    SourceWaterProfile, TankState,
+    SourceWaterProfile, TankState, SCHEMA_VERSION,
 };
 
 #[test]
@@ -149,6 +149,29 @@ fn save_load_with_active_cycle_state() -> Result<(), tank_core::SimError> {
         continued.full_state(),
         resumed.full_state(),
         "Save/load with active cycle state must produce identical results"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v2_saves_are_rejected() -> Result<(), tank_core::SimError> {
+    let save = SaveFile::from_engine(&Engine::new(SimSeed(99)));
+    let json = serde_json::json!({
+        "schema_version": 2,
+        "app_version": save.app_version,
+        "state": save.state,
+        "queued_actions": save.queued_actions,
+    })
+    .to_string();
+
+    let error = SaveFile::from_json(&json).expect_err("schema 2 save should be rejected");
+    assert_eq!(
+        error,
+        tank_core::SimError::SchemaVersionMismatch {
+            expected: SCHEMA_VERSION,
+            actual: 2,
+        }
     );
 
     Ok(())

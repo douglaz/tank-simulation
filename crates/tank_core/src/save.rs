@@ -5,7 +5,9 @@ use crate::{
     types::{PlayerAction, SimError, TankState},
 };
 
-pub const SCHEMA_VERSION: u32 = 2;
+// Schema 3 locks save/load onto net-water chemistry semantics; older schema 2
+// saves are rejected because their volume basis is ambiguous across builds.
+pub const SCHEMA_VERSION: u32 = 3;
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

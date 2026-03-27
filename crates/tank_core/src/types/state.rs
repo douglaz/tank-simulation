@@ -104,6 +104,7 @@ impl TankState {
 
     pub fn seeded_example(seed: SimSeed) -> Self {
         let mut state = Self::new(seed);
+        let old_volume_l = state.water_volume_l();
         state.meta.scenario_id = Some("seeded_example".to_string());
         state.substrate_layers = vec![
             SubstrateLayerState {
@@ -129,6 +130,13 @@ impl TankState {
                 grazing_surface_index: 0.7,
             },
         ];
+        let volume_l = state.water_volume_l();
+        state
+            .water
+            .rescale_totals_for_volume(old_volume_l, volume_l);
+        state
+            .stability_tracker
+            .seed_from_water(&state.water, volume_l);
         state
     }
 
@@ -189,6 +197,10 @@ impl TankState {
         self.water.nitrate_mg_n_per_l(self.water_volume_l())
     }
 
+    pub fn don_mg_n_per_l(&self) -> f64 {
+        self.water.don_mg_n_per_l(self.water_volume_l())
+    }
+
     pub fn doc_mg_c_per_l(&self) -> f64 {
         self.water.doc_mg_c_per_l(self.water_volume_l())
     }
@@ -219,6 +231,10 @@ impl TankState {
 
     pub fn gh_d(&self) -> f64 {
         self.water.gh_d(self.water_volume_l())
+    }
+
+    pub fn kh_d(&self) -> f64 {
+        self.water.kh_d(self.water_volume_l())
     }
 
     pub fn tds_mg_per_l(&self) -> f64 {

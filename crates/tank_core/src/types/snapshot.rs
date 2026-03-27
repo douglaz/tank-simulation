@@ -70,7 +70,7 @@ impl TankSnapshot {
         let dissolved_inorganic_carbon_mg_l = state.dic_mg_c_per_l();
         let do_mg_l_val = state.do_mg_per_l();
         let gh_d = state.gh_d();
-        let kh_d = (state.alkalinity_meq_per_l() * 50.0) / 17.848;
+        let kh_d = state.kh_d();
         let tds_mg_l = state.tds_mg_per_l();
         let conductivity_us_cm = state.conductivity_us_cm();
         let ph = state.water.ph;

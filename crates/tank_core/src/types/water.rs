@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use super::{SourceWaterProfile, TankGeometry};
+use super::{SourceWaterProfile, SubstrateLayerState, TankGeometry};
+
+const MG_CACO3_PER_MEQ: f64 = 50.0;
+const MG_CACO3_PER_DEGREE: f64 = 17.848;
 
 fn default_ph() -> f64 {
     7.0
@@ -60,14 +63,21 @@ impl WaterState {
         state
     }
 
-    pub fn default_for_geometry(geometry: &TankGeometry) -> Self {
-        Self::default_for_volume_l(geometry.water_volume_l())
+    pub fn default_for_geometry(geometry: &TankGeometry, substrate_depth_cm: f64) -> Self {
+        Self::default_for_volume_l(geometry.water_volume_l_with_substrate_depth(substrate_depth_cm))
     }
 
     /// Creates initial water state from a source-water profile and tank geometry.
     /// All dissolved totals are the profile's per-liter values multiplied by volume.
-    pub fn from_source_profile(profile: &SourceWaterProfile, geometry: &TankGeometry) -> Self {
-        Self::from_source_profile_for_volume_l(profile, geometry.water_volume_l())
+    pub fn from_source_profile(
+        profile: &SourceWaterProfile,
+        geometry: &TankGeometry,
+        substrate_depth_cm: f64,
+    ) -> Self {
+        Self::from_source_profile_for_volume_l(
+            profile,
+            geometry.water_volume_l_with_substrate_depth(substrate_depth_cm),
+        )
     }
 
     /// Creates initial water state from a source-water profile and explicit volume.
@@ -115,6 +125,10 @@ impl WaterState {
         concentration(self.nitrate_mg_n_total, volume_l)
     }
 
+    pub fn don_mg_n_per_l(&self, volume_l: f64) -> f64 {
+        concentration(self.dissolved_organic_nitrogen_mg_n_total, volume_l)
+    }
+
     pub fn doc_mg_c_per_l(&self, volume_l: f64) -> f64 {
         concentration(self.dissolved_organic_carbon_mg_c_total, volume_l)
     }
@@ -147,7 +161,11 @@ impl WaterState {
         let calcium_mg_per_l = self.calcium_mg_per_l(volume_l);
         let magnesium_mg_per_l = self.magnesium_mg_per_l(volume_l);
 
-        (((2.497 * calcium_mg_per_l) + (4.118 * magnesium_mg_per_l)) / 17.848).max(0.0)
+        (((2.497 * calcium_mg_per_l) + (4.118 * magnesium_mg_per_l)) / MG_CACO3_PER_DEGREE).max(0.0)
+    }
+
+    pub fn kh_d(&self, volume_l: f64) -> f64 {
+        (self.alkalinity_meq_per_l(volume_l) * MG_CACO3_PER_MEQ / MG_CACO3_PER_DEGREE).max(0.0)
     }
 
     pub fn tds_mg_per_l(&self, volume_l: f64) -> f64 {
@@ -196,7 +214,8 @@ impl WaterState {
 
 impl Default for WaterState {
     fn default() -> Self {
-        Self::default_for_geometry(&TankGeometry::default())
+        let geometry = TankGeometry::default();
+        Self::default_for_geometry(&geometry, SubstrateLayerState::default().depth_cm)
     }
 }
 
