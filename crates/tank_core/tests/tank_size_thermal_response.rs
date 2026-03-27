@@ -31,7 +31,7 @@ fn state_with_volume(seed: SimSeed, target_volume_l: f64) -> TankState {
     };
 
     // Re-initialize water for new geometry
-    state.water = tank_core::WaterState::default_for_geometry(&state.geometry);
+    state.water = tank_core::WaterState::default_for_volume_l(state.water_volume_l());
     state.water.temperature_c = 24.0;
     state.environment.ambient_temp_c = 24.0;
     state.hardware.heater.enabled = false;
@@ -170,11 +170,8 @@ fn feed_pulse_tan_concentration_scales_with_volume() -> Result<(), tank_core::Si
         engine_10l.step_hours(1)?;
         engine_100l.step_hours(1)?;
 
-        let vol_10 = engine_10l.full_state().geometry.water_volume_l();
-        let vol_100 = engine_100l.full_state().geometry.water_volume_l();
-
-        let tan_10 = engine_10l.full_state().water.ammonia_total_mg_n_total / vol_10;
-        let tan_100 = engine_100l.full_state().water.ammonia_total_mg_n_total / vol_100;
+        let tan_10 = engine_10l.full_state().tan_mg_n_per_l();
+        let tan_100 = engine_100l.full_state().tan_mg_n_per_l();
 
         peak_tan_10l = peak_tan_10l.max(tan_10);
         peak_tan_100l = peak_tan_100l.max(tan_100);

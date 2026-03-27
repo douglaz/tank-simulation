@@ -37,13 +37,10 @@ fn cycling_seeded_vs_unseeded() -> Result<(), tank_core::SimError> {
             unseeded.step_hours(1)?;
 
             let hour = day * 24 + _h + 1;
-            let vol_s = seeded.full_state().geometry.water_volume_l();
-            let vol_u = unseeded.full_state().geometry.water_volume_l();
-
-            let s_tan = seeded.full_state().water.ammonia_total_mg_n_total / vol_s;
-            let s_no2 = seeded.full_state().water.nitrite_mg_n_total / vol_s;
-            let u_tan = unseeded.full_state().water.ammonia_total_mg_n_total / vol_u;
-            let u_no2 = unseeded.full_state().water.nitrite_mg_n_total / vol_u;
+            let s_tan = seeded.full_state().tan_mg_n_per_l();
+            let s_no2 = seeded.full_state().nitrite_mg_n_per_l();
+            let u_tan = unseeded.full_state().tan_mg_n_per_l();
+            let u_no2 = unseeded.full_state().nitrite_mg_n_per_l();
 
             unseeded_peak_tan = unseeded_peak_tan.max(u_tan);
             unseeded_peak_nitrite = unseeded_peak_nitrite.max(u_no2);
@@ -81,10 +78,8 @@ fn cycling_seeded_vs_unseeded() -> Result<(), tank_core::SimError> {
         }
         (None, _) => {
             // Both had ongoing feed, so let's just check the seeded tank has lower final TAN
-            let vol_s = seeded.full_state().geometry.water_volume_l();
-            let vol_u = unseeded.full_state().geometry.water_volume_l();
-            let final_s_tan = seeded.full_state().water.ammonia_total_mg_n_total / vol_s;
-            let final_u_tan = unseeded.full_state().water.ammonia_total_mg_n_total / vol_u;
+            let final_s_tan = seeded.full_state().tan_mg_n_per_l();
+            let final_u_tan = unseeded.full_state().tan_mg_n_per_l();
             assert!(
                 final_s_tan < final_u_tan,
                 "Seeded should have lower final TAN: seeded={final_s_tan:.4}, unseeded={final_u_tan:.4}"
@@ -211,9 +206,8 @@ fn siphon_detritus_reduces_cycling_pressure() -> Result<(), tank_core::SimError>
     // only through the mineralization pathway. We verify the siphon doesn't zero them out
     // by checking the control tank has more dissolved N (which was never siphoned away).
     // The siphoned tank should have less TAN over time because less detritus = less mineralization.
-    let vol = control.full_state().geometry.water_volume_l();
-    let control_tan = control.full_state().water.ammonia_total_mg_n_total / vol;
-    let siphoned_tan = siphoned.full_state().water.ammonia_total_mg_n_total / vol;
+    let control_tan = control.full_state().tan_mg_n_per_l();
+    let siphoned_tan = siphoned.full_state().tan_mg_n_per_l();
     // Note: this might not always hold if nitrification is very active, but with heavy feeding
     // the control should accumulate more TAN due to higher detritus.
     // We just verify pools are non-negative.
@@ -228,7 +222,7 @@ fn siphon_detritus_reduces_cycling_pressure() -> Result<(), tank_core::SimError>
 #[test]
 fn limiter_shared_do_budget() -> Result<(), tank_core::SimError> {
     let mut state = TankState::new(SimSeed(9400));
-    let vol = state.geometry.water_volume_l();
+    let vol = state.water_volume_l();
 
     // Plenty of TAN substrate
     state.water.ammonia_total_mg_n_total = 10.0 * vol;
@@ -283,7 +277,7 @@ fn limiter_shared_do_budget() -> Result<(), tank_core::SimError> {
 #[test]
 fn limiter_low_alkalinity_caps_nitrification() -> Result<(), tank_core::SimError> {
     let mut state = TankState::new(SimSeed(9500));
-    let vol = state.geometry.water_volume_l();
+    let vol = state.water_volume_l();
 
     // Plenty of TAN and DO
     state.water.ammonia_total_mg_n_total = 10.0 * vol;
@@ -331,7 +325,7 @@ fn limiter_low_alkalinity_caps_nitrification() -> Result<(), tank_core::SimError
 fn dirty_filter_slows_nitrification() -> Result<(), tank_core::SimError> {
     let base = {
         let mut state = TankState::new(SimSeed(9600));
-        let vol = state.geometry.water_volume_l();
+        let vol = state.water_volume_l();
         state.water.ammonia_total_mg_n_total = 5.0 * vol;
         state.microbe.ammonia_oxidizer_biomass_g = 0.2;
         state.microbe.nitrite_oxidizer_biomass_g = 0.15;
@@ -346,16 +340,14 @@ fn dirty_filter_slows_nitrification() -> Result<(), tank_core::SimError> {
     let mut dirty_state = base;
     dirty_state.filter_state.clogging_index = 0.9; // heavily clogged
 
-    let vol = clean_state.geometry.water_volume_l();
-
     let mut clean_engine = Engine::from_parts(clean_state, vec![]);
     let mut dirty_engine = Engine::from_parts(dirty_state, vec![]);
 
     clean_engine.step_hours(24)?;
     dirty_engine.step_hours(24)?;
 
-    let clean_tan = clean_engine.full_state().water.ammonia_total_mg_n_total / vol;
-    let dirty_tan = dirty_engine.full_state().water.ammonia_total_mg_n_total / vol;
+    let clean_tan = clean_engine.full_state().tan_mg_n_per_l();
+    let dirty_tan = dirty_engine.full_state().tan_mg_n_per_l();
 
     // Clean filter should oxidize more TAN -> lower remaining TAN
     assert!(

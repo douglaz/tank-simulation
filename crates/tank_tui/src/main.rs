@@ -594,7 +594,7 @@ fn render_startup(frame: &mut Frame<'_>, selection: &StartupSelection) {
                     geometry.height_cm,
                     geometry.fill_height_cm
                 )),
-                Line::from(format!("Water volume {:.1} L", geometry.water_volume_l())),
+                Line::from(format!("Filled volume {:.1} L", geometry.water_volume_l())),
                 Line::from(format!(
                     "Source water {} ({})",
                     source_water_label(&selection.source_water_id),

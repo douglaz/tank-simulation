@@ -14,16 +14,14 @@ fn stocked_scenario(seed: SimSeed, ambient_temp_c: f64) -> TankState {
         open_top: true,
         lid_exchange_factor: 0.25,
     };
-    let water = tank_core::WaterState::default_for_geometry(&geometry);
-
     let mut state = TankState::new(seed);
     state.geometry = geometry;
-    state.water = water;
+    state.water = tank_core::WaterState::default_for_volume_l(state.water_volume_l());
     state.water.temperature_c = ambient_temp_c;
     state.environment.ambient_temp_c = ambient_temp_c;
 
     // Excellent water quality
-    let vol = state.geometry.water_volume_l();
+    let vol = state.water_volume_l();
     state.water.calcium_mg_total = 40.0 * vol;
     state.water.magnesium_mg_total = 10.0 * vol;
     state.water.alkalinity_meq_total = 12.0 * vol; // Very high buffering
@@ -67,12 +65,9 @@ fn stocked_scenario(seed: SimSeed, ambient_temp_c: f64) -> TankState {
     state.shrimp_params.base_spawn_rate = 0.03;
 
     // Initialize stability tracker from actual state
-    let ca_mg_l = state.water.calcium_mg_total / vol;
-    let mg_mg_l = state.water.magnesium_mg_total / vol;
-    let gh_d = ((2.497 * ca_mg_l) + (4.118 * mg_mg_l)) / 17.848;
     state.stability_tracker.prev_temp_c = state.water.temperature_c;
-    state.stability_tracker.prev_gh_d = gh_d;
-    state.stability_tracker.prev_do_mg_l = state.water.dissolved_oxygen_mg_total / vol;
+    state.stability_tracker.prev_gh_d = state.gh_d();
+    state.stability_tracker.prev_do_mg_l = state.do_mg_per_l();
     state.stability_tracker.prev_ph = 7.5;
 
     state

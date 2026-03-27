@@ -111,7 +111,7 @@ fn dic_changes_do_not_directly_shift_alkalinity() -> Result<(), tank_core::SimEr
 fn nitrification_lowers_alkalinity_and_ph() -> Result<(), tank_core::SimError> {
     // Tank with active nitrification
     let mut nitrifying_state = TankState::new(SimSeed(4100));
-    let vol = nitrifying_state.geometry.water_volume_l();
+    let vol = nitrifying_state.water_volume_l();
     nitrifying_state.water.ammonia_total_mg_n_total = 2.0 * vol; // 2 mg/L TAN
     nitrifying_state.microbe.ammonia_oxidizer_biomass_g = 0.2;
     nitrifying_state.microbe.nitrite_oxidizer_biomass_g = 0.15;

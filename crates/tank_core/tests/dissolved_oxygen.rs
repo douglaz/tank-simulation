@@ -58,7 +58,7 @@ fn dissolved_oxygen_dips_at_night_relative_to_lit_hours() -> Result<(), tank_cor
 #[test]
 fn aeration_recovers_do_faster_than_passive_exchange() -> Result<(), tank_core::SimError> {
     let mut base_state = oxygen_test_state(SimSeed(3100));
-    base_state.water.dissolved_oxygen_mg_total = 2.0 * base_state.geometry.water_volume_l();
+    base_state.water.dissolved_oxygen_mg_total = 2.0 * base_state.water_volume_l();
     base_state
         .process_params
         .background_bod_mg_o2_per_g_biomass_per_hour = 0.0;

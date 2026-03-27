@@ -14,15 +14,13 @@ fn shrimp_test_state(seed: SimSeed) -> TankState {
         open_top: true,
         lid_exchange_factor: 0.25,
     };
-    let water = tank_core::WaterState::default_for_geometry(&geometry);
-
     let mut state = TankState::new(seed);
     state.geometry = geometry;
-    state.water = water;
+    state.water = tank_core::WaterState::default_for_volume_l(state.water_volume_l());
     state.water.temperature_c = 24.0;
     state.environment.ambient_temp_c = 24.0;
 
-    let vol = state.geometry.water_volume_l();
+    let vol = state.water_volume_l();
     state.water.calcium_mg_total = 40.0 * vol;
     state.water.magnesium_mg_total = 10.0 * vol;
     state.water.alkalinity_meq_total = 8.0 * vol; // high buffer to avoid pH crash from nitrification
@@ -56,12 +54,9 @@ fn shrimp_test_state(seed: SimSeed) -> TankState {
     state.process_params.periphyton_capacity_g_per_m2 = 30.0;
 
     // Initialize stability tracker from actual state to avoid day-1 instability spike
-    let ca_mg_l = state.water.calcium_mg_total / vol;
-    let mg_mg_l = state.water.magnesium_mg_total / vol;
-    let gh_d = ((2.497 * ca_mg_l) + (4.118 * mg_mg_l)) / 17.848;
     state.stability_tracker.prev_temp_c = state.water.temperature_c;
-    state.stability_tracker.prev_gh_d = gh_d;
-    state.stability_tracker.prev_do_mg_l = state.water.dissolved_oxygen_mg_total / vol;
+    state.stability_tracker.prev_gh_d = state.gh_d();
+    state.stability_tracker.prev_do_mg_l = state.do_mg_per_l();
     // pH will be computed on first tick; use a reasonable estimate
     state.stability_tracker.prev_ph = 7.5;
 
@@ -138,7 +133,7 @@ fn egg_failure_under_stress() -> Result<(), SimError> {
     }];
 
     // Create stressful conditions: low DO, high temp
-    let vol = state.geometry.water_volume_l();
+    let vol = state.water_volume_l();
     state.water.dissolved_oxygen_mg_total = 2.0 * vol; // Low DO
     state.water.temperature_c = 32.0;
     state.environment.ambient_temp_c = 32.0;
@@ -184,7 +179,7 @@ fn mortality_under_combined_stress() -> Result<(), SimError> {
     state.animal.juveniles_count = 10;
 
     // Create combined low-DO + high-NH3 stress
-    let vol = state.geometry.water_volume_l();
+    let vol = state.water_volume_l();
     state.water.dissolved_oxygen_mg_total = 1.5 * vol; // Very low DO
     state.water.ammonia_total_mg_n_total = 2.0 * vol; // Very high ammonia
     state.water.alkalinity_meq_total = 8.0 * vol; // High pH -> more NH3
@@ -300,7 +295,7 @@ fn population_fields_never_negative() -> Result<(), SimError> {
     state.animal.juveniles_count = 2;
 
     // Very hostile environment
-    let vol = state.geometry.water_volume_l();
+    let vol = state.water_volume_l();
     state.water.dissolved_oxygen_mg_total = 0.5 * vol;
     state.water.ammonia_total_mg_n_total = 5.0 * vol;
 

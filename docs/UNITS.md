@@ -94,7 +94,9 @@ Legacy total-based parameter names that downstream work must migrate:
 | `algae_half_saturation_n_mg_total` | `algae_half_saturation_n_mg_n_per_l` | water-column elemental N exposure |
 | `algae_half_saturation_p_mg_total` | `algae_half_saturation_p_mg_p_per_l` | water-column elemental P exposure |
 
-Those renames belong to `tanksim-6e5.2.2`. This policy exists so the rename target is fixed before that refactor starts.
+Those renames belong to the downstream concentration-normalization beads
+`tanksim-6e5.2.3`, `tanksim-6e5.2.4`, and `tanksim-6e5.2.5`. This policy exists
+so the rename target is fixed before those refactors start.
 
 ## Helper Naming Policy
 
@@ -265,7 +267,8 @@ Do not introduce a full wrapper-type forest yet. Temperature, hardness, alkalini
 
 ## Migration and Test Expectations
 
-- `tanksim-6e5.2.2` should add canonical concentration helpers and migrate kinetics to concentration-based parameter names.
+- `tanksim-6e5.2.2` should add canonical concentration helpers and net-volume accessors.
+- `tanksim-6e5.2.3`, `tanksim-6e5.2.4`, and `tanksim-6e5.2.5` should migrate nitrification, plant, and algae kinetics to concentration-based parameter names.
 - `tanksim-6e5.2.7` should rename snapshot/API chemistry fields, add the scientific-versus-ion display policy, and relabel estimated TDS/conductivity in the TUI.
 - Save/schema work that renames serialized fields must use explicit migration handling such as `serde(alias)` during transition or a schema-version bump with a loader migration.
 - Tests that lock serialized snapshots or exact JSON field names must be updated alongside those schema changes; tests should never preserve an ambiguous chemistry name merely for backward compatibility.

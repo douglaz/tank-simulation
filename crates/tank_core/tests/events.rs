@@ -4,7 +4,7 @@ use tank_core::{
 
 fn threshold_state(seed: SimSeed) -> TankState {
     let mut state = TankState::new(seed);
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     state.water.alkalinity_meq_total = 8.0 * volume_l;
     state.water.dissolved_inorganic_carbon_mg_c_total = 0.5 * volume_l;
     state.water.ammonia_total_mg_n_total = 0.5 * volume_l;
@@ -74,7 +74,7 @@ fn threshold_events_are_deduplicated_per_day() -> Result<(), tank_core::SimError
 fn event_generation_warm_overfed_weak_aeration() -> Result<(), tank_core::SimError> {
     // Warm, overfed, weak-aeration setup — designed to trigger AmmoniaWarning or OxygenDip
     let mut state = TankState::new(SimSeed(5200));
-    let vol = state.geometry.water_volume_l();
+    let vol = state.water_volume_l();
     state.water.temperature_c = 30.0;
     state.environment.ambient_temp_c = 30.0;
     // Higher pH pushes NH3 fraction up at 30°C
@@ -139,7 +139,7 @@ fn shrimp_berried_event_has_cause_codes() -> Result<(), tank_core::SimError> {
     let mut state = TankState::new(SimSeed(5300));
     state.water.temperature_c = 24.0;
     state.environment.ambient_temp_c = 24.0;
-    let vol = state.geometry.water_volume_l();
+    let vol = state.water_volume_l();
     state.water.calcium_mg_total = 40.0 * vol;
     state.water.magnesium_mg_total = 10.0 * vol;
     state.water.alkalinity_meq_total = 3.0 * vol;
@@ -193,7 +193,7 @@ fn egg_failure_event_has_cause_codes() -> Result<(), tank_core::SimError> {
     let mut state = TankState::new(SimSeed(5400));
     state.water.temperature_c = 32.0;
     state.environment.ambient_temp_c = 32.0;
-    let vol = state.geometry.water_volume_l();
+    let vol = state.water_volume_l();
     state.water.dissolved_oxygen_mg_total = 2.0 * vol;
     state.water.calcium_mg_total = 5.0 * vol;
     state.water.magnesium_mg_total = 1.0 * vol;
@@ -239,7 +239,7 @@ fn molt_stress_warning_has_cause_codes() -> Result<(), tank_core::SimError> {
     let mut state = TankState::new(SimSeed(5500));
     state.water.temperature_c = 30.0;
     state.environment.ambient_temp_c = 30.0;
-    let vol = state.geometry.water_volume_l();
+    let vol = state.water_volume_l();
     state.water.calcium_mg_total = 2.0 * vol;
     state.water.magnesium_mg_total = 0.5 * vol;
     state.water.alkalinity_meq_total = 2.0 * vol;
