@@ -5,8 +5,9 @@ use crate::{
     rng::SimSeed,
     systems,
     types::{
-        BudgetDelta, BudgetLedger, BudgetSnapshot, EventCause, EventKind, EventSeverity,
-        PlayerAction, SimError, SimEvent, TankSnapshot, TankState, TickBudgetRecord,
+        live_biomass_carbon_mg, live_biomass_nitrogen_mg, BudgetDelta, BudgetLedger,
+        BudgetSnapshot, ElementBudget, EventCause, EventKind, EventSeverity, PlayerAction,
+        SimError, SimEvent, TankSnapshot, TankState, TickBudgetRecord,
     },
 };
 
@@ -360,10 +361,18 @@ impl Engine {
                 self.state.filter_state.clogging_index *= 1.0 - intensity;
                 // Proportional setback in active nitrifier and decomposer biomass
                 let setback = intensity * 0.5;
-                self.state.microbe.decomposer_biomass_g *= 1.0 - setback;
-                self.state.microbe.ammonia_oxidizer_biomass_g *= 1.0 - setback;
-                self.state.microbe.nitrite_oxidizer_biomass_g *= 1.0 - setback;
-                self.state.microbe.comammox_biomass_g *= 1.0 - setback;
+                let removed_decomposer = self.state.microbe.decomposer_biomass_g * setback;
+                let removed_aob = self.state.microbe.ammonia_oxidizer_biomass_g * setback;
+                let removed_nob = self.state.microbe.nitrite_oxidizer_biomass_g * setback;
+                let removed_comammox = self.state.microbe.comammox_biomass_g * setback;
+                self.state.microbe.decomposer_biomass_g -= removed_decomposer;
+                self.state.microbe.ammonia_oxidizer_biomass_g -= removed_aob;
+                self.state.microbe.nitrite_oxidizer_biomass_g -= removed_nob;
+                self.state.microbe.comammox_biomass_g -= removed_comammox;
+                route_live_biomass_to_dissolved_organics(
+                    &mut self.state,
+                    removed_decomposer + removed_aob + removed_nob + removed_comammox,
+                );
                 self.push_event(
                     EventSeverity::Warning,
                     EventKind::FilterCleaningSetback,
@@ -520,26 +529,135 @@ fn enforce_tracked_tick_budget_guard(tick: &TickBudgetRecord) -> Result<(), SimE
     Ok(())
 }
 
+fn route_live_biomass_to_dissolved_organics(state: &mut TankState, biomass_g: f64) {
+    if biomass_g <= f64::EPSILON {
+        return;
+    }
+
+    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
+    state.water.dissolved_organic_nitrogen_mg_n_total +=
+        live_biomass_nitrogen_mg(biomass_g, n_to_c_ratio);
+    state.water.dissolved_organic_carbon_mg_c_total +=
+        live_biomass_carbon_mg(biomass_g, n_to_c_ratio);
+}
+
 fn tick_has_closed_system_nitrogen(tick: &TickBudgetRecord) -> bool {
-    !tick.entries.iter().any(|entry| {
-        matches!(
-            entry.label.as_str(),
-            "action:feed"
-                | "action:water_change"
-                | "action:siphon_detritus"
-                | "action:clean_filter"
-                | "action:add_shrimp"
-                | "action:remove_shrimp"
-        )
-    })
+    !tick
+        .entries
+        .iter()
+        .any(|entry| entry_has_open_action_flux(entry.label.as_str(), entry.delta.nitrogen))
 }
 
 fn tick_has_closed_system_carbon(tick: &TickBudgetRecord) -> bool {
-    tick_has_closed_system_nitrogen(tick)
+    !tick
+        .entries
+        .iter()
+        .any(|entry| entry_has_open_action_flux(entry.label.as_str(), entry.delta.carbon))
         && tick
             .entries
             .iter()
             .find(|entry| entry.label == "system:chemistry")
-            .map(|entry| entry.delta.carbon.net_mg().abs() <= BUDGET_GUARD_TOLERANCE_MG)
+            .map(|entry| !element_budget_has_flux(entry.delta.carbon))
             .unwrap_or(true)
+}
+
+fn entry_has_open_action_flux(label: &str, budget: ElementBudget) -> bool {
+    matches!(
+        label,
+        "action:feed"
+            | "action:water_change"
+            | "action:siphon_detritus"
+            | "action:add_shrimp"
+            | "action:remove_shrimp"
+    ) && element_budget_has_flux(budget)
+}
+
+fn element_budget_has_flux(budget: ElementBudget) -> bool {
+    budget.in_mg.abs() > BUDGET_GUARD_TOLERANCE_MG
+        || budget.out_mg.abs() > BUDGET_GUARD_TOLERANCE_MG
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{BudgetEntry, BudgetTotals};
+
+    fn synthetic_tick(entries: Vec<BudgetEntry>) -> TickBudgetRecord {
+        TickBudgetRecord {
+            tick_index: 0,
+            day: 0,
+            hour: 0,
+            before: BudgetTotals::default(),
+            after: BudgetTotals::default(),
+            net_delta: BudgetDelta::default(),
+            entries,
+        }
+    }
+
+    #[test]
+    fn no_op_open_system_actions_do_not_disable_the_budget_guard() {
+        let tick = synthetic_tick(vec![
+            BudgetEntry {
+                label: "action:feed".to_owned(),
+                delta: BudgetDelta::default(),
+            },
+            BudgetEntry {
+                label: "action:water_change".to_owned(),
+                delta: BudgetDelta::default(),
+            },
+            BudgetEntry {
+                label: "action:siphon_detritus".to_owned(),
+                delta: BudgetDelta::default(),
+            },
+            BudgetEntry {
+                label: "action:add_shrimp".to_owned(),
+                delta: BudgetDelta::default(),
+            },
+            BudgetEntry {
+                label: "action:remove_shrimp".to_owned(),
+                delta: BudgetDelta::default(),
+            },
+        ]);
+
+        assert!(tick_has_closed_system_nitrogen(&tick));
+        assert!(tick_has_closed_system_carbon(&tick));
+    }
+
+    #[test]
+    fn carbon_guard_uses_carbon_flux_for_open_system_actions() {
+        let tick = synthetic_tick(vec![BudgetEntry {
+            label: "action:water_change".to_owned(),
+            delta: BudgetDelta {
+                carbon: ElementBudget {
+                    in_mg: 0.0,
+                    out_mg: 8.0,
+                },
+                ..BudgetDelta::default()
+            },
+        }]);
+
+        assert!(tick_has_closed_system_nitrogen(&tick));
+        assert!(!tick_has_closed_system_carbon(&tick));
+    }
+
+    #[test]
+    fn clean_filter_is_treated_as_closed_when_it_only_reroutes_internal_mass() {
+        let tick = synthetic_tick(vec![BudgetEntry {
+            label: "action:clean_filter".to_owned(),
+            delta: BudgetDelta {
+                nitrogen: ElementBudget {
+                    in_mg: 2.0,
+                    out_mg: 2.0,
+                },
+                carbon: ElementBudget {
+                    in_mg: 10.0,
+                    out_mg: 10.0,
+                },
+                ..BudgetDelta::default()
+            },
+        }]);
+
+        assert!(tick_has_closed_system_nitrogen(&tick));
+        assert!(tick_has_closed_system_carbon(&tick));
+    }
 }

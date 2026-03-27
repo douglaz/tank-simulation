@@ -71,6 +71,16 @@ pub enum SimError {
     },
     #[error("schema version mismatch: expected {expected}, got {actual}")]
     SchemaVersionMismatch { expected: u32, actual: u32 },
+    #[error(
+        "save file version {actual} is newer than supported version {max_supported}; \
+         upgrade the application to load this save"
+    )]
+    SchemaVersionTooNew { actual: u32, max_supported: u32 },
+    #[error(
+        "save file version {actual} is too old; \
+         minimum supported version is {min_supported}"
+    )]
+    SchemaVersionTooOld { actual: u32, min_supported: u32 },
     #[error("serialization error: {0}")]
     Serialization(String),
     #[error("deserialization error: {0}")]

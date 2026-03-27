@@ -125,6 +125,23 @@ fn trim_plants_budget_state(seed: SimSeed) -> TankState {
     state
 }
 
+fn clean_filter_budget_state(seed: SimSeed) -> TankState {
+    let mut state = quiescent_budget_state(seed);
+    state.microbe.decomposer_biomass_g = 0.45;
+    state.microbe.ammonia_oxidizer_biomass_g = 0.18;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.12;
+    state.microbe.comammox_biomass_g = 0.10;
+    state.process_params.decomposer_vmax_per_hour = 0.0;
+    state.process_params.decomposer_decay_rate_per_hour = 0.0;
+    state.process_params.aob_vmax_mg_n_per_g_per_hour = 0.0;
+    state.process_params.aob_decay_rate_per_hour = 0.0;
+    state.process_params.nob_vmax_mg_n_per_g_per_hour = 0.0;
+    state.process_params.nob_decay_rate_per_hour = 0.0;
+    state.process_params.comammox_vmax_fraction = 0.0;
+    state.process_params.comammox_decay_rate_per_hour = 0.0;
+    state
+}
+
 fn shrimp_mortality_budget_state(seed: SimSeed) -> TankState {
     let mut state = quiescent_budget_state(seed);
     state.animal.adults_count = 5;
@@ -505,6 +522,62 @@ fn test_trim_plants_preserves_n_and_c_when_routed_to_detritus() -> Result<(), Si
     assert!(trim_entry.delta.carbon.out_mg > 0.0);
     assert_close(trim_entry.delta.nitrogen.net_mg(), 0.0, 1e-6);
     assert_close(trim_entry.delta.carbon.net_mg(), 0.0, 1e-6);
+
+    Ok(())
+}
+
+#[test]
+fn test_clean_filter_routes_removed_microbes_to_dissolved_organics() -> Result<(), SimError> {
+    let state = clean_filter_budget_state(SimSeed(9_019));
+    let ratio = state.process_params.feed_n_to_c_ratio;
+    let removed_biomass_g = (state.microbe.decomposer_biomass_g
+        + state.microbe.ammonia_oxidizer_biomass_g
+        + state.microbe.nitrite_oxidizer_biomass_g
+        + state.microbe.comammox_biomass_g)
+        * 0.4;
+    let expected_don_increase = manual_live_biomass_nitrogen_mg(removed_biomass_g, ratio);
+    let expected_doc_increase = manual_live_biomass_carbon_mg(removed_biomass_g, ratio);
+    let initial_total_n = state.total_nitrogen();
+    let initial_total_c = state.total_carbon();
+    let initial_don = state.water.dissolved_organic_nitrogen_mg_n_total;
+    let initial_doc = state.water.dissolved_organic_carbon_mg_c_total;
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_budget_tracking();
+    engine.apply_action(PlayerAction::CleanFilter { intensity: 0.8 })?;
+
+    engine.step_hours(1)?;
+
+    assert_close(engine.full_state().total_nitrogen(), initial_total_n, 1e-6);
+    assert_close(engine.full_state().total_carbon(), initial_total_c, 1e-6);
+    assert_close(
+        engine
+            .full_state()
+            .water
+            .dissolved_organic_nitrogen_mg_n_total,
+        initial_don + expected_don_increase,
+        1e-6,
+    );
+    assert_close(
+        engine
+            .full_state()
+            .water
+            .dissolved_organic_carbon_mg_c_total,
+        initial_doc + expected_doc_increase,
+        1e-6,
+    );
+
+    let ledger = engine.budget_ledger().expect("budget tracking enabled");
+    let clean_filter_entry = ledger.ticks[0]
+        .entries
+        .iter()
+        .find(|entry| entry.label == "action:clean_filter")
+        .expect("clean filter entry should be recorded");
+    assert!(clean_filter_entry.delta.nitrogen.in_mg > 0.0);
+    assert!(clean_filter_entry.delta.nitrogen.out_mg > 0.0);
+    assert!(clean_filter_entry.delta.carbon.in_mg > 0.0);
+    assert!(clean_filter_entry.delta.carbon.out_mg > 0.0);
+    assert_close(clean_filter_entry.delta.nitrogen.net_mg(), 0.0, 1e-6);
+    assert_close(clean_filter_entry.delta.carbon.net_mg(), 0.0, 1e-6);
 
     Ok(())
 }
