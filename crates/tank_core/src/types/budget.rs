@@ -69,6 +69,12 @@ impl BudgetTotals {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BudgetComponent {
+    pub label: &'static str,
+    pub amount_mg: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BudgetEntry {
     pub label: String,
@@ -121,75 +127,181 @@ impl BudgetLedger {
     }
 }
 
-pub fn total_nitrogen_mg(state: &TankState) -> f64 {
+pub fn nitrogen_budget_components(state: &TankState) -> [BudgetComponent; 16] {
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
-    let plant_n_mg: f64 = state
-        .plant_guilds
-        .iter()
-        .map(|plant| plant_nitrogen_mg(plant.biomass_g))
-        .sum();
-    let algae_n_mg = algae_nitrogen_mg(state.algae.suspended_biomass_g)
-        + algae_nitrogen_mg(state.algae.periphyton_biomass_g);
-    let microbe_biomass_g = state.microbe.decomposer_biomass_g
-        + state.microbe.ammonia_oxidizer_biomass_g
-        + state.microbe.nitrite_oxidizer_biomass_g
-        + state.microbe.comammox_biomass_g;
     let substrate_n_mg: f64 = state
         .substrate_layers
         .iter()
         .map(|layer| layer.nutrient_store_mg_n_total)
         .sum();
+    let plant_n_mg: f64 = state
+        .plant_guilds
+        .iter()
+        .map(|plant| plant_nitrogen_mg(plant.biomass_g))
+        .sum();
 
-    state.water.ammonia_total_mg_n_total
-        + state.water.nitrite_mg_n_total
-        + state.water.nitrate_mg_n_total
-        + state.water.dissolved_organic_nitrogen_mg_n_total
-        + substrate_n_mg
-        + plant_n_mg
-        + algae_n_mg
-        + live_biomass_nitrogen_mg(microbe_biomass_g, n_to_c_ratio)
-        + shrimp_nitrogen_mg(
-            state.animal.adults_count,
-            state.animal.juveniles_count,
-            n_to_c_ratio,
-        )
-        // `dissolved_feed_residue_g_total` mirrors DOC/DON flow for clogging
-        // pressure and would double-count dissolved organics here.
-        + detritus_nitrogen_mg(
-            state.detritus.particulate_organics_g_total + state.detritus.fine_detritus_g_total,
-            n_to_c_ratio,
-        )
+    [
+        BudgetComponent {
+            label: "water.ammonia_total_mg_n_total",
+            amount_mg: state.water.ammonia_total_mg_n_total,
+        },
+        BudgetComponent {
+            label: "water.nitrite_mg_n_total",
+            amount_mg: state.water.nitrite_mg_n_total,
+        },
+        BudgetComponent {
+            label: "water.nitrate_mg_n_total",
+            amount_mg: state.water.nitrate_mg_n_total,
+        },
+        BudgetComponent {
+            label: "water.dissolved_organic_nitrogen_mg_n_total",
+            amount_mg: state.water.dissolved_organic_nitrogen_mg_n_total,
+        },
+        BudgetComponent {
+            label: "substrate_layers[*].nutrient_store_mg_n_total",
+            amount_mg: substrate_n_mg,
+        },
+        BudgetComponent {
+            label: "plant_guilds[*].biomass_g",
+            amount_mg: plant_n_mg,
+        },
+        BudgetComponent {
+            label: "algae.suspended_biomass_g",
+            amount_mg: algae_nitrogen_mg(state.algae.suspended_biomass_g),
+        },
+        BudgetComponent {
+            label: "algae.periphyton_biomass_g",
+            amount_mg: algae_nitrogen_mg(state.algae.periphyton_biomass_g),
+        },
+        BudgetComponent {
+            label: "microbe.decomposer_biomass_g",
+            amount_mg: live_biomass_nitrogen_mg(state.microbe.decomposer_biomass_g, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "microbe.ammonia_oxidizer_biomass_g",
+            amount_mg: live_biomass_nitrogen_mg(
+                state.microbe.ammonia_oxidizer_biomass_g,
+                n_to_c_ratio,
+            ),
+        },
+        BudgetComponent {
+            label: "microbe.nitrite_oxidizer_biomass_g",
+            amount_mg: live_biomass_nitrogen_mg(
+                state.microbe.nitrite_oxidizer_biomass_g,
+                n_to_c_ratio,
+            ),
+        },
+        BudgetComponent {
+            label: "microbe.comammox_biomass_g",
+            amount_mg: live_biomass_nitrogen_mg(state.microbe.comammox_biomass_g, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "animal.adults_count",
+            amount_mg: shrimp_nitrogen_mg(state.animal.adults_count, 0, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "animal.juveniles_count",
+            amount_mg: shrimp_nitrogen_mg(0, state.animal.juveniles_count, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "detritus.particulate_organics_g_total",
+            amount_mg: detritus_nitrogen_mg(
+                state.detritus.particulate_organics_g_total,
+                n_to_c_ratio,
+            ),
+        },
+        BudgetComponent {
+            label: "detritus.fine_detritus_g_total",
+            amount_mg: detritus_nitrogen_mg(state.detritus.fine_detritus_g_total, n_to_c_ratio),
+        },
+    ]
 }
 
-pub fn total_carbon_mg(state: &TankState) -> f64 {
+pub fn carbon_budget_components(state: &TankState) -> [BudgetComponent; 13] {
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let plant_c_mg: f64 = state
         .plant_guilds
         .iter()
         .map(|plant| plant_carbon_mg(plant.biomass_g, n_to_c_ratio))
         .sum();
-    let algae_c_mg = algae_carbon_mg(state.algae.suspended_biomass_g, n_to_c_ratio)
-        + algae_carbon_mg(state.algae.periphyton_biomass_g, n_to_c_ratio);
-    let microbe_biomass_g = state.microbe.decomposer_biomass_g
-        + state.microbe.ammonia_oxidizer_biomass_g
-        + state.microbe.nitrite_oxidizer_biomass_g
-        + state.microbe.comammox_biomass_g;
 
-    state.water.dissolved_inorganic_carbon_mg_c_total
-        + state.water.dissolved_organic_carbon_mg_c_total
-        + plant_c_mg
-        + algae_c_mg
-        + live_biomass_carbon_mg(microbe_biomass_g, n_to_c_ratio)
-        + shrimp_carbon_mg(
-            state.animal.adults_count,
-            state.animal.juveniles_count,
-            n_to_c_ratio,
-        )
-        // `dissolved_feed_residue_g_total` is a bookkeeping mirror of DOC/DON.
-        + detritus_carbon_mg(
-            state.detritus.particulate_organics_g_total + state.detritus.fine_detritus_g_total,
-            n_to_c_ratio,
-        )
+    [
+        BudgetComponent {
+            label: "water.dissolved_inorganic_carbon_mg_c_total",
+            amount_mg: state.water.dissolved_inorganic_carbon_mg_c_total,
+        },
+        BudgetComponent {
+            label: "water.dissolved_organic_carbon_mg_c_total",
+            amount_mg: state.water.dissolved_organic_carbon_mg_c_total,
+        },
+        BudgetComponent {
+            label: "plant_guilds[*].biomass_g",
+            amount_mg: plant_c_mg,
+        },
+        BudgetComponent {
+            label: "algae.suspended_biomass_g",
+            amount_mg: algae_carbon_mg(state.algae.suspended_biomass_g, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "algae.periphyton_biomass_g",
+            amount_mg: algae_carbon_mg(state.algae.periphyton_biomass_g, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "microbe.decomposer_biomass_g",
+            amount_mg: live_biomass_carbon_mg(state.microbe.decomposer_biomass_g, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "microbe.ammonia_oxidizer_biomass_g",
+            amount_mg: live_biomass_carbon_mg(
+                state.microbe.ammonia_oxidizer_biomass_g,
+                n_to_c_ratio,
+            ),
+        },
+        BudgetComponent {
+            label: "microbe.nitrite_oxidizer_biomass_g",
+            amount_mg: live_biomass_carbon_mg(
+                state.microbe.nitrite_oxidizer_biomass_g,
+                n_to_c_ratio,
+            ),
+        },
+        BudgetComponent {
+            label: "microbe.comammox_biomass_g",
+            amount_mg: live_biomass_carbon_mg(state.microbe.comammox_biomass_g, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "animal.adults_count",
+            amount_mg: shrimp_carbon_mg(state.animal.adults_count, 0, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "animal.juveniles_count",
+            amount_mg: shrimp_carbon_mg(0, state.animal.juveniles_count, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "detritus.particulate_organics_g_total",
+            amount_mg: detritus_carbon_mg(
+                state.detritus.particulate_organics_g_total,
+                n_to_c_ratio,
+            ),
+        },
+        BudgetComponent {
+            label: "detritus.fine_detritus_g_total",
+            amount_mg: detritus_carbon_mg(state.detritus.fine_detritus_g_total, n_to_c_ratio),
+        },
+    ]
+}
+
+pub fn total_nitrogen_mg(state: &TankState) -> f64 {
+    nitrogen_budget_components(state)
+        .into_iter()
+        .map(|component| component.amount_mg)
+        .sum()
+}
+
+pub fn total_carbon_mg(state: &TankState) -> f64 {
+    carbon_budget_components(state)
+        .into_iter()
+        .map(|component| component.amount_mg)
+        .sum()
 }
 
 pub fn plant_nitrogen_mg(biomass_g: f64) -> f64 {

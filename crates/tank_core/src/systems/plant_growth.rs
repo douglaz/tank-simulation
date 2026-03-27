@@ -1,11 +1,13 @@
+use crate::systems::chemistry::compute_ph_from_totals;
 use crate::types::{
-    legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2, PlantGuild, TankState,
-    PLANT_N_MG_PER_G_BIOMASS,
+    legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2, plant_carbon_mg,
+    plant_nitrogen_mg, PlantGuild, TankState, PLANT_N_MG_PER_G_BIOMASS,
 };
 
 const PLANT_P_MG_PER_G_GROWTH: f64 = 4.0;
 
 pub fn step_daily_plants(state: &mut TankState) {
+    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let dic_mg_c_per_l = state.concentrations().dic_mg_c_per_l();
     let plant_half_saturation_n_mg_n_per_l =
         legacy_total_param_to_mg_per_l(state.process_params.plant_half_saturation_n_mg_total);
@@ -94,6 +96,7 @@ pub fn step_daily_plants(state: &mut TankState) {
 
         let n_demand = realized_growth_g * PLANT_N_MG_PER_G_BIOMASS;
         let p_demand = realized_growth_g * PLANT_P_MG_PER_G_GROWTH;
+        let c_demand = plant_carbon_mg(realized_growth_g, n_to_c_ratio);
         let (nh3_removed, no3_removed, sub_n_removed, p_removed) =
             remove_plant_nutrients(state, n_demand, p_demand, water_bias, substrate_bias);
         let n_removed = nh3_removed + no3_removed + sub_n_removed;
@@ -110,7 +113,12 @@ pub fn step_daily_plants(state: &mut TankState) {
             } else {
                 1.0
             };
-            n_frac.min(p_frac).min(1.0)
+            let c_frac = if c_demand > f64::EPSILON {
+                state.water.dissolved_inorganic_carbon_mg_c_total / c_demand
+            } else {
+                1.0
+            };
+            n_frac.min(p_frac).min(c_frac).min(1.0)
         } else {
             0.0
         };
@@ -136,12 +144,17 @@ pub fn step_daily_plants(state: &mut TankState) {
             sub_n_removed,
             p_refund,
         );
+        let c_used = plant_carbon_mg(nutrient_cap_g, n_to_c_ratio);
+        state.water.dissolved_inorganic_carbon_mg_c_total =
+            (state.water.dissolved_inorganic_carbon_mg_c_total - c_used).max(0.0);
 
         let capped_net = nutrient_cap_g - respiration_g - senescence_g;
 
         let new_biomass_g = (biomass_g + capped_net).max(0.0);
         state.plant_guilds[index].biomass_g = new_biomass_g;
-        state.detritus.fine_detritus_g_total += senescence_g.max(0.0);
+        route_plant_loss_to_dissolved_organics(state, respiration_g.max(0.0), n_to_c_ratio);
+        state.detritus.fine_detritus_g_total +=
+            plant_detrital_mass_g(senescence_g.max(0.0), n_to_c_ratio);
 
         let stress_driver = nutrient_limitation.min(f_light).min(habitat_index);
         let poor_conditions = stress_driver < 0.55;
@@ -152,6 +165,12 @@ pub fn step_daily_plants(state: &mut TankState) {
         };
         state.plant_guilds[index].health_index = new_health.clamp(0.0, 1.0);
     }
+
+    state.water.ph = compute_ph_from_totals(
+        state.water.alkalinity_meq_total,
+        state.water.dissolved_inorganic_carbon_mg_c_total,
+        state.water_volume_l(),
+    );
 }
 
 fn weighted_limitation_factor(
@@ -360,6 +379,27 @@ fn remove_substrate_pool(state: &mut TankState, target_mg: f64, is_nitrogen: boo
     }
 
     removed_total
+}
+
+fn route_plant_loss_to_dissolved_organics(
+    state: &mut TankState,
+    biomass_g: f64,
+    n_to_c_ratio: f64,
+) {
+    if biomass_g <= f64::EPSILON {
+        return;
+    }
+
+    state.water.dissolved_organic_nitrogen_mg_n_total += plant_nitrogen_mg(biomass_g);
+    state.water.dissolved_organic_carbon_mg_c_total += plant_carbon_mg(biomass_g, n_to_c_ratio);
+}
+
+fn plant_detrital_mass_g(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
+    if biomass_g <= f64::EPSILON {
+        return 0.0;
+    }
+
+    (plant_nitrogen_mg(biomass_g) + plant_carbon_mg(biomass_g, n_to_c_ratio)) / 1000.0
 }
 
 fn half_saturation(value: f64, half_sat: f64) -> f64 {

@@ -1,8 +1,9 @@
+use std::collections::BTreeSet;
+
+use serde_json::Value;
 use tank_core::{
-    algae_carbon_mg, algae_nitrogen_mg, detritus_carbon_mg, detritus_nitrogen_mg,
-    live_biomass_carbon_mg, live_biomass_nitrogen_mg, plant_carbon_mg, plant_nitrogen_mg,
-    shrimp_biomass_g, Engine, PlayerAction, SimError, SimSeed, SimulationEngine,
-    SourceWaterProfile, SubstrateKind, SubstrateLayerState, TankState,
+    carbon_budget_components, nitrogen_budget_components, Engine, PlayerAction, SimError, SimSeed,
+    SimulationEngine, SourceWaterProfile, SubstrateKind, SubstrateLayerState, TankState,
 };
 
 fn assert_close(actual: f64, expected: f64, tolerance: f64) {
@@ -51,6 +52,35 @@ fn known_budget_state() -> TankState {
     state
 }
 
+fn active_budget_state(seed: SimSeed) -> TankState {
+    let mut state = TankState::new(seed);
+    state.water.ammonia_total_mg_n_total = 6.5;
+    state.water.nitrite_mg_n_total = 1.5;
+    state.water.nitrate_mg_n_total = 14.0;
+    state.water.phosphate_mg_p_total = 3.5;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 300.0;
+    state.water.dissolved_organic_carbon_mg_c_total = 32.0;
+    state.water.dissolved_organic_nitrogen_mg_n_total = 5.5;
+    state.detritus.particulate_organics_g_total = 0.7;
+    state.detritus.fine_detritus_g_total = 0.45;
+    state.detritus.dissolved_feed_residue_g_total = 0.2;
+    state.algae.suspended_biomass_g = 0.35;
+    state.algae.periphyton_biomass_g = 0.55;
+    state.microbe.decomposer_biomass_g = 0.12;
+    state.microbe.ammonia_oxidizer_biomass_g = 0.08;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.07;
+    state.microbe.comammox_biomass_g = 0.03;
+    state.microfauna.population_index = 0.4;
+    state.microfauna.grazing_pressure_index = 0.35;
+    state.animal.adults_count = 0;
+    state.animal.juveniles_count = 0;
+    state.animal.berried_females_count = 0;
+    state.substrate_layers[0].nutrient_store_mg_n_total = 22.0;
+    state.substrate_layers[0].nutrient_store_mg_p_total = 6.0;
+    state.reseed_stability_tracker();
+    state
+}
+
 fn quiescent_budget_state(seed: SimSeed) -> TankState {
     let mut state = TankState::new(seed);
     state.hardware.light.enabled = false;
@@ -85,6 +115,83 @@ fn quiescent_budget_state(seed: SimSeed) -> TankState {
     state
 }
 
+fn manual_organic_nitrogen_mg(mass_g: f64, n_to_c_ratio: f64) -> f64 {
+    mass_g * 1000.0 * n_to_c_ratio / (1.0 + n_to_c_ratio)
+}
+
+fn manual_organic_carbon_mg(mass_g: f64, n_to_c_ratio: f64) -> f64 {
+    mass_g * 1000.0 / (1.0 + n_to_c_ratio)
+}
+
+fn manual_live_biomass_nitrogen_mg(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
+    manual_organic_nitrogen_mg(biomass_g * 0.20, n_to_c_ratio)
+}
+
+fn manual_live_biomass_carbon_mg(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
+    manual_organic_carbon_mg(biomass_g * 0.20, n_to_c_ratio)
+}
+
+fn manual_shrimp_biomass_g(adults_count: u32, juveniles_count: u32) -> f64 {
+    f64::from(adults_count) * 0.12 + f64::from(juveniles_count) * 0.05
+}
+
+fn collect_numeric_paths(value: &Value, prefix: &str, paths: &mut BTreeSet<String>) {
+    match value {
+        Value::Object(map) => {
+            for (key, child) in map {
+                let next = if prefix.is_empty() {
+                    key.to_string()
+                } else {
+                    format!("{prefix}.{key}")
+                };
+                collect_numeric_paths(child, &next, paths);
+            }
+        }
+        Value::Array(items) => {
+            for child in items {
+                let next = format!("{prefix}[*]");
+                collect_numeric_paths(child, &next, paths);
+            }
+        }
+        Value::Number(_) => {
+            paths.insert(prefix.to_string());
+        }
+        _ => {}
+    }
+}
+
+fn is_shared_budget_path(path: &str) -> bool {
+    path.ends_with("biomass_g")
+        || matches!(
+            path,
+            "animal.adults_count"
+                | "animal.juveniles_count"
+                | "detritus.particulate_organics_g_total"
+                | "detritus.fine_detritus_g_total"
+        )
+}
+
+fn is_nitrogen_budget_path(path: &str) -> bool {
+    is_shared_budget_path(path)
+        || matches!(
+            path,
+            "water.ammonia_total_mg_n_total"
+                | "water.nitrite_mg_n_total"
+                | "water.nitrate_mg_n_total"
+                | "water.dissolved_organic_nitrogen_mg_n_total"
+                | "substrate_layers[*].nutrient_store_mg_n_total"
+        )
+}
+
+fn is_carbon_budget_path(path: &str) -> bool {
+    is_shared_budget_path(path)
+        || matches!(
+            path,
+            "water.dissolved_inorganic_carbon_mg_c_total"
+                | "water.dissolved_organic_carbon_mg_c_total"
+        )
+}
+
 #[test]
 fn test_total_n_helper_sums_all_pools() {
     let state = known_budget_state();
@@ -103,16 +210,16 @@ fn test_total_n_helper_sums_all_pools() {
         + state.water.nitrate_mg_n_total
         + state.water.dissolved_organic_nitrogen_mg_n_total
         + substrate_n_mg
-        + plant_nitrogen_mg(state.plant_guilds[0].biomass_g)
-        + plant_nitrogen_mg(state.plant_guilds[1].biomass_g)
-        + algae_nitrogen_mg(state.algae.suspended_biomass_g)
-        + algae_nitrogen_mg(state.algae.periphyton_biomass_g)
-        + live_biomass_nitrogen_mg(microbe_biomass_g, ratio)
-        + live_biomass_nitrogen_mg(
-            shrimp_biomass_g(state.animal.adults_count, state.animal.juveniles_count),
+        + state.plant_guilds[0].biomass_g * 28.0
+        + state.plant_guilds[1].biomass_g * 28.0
+        + state.algae.suspended_biomass_g * 35.0
+        + state.algae.periphyton_biomass_g * 35.0
+        + manual_live_biomass_nitrogen_mg(microbe_biomass_g, ratio)
+        + manual_live_biomass_nitrogen_mg(
+            manual_shrimp_biomass_g(state.animal.adults_count, state.animal.juveniles_count),
             ratio,
         )
-        + detritus_nitrogen_mg(
+        + manual_organic_nitrogen_mg(
             state.detritus.particulate_organics_g_total + state.detritus.fine_detritus_g_total,
             ratio,
         );
@@ -130,16 +237,16 @@ fn test_total_c_helper_sums_all_pools() {
         + state.microbe.comammox_biomass_g;
     let expected = state.water.dissolved_inorganic_carbon_mg_c_total
         + state.water.dissolved_organic_carbon_mg_c_total
-        + plant_carbon_mg(state.plant_guilds[0].biomass_g, ratio)
-        + plant_carbon_mg(state.plant_guilds[1].biomass_g, ratio)
-        + algae_carbon_mg(state.algae.suspended_biomass_g, ratio)
-        + algae_carbon_mg(state.algae.periphyton_biomass_g, ratio)
-        + live_biomass_carbon_mg(microbe_biomass_g, ratio)
-        + live_biomass_carbon_mg(
-            shrimp_biomass_g(state.animal.adults_count, state.animal.juveniles_count),
+        + (state.plant_guilds[0].biomass_g * 28.0 / ratio)
+        + (state.plant_guilds[1].biomass_g * 28.0 / ratio)
+        + (state.algae.suspended_biomass_g * 35.0 / ratio)
+        + (state.algae.periphyton_biomass_g * 35.0 / ratio)
+        + manual_live_biomass_carbon_mg(microbe_biomass_g, ratio)
+        + manual_live_biomass_carbon_mg(
+            manual_shrimp_biomass_g(state.animal.adults_count, state.animal.juveniles_count),
             ratio,
         )
-        + detritus_carbon_mg(
+        + manual_organic_carbon_mg(
             state.detritus.particulate_organics_g_total + state.detritus.fine_detritus_g_total,
             ratio,
         );
@@ -148,8 +255,46 @@ fn test_total_c_helper_sums_all_pools() {
 }
 
 #[test]
+fn test_budget_component_labels_cover_all_element_bearing_fields() {
+    let state = known_budget_state();
+    let mut numeric_paths = BTreeSet::new();
+    collect_numeric_paths(
+        &serde_json::to_value(&state).expect("state should serialize"),
+        "",
+        &mut numeric_paths,
+    );
+
+    let nitrogen_paths: BTreeSet<_> = numeric_paths
+        .iter()
+        .filter(|path| is_nitrogen_budget_path(path))
+        .cloned()
+        .collect();
+    let carbon_paths: BTreeSet<_> = numeric_paths
+        .iter()
+        .filter(|path| is_carbon_budget_path(path))
+        .cloned()
+        .collect();
+    let nitrogen_labels: BTreeSet<_> = nitrogen_budget_components(&state)
+        .into_iter()
+        .map(|component| component.label.to_string())
+        .collect();
+    let carbon_labels: BTreeSet<_> = carbon_budget_components(&state)
+        .into_iter()
+        .map(|component| component.label.to_string())
+        .collect();
+
+    assert_eq!(nitrogen_labels, nitrogen_paths);
+    assert_eq!(carbon_labels, carbon_paths);
+    assert!(
+        !nitrogen_paths.contains("detritus.dissolved_feed_residue_g_total")
+            && !carbon_paths.contains("detritus.dissolved_feed_residue_g_total"),
+        "dissolved feed residue must stay excluded because it mirrors DOC/DON"
+    );
+}
+
+#[test]
 fn test_closed_system_n_conservation() -> Result<(), SimError> {
-    let state = quiescent_budget_state(SimSeed(9_001));
+    let state = active_budget_state(SimSeed(9_001));
     let initial_total_n = state.total_nitrogen();
     let mut engine = Engine::from_parts(state, vec![]);
     engine.enable_budget_tracking();
@@ -168,17 +313,21 @@ fn test_closed_system_n_conservation() -> Result<(), SimError> {
             .all(|tick| tick.net_delta.nitrogen.net_mg().abs() <= 1e-6),
         "expected per-tick nitrogen deltas to remain near zero: {ledger:#?}"
     );
-    assert!(ledger.ticks[0]
+    assert!(ledger.ticks.iter().any(|tick| tick
         .entries
         .iter()
-        .any(|entry| entry.label == "system:nitrogen_cycle"));
+        .any(|entry| entry.label == "system:nitrogen_cycle")));
+    assert!(ledger.ticks.iter().any(|tick| tick
+        .entries
+        .iter()
+        .any(|entry| entry.label == "system:daily_plants")));
 
     Ok(())
 }
 
 #[test]
 fn test_closed_system_c_conservation() -> Result<(), SimError> {
-    let state = quiescent_budget_state(SimSeed(9_002));
+    let state = active_budget_state(SimSeed(9_002));
     let initial_total_c = state.total_carbon();
     let mut engine = Engine::from_parts(state, vec![]);
     engine.enable_budget_tracking();
@@ -197,6 +346,14 @@ fn test_closed_system_c_conservation() -> Result<(), SimError> {
             .all(|tick| tick.net_delta.carbon.net_mg().abs() <= 1e-6),
         "expected per-tick carbon deltas to remain near zero: {ledger:#?}"
     );
+    assert!(ledger.ticks.iter().any(|tick| tick
+        .entries
+        .iter()
+        .any(|entry| entry.label == "system:daily_algae")));
+    assert!(ledger.ticks.iter().any(|tick| tick
+        .entries
+        .iter()
+        .any(|entry| entry.label == "system:daily_microfauna")));
 
     Ok(())
 }
@@ -205,9 +362,11 @@ fn test_closed_system_c_conservation() -> Result<(), SimError> {
 fn test_water_change_n_export_tracked() -> Result<(), SimError> {
     let mut state = quiescent_budget_state(SimSeed(9_003));
     state.substrate_layers[0].nutrient_store_mg_n_total = 0.0;
+    state.detritus.dissolved_feed_residue_g_total = 1.6;
     state
         .source_water_catalog
         .insert("ro_like".to_string(), SourceWaterProfile::zero());
+    let residue_before = state.detritus.dissolved_feed_residue_g_total;
     let water_n_before = state.water.ammonia_total_mg_n_total
         + state.water.nitrite_mg_n_total
         + state.water.nitrate_mg_n_total
@@ -239,6 +398,11 @@ fn test_water_change_n_export_tracked() -> Result<(), SimError> {
         1e-6,
     );
     assert_close(water_change_entry.delta.nitrogen.in_mg, 0.0, 1e-9);
+    assert_close(
+        engine.full_state().detritus.dissolved_feed_residue_g_total,
+        residue_before * 0.75,
+        1e-9,
+    );
 
     Ok(())
 }

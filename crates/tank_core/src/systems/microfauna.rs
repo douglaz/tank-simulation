@@ -1,4 +1,6 @@
-use crate::types::TankState;
+use crate::types::{
+    algae_carbon_mg, algae_nitrogen_mg, detritus_carbon_mg, detritus_nitrogen_mg, TankState,
+};
 
 /// Daily microfauna turnover: updates population_index and grazing_pressure_index
 /// from detritus/periphyton resource availability and shrimp grazing pressure.
@@ -14,6 +16,7 @@ pub fn step_daily_microfauna(state: &mut TankState) {
     }
 
     let pp = &state.process_params;
+    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
 
     // Resource availability (detritus + periphyton as food for microfauna)
     // Reference densities are generous so microfauna don't over-respond to
@@ -47,10 +50,38 @@ pub fn step_daily_microfauna(state: &mut TankState) {
         pp.microfauna_periphyton_consumption * state.microfauna.population_index;
     let consumed = state.algae.periphyton_biomass_g * consumption_fraction;
     state.algae.periphyton_biomass_g = (state.algae.periphyton_biomass_g - consumed).max(0.0);
+    route_algae_loss_to_dissolved_organics(state, consumed, n_to_c_ratio);
 
     // Microfauna also process some fine detritus (modest)
     let detritus_consumed =
         state.detritus.fine_detritus_g_total * 0.01 * state.microfauna.population_index;
     state.detritus.fine_detritus_g_total =
         (state.detritus.fine_detritus_g_total - detritus_consumed).max(0.0);
+    route_detritus_loss_to_dissolved_organics(state, detritus_consumed, n_to_c_ratio);
+}
+
+fn route_algae_loss_to_dissolved_organics(
+    state: &mut TankState,
+    biomass_g: f64,
+    n_to_c_ratio: f64,
+) {
+    if biomass_g <= f64::EPSILON {
+        return;
+    }
+
+    state.water.dissolved_organic_nitrogen_mg_n_total += algae_nitrogen_mg(biomass_g);
+    state.water.dissolved_organic_carbon_mg_c_total += algae_carbon_mg(biomass_g, n_to_c_ratio);
+}
+
+fn route_detritus_loss_to_dissolved_organics(
+    state: &mut TankState,
+    mass_g: f64,
+    n_to_c_ratio: f64,
+) {
+    if mass_g <= f64::EPSILON {
+        return;
+    }
+
+    state.water.dissolved_organic_nitrogen_mg_n_total += detritus_nitrogen_mg(mass_g, n_to_c_ratio);
+    state.water.dissolved_organic_carbon_mg_c_total += detritus_carbon_mg(mass_g, n_to_c_ratio);
 }

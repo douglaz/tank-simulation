@@ -1,6 +1,6 @@
 use crate::types::{
-    concentration_from_total, legacy_total_param_to_mg_per_l, TankState, ADULT_SHRIMP_BIOMASS_G,
-    JUVENILE_SHRIMP_BIOMASS_G,
+    concentration_from_total, legacy_total_param_to_mg_per_l, live_biomass_carbon_mg,
+    live_biomass_nitrogen_mg, TankState, ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G,
 };
 
 const FEED_P_TO_N_MASS_RATIO: f64 = 0.10;
@@ -43,7 +43,8 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
         return NitrogenCycleOutput::default();
     }
 
-    let pp = &state.process_params;
+    let pp = state.process_params.clone();
+    let n_to_c = safe_rate(pp.feed_n_to_c_ratio);
 
     // ---- 1. Feed leaching: particulate -> fine detritus ----
     let trapping_factor =
@@ -61,7 +62,6 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     state.detritus.fine_detritus_g_total -= dissolved;
     // dissolved mass (g) -> mg for dissolved pools: 1 g = 1000 mg
     // Split into DOC and DON using N:C ratio
-    let n_to_c = safe_rate(pp.feed_n_to_c_ratio);
     let doc_mg = dissolved * 1000.0 / (1.0 + n_to_c); // carbon fraction
     let don_mg = doc_mg * n_to_c; // nitrogen fraction
     let phosphate_mg = don_mg * FEED_P_TO_N_MASS_RATIO;
@@ -109,16 +109,25 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
 
     state.water.dissolved_organic_carbon_mg_c_total -= doc_consumed_mg;
     state.water.dissolved_organic_nitrogen_mg_n_total -= don_consumed_mg;
-    // Mineralized DON becomes TAN
-    state.water.ammonia_total_mg_n_total += don_consumed_mg;
     // Track residue pool depletion
-    let residue_consumed_g = doc_consumed_mg / 1000.0 * (1.0 + n_to_c);
+    let residue_consumed_g = (doc_consumed_mg + don_consumed_mg) / 1000.0;
     state.detritus.dissolved_feed_residue_g_total =
         (state.detritus.dissolved_feed_residue_g_total - residue_consumed_g).max(0.0);
 
     // Decomposer growth/decay
-    let decomp_growth = safe_rate(pp.decomposer_growth_yield) * doc_consumed_mg / 1000.0; // mg->g
+    let decomp_growth_potential = safe_rate(pp.decomposer_growth_yield) * doc_consumed_mg / 1000.0; // mg->g
+    let decomp_growth = constrained_live_growth_g(
+        decomp_growth_potential,
+        don_consumed_mg,
+        doc_consumed_mg,
+        n_to_c,
+    );
+    state.water.ammonia_total_mg_n_total +=
+        (don_consumed_mg - live_biomass_nitrogen_mg(decomp_growth, n_to_c)).max(0.0);
+    state.water.dissolved_inorganic_carbon_mg_c_total +=
+        (doc_consumed_mg - live_biomass_carbon_mg(decomp_growth, n_to_c)).max(0.0);
     let decomp_decay = safe_rate(pp.decomposer_decay_rate_per_hour) * decomposer_biomass;
+    route_live_biomass_to_dissolved_organics(state, decomp_decay, n_to_c);
     state.microbe.decomposer_biomass_g =
         (state.microbe.decomposer_biomass_g + decomp_growth - decomp_decay).max(0.0);
 
@@ -274,23 +283,48 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let logistic_factor = (1.0 - total_nitrifier_g / capacity_g).clamp(0.0, 1.0);
 
     // AOB growth from TAN oxidized
-    let aob_growth = safe_rate(pp.aob_growth_yield) * aob_rate * logistic_factor;
+    let aob_growth_potential = safe_rate(pp.aob_growth_yield) * aob_rate * logistic_factor;
+    let aob_growth = constrained_live_growth_g(
+        aob_growth_potential,
+        state.water.ammonia_total_mg_n_total,
+        state.water.dissolved_inorganic_carbon_mg_c_total,
+        n_to_c,
+    );
+    consume_live_growth_inputs(state, aob_growth, n_to_c);
     let aob_decay =
         safe_rate(pp.aob_decay_rate_per_hour) * state.microbe.ammonia_oxidizer_biomass_g;
+    route_live_biomass_to_dissolved_organics(state, aob_decay, n_to_c);
     state.microbe.ammonia_oxidizer_biomass_g =
         (state.microbe.ammonia_oxidizer_biomass_g + aob_growth - aob_decay).max(0.0);
 
     // NOB growth from nitrite oxidized
-    let nob_growth = safe_rate(pp.nob_growth_yield) * nob_rate * logistic_factor;
+    let nob_growth_potential = safe_rate(pp.nob_growth_yield) * nob_rate * logistic_factor;
+    let nob_growth = constrained_live_growth_g(
+        nob_growth_potential,
+        state.water.ammonia_total_mg_n_total,
+        state.water.dissolved_inorganic_carbon_mg_c_total,
+        n_to_c,
+    );
+    consume_live_growth_inputs(state, nob_growth, n_to_c);
     let nob_decay =
         safe_rate(pp.nob_decay_rate_per_hour) * state.microbe.nitrite_oxidizer_biomass_g;
+    route_live_biomass_to_dissolved_organics(state, nob_decay, n_to_c);
     state.microbe.nitrite_oxidizer_biomass_g =
         (state.microbe.nitrite_oxidizer_biomass_g + nob_growth - nob_decay).max(0.0);
 
     // Comammox growth from TAN fully oxidized
-    let comammox_growth = safe_rate(pp.comammox_growth_yield) * comammox_rate * logistic_factor;
+    let comammox_growth_potential =
+        safe_rate(pp.comammox_growth_yield) * comammox_rate * logistic_factor;
+    let comammox_growth = constrained_live_growth_g(
+        comammox_growth_potential,
+        state.water.ammonia_total_mg_n_total,
+        state.water.dissolved_inorganic_carbon_mg_c_total,
+        n_to_c,
+    );
+    consume_live_growth_inputs(state, comammox_growth, n_to_c);
     let comammox_decay =
         safe_rate(pp.comammox_decay_rate_per_hour) * state.microbe.comammox_biomass_g;
+    route_live_biomass_to_dissolved_organics(state, comammox_decay, n_to_c);
     state.microbe.comammox_biomass_g =
         (state.microbe.comammox_biomass_g + comammox_growth - comammox_decay).max(0.0);
 
@@ -312,6 +346,61 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     NitrogenCycleOutput {
         total_mg_n_nitrified,
     }
+}
+
+fn constrained_live_growth_g(
+    potential_growth_g: f64,
+    available_nitrogen_mg: f64,
+    available_carbon_mg: f64,
+    n_to_c_ratio: f64,
+) -> f64 {
+    if potential_growth_g <= f64::EPSILON {
+        return 0.0;
+    }
+
+    let required_n = live_biomass_nitrogen_mg(potential_growth_g, n_to_c_ratio);
+    let required_c = live_biomass_carbon_mg(potential_growth_g, n_to_c_ratio);
+    let n_scale = if required_n > f64::EPSILON {
+        available_nitrogen_mg / required_n
+    } else {
+        1.0
+    };
+    let c_scale = if required_c > f64::EPSILON {
+        available_carbon_mg / required_c
+    } else {
+        1.0
+    };
+
+    potential_growth_g * n_scale.min(c_scale).clamp(0.0, 1.0)
+}
+
+fn consume_live_growth_inputs(state: &mut TankState, growth_g: f64, n_to_c_ratio: f64) {
+    if growth_g <= f64::EPSILON {
+        return;
+    }
+
+    state.water.ammonia_total_mg_n_total = (state.water.ammonia_total_mg_n_total
+        - live_biomass_nitrogen_mg(growth_g, n_to_c_ratio))
+    .max(0.0);
+    state.water.dissolved_inorganic_carbon_mg_c_total =
+        (state.water.dissolved_inorganic_carbon_mg_c_total
+            - live_biomass_carbon_mg(growth_g, n_to_c_ratio))
+        .max(0.0);
+}
+
+fn route_live_biomass_to_dissolved_organics(
+    state: &mut TankState,
+    biomass_g: f64,
+    n_to_c_ratio: f64,
+) {
+    if biomass_g <= f64::EPSILON {
+        return;
+    }
+
+    state.water.dissolved_organic_nitrogen_mg_n_total +=
+        live_biomass_nitrogen_mg(biomass_g, n_to_c_ratio);
+    state.water.dissolved_organic_carbon_mg_c_total +=
+        live_biomass_carbon_mg(biomass_g, n_to_c_ratio);
 }
 
 /// Temperature factor: peaks around 25-30°C, drops off at extremes.

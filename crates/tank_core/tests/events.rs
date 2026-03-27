@@ -77,43 +77,54 @@ fn event_generation_warm_overfed_weak_aeration() -> Result<(), tank_core::SimErr
     let vol = state.water_volume_l();
     state.water.temperature_c = 30.0;
     state.environment.ambient_temp_c = 30.0;
+    state.water.dissolved_oxygen_mg_total = 3.5 * vol;
     // Higher pH pushes NH3 fraction up at 30°C
     state.water.alkalinity_meq_total = 4.0 * vol;
     state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * vol;
     // Weak aeration
-    state.hardware.aeration.enabled = true;
-    state.hardware.aeration.intensity = 0.05;
-    // Low reaeration to allow DO to drop
+    state.hardware.aeration.enabled = false;
+    state.hardware.light.enabled = false;
+    state.plant_guilds.clear();
+    state.algae.suspended_biomass_g = 0.0;
+    state.algae.periphyton_biomass_g = 0.0;
+    // Low reaeration and elevated BOD allow oxygen to sag while feed mineralizes.
     state.process_params = ProcessParams {
-        reaeration_kla_base: 0.05,
+        reaeration_kla_base: 0.0,
         aeration_kla_boost: 0.1,
+        background_bod_mg_o2_per_g_biomass_per_hour: 0.15,
         ..ProcessParams::default()
     };
     // Strong decomposer biomass to mineralize feed quickly into TAN
     state.microbe.decomposer_biomass_g = 0.5;
     // Minimal nitrification so TAN accumulates
-    state.microbe.ammonia_oxidizer_biomass_g = 0.005;
-    state.microbe.nitrite_oxidizer_biomass_g = 0.005;
-    state.microbe.comammox_biomass_g = 0.001;
+    state.microbe.ammonia_oxidizer_biomass_g = 0.0;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.0;
+    state.microbe.comammox_biomass_g = 0.0;
     state.filter_state.biofilter_maturity_index = 0.05;
 
     let mut engine = Engine::from_parts(state, vec![]);
 
-    // Heavy overfeeding for 14 days
-    for _ in 0..14 {
-        engine.apply_action(PlayerAction::Feed { grams: 3.0 })?;
+    // Heavy overfeeding for 10 days
+    for _ in 0..10 {
+        engine.apply_action(PlayerAction::Feed { grams: 4.0 })?;
         engine.step_hours(24)?;
     }
 
     let events = &engine.full_state().event_log;
+    let final_state = engine.full_state();
+    let final_view = final_state.concentrations();
 
     // Must emit at least one of AmmoniaWarning or OxygenDip
     let has_ammonia = events.iter().any(|e| e.kind == EventKind::AmmoniaWarning);
     let has_oxygen = events.iter().any(|e| e.kind == EventKind::OxygenDip);
     assert!(
         has_ammonia || has_oxygen,
-        "Warm overfed tank should emit AmmoniaWarning or OxygenDip. Events: {:?}",
+        "Warm overfed tank should emit AmmoniaWarning or OxygenDip. Events: {:?}; TAN={:.3} mg/L, DO={:.3} mg/L, pH={:.3}",
         events.iter().map(|e| &e.kind).collect::<Vec<_>>()
+            ,
+        final_view.tan_mg_n_per_l(),
+        final_view.do_mg_per_l(),
+        final_state.water.ph,
     );
 
     // All emitted events must have non-empty cause_codes

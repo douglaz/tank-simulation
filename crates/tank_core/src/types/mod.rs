@@ -18,9 +18,10 @@ pub use biology::{
     MicrofaunaState, PlantGuild, PlantGuildState, ShrimpRuntimeParams, StabilityTracker,
 };
 pub use budget::{
-    algae_carbon_mg, algae_nitrogen_mg, detritus_carbon_mg, detritus_nitrogen_mg,
-    live_biomass_carbon_mg, live_biomass_nitrogen_mg, plant_carbon_mg, plant_nitrogen_mg,
-    shrimp_biomass_g, shrimp_carbon_mg, shrimp_nitrogen_mg, BudgetDelta, BudgetEntry, BudgetLedger,
+    algae_carbon_mg, algae_nitrogen_mg, carbon_budget_components, detritus_carbon_mg,
+    detritus_nitrogen_mg, live_biomass_carbon_mg, live_biomass_nitrogen_mg,
+    nitrogen_budget_components, plant_carbon_mg, plant_nitrogen_mg, shrimp_biomass_g,
+    shrimp_carbon_mg, shrimp_nitrogen_mg, BudgetComponent, BudgetDelta, BudgetEntry, BudgetLedger,
     BudgetTotals, ElementBudget, TickBudgetRecord, ADULT_SHRIMP_BIOMASS_G,
     ALGAE_N_MG_PER_G_BIOMASS, JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
     PLANT_N_MG_PER_G_BIOMASS,

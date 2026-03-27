@@ -1,7 +1,10 @@
 use crate::systems::chemistry::compute_nh3_mg_l;
 use crate::types::{
-    EggCohort, EventCause, EventKind, EventSeverity, ShrimpRuntimeParams, TankState,
+    algae_carbon_mg, algae_nitrogen_mg, detritus_carbon_mg, detritus_nitrogen_mg, EggCohort,
+    EventCause, EventKind, EventSeverity, ShrimpRuntimeParams, TankState,
 };
+
+const SHRIMP_MINERALIZED_WASTE_FRACTION: f64 = 0.35;
 
 // ── Hourly ──────────────────────────────────────────────────────────────────
 
@@ -124,6 +127,7 @@ fn shrimp_feeding(state: &mut TankState) {
         return;
     }
 
+    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let rate = state
         .process_params
         .shrimp_periphyton_grazing_g_per_shrimp_per_day;
@@ -136,6 +140,7 @@ fn shrimp_feeding(state: &mut TankState) {
     let periph_consumed = food_demand.min(max_periph).max(0.0);
     state.algae.periphyton_biomass_g =
         (state.algae.periphyton_biomass_g - periph_consumed).max(0.0);
+    route_algae_food_to_waste(state, periph_consumed, n_to_c_ratio);
 
     // Shrimp also eat fine detritus (biofilm, decomposing organic matter)
     let detritus_demand = total_feeding_units * rate * grazing_access_factor;
@@ -143,6 +148,7 @@ fn shrimp_feeding(state: &mut TankState) {
     let detritus_consumed = detritus_demand.min(max_detritus).max(0.0);
     state.detritus.fine_detritus_g_total =
         (state.detritus.fine_detritus_g_total - detritus_consumed).max(0.0);
+    route_detritus_food_to_waste(state, detritus_consumed, n_to_c_ratio);
     state.animal.daily_food_consumed_g = periph_consumed + detritus_consumed;
 }
 
@@ -511,6 +517,43 @@ fn reset_hourly_accumulators(state: &mut TankState) {
     state.animal.hourly_heat_stress_accum = 0.0;
     state.animal.hourly_instability_stress_accum = 0.0;
     state.animal.daily_food_consumed_g = 0.0;
+}
+
+fn route_algae_food_to_waste(state: &mut TankState, biomass_g: f64, n_to_c_ratio: f64) {
+    if biomass_g <= f64::EPSILON {
+        return;
+    }
+
+    route_food_to_waste_pools(
+        state,
+        algae_nitrogen_mg(biomass_g),
+        algae_carbon_mg(biomass_g, n_to_c_ratio),
+    );
+}
+
+fn route_detritus_food_to_waste(state: &mut TankState, mass_g: f64, n_to_c_ratio: f64) {
+    if mass_g <= f64::EPSILON {
+        return;
+    }
+
+    route_food_to_waste_pools(
+        state,
+        detritus_nitrogen_mg(mass_g, n_to_c_ratio),
+        detritus_carbon_mg(mass_g, n_to_c_ratio),
+    );
+}
+
+fn route_food_to_waste_pools(state: &mut TankState, nitrogen_mg: f64, carbon_mg: f64) {
+    if nitrogen_mg <= f64::EPSILON && carbon_mg <= f64::EPSILON {
+        return;
+    }
+
+    let dissolved_fraction = 1.0 - SHRIMP_MINERALIZED_WASTE_FRACTION;
+    state.water.ammonia_total_mg_n_total += nitrogen_mg * SHRIMP_MINERALIZED_WASTE_FRACTION;
+    state.water.dissolved_organic_nitrogen_mg_n_total += nitrogen_mg * dissolved_fraction;
+    state.water.dissolved_inorganic_carbon_mg_c_total +=
+        carbon_mg * SHRIMP_MINERALIZED_WASTE_FRACTION;
+    state.water.dissolved_organic_carbon_mg_c_total += carbon_mg * dissolved_fraction;
 }
 
 // ── Factor functions ────────────────────────────────────────────────────────

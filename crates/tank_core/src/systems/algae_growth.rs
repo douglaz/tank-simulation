@@ -1,8 +1,9 @@
 use crate::{
+    systems::chemistry::compute_ph_from_totals,
     systems::events,
     types::{
-        legacy_total_param_to_mg_per_l, total_colonizable_area_cm2, TankState,
-        ALGAE_N_MG_PER_G_BIOMASS,
+        algae_carbon_mg, algae_nitrogen_mg, legacy_total_param_to_mg_per_l,
+        total_colonizable_area_cm2, TankState, ALGAE_N_MG_PER_G_BIOMASS,
     },
 };
 
@@ -14,6 +15,7 @@ pub fn step_daily_algae(state: &mut TankState) {
     if volume_l <= f64::EPSILON {
         return;
     }
+    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let tan_mg_n_per_l = concentrations.tan_mg_n_per_l();
     let nitrate_mg_n_per_l = concentrations.nitrate_mg_n_per_l();
     let phosphate_mg_p_per_l = concentrations.phosphate_mg_p_per_l();
@@ -79,7 +81,13 @@ pub fn step_daily_algae(state: &mut TankState) {
         } else {
             1.0
         };
-        n_frac.min(p_frac)
+        let c_demand = algae_carbon_mg(suspended_gross_growth_g, n_to_c_ratio);
+        let c_frac = if c_demand > f64::EPSILON {
+            state.water.dissolved_inorganic_carbon_mg_c_total / c_demand
+        } else {
+            1.0
+        };
+        n_frac.min(p_frac).min(c_frac)
     } else {
         0.0
     };
@@ -101,11 +109,20 @@ pub fn step_daily_algae(state: &mut TankState) {
         susp_no3_removed * susp_n_frac,
         susp_p_refund,
     );
+    state.water.dissolved_inorganic_carbon_mg_c_total =
+        (state.water.dissolved_inorganic_carbon_mg_c_total
+            - algae_carbon_mg(susp_cap, n_to_c_ratio))
+        .max(0.0);
     let suspended_new_g = (state.algae.suspended_biomass_g + susp_cap
         - suspended_respiration_g
         - suspended_grazing_g)
         .max(0.0);
     state.algae.suspended_biomass_g = suspended_new_g;
+    route_algae_loss_to_dissolved_organics(
+        state,
+        suspended_respiration_g + suspended_grazing_g,
+        n_to_c_ratio,
+    );
 
     let colonizable_area_m2 =
         total_colonizable_area_cm2(&state.substrate_layers, state.geometry.wall_area_cm2())
@@ -150,7 +167,13 @@ pub fn step_daily_algae(state: &mut TankState) {
         } else {
             1.0
         };
-        n_frac.min(p_frac)
+        let c_demand = algae_carbon_mg(periphyton_gross_growth_g, n_to_c_ratio);
+        let c_frac = if c_demand > f64::EPSILON {
+            state.water.dissolved_inorganic_carbon_mg_c_total / c_demand
+        } else {
+            1.0
+        };
+        n_frac.min(p_frac).min(c_frac)
     } else {
         0.0
     };
@@ -170,12 +193,21 @@ pub fn step_daily_algae(state: &mut TankState) {
         peri_no3_removed * peri_n_frac,
         peri_p_refund,
     );
+    state.water.dissolved_inorganic_carbon_mg_c_total =
+        (state.water.dissolved_inorganic_carbon_mg_c_total
+            - algae_carbon_mg(peri_cap, n_to_c_ratio))
+        .max(0.0);
     let periphyton_new_g = (state.algae.periphyton_biomass_g + peri_cap
         - periphyton_respiration_g
         - periphyton_grazing_g)
         .max(0.0)
         .min(periphyton_capacity_g.max(0.0));
     state.algae.periphyton_biomass_g = periphyton_new_g;
+    route_algae_loss_to_dissolved_organics(
+        state,
+        periphyton_respiration_g + periphyton_grazing_g,
+        n_to_c_ratio,
+    );
 
     let suspended_pressure = (state.algae.suspended_biomass_g / volume_l)
         / state
@@ -191,6 +223,11 @@ pub fn step_daily_algae(state: &mut TankState) {
         (0.55 * suspended_pressure + 0.45 * periphyton_pressure).clamp(0.0, 1.0);
 
     events::emit_daily_algae_events(state, previous_nuisance_index, periphyton_capacity_g);
+    state.water.ph = compute_ph_from_totals(
+        state.water.alkalinity_meq_total,
+        state.water.dissolved_inorganic_carbon_mg_c_total,
+        volume_l,
+    );
 }
 
 fn algae_light_factor(state: &TankState) -> f64 {
@@ -240,6 +277,19 @@ fn consume_algae_nutrients(
     state.water.phosphate_mg_p_total -= phosphate_removed;
 
     (ammonia_removed, nitrate_removed, phosphate_removed)
+}
+
+fn route_algae_loss_to_dissolved_organics(
+    state: &mut TankState,
+    biomass_g: f64,
+    n_to_c_ratio: f64,
+) {
+    if biomass_g <= f64::EPSILON {
+        return;
+    }
+
+    state.water.dissolved_organic_nitrogen_mg_n_total += algae_nitrogen_mg(biomass_g);
+    state.water.dissolved_organic_carbon_mg_c_total += algae_carbon_mg(biomass_g, n_to_c_ratio);
 }
 
 fn half_saturation(value: f64, half_sat: f64) -> f64 {
