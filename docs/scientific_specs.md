@@ -2,6 +2,8 @@ I reviewed the project statically and wrote up a fuller note here: [aquarium_sim
 
 Top line: this is already a strong **v0.1 foundation**. The crate layout is good, the sim is clearly engine-first instead of UI-first, and you already have meaningful regression coverage around cycling, oxygen, shrimp population, substrate effects, water changes, ambient temperature, and tank-size thermal behavior. The biggest gaps are not architectural — they are in the **scientific core**.
 
+Update on 2026-03-27: the prescriptive routing contract for the mass-conservation gap in issue 2 and the trim/export split in issue 8 now lives in [ROUTING.md](ROUTING.md). This note remains the broader scientific review.
+
 What is already solid
 
 Your direction on nitrogen is better than most hobby sims. Internally you store TAN and compute free NH3 from pH and temperature, and you model AOB/NOB/comammox separately instead of doing instant “ammonia disappears” logic. That is scientifically the right shape: ammonia risk depends strongly on speciation, and recent home-aquarium work supports variable cycling plus AOA/comammox involvement in real aquarium biofilters. ([US EPA][1])

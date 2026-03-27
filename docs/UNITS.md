@@ -1,6 +1,6 @@
 # Unit Policy
 
-This document is the prescriptive unit and naming policy for the chemistry-facing parts of the simulator. It turns the descriptive findings in [scientific_inventory.md](scientific_inventory.md) into rules that future refactors must follow across engine state, snapshots, API responses, TUI labels, save files, presets, and tests.
+This document is the prescriptive unit and naming policy for the chemistry-facing parts of the simulator. It turns the descriptive findings in [scientific_inventory.md](scientific_inventory.md) into rules that future refactors must follow across engine state, snapshots, API responses, TUI labels, save files, presets, and tests. The companion routing policy for how those quantities move between pools lives in [ROUTING.md](ROUTING.md).
 
 ## Goals
 

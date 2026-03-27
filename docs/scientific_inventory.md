@@ -1,6 +1,6 @@
 # Scientific Inventory
 
-This note inventories what the simulator means today, as inspected on 2026-03-27. It is intentionally descriptive, not prescriptive: it records current storage semantics, units, invariants, shortcuts, and test locks so later beads can cite one repo-local reference instead of rediscovering them in code. The prescriptive naming and display policy that future refactors should follow lives in [UNITS.md](UNITS.md).
+This note inventories what the simulator means today, as inspected on 2026-03-27. It is intentionally descriptive, not prescriptive: it records current storage semantics, units, invariants, shortcuts, and test locks so later beads can cite one repo-local reference instead of rediscovering them in code. The prescriptive naming and display policy that future refactors should follow lives in [UNITS.md](UNITS.md), and the prescriptive closed-loop material-routing policy for consumers and maintenance actions lives in [ROUTING.md](ROUTING.md).
 
 Quick orientation:
 
@@ -111,6 +111,19 @@ Quick orientation:
 | `calcium + magnesium + sodium + potassium + bicarbonate + chloride + sulfate` | `tds_mg_l`, `conductivity_us_cm` | Tracked-major-ion TDS proxy and conductivity estimate. | Reads like full TDS/conductivity; both omit untracked solutes and use a fixed `0.65` divisor. |
 | `plant_guilds`, `event_log` | `*_biomass_g`, `*_health_index`, `recent_events` | Snapshot sums or averages guild state and truncates events to the last 20 items. | Consumers can mistake snapshot fields for canonical storage rather than projections. |
 
+### 1.7 Routing convention cross-reference
+
+The inventory above records current storage. The prescriptive answer to "where should this mass go next?" now lives in [ROUTING.md](ROUTING.md).
+
+| Pool or action surface | Routing contract |
+| --- | --- |
+| `particulate_organics_g_total` | Feed enters here first, then follows the coarse-to-fine-to-dissolved path in [ROUTING.md](ROUTING.md#maintenance-and-husbandry-actions). |
+| `fine_detritus_g_total` | Receives feces, plant cuttings left in-tank, carcasses, failed eggs, and general fine organics per [ROUTING.md](ROUTING.md#consumer-routing-contract) and [ROUTING.md](ROUTING.md#death-senescence-and-failed-reproduction-routing). |
+| `dissolved_organic_carbon_mg_c_total` / `dissolved_organic_nitrogen_mg_n_total` | Remain the dissolved-organic destination for detritus breakdown; this doc does not add direct consumer routing to those pools in phase 1. |
+| `ammonia_total_mg_n_total` | Consumer dissolved N waste and mineralized DON route here per [ROUTING.md](ROUTING.md#consumer-routing-contract). |
+| `dissolved_inorganic_carbon_mg_c_total` / `dissolved_oxygen_mg_total` | Consumer respiration couples to these pools per [ROUTING.md](ROUTING.md#consumer-routing-contract). |
+| `TrimPlants`, `SiphonDetritus`, `CleanFilter`, `WaterChangePercent`, `RemoveShrimp` | Maintenance/export semantics are defined in [ROUTING.md](ROUTING.md#maintenance-and-husbandry-actions). |
+
 ## 2. Rate / Parameter Catalog
 
 Two important runtime facts before the catalog:
@@ -202,6 +215,8 @@ The TOML files already carry file-level `[provenance]` blocks, but not per-param
 | Scenario/startup scaling invariants | Geometry overrides currently rescale substrate nutrient charge by footprint, but not plant biomass, filter flow, heater power, or aeration defaults. | `E1`, `A2` |
 
 ## 4. Known Nonphysical Behaviors / Shortcuts
+
+For the `C1 / tanksim-6e5.3.1` mass-routing cluster, [ROUTING.md](ROUTING.md) now defines the intended future behavior. The rows below still describe the current runtime shortcuts and gaps.
 
 | Behavior / shortcut | Severity | Evidence | Expected owner |
 | --- | --- | --- | --- |
