@@ -1,6 +1,6 @@
 # Scientific Inventory
 
-This note inventories what the simulator means today, as inspected on 2026-03-27. It is intentionally descriptive, not prescriptive: it records current storage semantics, units, invariants, shortcuts, and test locks so later beads can cite one repo-local reference instead of rediscovering them in code.
+This note inventories what the simulator means today, as inspected on 2026-03-27. It is intentionally descriptive, not prescriptive: it records current storage semantics, units, invariants, shortcuts, and test locks so later beads can cite one repo-local reference instead of rediscovering them in code. The prescriptive naming and display policy that future refactors should follow lives in [UNITS.md](UNITS.md).
 
 Quick orientation:
 

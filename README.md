@@ -2,7 +2,7 @@
 
 `tank-simulation` is a Rust workspace for a deterministic freshwater planted shrimp tank simulator. It models the aquarium as an ecosystem rather than a scripted event loop: water chemistry, biofilter succession, plant growth, algae pressure, detritus, ambient temperature, and `Neocaridina davidi` population dynamics all feed back on each other over time.
 
-The current codebase is a strong v0.1 foundation. The engine, data layer, scenarios, TUI, and HTTP API are already separated cleanly, and the repository has meaningful automated coverage. The main remaining work is in the scientific core, not the architecture. A fuller review and next-step plan live in [docs/aquarium_sim_review_vnext.md](docs/aquarium_sim_review_vnext.md).
+The current codebase is a strong v0.1 foundation. The engine, data layer, scenarios, TUI, and HTTP API are already separated cleanly, and the repository has meaningful automated coverage. The main remaining work is in the scientific core, not the architecture. A fuller review and next-step plan live in [docs/aquarium_sim_review_vnext.md](docs/aquarium_sim_review_vnext.md), and the canonical unit/display policy now lives in [docs/UNITS.md](docs/UNITS.md).
 
 ## What it does
 
@@ -45,7 +45,7 @@ The main known limitations are documented rather than hidden:
 - pH and carbonate chemistry are still simplified
 - habitat-specific biofilms, denitrification, and deeper shrimp ecology are planned but not fully implemented
 
-A structured scientific roadmap covering units/kinetics normalization, mass conservation, carbonate chemistry, habitat-aware ecology, shrimp life history, and calibration is tracked as an 80-bead backlog in `.beads/issues.jsonl` (use `br list --pretty` or `bv` to browse). For background on the review that motivated the roadmap, see [docs/aquarium_sim_review_vnext.md](docs/aquarium_sim_review_vnext.md) and [docs/scientific_specs.md](docs/scientific_specs.md).
+A structured scientific roadmap covering units/kinetics normalization, mass conservation, carbonate chemistry, habitat-aware ecology, shrimp life history, and calibration is tracked as an 80-bead backlog in `.beads/issues.jsonl` (use `br list --pretty` or `bv` to browse). For background on the review that motivated the roadmap, see [docs/aquarium_sim_review_vnext.md](docs/aquarium_sim_review_vnext.md), [docs/scientific_specs.md](docs/scientific_specs.md), and [docs/UNITS.md](docs/UNITS.md).
 
 ## Quick start
 
