@@ -11,7 +11,9 @@ This repository uses `br` (beads_rust) and `bv` for issue tracking and backlog i
 - Read task context from the beads themselves with `br show <id>`.
 - Use `br ready` to find the next unblocked task.
 - Use `br list --pretty` or `bv` to inspect the backlog more broadly.
-- Run `br lint` after backlog edits; keep tasks and spikes template-clean with `## Acceptance Criteria` and epics template-clean with `## Success Criteria`.
+- Run `br lint` after backlog edits.
+- Keep task/spike/epic templates clean without duplicating criteria verbatim:
+  use the structured criteria field as the source of truth, and if a description needs an `## Acceptance Criteria` or `## Success Criteria` heading for lint/template reasons, make that section a short pointer rather than repeating the same bullet list.
 - Use `br graph` or `br dep tree <id>` when dependency shape matters.
 - Keep task knowledge in the beads. Do not recreate parallel backlog scripts or mirror plan docs unless explicitly requested.
 
