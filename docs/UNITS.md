@@ -21,12 +21,14 @@ Use the quantity basis directly in the identifier.
 | `_mg_total` | whole-tank mass where the stored basis is already the tracked species or ion | `dissolved_oxygen_mg_total`, `calcium_mg_total`, `bicarbonate_mg_total` |
 | `_meq_total` | whole-tank charge-equivalent store | `alkalinity_meq_total` |
 | `_mg_n_per_l`, `_mg_p_per_l`, `_mg_c_per_l`, `_mg_per_l` | concentration projection or source-water input | `ammonia_mg_n_per_l`, `calcium_mg_per_l` |
+| `_mmol_per_l` | derived molar concentration used for equilibrium/speciation views | `co2_aq_mmol_per_l`, `hco3_mmol_per_l`, `co3_mmol_per_l` |
 | `_per_hour`, `_per_day`, `_per_g_per_hour`, `_g_per_l`, `_g_per_m2` | rate or density parameter units | `feed_leach_rate_per_hour`, `aob_vmax_mg_n_per_g_per_hour`, `algae_bloom_threshold_g_per_l` |
 
 Rules:
 
 - Never use bare `_mg_l` for nitrogen-, phosphorus-, or carbon-basis chemistry. Those names hide whether the value means `mg N/L`, `mg P/L`, `mg C/L`, or full-ion `mg/L`.
 - Keep abbreviations only when they are already domain-standard and the basis is still explicit: `tan_mg_n_per_l`, `gh_d`, `kh_d`.
+- Carbonate speciation that exists only as a solver output uses molar names such as `co2_aq_mmol_per_l`, not ad hoc `mg/L` identifiers. If a UI wants `mg/L` later, that conversion belongs in the presentation layer.
 - Index, count, boolean, and temperature fields stay unit-specific without `_total`: `ph`, `temperature_c`, `cleanliness_index`, `adults_count`.
 
 ## Internal Storage Rules
@@ -42,6 +44,12 @@ Current canonical internal examples:
 - detritus and biomass totals in `crates/tank_core/src/types/biology.rs`
 
 This bead does not change the storage basis. Future chemistry or habitat work can add helper views, but the authoritative state remains whole-tank totals unless a later bead makes an explicit schema change.
+
+Approved carbonate exception:
+
+- `dissolved_inorganic_carbon_mg_c_total` and `alkalinity_meq_total` remain the authoritative carbonate stores.
+- `ph` and `bicarbonate_mg_total` are derived or cached projections.
+- Speciated carbonate outputs such as `co2_aq_mmol_per_l` are helper/view values, not canonical saved state.
 
 ### 2. Source-water and preset inputs stay per liter
 
@@ -106,6 +114,14 @@ Guidelines:
 - Helpers that derive a concentration from a total require `volume_l` explicitly unless they are called from a type that already owns canonical volume.
 - Avoid helper names that hide the basis, such as `nitrite_mg_l()` or `phosphate_ppm()`.
 
+Carbonate-equilibrium helpers follow the same rule:
+
+- `co2_aq_mmol_per_l(volume_l)`
+- `hco3_mmol_per_l(volume_l)`
+- `co3_mmol_per_l(volume_l)`
+
+Those are derived views over canonical DIC + alkalinity state, not new persisted stores.
+
 ### 2. Pure conversion helpers
 
 Element-to-ion or element-to-molecule display conversions should be pure functions collected in one conversion module. The destination basis belongs in the function name.
@@ -161,6 +177,14 @@ Canonical snapshot/API names for `tanksim-6e5.2.7`:
 | `dissolved_inorganic_carbon_mg_l` | `dissolved_inorganic_carbon_mg_c_per_l` | `DIC (mg C/L)` |
 
 Bare `mg/L` labels remain fine for species already stored and displayed as the tracked mass itself, such as dissolved oxygen and the tracked major ions.
+
+Carbonate-equilibrium debug or snapshot fields should keep their molar basis in the name:
+
+- `co2_aq_mmol_per_l`
+- `hco3_mmol_per_l`
+- `co3_mmol_per_l`
+
+If `bicarbonate_mg_total` continues to appear in state or debugging output, treat it as a derived cache sourced from `hco3_mmol_per_l`, not as an independent chemistry input.
 
 ### 3. Hobby-style ion display is opt-in and clearly marked
 

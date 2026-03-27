@@ -166,10 +166,10 @@ After conservation is fixed, do chemistry.
 
 Build goals:
 
-* explicit CO2(aq), HCO3-, CO3-- state
-* compute pH from carbonate equilibrium instead of the current shortcut
-* link aeration and surface exchange to **both** O2 and CO2
-* add source-water pH or pCO2/equilibrium target
+* keep `dissolved_inorganic_carbon_mg_c_total` and `alkalinity_meq_total` as canonical state, and derive `CO2(aq)`, `HCO3-`, `CO3--`, and `pH` each chemistry resolve as defined in [carbonate_state_contract.md](carbonate_state_contract.md)
+* replace the current log-linear pH shortcut with the approved first-pass analytical solve: temperature-corrected `pKa1`, fixed first-pass `pKa2`, no Newton iteration in the freshwater target envelope
+* link aeration and surface exchange to **both** O2 and DIC/CO2 as a follow-on that feeds the same carbonate resolve step
+* treat source-water `pH` or atmospheric `pCO2` targets as later extensions rather than a second authoritative pH state
 * optionally add CO2 injection hardware later
 
 That will let you get real day/night pH drift, aeration-driven CO2 stripping, and more believable plant/algae dynamics. ([USGS][3])
@@ -224,7 +224,7 @@ The first five tickets I would actually implement next
    Shrimp grazing must return mass into the system as feces, TAN, and respiration.
 
 5. **Replace the pH shortcut**
-   Add explicit carbonate state and CO2 exchange before tuning anything else.
+   Implement `tanksim-6e5.4.2` against [carbonate_state_contract.md](carbonate_state_contract.md), then layer CO2 exchange onto that same contract before tuning chemistry further.
 
 My overall recommendation
 
