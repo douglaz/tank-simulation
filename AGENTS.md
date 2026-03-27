@@ -12,8 +12,8 @@ This repository uses `br` (beads_rust) and `bv` for issue tracking and backlog i
 - Use `br ready` to find the next unblocked task.
 - Use `br list --pretty` or `bv` to inspect the backlog more broadly.
 - Run `br lint` after backlog edits.
-- Keep task/spike/epic templates clean without duplicating criteria verbatim:
-  use the structured criteria field as the source of truth, and if a description needs an `## Acceptance Criteria` or `## Success Criteria` heading for lint/template reasons, make that section a short pointer rather than repeating the same bullet list.
+- Keep criteria content only in the structured field.
+- For tasks and spikes, keep the required `## Acceptance Criteria` heading in the description only as an empty template marker for `br lint`; do not repeat bullets or pointer text there.
 - Use `br graph` or `br dep tree <id>` when dependency shape matters.
 - Keep task knowledge in the beads. Do not recreate parallel backlog scripts or mirror plan docs unless explicitly requested.
 
