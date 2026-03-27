@@ -1,6 +1,6 @@
 use tank_core::{
-    Engine, MicrobeState, PlayerAction, ProcessParams, SaveFile, SimSeed, SimulationEngine,
-    SourceWaterProfile, TankState, WaterState, APP_VERSION, SCHEMA_VERSION,
+    Engine, MicrobeState, PlayerAction, ProcessParams, SaveFile, SimError, SimSeed,
+    SimulationEngine, SourceWaterProfile, TankState, WaterState, APP_VERSION, SCHEMA_VERSION,
 };
 
 #[test]
@@ -224,5 +224,103 @@ fn legacy_schema_v2_saves_without_tracker_reseed_stability_baselines(
     assert!((migrated.state.stability_tracker.prev_gh_d - migrated.state.gh_d()).abs() < 1e-9);
     assert_eq!(migrated.state.stability_tracker.instability_index, 0.0);
 
+    Ok(())
+}
+
+#[test]
+fn future_schema_version_produces_clear_error() {
+    let state = TankState::new(SimSeed(1));
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION + 1,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let err = SaveFile::from_json(&json).unwrap_err();
+    match err {
+        SimError::SchemaVersionTooNew {
+            actual,
+            max_supported,
+        } => {
+            assert_eq!(actual, SCHEMA_VERSION + 1);
+            assert_eq!(max_supported, SCHEMA_VERSION);
+        }
+        other => panic!("expected SchemaVersionTooNew, got: {other}"),
+    }
+
+    // Verify the error message is human-readable (not silent data loss).
+    let msg = err.to_string();
+    assert!(msg.contains("newer"), "error should mention 'newer': {msg}");
+    assert!(
+        msg.contains("upgrade"),
+        "error should suggest upgrade: {msg}"
+    );
+}
+
+#[test]
+fn very_old_schema_version_produces_clear_error() {
+    let state = TankState::new(SimSeed(1));
+    let json = serde_json::json!({
+        "schema_version": 1,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let err = SaveFile::from_json(&json).unwrap_err();
+    match err {
+        SimError::SchemaVersionTooOld {
+            actual,
+            min_supported,
+        } => {
+            assert_eq!(actual, 1);
+            assert_eq!(min_supported, 2);
+        }
+        other => panic!("expected SchemaVersionTooOld, got: {other}"),
+    }
+}
+
+#[test]
+fn zero_schema_version_produces_clear_error() {
+    // Covers malformed saves with missing or zero schema_version.
+    let state = TankState::new(SimSeed(1));
+    let json = serde_json::json!({
+        "schema_version": 0,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let err = SaveFile::from_json(&json).unwrap_err();
+    assert!(matches!(err, SimError::SchemaVersionTooOld { .. }));
+}
+
+#[test]
+fn migration_chain_applies_v2_to_current() -> Result<(), SimError> {
+    // Build a v2 save and verify the full migration chain lands at current schema.
+    let mut legacy_state = TankState::new(SimSeed(50));
+    let gross_volume_l = legacy_state.geometry.gross_water_volume_l();
+    legacy_state.water = WaterState::default_for_volume_l(gross_volume_l);
+    legacy_state.water.ammonia_total_mg_n_total = 2.0 * gross_volume_l;
+
+    let json = serde_json::json!({
+        "schema_version": 2,
+        "app_version": APP_VERSION,
+        "state": legacy_state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    assert_eq!(loaded.schema_version, SCHEMA_VERSION);
+    // After migration, concentration should be preserved at 2.0 mg/L.
+    assert!((loaded.state.tan_mg_n_per_l() - 2.0).abs() < 1e-9);
+
+    // The loaded save should produce a working engine.
+    let _engine = loaded.into_engine()?;
     Ok(())
 }
