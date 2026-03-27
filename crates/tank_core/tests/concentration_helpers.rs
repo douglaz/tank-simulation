@@ -165,6 +165,27 @@ fn helpers_remain_stable_for_very_large_tanks() {
 }
 
 #[test]
+fn substrate_areal_density_helpers_use_tank_footprint() {
+    let mut state = helper_state();
+    state.substrate_layers = vec![
+        SubstrateLayerState {
+            nutrient_store_mg_n_total: 24.0,
+            nutrient_store_mg_p_total: 3.0,
+            ..state.substrate_layers[0].clone()
+        },
+        SubstrateLayerState {
+            nutrient_store_mg_n_total: 16.0,
+            nutrient_store_mg_p_total: 6.0,
+            ..state.substrate_layers[0].clone()
+        },
+    ];
+
+    assert_close(state.geometry.footprint_area_m2(), 0.1);
+    assert_close(state.substrate_n_mg_n_per_m2(), 400.0);
+    assert_close(state.substrate_p_mg_p_per_m2(), 90.0);
+}
+
+#[test]
 fn geometry_water_constructors_use_net_water_volume() {
     let geometry = TankGeometry {
         length_cm: 50.0,
@@ -296,6 +317,8 @@ proptest! {
         bicarbonate_total in 0.0_f64..1.0e6,
         chloride_total in 0.0_f64..1.0e6,
         sulfate_total in 0.0_f64..1.0e6,
+        substrate_n_total in 0.0_f64..1.0e6,
+        substrate_p_total in 0.0_f64..1.0e6,
     ) {
         let mut state = TankState::new(SimSeed(99));
         state.geometry = TankGeometry {
@@ -309,6 +332,8 @@ proptest! {
         };
         state.substrate_layers = vec![SubstrateLayerState {
             depth_cm: substrate_depth_cm,
+            nutrient_store_mg_n_total: substrate_n_total,
+            nutrient_store_mg_p_total: substrate_p_total,
             colonizable_area_cm2: state.geometry.footprint_area_cm2(),
             ..SubstrateLayerState::default()
         }];
@@ -331,6 +356,8 @@ proptest! {
 
         prop_assert!(state.substrate_volume_l() >= 0.0);
         prop_assert!(state.water_volume_l() >= 0.0);
+        prop_assert!(state.substrate_n_mg_n_per_m2() >= 0.0);
+        prop_assert!(state.substrate_p_mg_p_per_m2() >= 0.0);
         prop_assert!(state.tan_mg_n_per_l() >= 0.0);
         prop_assert!(state.nitrite_mg_n_per_l() >= 0.0);
         prop_assert!(state.nitrate_mg_n_per_l() >= 0.0);

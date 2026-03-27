@@ -246,6 +246,59 @@ fn plant_water_column_limitation_is_volume_invariant_at_fixed_concentration() {
 }
 
 #[test]
+fn plant_substrate_limitation_drops_when_areal_store_is_depleted() {
+    let build_state = |substrate_n_mg_total: f64, substrate_p_mg_total: f64| {
+        let mut state = base_growth_state(SimSeed(8107));
+        let volume_l = state.water_volume_l();
+        state.plant_guilds = vec![PlantGuildState {
+            guild: PlantGuild::RootFeedingRosette,
+            biomass_g: 4.0,
+            health_index: 0.8,
+            crowding_index: 0.0,
+            habitat_index: 0.8,
+            water_column_uptake_bias: Some(0.2),
+            substrate_uptake_bias: Some(0.8),
+        }];
+        state.substrate_layers = vec![SubstrateLayerState {
+            kind: SubstrateKind::ActivePlanted,
+            depth_cm: 4.0,
+            nutrient_store_mg_n_total: substrate_n_mg_total,
+            nutrient_store_mg_p_total: substrate_p_mg_total,
+            cation_exchange_capacity_index: 0.9,
+            detritus_trapping_index: 0.4,
+            colonizable_area_cm2: state.geometry.footprint_area_cm2(),
+            low_oxygen_tendency_index: 0.4,
+            grazing_surface_index: 0.5,
+        }];
+        state.water.ammonia_total_mg_n_total = 0.08 * volume_l;
+        state.water.nitrate_mg_n_total = 0.24 * volume_l;
+        state.water.phosphate_mg_p_total = 0.04 * volume_l;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 18.0 * volume_l;
+        state
+    };
+
+    let mut rich = build_state(40.0, 6.0);
+    let mut depleted = build_state(8.0, 1.2);
+
+    assert!(
+        rich.substrate_n_mg_n_per_m2() > depleted.substrate_n_mg_n_per_m2(),
+        "rich substrate should start with a higher areal N density"
+    );
+    assert!(
+        rich.substrate_p_mg_p_per_m2() > depleted.substrate_p_mg_p_per_m2(),
+        "rich substrate should start with a higher areal P density"
+    );
+
+    step_daily_plants(&mut rich);
+    step_daily_plants(&mut depleted);
+
+    assert!(
+        rich.plant_guilds[0].biomass_g > depleted.plant_guilds[0].biomass_g + 0.03,
+        "depleted substrate should materially reduce rooted-plant growth"
+    );
+}
+
+#[test]
 fn algae_water_column_limitation_is_volume_invariant_at_fixed_concentration() {
     let build_state = |substrate_depth_cm: f64| {
         let mut state = base_growth_state(SimSeed(8106));

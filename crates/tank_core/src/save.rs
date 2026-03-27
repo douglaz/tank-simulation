@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::{
     engine::{Engine, SimulationEngine},
@@ -41,12 +42,19 @@ impl SaveFile {
     }
 
     pub fn from_json(json: &str) -> Result<Self, SimError> {
-        let mut save: Self = serde_json::from_str(json)
+        let value: Value = serde_json::from_str(json)
+            .map_err(|error| SimError::Deserialization(error.to_string()))?;
+        let stability_tracker_present = has_serialized_stability_tracker(&value);
+        let mut save: Self = serde_json::from_value(value)
             .map_err(|error| SimError::Deserialization(error.to_string()))?;
         match save.schema_version {
-            SCHEMA_VERSION => Ok(save),
+            SCHEMA_VERSION => {
+                reseed_stability_tracker_if_missing(&mut save.state, stability_tracker_present);
+                Ok(save)
+            }
             LEGACY_SCHEMA_VERSION => {
                 migrate_schema_v2_to_v3(&mut save.state);
+                reseed_stability_tracker_if_missing(&mut save.state, stability_tracker_present);
                 save.schema_version = SCHEMA_VERSION;
                 Ok(save)
             }
@@ -79,4 +87,17 @@ fn migrate_schema_v2_to_v3(state: &mut TankState) {
     state
         .water
         .rescale_totals_for_volume(gross_volume_l, net_volume_l);
+}
+
+fn has_serialized_stability_tracker(value: &Value) -> bool {
+    value
+        .get("state")
+        .and_then(|state| state.get("stability_tracker"))
+        .is_some()
+}
+
+fn reseed_stability_tracker_if_missing(state: &mut TankState, stability_tracker_present: bool) {
+    if !stability_tracker_present {
+        state.reseed_stability_tracker();
+    }
 }

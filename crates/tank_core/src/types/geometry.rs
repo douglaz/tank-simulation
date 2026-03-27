@@ -41,6 +41,10 @@ impl TankGeometry {
         self.length_cm * self.width_cm
     }
 
+    pub fn footprint_area_m2(&self) -> f64 {
+        (self.footprint_area_cm2() / 10_000.0).max(0.0)
+    }
+
     pub fn wall_area_cm2(&self) -> f64 {
         2.0 * self.fill_height_cm * (self.length_cm + self.width_cm)
     }

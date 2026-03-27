@@ -95,10 +95,7 @@ impl TankState {
         };
         // Seed stability baseline from the freshly built water state so the
         // first daily update does not register a false chemistry swing.
-        let volume_l = state.water_volume_l();
-        state
-            .stability_tracker
-            .seed_from_water(&state.water, volume_l);
+        state.reseed_stability_tracker();
         state
     }
 
@@ -134,9 +131,7 @@ impl TankState {
         state
             .water
             .rescale_totals_for_volume(old_volume_l, volume_l);
-        state
-            .stability_tracker
-            .seed_from_water(&state.water, volume_l);
+        state.reseed_stability_tracker();
         state
     }
 
@@ -183,6 +178,32 @@ impl TankState {
         self.geometry
             .water_volume_l_with_substrate_depth(self.substrate_depth_cm())
             .max(0.0)
+    }
+
+    pub fn substrate_n_mg_n_per_m2(&self) -> f64 {
+        area_density_mg_per_m2(
+            self.substrate_layers
+                .iter()
+                .map(|layer| layer.nutrient_store_mg_n_total)
+                .sum(),
+            self.geometry.footprint_area_m2(),
+        )
+    }
+
+    pub fn substrate_p_mg_p_per_m2(&self) -> f64 {
+        area_density_mg_per_m2(
+            self.substrate_layers
+                .iter()
+                .map(|layer| layer.nutrient_store_mg_p_total)
+                .sum(),
+            self.geometry.footprint_area_m2(),
+        )
+    }
+
+    pub fn reseed_stability_tracker(&mut self) {
+        let volume_l = self.water_volume_l();
+        self.stability_tracker
+            .seed_from_water(&self.water, volume_l);
     }
 
     pub fn concentrations(&self) -> ConcentrationView<'_> {
@@ -253,5 +274,13 @@ impl TankState {
 impl Default for TankState {
     fn default() -> Self {
         Self::new(SimSeed(0))
+    }
+}
+
+fn area_density_mg_per_m2(total_mg: f64, area_m2: f64) -> f64 {
+    if !total_mg.is_finite() || !area_m2.is_finite() || area_m2 <= f64::EPSILON {
+        0.0
+    } else {
+        (total_mg / area_m2).max(0.0)
     }
 }

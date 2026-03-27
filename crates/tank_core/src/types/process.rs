@@ -1,10 +1,19 @@
 use serde::{Deserialize, Serialize};
 
 pub const LEGACY_KINETIC_REFERENCE_VOLUME_L: f64 = 20.0;
+pub const LEGACY_KINETIC_REFERENCE_FOOTPRINT_M2: f64 = 0.1;
 
 pub fn legacy_total_param_to_mg_per_l(value: f64) -> f64 {
     if value.is_finite() {
         (value / LEGACY_KINETIC_REFERENCE_VOLUME_L).max(0.0)
+    } else {
+        0.0
+    }
+}
+
+pub fn legacy_total_param_to_mg_per_m2(value: f64) -> f64 {
+    if value.is_finite() {
+        (value / LEGACY_KINETIC_REFERENCE_FOOTPRINT_M2).max(0.0)
     } else {
         0.0
     }

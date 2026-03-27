@@ -182,3 +182,47 @@ fn legacy_schema_v2_saves_are_migrated_to_net_water_volume() -> Result<(), tank_
 
     Ok(())
 }
+
+#[test]
+fn legacy_schema_v2_saves_without_tracker_reseed_stability_baselines(
+) -> Result<(), tank_core::SimError> {
+    let mut legacy_state = TankState::new(SimSeed(100));
+    let gross_volume_l = legacy_state.geometry.water_volume_l();
+    legacy_state.water = WaterState::default_for_volume_l(gross_volume_l);
+    legacy_state.water.temperature_c = 26.5;
+    legacy_state.water.ph = 6.6;
+    legacy_state.water.dissolved_oxygen_mg_total = 6.2 * gross_volume_l;
+    legacy_state.water.alkalinity_meq_total = 2.3 * gross_volume_l;
+    legacy_state.water.calcium_mg_total = 34.0 * gross_volume_l;
+    legacy_state.water.magnesium_mg_total = 9.0 * gross_volume_l;
+
+    let mut state_json = serde_json::to_value(&legacy_state).expect("serialize legacy state");
+    state_json
+        .as_object_mut()
+        .expect("state json object")
+        .remove("stability_tracker");
+
+    let json = serde_json::json!({
+        "schema_version": 2,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert!(
+        (migrated.state.stability_tracker.prev_temp_c - migrated.state.water.temperature_c).abs()
+            < 1e-9
+    );
+    assert!((migrated.state.stability_tracker.prev_ph - migrated.state.water.ph).abs() < 1e-9);
+    assert!(
+        (migrated.state.stability_tracker.prev_do_mg_l - migrated.state.do_mg_per_l()).abs() < 1e-9
+    );
+    assert!((migrated.state.stability_tracker.prev_gh_d - migrated.state.gh_d()).abs() < 1e-9);
+    assert_eq!(migrated.state.stability_tracker.instability_index, 0.0);
+
+    Ok(())
+}

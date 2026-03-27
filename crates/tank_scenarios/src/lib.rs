@@ -517,10 +517,7 @@ fn materialize_scenario(
 
     // Seed stability tracker baselines from actual water state to prevent
     // false chemistry-swing detection on the first update.
-    let volume_l = state.water_volume_l();
-    state
-        .stability_tracker
-        .seed_from_water(&state.water, volume_l);
+    state.reseed_stability_tracker();
 
     Ok(state)
 }
@@ -627,10 +624,7 @@ fn apply_startup_overrides(
 
     // Reseed stability baselines so that overridden water chemistry is not
     // treated as a "swing" on the first daily update.
-    let volume_l = state.water_volume_l();
-    state
-        .stability_tracker
-        .seed_from_water(&state.water, volume_l);
+    state.reseed_stability_tracker();
 
     Ok(())
 }

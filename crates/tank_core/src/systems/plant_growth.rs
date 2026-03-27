@@ -1,17 +1,27 @@
-use crate::types::{legacy_total_param_to_mg_per_l, PlantGuild, TankState};
+use crate::types::{
+    legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2, PlantGuild, TankState,
+};
 
 const PLANT_N_MG_PER_G_GROWTH: f64 = 28.0;
 const PLANT_P_MG_PER_G_GROWTH: f64 = 4.0;
 
 pub fn step_daily_plants(state: &mut TankState) {
-    let volume_l = state.water_volume_l();
+    let chemistry = state.concentrations();
+    let tan_mg_n_per_l = chemistry.tan_mg_n_per_l();
+    let nitrate_mg_n_per_l = chemistry.nitrate_mg_n_per_l();
+    let phosphate_mg_p_per_l = chemistry.phosphate_mg_p_per_l();
+    let dic_mg_c_per_l = chemistry.dic_mg_c_per_l();
     let plant_half_saturation_n_mg_n_per_l =
         legacy_total_param_to_mg_per_l(state.process_params.plant_half_saturation_n_mg_total);
     let plant_half_saturation_p_mg_p_per_l =
         legacy_total_param_to_mg_per_l(state.process_params.plant_half_saturation_p_mg_total);
     let plant_half_saturation_c_mg_c_per_l =
         legacy_total_param_to_mg_per_l(state.process_params.plant_half_saturation_c_mg_total);
-    let surface_area_m2 = (state.geometry.surface_area_cm2() / 10_000.0).max(f64::MIN_POSITIVE);
+    let plant_half_saturation_n_mg_n_per_m2 =
+        legacy_total_param_to_mg_per_m2(state.process_params.plant_half_saturation_n_mg_total);
+    let plant_half_saturation_p_mg_p_per_m2 =
+        legacy_total_param_to_mg_per_m2(state.process_params.plant_half_saturation_p_mg_total);
+    let surface_area_m2 = state.geometry.footprint_area_m2().max(f64::MIN_POSITIVE);
     let total_plant_biomass_g: f64 = state.plant_guilds.iter().map(|plant| plant.biomass_g).sum();
     let crowding_index = (total_plant_biomass_g
         / (surface_area_m2
@@ -26,10 +36,7 @@ pub fn step_daily_plants(state: &mut TankState) {
         state.process_params.plant_temp_optimum_c,
         state.process_params.plant_temp_sigma_c,
     );
-    let f_c = half_saturation(
-        state.water.dic_mg_c_per_l(volume_l),
-        plant_half_saturation_c_mg_c_per_l,
-    );
+    let f_c = half_saturation(dic_mg_c_per_l, plant_half_saturation_c_mg_c_per_l);
 
     for index in 0..state.plant_guilds.len() {
         let guild = state.plant_guilds[index].guild;
@@ -40,8 +47,8 @@ pub fn step_daily_plants(state: &mut TankState) {
         state.plant_guilds[index].crowding_index = crowding_index;
         state.plant_guilds[index].habitat_index = habitat_index;
 
-        let substrate_n = total_substrate_n(state);
-        let substrate_p = total_substrate_p(state);
+        let substrate_n = state.substrate_n_mg_n_per_m2();
+        let substrate_p = state.substrate_p_mg_p_per_m2();
         let water_bias = state.plant_guilds[index].water_column_uptake_bias();
         let substrate_bias = state.plant_guilds[index].substrate_uptake_bias();
         // Normalize biases for the accessibility calculation so presets that
@@ -50,15 +57,13 @@ pub fn step_daily_plants(state: &mut TankState) {
         let w_norm = water_bias / bias_sum;
         let s_norm = substrate_bias / bias_sum;
         let water_n_factor = half_saturation(
-            state.water.tan_mg_n_per_l(volume_l) + state.water.nitrate_mg_n_per_l(volume_l),
+            tan_mg_n_per_l + nitrate_mg_n_per_l,
             plant_half_saturation_n_mg_n_per_l,
         );
-        let water_p_factor = half_saturation(
-            state.water.phosphate_mg_p_per_l(volume_l),
-            plant_half_saturation_p_mg_p_per_l,
-        );
-        let substrate_n_factor = half_saturation(substrate_n, plant_half_saturation_n_mg_n_per_l);
-        let substrate_p_factor = half_saturation(substrate_p, plant_half_saturation_p_mg_p_per_l);
+        let water_p_factor =
+            half_saturation(phosphate_mg_p_per_l, plant_half_saturation_p_mg_p_per_l);
+        let substrate_n_factor = half_saturation(substrate_n, plant_half_saturation_n_mg_n_per_m2);
+        let substrate_p_factor = half_saturation(substrate_p, plant_half_saturation_p_mg_p_per_m2);
         let f_n = weighted_limitation_factor(water_n_factor, substrate_n_factor, w_norm, s_norm);
         let f_p = weighted_limitation_factor(water_p_factor, substrate_p_factor, w_norm, s_norm);
         let nutrient_limitation = f_n.min(f_p).min(f_c);
@@ -351,22 +356,6 @@ fn remove_substrate_pool(state: &mut TankState, target_mg: f64, is_nitrogen: boo
     }
 
     removed_total
-}
-
-fn total_substrate_n(state: &TankState) -> f64 {
-    state
-        .substrate_layers
-        .iter()
-        .map(|layer| layer.nutrient_store_mg_n_total)
-        .sum()
-}
-
-fn total_substrate_p(state: &TankState) -> f64 {
-    state
-        .substrate_layers
-        .iter()
-        .map(|layer| layer.nutrient_store_mg_p_total)
-        .sum()
 }
 
 fn half_saturation(value: f64, half_sat: f64) -> f64 {
