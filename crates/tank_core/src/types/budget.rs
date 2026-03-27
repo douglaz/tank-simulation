@@ -92,7 +92,7 @@ impl TickBudgetRecord {
         Self {
             tick_index,
             day: state.environment.day,
-            hour: state.environment.hour_of_day,
+            hour: u32::from(state.environment.hour_of_day),
             before: totals,
             after: totals,
             net_delta: BudgetDelta::default(),
@@ -153,6 +153,8 @@ pub fn total_nitrogen_mg(state: &TankState) -> f64 {
             state.animal.juveniles_count,
             n_to_c_ratio,
         )
+        // `dissolved_feed_residue_g_total` mirrors DOC/DON flow for clogging
+        // pressure and would double-count dissolved organics here.
         + detritus_nitrogen_mg(
             state.detritus.particulate_organics_g_total + state.detritus.fine_detritus_g_total,
             n_to_c_ratio,
@@ -183,6 +185,7 @@ pub fn total_carbon_mg(state: &TankState) -> f64 {
             state.animal.juveniles_count,
             n_to_c_ratio,
         )
+        // `dissolved_feed_residue_g_total` is a bookkeeping mirror of DOC/DON.
         + detritus_carbon_mg(
             state.detritus.particulate_organics_g_total + state.detritus.fine_detritus_g_total,
             n_to_c_ratio,
@@ -232,7 +235,10 @@ pub fn shrimp_nitrogen_mg(adults_count: u32, juveniles_count: u32, n_to_c_ratio:
 }
 
 pub fn shrimp_carbon_mg(adults_count: u32, juveniles_count: u32, n_to_c_ratio: f64) -> f64 {
-    live_biomass_carbon_mg(shrimp_biomass_g(adults_count, juveniles_count), n_to_c_ratio)
+    live_biomass_carbon_mg(
+        shrimp_biomass_g(adults_count, juveniles_count),
+        n_to_c_ratio,
+    )
 }
 
 pub fn detritus_nitrogen_mg(mass_g: f64, n_to_c_ratio: f64) -> f64 {

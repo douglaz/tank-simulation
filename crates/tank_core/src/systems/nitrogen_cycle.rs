@@ -1,6 +1,6 @@
 use crate::types::{
-    concentration_from_total, legacy_total_param_to_mg_per_l, TankState,
-    ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G,
+    concentration_from_total, legacy_total_param_to_mg_per_l, TankState, ADULT_SHRIMP_BIOMASS_G,
+    JUVENILE_SHRIMP_BIOMASS_G,
 };
 
 const FEED_P_TO_N_MASS_RATIO: f64 = 0.10;

@@ -47,6 +47,18 @@ impl StartupSubstratePreset {
         }
     }
 
+    pub fn total_depth_cm(self) -> f64 {
+        self.preset_ids()
+            .iter()
+            .map(|id| {
+                tank_data::load_substrate(id)
+                    .expect("startup substrate preset ids should resolve")
+                    .depth_cm
+                    .max(0.0)
+            })
+            .sum()
+    }
+
     fn preset_ids(self) -> &'static [&'static str] {
         match self {
             Self::InertSand => &["inert_sand"],

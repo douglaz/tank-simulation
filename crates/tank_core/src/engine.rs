@@ -5,8 +5,8 @@ use crate::{
     rng::SimSeed,
     systems,
     types::{
-        EventCause, EventKind, EventSeverity, PlayerAction, SimError, SimEvent, TankSnapshot,
-        TankState,
+        BudgetLedger, BudgetTotals, EventCause, EventKind, EventSeverity, PlayerAction, SimError,
+        SimEvent, TankSnapshot, TankState, TickBudgetRecord,
     },
 };
 
@@ -21,6 +21,7 @@ pub trait SimulationEngine {
 pub struct Engine {
     state: TankState,
     queued_actions: VecDeque<PlayerAction>,
+    budget_ledger: Option<BudgetLedger>,
 }
 
 impl Engine {
@@ -28,6 +29,7 @@ impl Engine {
         Self {
             state: TankState::new(seed),
             queued_actions: VecDeque::new(),
+            budget_ledger: None,
         }
     }
 
@@ -35,6 +37,7 @@ impl Engine {
         Self {
             state,
             queued_actions: queued_actions.into(),
+            budget_ledger: None,
         }
     }
 
@@ -42,7 +45,25 @@ impl Engine {
         self.queued_actions.iter().cloned().collect()
     }
 
+    pub fn enable_budget_tracking(&mut self) {
+        if self.budget_ledger.is_none() {
+            self.budget_ledger = Some(BudgetLedger::default());
+        }
+    }
+
+    pub fn disable_budget_tracking(&mut self) {
+        self.budget_ledger = None;
+    }
+
+    pub fn budget_ledger(&self) -> Option<&BudgetLedger> {
+        self.budget_ledger.as_ref()
+    }
+
     fn step_one_hour(&mut self) -> Result<(), SimError> {
+        let mut tick = self
+            .budget_ledger
+            .as_ref()
+            .map(|ledger| TickBudgetRecord::start(&self.state, ledger.ticks.len()));
         let actions_slice: Vec<_> = self.queued_actions.iter().cloned().collect();
         // Validate all queued actions (covers from_parts callers that bypass apply_action).
         let mut available_shrimp = self.state.animal.adults_count as i64;
@@ -68,11 +89,16 @@ impl Engine {
         systems::water_change::validate_water_changes(&self.state, &actions_slice)?;
 
         while let Some(action) = self.queued_actions.pop_front() {
-            self.process_action(action);
+            let label = action_budget_label(&action);
+            self.maybe_record_stage(&mut tick, label, move |engine| {
+                engine.process_action(action);
+            });
         }
 
         // Step 4: update water temperature from ambient and heater
-        systems::temperature::step_temperature(&mut self.state);
+        self.maybe_record_stage(&mut tick, "system:temperature", |engine| {
+            systems::temperature::step_temperature(&mut engine.state);
+        });
 
         // Step 5: compute light state for the current hour.
         let light_on = self.state.hardware.light.enabled
@@ -86,48 +112,80 @@ impl Engine {
         // This runs between light-state resolution and chemistry/DO/event phases.
         // Nitrification O2 consumption and alkalinity depletion are handled
         // internally by the nitrogen cycle system.
-        let _nc_output = systems::nitrogen_cycle::step_nitrogen_cycle(&mut self.state);
+        self.maybe_record_stage(&mut tick, "system:nitrogen_cycle", |engine| {
+            let _ = systems::nitrogen_cycle::step_nitrogen_cycle(&mut engine.state);
+        });
 
         // Step 9: update DIC, alkalinity, and pH.
-        systems::chemistry::step_hourly_chemistry(&mut self.state, light_on);
+        self.maybe_record_stage(&mut tick, "system:chemistry", |engine| {
+            systems::chemistry::step_hourly_chemistry(&mut engine.state, light_on);
+        });
 
         // Step 10 / 11-partial: update dissolved oxygen with background respiration and
         // light-driven photosynthetic support from existing biomass.
-        systems::dissolved_oxygen::step_dissolved_oxygen(&mut self.state, light_on);
+        self.maybe_record_stage(&mut tick, "system:dissolved_oxygen", |engine| {
+            systems::dissolved_oxygen::step_dissolved_oxygen(&mut engine.state, light_on);
+        });
 
         // Step 12: hourly shrimp stress accumulation.
-        systems::shrimp::step_hourly_shrimp_stress(&mut self.state);
+        self.maybe_record_stage(&mut tick, "system:shrimp_stress", |engine| {
+            systems::shrimp::step_hourly_shrimp_stress(&mut engine.state);
+        });
 
         // Step 13: emit threshold-based chemistry warnings.
-        systems::events::emit_hourly_threshold_events(&mut self.state);
+        self.maybe_record_stage(&mut tick, "system:hourly_events", |engine| {
+            systems::events::emit_hourly_threshold_events(&mut engine.state);
+        });
 
         self.state.environment.hour_of_day = (self.state.environment.hour_of_day + 1) % 24;
         if self.state.environment.hour_of_day == 0 {
             self.state.environment.day += 1;
             // Daily pipeline
-            self.run_daily_update();
+            self.run_daily_update(&mut tick);
         }
 
-        enforce_invariants(&mut self.state)
+        self.maybe_record_stage(&mut tick, "system:invariants", |engine| {
+            enforce_invariants(&mut engine.state)
+        })?;
+
+        if let (Some(ledger), Some(tick)) = (self.budget_ledger.as_mut(), tick) {
+            ledger.push_tick(tick);
+        }
+
+        Ok(())
     }
 
-    fn run_daily_update(&mut self) {
+    fn run_daily_update(&mut self, tick: &mut Option<TickBudgetRecord>) {
         // Daily pipeline: plants → algae → microfauna → stability → shrimp → biofilter
-        systems::plant_growth::step_daily_plants(&mut self.state);
-        systems::algae_growth::step_daily_algae(&mut self.state);
-        systems::microfauna::step_daily_microfauna(&mut self.state);
+        self.maybe_record_stage(tick, "system:daily_plants", |engine| {
+            systems::plant_growth::step_daily_plants(&mut engine.state);
+        });
+        self.maybe_record_stage(tick, "system:daily_algae", |engine| {
+            systems::algae_growth::step_daily_algae(&mut engine.state);
+        });
+        self.maybe_record_stage(tick, "system:daily_microfauna", |engine| {
+            systems::microfauna::step_daily_microfauna(&mut engine.state);
+        });
 
         // Update stability metrics before shrimp so that same-day chemistry
         // swings (water changes, temperature shifts) are reflected in the
         // instability_index that shrimp condition/mortality reads.
-        systems::shrimp::update_stability_tracker(&mut self.state);
+        self.maybe_record_stage(tick, "system:stability_tracker", |engine| {
+            systems::shrimp::update_stability_tracker(&mut engine.state);
+        });
 
-        systems::shrimp::step_daily_shrimp(&mut self.state);
-        systems::nitrogen_cycle::update_daily_filter_clogging(&mut self.state);
+        self.maybe_record_stage(tick, "system:daily_shrimp", |engine| {
+            systems::shrimp::step_daily_shrimp(&mut engine.state);
+        });
+        self.maybe_record_stage(tick, "system:daily_filter_clogging", |engine| {
+            systems::nitrogen_cycle::update_daily_filter_clogging(&mut engine.state);
+        });
 
         // Biofilter maturity summary update
         let maturity_delta =
-            systems::nitrogen_cycle::update_daily_biofilter_maturity(&mut self.state);
+            self.maybe_record_stage(tick, "system:daily_biofilter_maturity", |engine| {
+                systems::nitrogen_cycle::update_daily_biofilter_maturity(&mut engine.state)
+            });
         if maturity_delta > 0.005 {
             self.push_event(
                 EventSeverity::Info,
@@ -150,6 +208,24 @@ impl Engine {
                 format!("Nitrogen cycle progressing, maturity {current_maturity:.3}"),
             );
         }
+    }
+
+    fn maybe_record_stage<F, R>(
+        &mut self,
+        tick: &mut Option<TickBudgetRecord>,
+        label: &'static str,
+        stage: F,
+    ) -> R
+    where
+        F: FnOnce(&mut Self) -> R,
+    {
+        let before = tick.as_ref().map(|_| BudgetTotals::from_state(&self.state));
+        let result = stage(self);
+        if let (Some(tick), Some(before)) = (tick.as_mut(), before) {
+            let after = BudgetTotals::from_state(&self.state);
+            tick.record_stage(label, before, after);
+        }
+        result
     }
 
     fn process_action(&mut self, action: PlayerAction) {
@@ -313,5 +389,22 @@ impl SimulationEngine for Engine {
 
     fn full_state(&self) -> &TankState {
         &self.state
+    }
+}
+
+fn action_budget_label(action: &PlayerAction) -> &'static str {
+    match action {
+        PlayerAction::Feed { .. } => "action:feed",
+        PlayerAction::WaterChangePercent { .. } => "action:water_change",
+        PlayerAction::TrimPlants { .. } => "action:trim_plants",
+        PlayerAction::SiphonDetritus { .. } => "action:siphon_detritus",
+        PlayerAction::CleanFilter { .. } => "action:clean_filter",
+        PlayerAction::AddShrimp { .. } => "action:add_shrimp",
+        PlayerAction::RemoveShrimp { .. } => "action:remove_shrimp",
+        PlayerAction::ChangePhotoperiod { .. } => "action:change_photoperiod",
+        PlayerAction::ChangeLightIntensity { .. } => "action:change_light_intensity",
+        PlayerAction::ChangeHeaterSetpoint { .. } => "action:change_heater_setpoint",
+        PlayerAction::ChangeAmbientTemperature { .. } => "action:change_ambient_temperature",
+        PlayerAction::ChangeAeration { .. } => "action:change_aeration",
     }
 }

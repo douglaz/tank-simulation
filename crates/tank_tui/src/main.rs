@@ -584,6 +584,9 @@ fn render_startup(frame: &mut Frame<'_>, selection: &StartupSelection) {
                 item.tank_height_cm,
                 item.fill_height_cm,
             );
+            let gross_volume_l = geometry.water_volume_l();
+            let net_volume_l = geometry
+                .water_volume_l_with_substrate_depth(selection.substrate_preset.total_depth_cm());
             vec![
                 Line::from(format!("Scenario template {} ({})", item.name, item.id)),
                 Line::from(format!("Ambient {:.1} C", item.ambient_temp_c)),
@@ -594,7 +597,11 @@ fn render_startup(frame: &mut Frame<'_>, selection: &StartupSelection) {
                     geometry.height_cm,
                     geometry.fill_height_cm
                 )),
-                Line::from(format!("Filled volume {:.1} L", geometry.water_volume_l())),
+                Line::from(format!("Filled capacity {:.1} L gross", gross_volume_l)),
+                Line::from(format!(
+                    "Net water volume {:.1} L after substrate displacement",
+                    net_volume_l
+                )),
                 Line::from(format!(
                     "Source water {} ({})",
                     source_water_label(&selection.source_water_id),
