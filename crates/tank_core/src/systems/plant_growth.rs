@@ -148,13 +148,15 @@ pub fn step_daily_plants(state: &mut TankState) {
         state.water.dissolved_inorganic_carbon_mg_c_total =
             (state.water.dissolved_inorganic_carbon_mg_c_total - c_used).max(0.0);
 
-        let capped_net = nutrient_cap_g - respiration_g - senescence_g;
-
-        let new_biomass_g = (biomass_g + capped_net).max(0.0);
+        let biomass_after_growth_g = (biomass_g + nutrient_cap_g).max(0.0);
+        let (realized_respiration_g, realized_senescence_g) =
+            clamp_partitioned_losses(biomass_after_growth_g, respiration_g, senescence_g);
+        let new_biomass_g =
+            (biomass_after_growth_g - realized_respiration_g - realized_senescence_g).max(0.0);
         state.plant_guilds[index].biomass_g = new_biomass_g;
-        route_plant_loss_to_dissolved_organics(state, respiration_g.max(0.0), n_to_c_ratio);
+        route_plant_loss_to_dissolved_organics(state, realized_respiration_g, n_to_c_ratio);
         state.detritus.fine_detritus_g_total +=
-            plant_detrital_mass_g(senescence_g.max(0.0), n_to_c_ratio);
+            plant_detrital_mass_g(realized_senescence_g, n_to_c_ratio);
 
         let stress_driver = nutrient_limitation.min(f_light).min(habitat_index);
         let poor_conditions = stress_driver < 0.55;
@@ -392,6 +394,25 @@ fn route_plant_loss_to_dissolved_organics(
 
     state.water.dissolved_organic_nitrogen_mg_n_total += plant_nitrogen_mg(biomass_g);
     state.water.dissolved_organic_carbon_mg_c_total += plant_carbon_mg(biomass_g, n_to_c_ratio);
+}
+
+fn clamp_partitioned_losses(
+    available_biomass_g: f64,
+    primary_loss_g: f64,
+    secondary_loss_g: f64,
+) -> (f64, f64) {
+    let available_biomass_g = available_biomass_g.max(0.0);
+    let primary_loss_g = primary_loss_g.max(0.0);
+    let secondary_loss_g = secondary_loss_g.max(0.0);
+    let requested_total_loss_g = primary_loss_g + secondary_loss_g;
+    if available_biomass_g <= f64::EPSILON || requested_total_loss_g <= f64::EPSILON {
+        return (0.0, 0.0);
+    }
+
+    let realized_total_loss_g = requested_total_loss_g.min(available_biomass_g);
+    let realized_primary_loss_g = realized_total_loss_g * (primary_loss_g / requested_total_loss_g);
+    let realized_secondary_loss_g = realized_total_loss_g - realized_primary_loss_g;
+    (realized_primary_loss_g, realized_secondary_loss_g)
 }
 
 pub(crate) fn plant_detrital_mass_g(biomass_g: f64, n_to_c_ratio: f64) -> f64 {

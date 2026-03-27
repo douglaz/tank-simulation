@@ -113,16 +113,13 @@ pub fn step_daily_algae(state: &mut TankState) {
         (state.water.dissolved_inorganic_carbon_mg_c_total
             - algae_carbon_mg(susp_cap, n_to_c_ratio))
         .max(0.0);
-    let suspended_new_g = (state.algae.suspended_biomass_g + susp_cap
-        - suspended_respiration_g
-        - suspended_grazing_g)
-        .max(0.0);
+    let suspended_available_after_growth_g = (state.algae.suspended_biomass_g + susp_cap).max(0.0);
+    let suspended_realized_loss_g = (suspended_respiration_g + suspended_grazing_g)
+        .max(0.0)
+        .min(suspended_available_after_growth_g);
+    let suspended_new_g = (suspended_available_after_growth_g - suspended_realized_loss_g).max(0.0);
     state.algae.suspended_biomass_g = suspended_new_g;
-    route_algae_loss_to_dissolved_organics(
-        state,
-        suspended_respiration_g + suspended_grazing_g,
-        n_to_c_ratio,
-    );
+    route_algae_loss_to_dissolved_organics(state, suspended_realized_loss_g, n_to_c_ratio);
 
     let colonizable_area_m2 =
         total_colonizable_area_cm2(&state.substrate_layers, state.geometry.wall_area_cm2())
@@ -197,17 +194,18 @@ pub fn step_daily_algae(state: &mut TankState) {
         (state.water.dissolved_inorganic_carbon_mg_c_total
             - algae_carbon_mg(peri_cap, n_to_c_ratio))
         .max(0.0);
-    let periphyton_new_g = (state.algae.periphyton_biomass_g + peri_cap
-        - periphyton_respiration_g
-        - periphyton_grazing_g)
+    let periphyton_available_after_growth_g =
+        (state.algae.periphyton_biomass_g + peri_cap).max(0.0);
+    let periphyton_realized_loss_g = (periphyton_respiration_g + periphyton_grazing_g)
         .max(0.0)
-        .min(periphyton_capacity_g.max(0.0));
+        .min(periphyton_available_after_growth_g);
+    let periphyton_post_loss_g =
+        (periphyton_available_after_growth_g - periphyton_realized_loss_g).max(0.0);
+    let excess_g = (periphyton_post_loss_g - periphyton_capacity_g.max(0.0)).max(0.0);
+    let periphyton_new_g = (periphyton_post_loss_g - excess_g).max(0.0);
     state.algae.periphyton_biomass_g = periphyton_new_g;
-    route_algae_loss_to_dissolved_organics(
-        state,
-        periphyton_respiration_g + periphyton_grazing_g,
-        n_to_c_ratio,
-    );
+    route_algae_loss_to_dissolved_organics(state, periphyton_realized_loss_g, n_to_c_ratio);
+    route_algae_loss_to_dissolved_organics(state, excess_g, n_to_c_ratio);
 
     let suspended_pressure = (state.algae.suspended_biomass_g / volume_l)
         / state

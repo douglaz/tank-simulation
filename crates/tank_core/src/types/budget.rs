@@ -159,6 +159,14 @@ impl BudgetLedger {
     }
 }
 
+/// Canonical nitrogen-bearing TankState components for conservation checks,
+/// diagnostics, and budget snapshots.
+///
+/// The structural coverage test auto-discovers expected fields by naming
+/// convention (`*_mg_n_total`, `*biomass_g`, plus shared detritus/count pools).
+/// When adding a new explicit nitrogen-bearing field, update this function in
+/// the same change. If the field uses a non-standard name, also extend the
+/// budget-path discovery rules used by the coverage test.
 pub fn nitrogen_budget_components(state: &TankState) -> [BudgetComponent; 16] {
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let substrate_n_mg: f64 = state
@@ -249,6 +257,14 @@ pub fn nitrogen_budget_components(state: &TankState) -> [BudgetComponent; 16] {
     ]
 }
 
+/// Canonical carbon-bearing TankState components for conservation checks,
+/// diagnostics, and budget snapshots.
+///
+/// The structural coverage test auto-discovers expected fields by naming
+/// convention (`*_mg_c_total`, `*biomass_g`, plus shared detritus/count pools).
+/// When adding a new explicit carbon-bearing field, update this function in the
+/// same change. If the field uses a non-standard name, also extend the
+/// budget-path discovery rules used by the coverage test.
 pub fn carbon_budget_components(state: &TankState) -> [BudgetComponent; 13] {
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let plant_c_mg: f64 = state

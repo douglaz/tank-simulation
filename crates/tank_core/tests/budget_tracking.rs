@@ -2,9 +2,10 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 use tank_core::{
-    carbon_budget_components, nitrogen_budget_components, Engine, PlantGuildState, PlayerAction,
-    SimError, SimSeed, SimulationEngine, SourceWaterProfile, SubstrateKind, SubstrateLayerState,
-    TankState,
+    carbon_budget_components, nitrogen_budget_components,
+    systems::{algae_growth::step_daily_algae, plant_growth::step_daily_plants},
+    Engine, PlantGuildState, PlayerAction, SimError, SimSeed, SimulationEngine, SourceWaterProfile,
+    SubstrateKind, SubstrateLayerState, TankState,
 };
 
 fn assert_close(actual: f64, expected: f64, tolerance: f64) {
@@ -413,6 +414,69 @@ fn test_closed_system_c_conservation() -> Result<(), SimError> {
         .any(|entry| entry.label == "system:daily_microfauna")));
 
     Ok(())
+}
+
+#[test]
+fn test_periphyton_capacity_excess_routes_to_dissolved_organics() {
+    let mut state = quiescent_budget_state(SimSeed(9_016));
+    state.hardware.light.enabled = false;
+    state.algae.suspended_biomass_g = 0.0;
+    state.algae.periphyton_biomass_g = 5.0;
+    state.microfauna.population_index = 0.0;
+    state.microfauna.grazing_pressure_index = 0.0;
+    state.process_params.periphyton_capacity_g_per_m2 = 0.0;
+    let initial_total_n = state.total_nitrogen();
+    let initial_total_c = state.total_carbon();
+    let initial_don = state.water.dissolved_organic_nitrogen_mg_n_total;
+    let initial_doc = state.water.dissolved_organic_carbon_mg_c_total;
+
+    step_daily_algae(&mut state);
+
+    assert_close(state.algae.periphyton_biomass_g, 0.0, 1e-9);
+    assert_close(state.total_nitrogen(), initial_total_n, 1e-6);
+    assert_close(state.total_carbon(), initial_total_c, 1e-6);
+    assert!(state.water.dissolved_organic_nitrogen_mg_n_total > initial_don);
+    assert!(state.water.dissolved_organic_carbon_mg_c_total > initial_doc);
+}
+
+#[test]
+fn test_algae_loss_routing_is_clamped_to_available_biomass() {
+    let mut state = quiescent_budget_state(SimSeed(9_017));
+    state.hardware.light.enabled = false;
+    state.algae.suspended_biomass_g = 0.4;
+    state.algae.periphyton_biomass_g = 0.5;
+    state.microfauna.population_index = 1.0;
+    state.microfauna.grazing_pressure_index = 1.0;
+    state.process_params.algae_respiration_fraction_per_day = 1.4;
+    state.process_params.periphyton_capacity_g_per_m2 = 1_000.0;
+    let initial_total_n = state.total_nitrogen();
+    let initial_total_c = state.total_carbon();
+
+    step_daily_algae(&mut state);
+
+    assert_close(state.algae.suspended_biomass_g, 0.0, 1e-9);
+    assert_close(state.algae.periphyton_biomass_g, 0.0, 1e-9);
+    assert_close(state.total_nitrogen(), initial_total_n, 1e-6);
+    assert_close(state.total_carbon(), initial_total_c, 1e-6);
+}
+
+#[test]
+fn test_plant_loss_routing_is_clamped_to_available_biomass() {
+    let mut state = quiescent_budget_state(SimSeed(9_018));
+    state.hardware.light.enabled = false;
+    state.plant_guilds = vec![PlantGuildState::default(), PlantGuildState::default()];
+    state.plant_guilds[0].biomass_g = 0.8;
+    state.plant_guilds[1].biomass_g = 0.0;
+    state.process_params.plant_respiration_fraction_per_day = 1.5;
+    state.process_params.plant_senescence_fraction_per_day = 1.0;
+    let initial_total_n = state.total_nitrogen();
+    let initial_total_c = state.total_carbon();
+
+    step_daily_plants(&mut state);
+
+    assert_close(state.plant_guilds[0].biomass_g, 0.0, 1e-9);
+    assert_close(state.total_nitrogen(), initial_total_n, 1e-6);
+    assert_close(state.total_carbon(), initial_total_c, 1e-6);
 }
 
 #[test]

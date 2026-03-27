@@ -12,6 +12,24 @@ fn feed_daily(engine: &mut Engine, days: u32, grams: f64) -> Result<(), tank_cor
     Ok(())
 }
 
+fn nitrifier_growth_state(seed: SimSeed) -> TankState {
+    let mut state = TankState::new(seed);
+    state.microbe.decomposer_biomass_g = 0.0;
+    state.filter_state.biofilter_maturity_index = 1.0;
+    state.process_params.reaeration_kla_base = 0.0;
+    state.process_params.aeration_kla_boost = 0.0;
+    state.process_params.aob_vmax_mg_n_per_g_per_hour = 100.0;
+    state.process_params.nob_vmax_mg_n_per_g_per_hour = 100.0;
+    state.process_params.comammox_vmax_fraction = 1.0;
+    state.process_params.aob_decay_rate_per_hour = 0.0;
+    state.process_params.nob_decay_rate_per_hour = 0.0;
+    state.process_params.comammox_decay_rate_per_hour = 0.0;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 10_000.0;
+    state.water.dissolved_oxygen_mg_total = 10_000.0;
+    state.water.alkalinity_meq_total = 10_000.0;
+    state
+}
+
 #[test]
 fn cycling_seeded_vs_unseeded() -> Result<(), tank_core::SimError> {
     let (seeded_state, unseeded_state) = tank_scenarios::cycling_fixture_pair(SimSeed(9000));
@@ -359,6 +377,78 @@ fn dirty_filter_slows_nitrification() -> Result<(), tank_core::SimError> {
     );
 
     Ok(())
+}
+
+#[test]
+fn aob_growth_reserves_tan_for_assimilation_when_tan_would_otherwise_hit_zero() {
+    let mut state = nitrifier_growth_state(SimSeed(9702));
+    state.microbe.ammonia_oxidizer_biomass_g = 0.1;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.0;
+    state.microbe.comammox_biomass_g = 0.0;
+    state.water.ammonia_total_mg_n_total = 0.8;
+    let aob_before = state.microbe.ammonia_oxidizer_biomass_g;
+
+    step_nitrogen_cycle(&mut state);
+
+    assert!(
+        state.microbe.ammonia_oxidizer_biomass_g > aob_before,
+        "AOB biomass should grow when TAN is fully processed within the tick"
+    );
+    assert!(
+        state.water.ammonia_total_mg_n_total <= 1e-9,
+        "AOB growth bookkeeping should still exhaust the small TAN pool"
+    );
+    assert!(
+        state.water.nitrite_mg_n_total > 0.0,
+        "AOB growth should not collapse nitrification to zero product"
+    );
+}
+
+#[test]
+fn nob_growth_uses_nitrite_source_not_ammonia() {
+    let mut state = nitrifier_growth_state(SimSeed(9703));
+    state.microbe.ammonia_oxidizer_biomass_g = 0.0;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.1;
+    state.microbe.comammox_biomass_g = 0.0;
+    state.water.ammonia_total_mg_n_total = 0.0;
+    state.water.nitrite_mg_n_total = 1.0;
+    let nob_before = state.microbe.nitrite_oxidizer_biomass_g;
+
+    step_nitrogen_cycle(&mut state);
+
+    assert!(
+        state.microbe.nitrite_oxidizer_biomass_g > nob_before,
+        "NOB biomass should grow from nitrite processing even with zero ammonia"
+    );
+    assert!(
+        state.water.nitrate_mg_n_total > 0.0,
+        "NOB processing should still oxidize nitrite into nitrate"
+    );
+}
+
+#[test]
+fn comammox_growth_reserves_tan_for_assimilation_when_tan_would_otherwise_hit_zero() {
+    let mut state = nitrifier_growth_state(SimSeed(9704));
+    state.microbe.ammonia_oxidizer_biomass_g = 0.0;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.0;
+    state.microbe.comammox_biomass_g = 0.1;
+    state.water.ammonia_total_mg_n_total = 0.8;
+    let comammox_before = state.microbe.comammox_biomass_g;
+
+    step_nitrogen_cycle(&mut state);
+
+    assert!(
+        state.microbe.comammox_biomass_g > comammox_before,
+        "Comammox biomass should grow when TAN is fully processed within the tick"
+    );
+    assert!(
+        state.water.ammonia_total_mg_n_total <= 1e-9,
+        "Comammox growth bookkeeping should still exhaust the small TAN pool"
+    );
+    assert!(
+        state.water.nitrate_mg_n_total > 0.0,
+        "Comammox growth should not collapse nitrification to zero nitrate"
+    );
 }
 
 #[test]
