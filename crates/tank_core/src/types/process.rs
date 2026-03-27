@@ -168,6 +168,47 @@ pub struct ProcessParams {
     pub shrimp_periphyton_grazing_g_per_shrimp_per_day: f64,
     pub shrimp_condition_smoothing: f64,
 
+    // -- Shrimp feeding pathway fractions (consumer routing contract) --
+    // Phase-1 simplification: one shared food-quality assumption for periphyton
+    // and fine detritus. Both are treated as generic organic matter with the
+    // same N:C ratio (feed_n_to_c_ratio). This is acceptable because
+    // periphyton and fine detritus in a shrimp tank have broadly similar
+    // elemental composition at the resolution of this model.
+    //
+    // Routing contract:
+    //   ingested = feces + assimilated
+    //   assimilated = respired + excreted + retained
+    //   fecal_fraction = 1.0 - assimilation_efficiency
+    //   respiration_fraction + excretion_fraction + growth_fraction = 1.0
+    //
+    // See docs/ROUTING.md for the full consumer routing contract.
+
+    /// Fraction of ingested organic matter that is assimilated (remainder is feces).
+    /// Literature range for detritivorous shrimp: 0.4–0.7.
+    #[serde(default = "default_shrimp_assimilation_efficiency")]
+    pub shrimp_assimilation_efficiency: f64,
+
+    /// Of the assimilated share, fraction routed to respiration (O2 demand + DIC).
+    /// Literature range: 0.6–0.8.
+    #[serde(default = "default_shrimp_respiration_fraction")]
+    pub shrimp_respiration_fraction_of_assimilated: f64,
+
+    /// Of the assimilated share, fraction excreted as dissolved TAN.
+    /// Literature range: 0.1–0.2.
+    #[serde(default = "default_shrimp_excretion_fraction")]
+    pub shrimp_excretion_fraction_of_assimilated: f64,
+
+    /// Of the assimilated share, fraction retained as body reserve/growth.
+    /// Derived: 1.0 - respiration_fraction - excretion_fraction.
+    /// Literature range: 0.1–0.2.
+    #[serde(default = "default_shrimp_growth_fraction")]
+    pub shrimp_growth_fraction_of_assimilated: f64,
+
+    /// Respiratory quotient: mg O2 consumed per mg C respired.
+    /// Stoichiometric value for carbohydrate oxidation ≈ 2.67 (32/12).
+    #[serde(default = "default_shrimp_o2_per_mg_c_respired")]
+    pub shrimp_o2_per_mg_c_respired: f64,
+
     // -- Microfauna turnover --
     pub microfauna_mineralization_boost: f64,
     pub microfauna_periphyton_consumption: f64,

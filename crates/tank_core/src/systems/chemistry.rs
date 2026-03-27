@@ -1,4 +1,6 @@
-use crate::types::{TankState, ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G};
+use crate::types::{
+    BudgetDelta, ElementBudget, TankState, ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G,
+};
 
 pub fn compute_ph_from_totals(
     alkalinity_meq_total: f64,
@@ -23,17 +25,43 @@ pub fn compute_nh3_mg_l(tan_mg_l: f64, ph: f64, temp_c: f64) -> f64 {
 }
 
 pub fn step_hourly_chemistry(state: &mut TankState, light_on: bool) {
+    let Some(terms) = hourly_chemistry_terms(state, light_on) else {
+        return;
+    };
+
+    apply_hourly_chemistry_terms(state, terms);
+}
+
+pub fn step_hourly_chemistry_with_budget(state: &mut TankState, light_on: bool) -> BudgetDelta {
+    let Some(terms) = hourly_chemistry_terms(state, light_on) else {
+        return BudgetDelta::default();
+    };
+
+    BudgetDelta {
+        carbon: apply_hourly_chemistry_terms(state, terms),
+        ..BudgetDelta::default()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct HourlyChemistryTerms {
+    respiration_dic_mg: f64,
+    photosynthesis_dic_mg: f64,
+}
+
+fn hourly_chemistry_terms(state: &TankState, light_on: bool) -> Option<HourlyChemistryTerms> {
     let volume_l = state.water_volume_l();
     if volume_l <= f64::EPSILON {
-        return;
+        return None;
     }
 
     // These DIC terms are an intentional atmospheric-exchange simplification:
     // respiration adds CO2 into the lumped DIC pool and light-driven uptake
     // removes it again, even though there is no paired organic-C store inside
     // this hourly chemistry pass. Closed-system carbon conservation therefore
-    // only holds when these rates are zeroed (the code default used by the
-    // conservation tests); preset packs may opt into this open-system shortcut.
+    // only holds when these rates are zeroed unless the guard subtracts this
+    // explicit chemistry-stage source/sink budget; preset packs may opt into
+    // this open-system shortcut without disabling the rest of the tick guard.
     let respiration_dic_mg = state
         .process_params
         .respiration_dic_rate_mg_c_per_g_per_hour
@@ -47,15 +75,34 @@ pub fn step_hourly_chemistry(state: &mut TankState, light_on: bool) {
     } else {
         0.0
     };
-    let net_dic_delta_mg = respiration_dic_mg - photosynthesis_dic_mg;
+
+    Some(HourlyChemistryTerms {
+        respiration_dic_mg,
+        photosynthesis_dic_mg,
+    })
+}
+
+fn apply_hourly_chemistry_terms(
+    state: &mut TankState,
+    terms: HourlyChemistryTerms,
+) -> ElementBudget {
+    let dic_before_mg = state.water.dissolved_inorganic_carbon_mg_c_total.max(0.0);
+    let carbon_in_mg = terms.respiration_dic_mg.max(0.0);
+    let carbon_out_requested_mg = terms.photosynthesis_dic_mg.max(0.0);
+    let carbon_out_mg = carbon_out_requested_mg.min(dic_before_mg + carbon_in_mg);
 
     state.water.dissolved_inorganic_carbon_mg_c_total =
-        (state.water.dissolved_inorganic_carbon_mg_c_total + net_dic_delta_mg).max(0.0);
+        (dic_before_mg + carbon_in_mg - carbon_out_mg).max(0.0);
     state.water.ph = compute_ph_from_totals(
         state.water.alkalinity_meq_total,
         state.water.dissolved_inorganic_carbon_mg_c_total,
-        volume_l,
+        state.water_volume_l(),
     );
+
+    ElementBudget {
+        in_mg: carbon_in_mg,
+        out_mg: carbon_out_mg,
+    }
 }
 
 pub(crate) fn respiring_biomass_g(state: &TankState) -> f64 {

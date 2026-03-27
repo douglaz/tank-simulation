@@ -777,10 +777,12 @@ fn test_dissolved_oxygen_stage_tracks_gross_in_and_out() -> Result<(), SimError>
 }
 
 #[test]
-fn test_preset_dic_exchange_is_treated_as_open_system_carbon() -> Result<(), SimError> {
+fn test_preset_dic_exchange_is_explicitly_tracked_without_disabling_carbon_guard(
+) -> Result<(), SimError> {
     // These values mirror crates/tank_data/data/process/default.toml and model
-    // the current atmospheric DIC shortcut, so tracked carbon should drift while
-    // budget tracking stays permissive for the chemistry stage.
+    // the current atmospheric DIC shortcut, so tracked carbon should drift only
+    // by the chemistry-stage source/sink budget instead of disabling the rest
+    // of the tick-level carbon guard.
     let mut state = active_budget_state(SimSeed(9_015));
     state.environment.hour_of_day = 12;
     state.hardware.light.enabled = true;
@@ -811,8 +813,21 @@ fn test_preset_dic_exchange_is_treated_as_open_system_carbon() -> Result<(), Sim
         "default preset DIC exchange should move carbon through system:chemistry"
     );
     assert!(
+        chemistry_entry.delta.carbon.in_mg > 0.0,
+        "respiration shortcut should record explicit carbon inflow"
+    );
+    assert!(
+        chemistry_entry.delta.carbon.out_mg > 0.0,
+        "photosynthesis shortcut should record explicit carbon outflow"
+    );
+    assert!(
         (engine.full_state().total_carbon() - initial_total_c).abs() > 1e-6,
-        "preset DIC exchange should prevent closed-system carbon conservation"
+        "preset DIC exchange should still move total carbon through the chemistry shortcut"
+    );
+    assert_close(
+        engine.full_state().total_carbon() - initial_total_c,
+        chemistry_entry.delta.carbon.net_mg(),
+        1e-6,
     );
 
     Ok(())

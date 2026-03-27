@@ -122,9 +122,22 @@ impl Engine {
         });
 
         // Step 9: update DIC, alkalinity, and pH.
-        self.maybe_record_stage(&mut tick, "system:chemistry", |engine| {
-            systems::chemistry::step_hourly_chemistry(&mut engine.state, light_on);
-        });
+        self.maybe_record_stage_with_explicit_budget(
+            &mut tick,
+            "system:chemistry",
+            move |engine, tracking| {
+                let delta = if tracking {
+                    Some(systems::chemistry::step_hourly_chemistry_with_budget(
+                        &mut engine.state,
+                        light_on,
+                    ))
+                } else {
+                    systems::chemistry::step_hourly_chemistry(&mut engine.state, light_on);
+                    None
+                };
+                ((), delta)
+            },
+        );
 
         // Step 10 / 11-partial: update dissolved oxygen with background respiration and
         // light-driven photosynthetic support from existing biomass.
@@ -514,12 +527,11 @@ fn enforce_tracked_tick_budget_guard(tick: &TickBudgetRecord) -> Result<(), SimE
         });
     }
 
-    if tick_has_closed_system_carbon(tick)
-        && tick.net_delta.carbon.net_mg().abs() > BUDGET_GUARD_TOLERANCE_MG
-    {
+    let carbon_residual_mg = carbon_guard_delta_mg(tick);
+    if tick_has_closed_system_carbon(tick) && carbon_residual_mg.abs() > BUDGET_GUARD_TOLERANCE_MG {
         return Err(SimError::BudgetImbalance {
             element: "carbon",
-            delta_mg: tick.net_delta.carbon.net_mg(),
+            delta_mg: carbon_residual_mg,
             tick_index: tick.tick_index,
             day: tick.day,
             hour: tick.hour,
@@ -553,12 +565,21 @@ fn tick_has_closed_system_carbon(tick: &TickBudgetRecord) -> bool {
         .entries
         .iter()
         .any(|entry| entry_has_open_action_flux(entry.label.as_str(), entry.delta.carbon))
-        && tick
-            .entries
-            .iter()
-            .find(|entry| entry.label == "system:chemistry")
-            .map(|entry| !element_budget_has_flux(entry.delta.carbon))
-            .unwrap_or(true)
+}
+
+fn carbon_guard_delta_mg(tick: &TickBudgetRecord) -> f64 {
+    // The hourly chemistry system can opt into an explicit atmospheric DIC
+    // shortcut. Subtract that known open-system exchange so the guard still
+    // catches unrelated carbon leaks elsewhere in the same tick.
+    tick.net_delta.carbon.net_mg() - chemistry_external_carbon_flux_mg(tick)
+}
+
+fn chemistry_external_carbon_flux_mg(tick: &TickBudgetRecord) -> f64 {
+    tick.entries
+        .iter()
+        .filter(|entry| entry.label == "system:chemistry")
+        .map(|entry| entry.delta.carbon.net_mg())
+        .sum()
 }
 
 fn entry_has_open_action_flux(label: &str, budget: ElementBudget) -> bool {
@@ -583,13 +604,20 @@ mod tests {
     use crate::types::{BudgetEntry, BudgetTotals};
 
     fn synthetic_tick(entries: Vec<BudgetEntry>) -> TickBudgetRecord {
+        synthetic_tick_with_net_delta(entries, BudgetDelta::default())
+    }
+
+    fn synthetic_tick_with_net_delta(
+        entries: Vec<BudgetEntry>,
+        net_delta: BudgetDelta,
+    ) -> TickBudgetRecord {
         TickBudgetRecord {
             tick_index: 0,
             day: 0,
             hour: 0,
             before: BudgetTotals::default(),
             after: BudgetTotals::default(),
-            net_delta: BudgetDelta::default(),
+            net_delta,
             entries,
         }
     }
@@ -659,5 +687,80 @@ mod tests {
 
         assert!(tick_has_closed_system_nitrogen(&tick));
         assert!(tick_has_closed_system_carbon(&tick));
+    }
+
+    #[test]
+    fn chemistry_flux_does_not_open_the_carbon_guard() {
+        let tick = synthetic_tick_with_net_delta(
+            vec![BudgetEntry {
+                label: "system:chemistry".to_owned(),
+                delta: BudgetDelta {
+                    carbon: ElementBudget {
+                        in_mg: 5.0,
+                        out_mg: 3.0,
+                    },
+                    ..BudgetDelta::default()
+                },
+            }],
+            BudgetDelta {
+                carbon: ElementBudget {
+                    in_mg: 5.0,
+                    out_mg: 3.0,
+                },
+                ..BudgetDelta::default()
+            },
+        );
+
+        assert!(tick_has_closed_system_carbon(&tick));
+        assert!((carbon_guard_delta_mg(&tick) - 0.0).abs() <= f64::EPSILON);
+    }
+
+    #[test]
+    fn chemistry_flux_is_subtracted_before_carbon_budget_guard_checks_other_leaks() {
+        let tick = synthetic_tick_with_net_delta(
+            vec![
+                BudgetEntry {
+                    label: "system:chemistry".to_owned(),
+                    delta: BudgetDelta {
+                        carbon: ElementBudget {
+                            in_mg: 5.0,
+                            out_mg: 3.0,
+                        },
+                        ..BudgetDelta::default()
+                    },
+                },
+                BudgetEntry {
+                    label: "system:daily_plants".to_owned(),
+                    delta: BudgetDelta {
+                        carbon: ElementBudget {
+                            in_mg: 0.0,
+                            out_mg: 4.0,
+                        },
+                        ..BudgetDelta::default()
+                    },
+                },
+            ],
+            BudgetDelta {
+                carbon: ElementBudget {
+                    in_mg: 5.0,
+                    out_mg: 7.0,
+                },
+                ..BudgetDelta::default()
+            },
+        );
+
+        let err = enforce_tracked_tick_budget_guard(&tick).expect_err(
+            "chemistry exchange should not hide unrelated carbon drift in the same tick",
+        );
+        assert_eq!(
+            err,
+            SimError::BudgetImbalance {
+                element: "carbon",
+                delta_mg: -4.0,
+                tick_index: 0,
+                day: 0,
+                hour: 0,
+            }
+        );
     }
 }
