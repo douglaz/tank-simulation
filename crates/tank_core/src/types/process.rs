@@ -1,5 +1,15 @@
 use serde::{Deserialize, Serialize};
 
+pub const LEGACY_KINETIC_REFERENCE_VOLUME_L: f64 = 20.0;
+
+pub fn legacy_total_param_to_mg_per_l(value: f64) -> f64 {
+    if value.is_finite() {
+        (value / LEGACY_KINETIC_REFERENCE_VOLUME_L).max(0.0)
+    } else {
+        0.0
+    }
+}
+
 /// Runtime process parameters for heat-transfer coefficients and later chemistry systems.
 /// Stored in `TankState` for deterministic continuation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -34,9 +44,13 @@ pub struct ProcessParams {
     // -- Decomposer mineralization --
     /// Max mineralization rate per g decomposer biomass per hour (g DOC consumed).
     pub decomposer_vmax_per_hour: f64,
-    /// Half-saturation for DOC (mg C total) for decomposer Monod term.
+    /// Legacy compatibility name for the decomposer DOC half-saturation.
+    /// Runtime code normalizes this total-style value onto a 20 L reference
+    /// tank so the effective Monod constant stays concentration-based.
     pub decomposer_k_doc_mg: f64,
-    /// Half-saturation for dissolved oxygen (mg total) for decomposer Monod term.
+    /// Legacy compatibility name for the decomposer DO half-saturation.
+    /// Runtime code normalizes this total-style value onto a 20 L reference
+    /// tank so the effective Monod constant stays concentration-based.
     pub decomposer_k_do_mg: f64,
     /// Growth yield of decomposer biomass per g DOC consumed.
     pub decomposer_growth_yield: f64,
@@ -46,9 +60,13 @@ pub struct ProcessParams {
     // -- Nitrifier guild kinetics --
     /// AOB vmax: max mg N oxidized per g AOB biomass per hour.
     pub aob_vmax_mg_n_per_g_per_hour: f64,
-    /// AOB half-saturation for TAN (mg N total).
+    /// Legacy compatibility name for the AOB TAN half-saturation.
+    /// Runtime code normalizes this total-style value onto a 20 L reference
+    /// tank so the effective Monod constant stays concentration-based.
     pub aob_k_tan_mg: f64,
-    /// AOB half-saturation for DO (mg total).
+    /// Legacy compatibility name for the AOB DO half-saturation.
+    /// Runtime code normalizes this total-style value onto a 20 L reference
+    /// tank so the effective Monod constant stays concentration-based.
     pub aob_k_do_mg: f64,
     /// AOB growth yield (g biomass per mg N oxidized).
     pub aob_growth_yield: f64,
@@ -57,9 +75,13 @@ pub struct ProcessParams {
 
     /// NOB vmax: max mg N oxidized per g NOB biomass per hour.
     pub nob_vmax_mg_n_per_g_per_hour: f64,
-    /// NOB half-saturation for nitrite (mg N total).
+    /// Legacy compatibility name for the NOB nitrite half-saturation.
+    /// Runtime code normalizes this total-style value onto a 20 L reference
+    /// tank so the effective Monod constant stays concentration-based.
     pub nob_k_nitrite_mg: f64,
-    /// NOB half-saturation for DO (mg total).
+    /// Legacy compatibility name for the NOB DO half-saturation.
+    /// Runtime code normalizes this total-style value onto a 20 L reference
+    /// tank so the effective Monod constant stays concentration-based.
     pub nob_k_do_mg: f64,
     /// NOB growth yield (g biomass per mg N oxidized).
     pub nob_growth_yield: f64,
@@ -68,9 +90,13 @@ pub struct ProcessParams {
 
     /// Comammox vmax multiplier relative to AOB (must be < 1.0).
     pub comammox_vmax_fraction: f64,
-    /// Comammox half-saturation for TAN (mg N total).
+    /// Legacy compatibility name for the comammox TAN half-saturation.
+    /// Runtime code normalizes this total-style value onto a 20 L reference
+    /// tank so the effective Monod constant stays concentration-based.
     pub comammox_k_tan_mg: f64,
-    /// Comammox half-saturation for DO (mg total).
+    /// Legacy compatibility name for the comammox DO half-saturation.
+    /// Runtime code normalizes this total-style value onto a 20 L reference
+    /// tank so the effective Monod constant stays concentration-based.
     pub comammox_k_do_mg: f64,
     /// Comammox growth yield (g biomass per mg N oxidized).
     pub comammox_growth_yield: f64,
@@ -90,8 +116,17 @@ pub struct ProcessParams {
     pub plant_senescence_fraction_per_day: f64,
     pub plant_health_recovery_per_day: f64,
     pub plant_health_decline_per_day: f64,
+    /// Legacy compatibility name for the water-column N half-saturation.
+    /// Runtime code normalizes this total-style value onto a 20 L reference
+    /// tank so the effective limitation stays concentration-based.
     pub plant_half_saturation_n_mg_total: f64,
+    /// Legacy compatibility name for the water-column P half-saturation.
+    /// Runtime code normalizes this total-style value onto a 20 L reference
+    /// tank so the effective limitation stays concentration-based.
     pub plant_half_saturation_p_mg_total: f64,
+    /// Legacy compatibility name for the DIC half-saturation.
+    /// Runtime code normalizes this total-style value onto a 20 L reference
+    /// tank so the effective limitation stays concentration-based.
     pub plant_half_saturation_c_mg_total: f64,
     pub plant_light_half_saturation: f64,
     pub plant_temp_optimum_c: f64,
@@ -102,7 +137,13 @@ pub struct ProcessParams {
     pub algae_max_growth_rate_per_day: f64,
     pub periphyton_max_growth_rate_per_day: f64,
     pub algae_respiration_fraction_per_day: f64,
+    /// Legacy compatibility name for the algae water-column N half-saturation.
+    /// Runtime code normalizes this total-style value onto a 20 L reference
+    /// tank so the effective limitation stays concentration-based.
     pub algae_half_saturation_n_mg_total: f64,
+    /// Legacy compatibility name for the algae water-column P half-saturation.
+    /// Runtime code normalizes this total-style value onto a 20 L reference
+    /// tank so the effective limitation stays concentration-based.
     pub algae_half_saturation_p_mg_total: f64,
     pub algae_light_half_saturation: f64,
     pub algae_temp_optimum_c: f64,

@@ -256,6 +256,23 @@ fn seeded_example_reseeds_default_chemistry_for_its_current_volume() {
     assert_close(state.stability_tracker.prev_gh_d, state.gh_d());
 }
 
+#[test]
+fn concentration_view_matches_tank_helpers_without_recomputing_volume() {
+    let mut state = helper_state();
+    state.water.ammonia_total_mg_n_total = 15.0;
+    state.water.nitrate_mg_n_total = 30.0;
+    state.water.dissolved_oxygen_mg_total = 80.0;
+    state.water.alkalinity_meq_total = 25.0;
+
+    let chemistry = state.concentrations();
+
+    assert_close(chemistry.volume_l(), state.water_volume_l());
+    assert_close(chemistry.tan_mg_n_per_l(), state.tan_mg_n_per_l());
+    assert_close(chemistry.nitrate_mg_n_per_l(), state.nitrate_mg_n_per_l());
+    assert_close(chemistry.do_mg_per_l(), state.do_mg_per_l());
+    assert_close(chemistry.kh_d(), state.kh_d());
+}
+
 proptest! {
     #[test]
     fn helper_outputs_never_go_negative(

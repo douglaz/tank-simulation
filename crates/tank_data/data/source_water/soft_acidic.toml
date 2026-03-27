@@ -21,4 +21,4 @@ sulfate_mg_per_l = 12.4
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "Low-mineral planted tank source water. GH ~3.0, KH ~3.0, TDS ~120."
+notes = "Low-mineral planted tank source water. GH ~3.0, KH ~3.0, TDS ~120. KH was kept at ~3 so cycling still has enough buffer to avoid an immediate acid crash."

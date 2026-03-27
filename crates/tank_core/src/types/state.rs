@@ -5,10 +5,10 @@ use serde::{Deserialize, Serialize};
 use crate::rng::{SimRng, SimSeed};
 
 use super::{
-    AlgaeState, AnimalState, DetritusState, EnvironmentState, FilterState, HardwareState,
-    MicrobeState, MicrofaunaState, PlantGuild, PlantGuildState, ProcessParams, ShrimpRuntimeParams,
-    SimEvent, SourceWaterProfile, StabilityTracker, SubstrateKind, SubstrateLayerState,
-    TankGeometry, WaterState,
+    AlgaeState, AnimalState, ConcentrationView, DetritusState, EnvironmentState, FilterState,
+    HardwareState, MicrobeState, MicrofaunaState, PlantGuild, PlantGuildState, ProcessParams,
+    ShrimpRuntimeParams, SimEvent, SourceWaterProfile, StabilityTracker, SubstrateKind,
+    SubstrateLayerState, TankGeometry, WaterState,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -185,64 +185,68 @@ impl TankState {
             .max(0.0)
     }
 
+    pub fn concentrations(&self) -> ConcentrationView<'_> {
+        self.water.concentration_view(self.water_volume_l())
+    }
+
     pub fn tan_mg_n_per_l(&self) -> f64 {
-        self.water.tan_mg_n_per_l(self.water_volume_l())
+        self.concentrations().tan_mg_n_per_l()
     }
 
     pub fn nitrite_mg_n_per_l(&self) -> f64 {
-        self.water.nitrite_mg_n_per_l(self.water_volume_l())
+        self.concentrations().nitrite_mg_n_per_l()
     }
 
     pub fn nitrate_mg_n_per_l(&self) -> f64 {
-        self.water.nitrate_mg_n_per_l(self.water_volume_l())
+        self.concentrations().nitrate_mg_n_per_l()
     }
 
     pub fn don_mg_n_per_l(&self) -> f64 {
-        self.water.don_mg_n_per_l(self.water_volume_l())
+        self.concentrations().don_mg_n_per_l()
     }
 
     pub fn doc_mg_c_per_l(&self) -> f64 {
-        self.water.doc_mg_c_per_l(self.water_volume_l())
+        self.concentrations().doc_mg_c_per_l()
     }
 
     pub fn dic_mg_c_per_l(&self) -> f64 {
-        self.water.dic_mg_c_per_l(self.water_volume_l())
+        self.concentrations().dic_mg_c_per_l()
     }
 
     pub fn do_mg_per_l(&self) -> f64 {
-        self.water.do_mg_per_l(self.water_volume_l())
+        self.concentrations().do_mg_per_l()
     }
 
     pub fn phosphate_mg_p_per_l(&self) -> f64 {
-        self.water.phosphate_mg_p_per_l(self.water_volume_l())
+        self.concentrations().phosphate_mg_p_per_l()
     }
 
     pub fn alkalinity_meq_per_l(&self) -> f64 {
-        self.water.alkalinity_meq_per_l(self.water_volume_l())
+        self.concentrations().alkalinity_meq_per_l()
     }
 
     pub fn calcium_mg_per_l(&self) -> f64 {
-        self.water.calcium_mg_per_l(self.water_volume_l())
+        self.concentrations().calcium_mg_per_l()
     }
 
     pub fn magnesium_mg_per_l(&self) -> f64 {
-        self.water.magnesium_mg_per_l(self.water_volume_l())
+        self.concentrations().magnesium_mg_per_l()
     }
 
     pub fn gh_d(&self) -> f64 {
-        self.water.gh_d(self.water_volume_l())
+        self.concentrations().gh_d()
     }
 
     pub fn kh_d(&self) -> f64 {
-        self.water.kh_d(self.water_volume_l())
+        self.concentrations().kh_d()
     }
 
     pub fn tds_mg_per_l(&self) -> f64 {
-        self.water.tds_mg_per_l(self.water_volume_l())
+        self.concentrations().tds_mg_per_l()
     }
 
     pub fn conductivity_us_cm(&self) -> f64 {
-        self.water.conductivity_us_cm(self.water_volume_l())
+        self.concentrations().conductivity_us_cm()
     }
 }
 

@@ -1,9 +1,16 @@
-use crate::types::{PlantGuild, TankState};
+use crate::types::{legacy_total_param_to_mg_per_l, PlantGuild, TankState};
 
 const PLANT_N_MG_PER_G_GROWTH: f64 = 28.0;
 const PLANT_P_MG_PER_G_GROWTH: f64 = 4.0;
 
 pub fn step_daily_plants(state: &mut TankState) {
+    let volume_l = state.water_volume_l();
+    let plant_half_saturation_n_mg_n_per_l =
+        legacy_total_param_to_mg_per_l(state.process_params.plant_half_saturation_n_mg_total);
+    let plant_half_saturation_p_mg_p_per_l =
+        legacy_total_param_to_mg_per_l(state.process_params.plant_half_saturation_p_mg_total);
+    let plant_half_saturation_c_mg_c_per_l =
+        legacy_total_param_to_mg_per_l(state.process_params.plant_half_saturation_c_mg_total);
     let surface_area_m2 = (state.geometry.surface_area_cm2() / 10_000.0).max(f64::MIN_POSITIVE);
     let total_plant_biomass_g: f64 = state.plant_guilds.iter().map(|plant| plant.biomass_g).sum();
     let crowding_index = (total_plant_biomass_g
@@ -20,8 +27,8 @@ pub fn step_daily_plants(state: &mut TankState) {
         state.process_params.plant_temp_sigma_c,
     );
     let f_c = half_saturation(
-        state.water.dissolved_inorganic_carbon_mg_c_total,
-        state.process_params.plant_half_saturation_c_mg_total,
+        state.water.dic_mg_c_per_l(volume_l),
+        plant_half_saturation_c_mg_c_per_l,
     );
 
     for index in 0..state.plant_guilds.len() {
@@ -33,8 +40,6 @@ pub fn step_daily_plants(state: &mut TankState) {
         state.plant_guilds[index].crowding_index = crowding_index;
         state.plant_guilds[index].habitat_index = habitat_index;
 
-        let water_n = state.water.ammonia_total_mg_n_total + state.water.nitrate_mg_n_total;
-        let water_p = state.water.phosphate_mg_p_total;
         let substrate_n = total_substrate_n(state);
         let substrate_p = total_substrate_p(state);
         let water_bias = state.plant_guilds[index].water_column_uptake_bias();
@@ -44,16 +49,18 @@ pub fn step_daily_plants(state: &mut TankState) {
         let bias_sum = (water_bias + substrate_bias).max(f64::MIN_POSITIVE);
         let w_norm = water_bias / bias_sum;
         let s_norm = substrate_bias / bias_sum;
-        let accessible_n = (water_n * w_norm) + (substrate_n * s_norm);
-        let accessible_p = (water_p * w_norm) + (substrate_p * s_norm);
-        let f_n = half_saturation(
-            accessible_n,
-            state.process_params.plant_half_saturation_n_mg_total,
+        let water_n_factor = half_saturation(
+            state.water.tan_mg_n_per_l(volume_l) + state.water.nitrate_mg_n_per_l(volume_l),
+            plant_half_saturation_n_mg_n_per_l,
         );
-        let f_p = half_saturation(
-            accessible_p,
-            state.process_params.plant_half_saturation_p_mg_total,
+        let water_p_factor = half_saturation(
+            state.water.phosphate_mg_p_per_l(volume_l),
+            plant_half_saturation_p_mg_p_per_l,
         );
+        let substrate_n_factor = half_saturation(substrate_n, plant_half_saturation_n_mg_n_per_l);
+        let substrate_p_factor = half_saturation(substrate_p, plant_half_saturation_p_mg_p_per_l);
+        let f_n = weighted_limitation_factor(water_n_factor, substrate_n_factor, w_norm, s_norm);
+        let f_p = weighted_limitation_factor(water_p_factor, substrate_p_factor, w_norm, s_norm);
         let nutrient_limitation = f_n.min(f_p).min(f_c);
         let max_rate = match guild {
             PlantGuild::FastStem => state.process_params.plant_max_growth_rate_fast_stem_per_day,
@@ -136,6 +143,15 @@ pub fn step_daily_plants(state: &mut TankState) {
         };
         state.plant_guilds[index].health_index = new_health.clamp(0.0, 1.0);
     }
+}
+
+fn weighted_limitation_factor(
+    water_factor: f64,
+    substrate_factor: f64,
+    water_weight: f64,
+    substrate_weight: f64,
+) -> f64 {
+    ((water_factor * water_weight) + (substrate_factor * substrate_weight)).clamp(0.0, 1.0)
 }
 
 fn plant_light_factor(state: &TankState) -> f64 {

@@ -17,6 +17,9 @@ fine_detritus_dissolution_rate_per_hour = 0.08
 feed_n_to_c_ratio = 0.16
 
 # Decomposer mineralization
+# Legacy `_mg` field names are normalized against the historical 20 L
+# reference tank so the runtime uses concentration-scale half-saturation
+# constants until the preset schema is renamed.
 decomposer_vmax_per_hour = 0.02
 decomposer_k_doc_mg = 5.0
 decomposer_k_do_mg = 2.0
@@ -49,6 +52,9 @@ o2_per_mg_n_nitrified = 4.57
 alkalinity_meq_per_mg_n_nitrified = 0.1428
 
 # Daily plant growth
+# Legacy `_mg_total` field names below are normalized against the historical
+# 20 L reference tank so the runtime uses water-column concentration limits;
+# the rename is deferred for save/preset compatibility.
 plant_max_growth_rate_fast_stem_per_day = 0.08
 plant_max_growth_rate_root_rosette_per_day = 0.06
 plant_respiration_fraction_per_day = 0.01

@@ -22,9 +22,11 @@ pub use geometry::TankGeometry;
 pub use hardware::{
     AerationState, FilterHardware, FilterState, HardwareState, HeaterState, LightState,
 };
-pub use process::ProcessParams;
+pub use process::{
+    legacy_total_param_to_mg_per_l, ProcessParams, LEGACY_KINETIC_REFERENCE_VOLUME_L,
+};
 pub use snapshot::TankSnapshot;
 pub use source_water::SourceWaterProfile;
 pub use state::{SimMeta, TankState};
 pub use substrate::{SubstrateKind, SubstrateLayerState};
-pub use water::WaterState;
+pub use water::{ConcentrationView, WaterState};

@@ -1,6 +1,6 @@
 use tank_core::{
     Engine, MicrobeState, PlayerAction, ProcessParams, SaveFile, SimSeed, SimulationEngine,
-    SourceWaterProfile, TankState, SCHEMA_VERSION,
+    SourceWaterProfile, TankState, WaterState, APP_VERSION, SCHEMA_VERSION,
 };
 
 #[test]
@@ -155,24 +155,30 @@ fn save_load_with_active_cycle_state() -> Result<(), tank_core::SimError> {
 }
 
 #[test]
-fn legacy_schema_v2_saves_are_rejected() -> Result<(), tank_core::SimError> {
-    let save = SaveFile::from_engine(&Engine::new(SimSeed(99)));
+fn legacy_schema_v2_saves_are_migrated_to_net_water_volume() -> Result<(), tank_core::SimError> {
+    let mut legacy_state = TankState::new(SimSeed(99));
+    let gross_volume_l = legacy_state.geometry.water_volume_l();
+    let net_volume_l = legacy_state.water_volume_l();
+    legacy_state.water = WaterState::default_for_volume_l(gross_volume_l);
+    legacy_state.water.ammonia_total_mg_n_total = 1.5 * gross_volume_l;
+    legacy_state.water.nitrate_mg_n_total = 3.0 * gross_volume_l;
+    legacy_state.water.phosphate_mg_p_total = 0.4 * gross_volume_l;
+
     let json = serde_json::json!({
         "schema_version": 2,
-        "app_version": save.app_version,
-        "state": save.state,
-        "queued_actions": save.queued_actions,
+        "app_version": APP_VERSION,
+        "state": legacy_state,
+        "queued_actions": [],
     })
     .to_string();
 
-    let error = SaveFile::from_json(&json).expect_err("schema 2 save should be rejected");
-    assert_eq!(
-        error,
-        tank_core::SimError::SchemaVersionMismatch {
-            expected: SCHEMA_VERSION,
-            actual: 2,
-        }
-    );
+    let migrated = SaveFile::from_json(&json)?;
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert!((migrated.state.water_volume_l() - net_volume_l).abs() < 1e-9);
+    assert!((migrated.state.tan_mg_n_per_l() - 1.5).abs() < 1e-9);
+    assert!((migrated.state.nitrate_mg_n_per_l() - 3.0).abs() < 1e-9);
+    assert!((migrated.state.phosphate_mg_p_per_l() - 0.4).abs() < 1e-9);
+    assert!((migrated.state.water.do_mg_per_l(net_volume_l) - 8.0).abs() < 1e-9);
 
     Ok(())
 }

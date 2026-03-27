@@ -175,7 +175,7 @@ impl StartupHeaterPreset {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct StartupOverrides {
     pub geometry: ScenarioGeometryOverrides,
     pub source_water_profile_id: Option<String>,
@@ -188,21 +188,6 @@ pub struct StartupOverrides {
     pub initial_adult_shrimp_count: Option<u32>,
 }
 
-impl Default for StartupOverrides {
-    fn default() -> Self {
-        Self {
-            geometry: ScenarioGeometryOverrides::default(),
-            source_water_profile_id: None,
-            substrate_preset: None,
-            plant_selection: None,
-            filter_enabled: None,
-            light_preset: None,
-            heater_preset: None,
-            aeration_enabled: None,
-            initial_adult_shrimp_count: None,
-        }
-    }
-}
 
 pub fn default_scenario_ids() -> &'static [&'static str] {
     tank_data::scenario_ids()

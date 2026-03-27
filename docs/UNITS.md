@@ -53,7 +53,7 @@ Approved carbonate exception:
 
 ### 2. Source-water and preset inputs stay per liter
 
-Input profiles that describe incoming water chemistry use per-liter names, then materialize into totals by multiplying by `geometry.water_volume_l()`. `SourceWaterProfile` already follows this policy and remains the model for future input data.
+Input profiles that describe incoming water chemistry use per-liter names, then materialize into totals against the canonical net water volume (`TankState::water_volume_l()` or `TankGeometry::water_volume_l_with_substrate_depth(...)`). `SourceWaterProfile` already follows this policy and remains the model for future input data.
 
 Examples in `crates/tank_core/src/types/source_water.rs`:
 
@@ -75,9 +75,9 @@ Policy for save/schema work:
 
 ### 4. Parameter names must encode the quantity they expect
 
-Rates already encode units well. The remaining problem area is half-saturation and threshold parameters that still use total-mass units for what should become concentration-based kinetics.
+Rates already encode units well. The remaining problem area is a set of legacy field names whose suffixes still read like total-mass values even though the runtime Monod and limitation math now consumes canonical concentration helpers by normalizing those values against the 20 L reference tank that originally anchored the presets.
 
-Legacy total-based parameter names that downstream work must migrate:
+Legacy compatibility names that downstream rename-only work must migrate:
 
 | Current field | Canonical target name | Notes |
 | --- | --- | --- |
@@ -94,9 +94,11 @@ Legacy total-based parameter names that downstream work must migrate:
 | `algae_half_saturation_n_mg_total` | `algae_half_saturation_n_mg_n_per_l` | water-column elemental N exposure |
 | `algae_half_saturation_p_mg_total` | `algae_half_saturation_p_mg_p_per_l` | water-column elemental P exposure |
 
-Those renames belong to the downstream concentration-normalization beads
-`tanksim-6e5.2.3`, `tanksim-6e5.2.4`, and `tanksim-6e5.2.5`. This policy exists
-so the rename target is fixed before those refactors start.
+Those renames still belong to the downstream field-cleanup beads
+`tanksim-6e5.2.3`, `tanksim-6e5.2.4`, and `tanksim-6e5.2.5`. The current helper
+layer already normalized the runtime calculations onto concentration helpers;
+the remaining work is to align persisted/preset field names with those
+semantics.
 
 ## Helper Naming Policy
 

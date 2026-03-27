@@ -1,4 +1,5 @@
 use tank_core::{
+    systems::{algae_growth::step_daily_algae, plant_growth::step_daily_plants},
     Engine, EventKind, PlantGuild, PlantGuildState, PlayerAction, SimSeed, SimulationEngine,
     SubstrateKind, SubstrateLayerState, TankState,
 };
@@ -29,12 +30,19 @@ fn plant_growth_improves_with_light_and_nutrients() -> Result<(), tank_core::Sim
         habitat_index: 0.8,
         ..PlantGuildState::default()
     }];
+    let favorable_volume_l = favorable.water_volume_l();
+    favorable.water.ammonia_total_mg_n_total = 2.0 * favorable_volume_l;
+    favorable.water.nitrate_mg_n_total = 10.0 * favorable_volume_l;
+    favorable.water.phosphate_mg_p_total = 1.2 * favorable_volume_l;
+    favorable.water.dissolved_inorganic_carbon_mg_c_total = 24.0 * favorable_volume_l;
 
     let mut poor = favorable.clone();
     poor.hardware.light.intensity_index = 0.15;
-    poor.water.ammonia_total_mg_n_total = 0.2;
-    poor.water.nitrate_mg_n_total = 0.8;
-    poor.water.phosphate_mg_p_total = 0.1;
+    let poor_volume_l = poor.water_volume_l();
+    poor.water.ammonia_total_mg_n_total = 0.02 * poor_volume_l;
+    poor.water.nitrate_mg_n_total = 0.08 * poor_volume_l;
+    poor.water.phosphate_mg_p_total = 0.01 * poor_volume_l;
+    poor.water.dissolved_inorganic_carbon_mg_c_total = 2.0 * poor_volume_l;
 
     let mut favorable_engine = Engine::from_parts(favorable, vec![]);
     let mut poor_engine = Engine::from_parts(poor, vec![]);
@@ -162,8 +170,8 @@ fn algae_bloom_conditions_emit_events_and_overfeeding_raises_nuisance(
 
     let mut control_engine = Engine::from_parts(control, vec![]);
     let mut overfed_engine = Engine::from_parts(overfed, vec![]);
-    for _ in 0..14 {
-        control_engine.apply_action(PlayerAction::Feed { grams: 0.2 })?;
+    for _ in 0..21 {
+        control_engine.apply_action(PlayerAction::Feed { grams: 0.05 })?;
         overfed_engine.apply_action(PlayerAction::Feed { grams: 1.5 })?;
         control_engine.step_hours(24)?;
         overfed_engine.step_hours(24)?;
@@ -200,4 +208,80 @@ fn trim_plants_routes_mass_to_detritus() -> Result<(), tank_core::SimError> {
     assert!((state.detritus.fine_detritus_g_total - 2.5).abs() < 1e-6);
 
     Ok(())
+}
+
+#[test]
+fn plant_water_column_limitation_is_volume_invariant_at_fixed_concentration() {
+    let build_state = |fill_height_cm: f64| {
+        let mut state = base_growth_state(SimSeed(8105));
+        state.geometry.fill_height_cm = fill_height_cm;
+        state.substrate_layers.clear();
+        let volume_l = state.water_volume_l();
+        state.plant_guilds = vec![PlantGuildState {
+            guild: PlantGuild::FastStem,
+            biomass_g: 4.0,
+            health_index: 0.8,
+            crowding_index: 0.0,
+            habitat_index: 0.8,
+            water_column_uptake_bias: Some(1.0),
+            substrate_uptake_bias: Some(0.0),
+        }];
+        state.water.ammonia_total_mg_n_total = 0.5 * volume_l;
+        state.water.nitrate_mg_n_total = 2.0 * volume_l;
+        state.water.phosphate_mg_p_total = 0.3 * volume_l;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 12.0 * volume_l;
+        state
+    };
+
+    let mut shallow = build_state(8.0);
+    let mut deep = build_state(18.0);
+
+    step_daily_plants(&mut shallow);
+    step_daily_plants(&mut deep);
+
+    assert!(
+        (shallow.plant_guilds[0].biomass_g - deep.plant_guilds[0].biomass_g).abs() <= 1e-9,
+        "Same water-column nutrient concentrations should yield the same plant growth regardless of tank volume"
+    );
+}
+
+#[test]
+fn algae_water_column_limitation_is_volume_invariant_at_fixed_concentration() {
+    let build_state = |substrate_depth_cm: f64| {
+        let mut state = base_growth_state(SimSeed(8106));
+        state.plant_guilds.clear();
+        state.substrate_layers = vec![SubstrateLayerState {
+            kind: SubstrateKind::InertSand,
+            depth_cm: substrate_depth_cm,
+            nutrient_store_mg_n_total: 0.0,
+            nutrient_store_mg_p_total: 0.0,
+            cation_exchange_capacity_index: 0.1,
+            detritus_trapping_index: 0.3,
+            colonizable_area_cm2: 500.0,
+            low_oxygen_tendency_index: 0.2,
+            grazing_surface_index: 0.4,
+        }];
+        let volume_l = state.water_volume_l();
+        state.algae.suspended_biomass_g = 0.5;
+        state.algae.periphyton_biomass_g = 0.4;
+        state.water.ammonia_total_mg_n_total = 0.5 * volume_l;
+        state.water.nitrate_mg_n_total = 2.0 * volume_l;
+        state.water.phosphate_mg_p_total = 0.3 * volume_l;
+        state
+    };
+
+    let mut shallow = build_state(1.0);
+    let mut deep = build_state(6.0);
+
+    step_daily_algae(&mut shallow);
+    step_daily_algae(&mut deep);
+
+    assert!(
+        (shallow.algae.suspended_biomass_g - deep.algae.suspended_biomass_g).abs() <= 1e-9,
+        "Same nutrient concentrations should yield the same suspended-algae growth regardless of tank volume"
+    );
+    assert!(
+        (shallow.algae.periphyton_biomass_g - deep.algae.periphyton_biomass_g).abs() <= 1e-9,
+        "Same nutrient concentrations should yield the same periphyton growth regardless of tank volume"
+    );
 }

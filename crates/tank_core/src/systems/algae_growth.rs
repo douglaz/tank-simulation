@@ -1,6 +1,6 @@
 use crate::{
     systems::events,
-    types::{total_colonizable_area_cm2, TankState},
+    types::{legacy_total_param_to_mg_per_l, total_colonizable_area_cm2, TankState},
 };
 
 const ALGAE_N_MG_PER_G_GROWTH: f64 = 35.0;
@@ -11,6 +11,13 @@ pub fn step_daily_algae(state: &mut TankState) {
     if volume_l <= f64::EPSILON {
         return;
     }
+    let tan_mg_n_per_l = state.water.tan_mg_n_per_l(volume_l);
+    let nitrate_mg_n_per_l = state.water.nitrate_mg_n_per_l(volume_l);
+    let phosphate_mg_p_per_l = state.water.phosphate_mg_p_per_l(volume_l);
+    let algae_half_saturation_n_mg_n_per_l =
+        legacy_total_param_to_mg_per_l(state.process_params.algae_half_saturation_n_mg_total);
+    let algae_half_saturation_p_mg_p_per_l =
+        legacy_total_param_to_mg_per_l(state.process_params.algae_half_saturation_p_mg_total);
 
     let previous_nuisance_index = state.algae.nuisance_index;
     let light_factor = algae_light_factor(state);
@@ -29,12 +36,12 @@ pub fn step_daily_algae(state: &mut TankState) {
             * 0.7)
         .clamp(0.2, 1.0);
     let nutrient_factor = half_saturation(
-        state.water.ammonia_total_mg_n_total + state.water.nitrate_mg_n_total,
-        state.process_params.algae_half_saturation_n_mg_total,
+        tan_mg_n_per_l + nitrate_mg_n_per_l,
+        algae_half_saturation_n_mg_n_per_l,
     )
     .min(half_saturation(
-        state.water.phosphate_mg_p_total,
-        state.process_params.algae_half_saturation_p_mg_total,
+        phosphate_mg_p_per_l,
+        algae_half_saturation_p_mg_p_per_l,
     ));
     let microfauna_grazing = (state.microfauna.population_index
         * (0.3 + 0.7 * state.microfauna.grazing_pressure_index))

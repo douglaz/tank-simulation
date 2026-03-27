@@ -1,5 +1,6 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
+use serde_json::Value;
 use tank_core::{Engine, SaveFile, SimulationEngine, TankSnapshot};
 
 use crate::{error::ApiError, state::AppState};
@@ -17,15 +18,11 @@ pub struct LoadResponse {
 
 pub async fn post_load(
     State(state): State<AppState>,
-    Json(save): Json<SaveFile>,
+    Json(payload): Json<Value>,
 ) -> Result<impl IntoResponse, ApiError> {
-    if save.schema_version != tank_core::SCHEMA_VERSION {
-        return Err(ApiError::bad_request(format!(
-            "schema version mismatch: expected {}, got {}",
-            tank_core::SCHEMA_VERSION,
-            save.schema_version,
-        )));
-    }
+    let json = serde_json::to_string(&payload)
+        .map_err(|error| ApiError::bad_request(format!("invalid save payload: {error}")))?;
+    let save = SaveFile::from_json(&json).map_err(ApiError::from)?;
 
     let engine: Engine = save.into_engine().map_err(ApiError::from)?;
     let snapshot: TankSnapshot = engine.snapshot();

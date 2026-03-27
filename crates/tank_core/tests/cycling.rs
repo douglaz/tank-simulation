@@ -395,3 +395,48 @@ fn decomposer_do_half_saturation_is_tunable() {
         "Lower decomposer DO half-saturation should consume more DOC under the same low-DO conditions"
     );
 }
+
+#[test]
+fn decomposer_monod_uses_concentration_instead_of_total_mass() {
+    let build_state = |fill_height_cm: f64| {
+        let mut state = TankState::new(SimSeed(9701));
+        state.geometry.fill_height_cm = fill_height_cm;
+        state.substrate_layers.clear();
+        let volume_l = state.water_volume_l();
+        state.microbe.decomposer_biomass_g = 0.5;
+        state.microbe.ammonia_oxidizer_biomass_g = 0.0;
+        state.microbe.nitrite_oxidizer_biomass_g = 0.0;
+        state.microbe.comammox_biomass_g = 0.0;
+        state.microfauna.population_index = 0.0;
+        state.water.dissolved_organic_carbon_mg_c_total = 4.0 * volume_l;
+        state.water.dissolved_organic_nitrogen_mg_n_total = 0.4 * volume_l;
+        state.water.dissolved_oxygen_mg_total = 2.0 * volume_l;
+        state.process_params.decomposer_vmax_per_hour = 0.05;
+        state.process_params.decomposer_k_doc_mg = 5.0;
+        state.process_params.decomposer_k_do_mg = 1.0;
+        state.process_params.microfauna_mineralization_boost = 0.0;
+        state
+    };
+
+    let mut shallow = build_state(10.0);
+    let mut deep = build_state(20.0);
+    let shallow_doc_before = shallow.water.dissolved_organic_carbon_mg_c_total;
+    let deep_doc_before = deep.water.dissolved_organic_carbon_mg_c_total;
+
+    step_nitrogen_cycle(&mut shallow);
+    step_nitrogen_cycle(&mut deep);
+
+    let shallow_doc_consumed =
+        shallow_doc_before - shallow.water.dissolved_organic_carbon_mg_c_total;
+    let deep_doc_consumed = deep_doc_before - deep.water.dissolved_organic_carbon_mg_c_total;
+
+    assert!(
+        (shallow_doc_consumed - deep_doc_consumed).abs() <= 1e-9,
+        "Same DOC/DO concentrations should yield the same decomposer uptake regardless of tank volume: shallow={shallow_doc_consumed}, deep={deep_doc_consumed}"
+    );
+    assert!(
+        (shallow.water.ammonia_total_mg_n_total - deep.water.ammonia_total_mg_n_total).abs()
+            <= 1e-9,
+        "Same DOC/DO concentrations should yield the same TAN production regardless of tank volume"
+    );
+}

@@ -62,17 +62,18 @@ pub struct TankSnapshot {
 
 impl TankSnapshot {
     pub fn from_state(state: &TankState) -> Self {
-        let volume_l = state.water_volume_l();
-        let tan_mg_l = state.tan_mg_n_per_l();
-        let nitrite_mg_l = state.nitrite_mg_n_per_l();
-        let nitrate_mg_l = state.nitrate_mg_n_per_l();
-        let phosphate_mg_l = state.phosphate_mg_p_per_l();
-        let dissolved_inorganic_carbon_mg_l = state.dic_mg_c_per_l();
-        let do_mg_l_val = state.do_mg_per_l();
-        let gh_d = state.gh_d();
-        let kh_d = state.kh_d();
-        let tds_mg_l = state.tds_mg_per_l();
-        let conductivity_us_cm = state.conductivity_us_cm();
+        let chemistry = state.concentrations();
+        let volume_l = chemistry.volume_l();
+        let tan_mg_l = chemistry.tan_mg_n_per_l();
+        let nitrite_mg_l = chemistry.nitrite_mg_n_per_l();
+        let nitrate_mg_l = chemistry.nitrate_mg_n_per_l();
+        let phosphate_mg_l = chemistry.phosphate_mg_p_per_l();
+        let dissolved_inorganic_carbon_mg_l = chemistry.dic_mg_c_per_l();
+        let do_mg_l_val = chemistry.do_mg_per_l();
+        let gh_d = chemistry.gh_d();
+        let kh_d = chemistry.kh_d();
+        let tds_mg_l = chemistry.tds_mg_per_l();
+        let conductivity_us_cm = chemistry.conductivity_us_cm();
         let ph = state.water.ph;
         let nh3_mg_l = compute_nh3_mg_l(tan_mg_l, ph, state.water.temperature_c);
         let fast_stem_biomass_g: f64 = state

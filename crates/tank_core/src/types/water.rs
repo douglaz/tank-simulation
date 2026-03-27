@@ -32,6 +32,12 @@ pub struct WaterState {
     pub ph: f64,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct ConcentrationView<'a> {
+    water: &'a WaterState,
+    volume_l: f64,
+}
+
 impl WaterState {
     pub fn default_for_volume_l(volume_l: f64) -> Self {
         let volume_l = volume_l.max(0.0);
@@ -176,6 +182,13 @@ impl WaterState {
         (self.tds_mg_per_l(volume_l) / 0.65).max(0.0)
     }
 
+    pub fn concentration_view(&self, volume_l: f64) -> ConcentrationView<'_> {
+        ConcentrationView {
+            water: self,
+            volume_l: volume_l.max(0.0),
+        }
+    }
+
     pub fn rescale_totals_for_volume(&mut self, old_volume_l: f64, new_volume_l: f64) {
         let scale = if old_volume_l > f64::EPSILON && old_volume_l.is_finite() {
             (new_volume_l.max(0.0) / old_volume_l).max(0.0)
@@ -216,6 +229,72 @@ impl Default for WaterState {
     fn default() -> Self {
         let geometry = TankGeometry::default();
         Self::default_for_geometry(&geometry, SubstrateLayerState::default().depth_cm)
+    }
+}
+
+impl<'a> ConcentrationView<'a> {
+    pub fn volume_l(&self) -> f64 {
+        self.volume_l
+    }
+
+    pub fn tan_mg_n_per_l(&self) -> f64 {
+        self.water.tan_mg_n_per_l(self.volume_l)
+    }
+
+    pub fn nitrite_mg_n_per_l(&self) -> f64 {
+        self.water.nitrite_mg_n_per_l(self.volume_l)
+    }
+
+    pub fn nitrate_mg_n_per_l(&self) -> f64 {
+        self.water.nitrate_mg_n_per_l(self.volume_l)
+    }
+
+    pub fn don_mg_n_per_l(&self) -> f64 {
+        self.water.don_mg_n_per_l(self.volume_l)
+    }
+
+    pub fn doc_mg_c_per_l(&self) -> f64 {
+        self.water.doc_mg_c_per_l(self.volume_l)
+    }
+
+    pub fn dic_mg_c_per_l(&self) -> f64 {
+        self.water.dic_mg_c_per_l(self.volume_l)
+    }
+
+    pub fn do_mg_per_l(&self) -> f64 {
+        self.water.do_mg_per_l(self.volume_l)
+    }
+
+    pub fn phosphate_mg_p_per_l(&self) -> f64 {
+        self.water.phosphate_mg_p_per_l(self.volume_l)
+    }
+
+    pub fn alkalinity_meq_per_l(&self) -> f64 {
+        self.water.alkalinity_meq_per_l(self.volume_l)
+    }
+
+    pub fn calcium_mg_per_l(&self) -> f64 {
+        self.water.calcium_mg_per_l(self.volume_l)
+    }
+
+    pub fn magnesium_mg_per_l(&self) -> f64 {
+        self.water.magnesium_mg_per_l(self.volume_l)
+    }
+
+    pub fn gh_d(&self) -> f64 {
+        self.water.gh_d(self.volume_l)
+    }
+
+    pub fn kh_d(&self) -> f64 {
+        self.water.kh_d(self.volume_l)
+    }
+
+    pub fn tds_mg_per_l(&self) -> f64 {
+        self.water.tds_mg_per_l(self.volume_l)
+    }
+
+    pub fn conductivity_us_cm(&self) -> f64 {
+        self.water.conductivity_us_cm(self.volume_l)
     }
 }
 

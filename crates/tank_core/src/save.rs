@@ -5,8 +5,11 @@ use crate::{
     types::{PlayerAction, SimError, TankState},
 };
 
-// Schema 3 locks save/load onto net-water chemistry semantics; older schema 2
-// saves are rejected because their volume basis is ambiguous across builds.
+const LEGACY_SCHEMA_VERSION: u32 = 2;
+
+// Schema 3 writes net-water chemistry semantics. Schema 2 saves are migrated
+// on load by rescaling dissolved totals from the old gross-volume basis onto
+// the canonical net-water volume derived from geometry + substrate.
 pub const SCHEMA_VERSION: u32 = 3;
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -38,15 +41,20 @@ impl SaveFile {
     }
 
     pub fn from_json(json: &str) -> Result<Self, SimError> {
-        let save: Self = serde_json::from_str(json)
+        let mut save: Self = serde_json::from_str(json)
             .map_err(|error| SimError::Deserialization(error.to_string()))?;
-        if save.schema_version != SCHEMA_VERSION {
-            return Err(SimError::SchemaVersionMismatch {
+        match save.schema_version {
+            SCHEMA_VERSION => Ok(save),
+            LEGACY_SCHEMA_VERSION => {
+                migrate_schema_v2_to_v3(&mut save.state);
+                save.schema_version = SCHEMA_VERSION;
+                Ok(save)
+            }
+            actual => Err(SimError::SchemaVersionMismatch {
                 expected: SCHEMA_VERSION,
-                actual: save.schema_version,
-            });
+                actual,
+            }),
         }
-        Ok(save)
     }
 
     pub fn into_engine(self) -> Result<Engine, SimError> {
@@ -63,4 +71,12 @@ impl SaveFile {
         }
         Ok(engine)
     }
+}
+
+fn migrate_schema_v2_to_v3(state: &mut TankState) {
+    let gross_volume_l = state.geometry.water_volume_l();
+    let net_volume_l = state.water_volume_l();
+    state
+        .water
+        .rescale_totals_for_volume(gross_volume_l, net_volume_l);
 }

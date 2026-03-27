@@ -1,4 +1,4 @@
-use crate::types::TankState;
+use crate::types::{legacy_total_param_to_mg_per_l, TankState};
 
 const FEED_P_TO_N_MASS_RATIO: f64 = 0.10;
 const ADULT_SHRIMP_BIOMASS_G: f64 = 0.12;
@@ -75,19 +75,22 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let decomposer_biomass = state.microbe.decomposer_biomass_g;
     let doc_total = state.water.dissolved_organic_carbon_mg_c_total;
     let don_total = state.water.dissolved_organic_nitrogen_mg_n_total;
-    let do_total = state.water.dissolved_oxygen_mg_total;
+    let doc_mg_c_per_l = state.water.doc_mg_c_per_l(volume_l);
+    let do_mg_per_l = state.water.do_mg_per_l(volume_l);
 
     // Environmental factors for decomposers
     let temp = state.water.temperature_c;
     let f_temp_decomp = temperature_factor(temp);
-    let f_do_decomp = do_total / (do_total + pp.decomposer_k_do_mg.max(0.01));
+    let decomposer_k_do_mg_per_l = legacy_total_param_to_mg_per_l(pp.decomposer_k_do_mg).max(0.01);
+    let decomposer_k_doc_mg_c_per_l =
+        legacy_total_param_to_mg_per_l(pp.decomposer_k_doc_mg).max(0.01);
+    let f_do_decomp = monod_factor(do_mg_per_l, decomposer_k_do_mg_per_l);
 
     // Microfauna modestly improve mineralization efficiency
     let microfauna_boost =
         1.0 + pp.microfauna_mineralization_boost * state.microfauna.population_index;
     let decomp_vmax = safe_rate(pp.decomposer_vmax_per_hour) * microfauna_boost;
-    let k_doc = pp.decomposer_k_doc_mg.max(0.01);
-    let monod_doc = doc_total / (doc_total + k_doc);
+    let monod_doc = monod_factor(doc_mg_c_per_l, decomposer_k_doc_mg_c_per_l);
 
     let potential_doc_consumed_mg = decomp_vmax * decomposer_biomass * 1000.0 // g->mg conversion for biomass effect
         * f_temp_decomp * f_do_decomp * monod_doc;
@@ -133,16 +136,27 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let o2_for_aob = 3.43_f64; // TAN -> nitrite
     let o2_for_comammox = pp.o2_per_mg_n_nitrified; // TAN -> nitrate (4.57)
     let o2_for_nob = 1.14_f64; // nitrite -> nitrate
+    let aob_k_tan_mg_n_per_l = legacy_total_param_to_mg_per_l(pp.aob_k_tan_mg).max(0.01);
+    let aob_k_do_mg_per_l = legacy_total_param_to_mg_per_l(pp.aob_k_do_mg).max(0.01);
+    let comammox_k_tan_mg_n_per_l = legacy_total_param_to_mg_per_l(pp.comammox_k_tan_mg).max(0.01);
+    let comammox_k_do_mg_per_l = legacy_total_param_to_mg_per_l(pp.comammox_k_do_mg).max(0.01);
+    let nob_k_nitrite_mg_n_per_l = legacy_total_param_to_mg_per_l(pp.nob_k_nitrite_mg).max(0.01);
+    let nob_k_do_mg_per_l = legacy_total_param_to_mg_per_l(pp.nob_k_do_mg).max(0.01);
 
     // 4a. AOB: TAN -> nitrite
-    let aob_env_factor =
-        combined_env * env.f_temp * env.f_ph * (do_budget / (do_budget + pp.aob_k_do_mg.max(0.01)));
+    let aob_env_factor = combined_env
+        * env.f_temp
+        * env.f_ph
+        * monod_factor(
+            concentration_from_total(do_budget, volume_l),
+            aob_k_do_mg_per_l,
+        );
     let aob_potential = monod_rate(
         safe_rate(pp.aob_vmax_mg_n_per_g_per_hour) * env.flow_factor,
         state.microbe.ammonia_oxidizer_biomass_g,
         aob_env_factor,
-        state.water.ammonia_total_mg_n_total,
-        pp.aob_k_tan_mg.max(0.01),
+        state.water.tan_mg_n_per_l(volume_l),
+        aob_k_tan_mg_n_per_l,
     );
     let aob_rate = safe_rate(aob_potential)
         .min(state.water.ammonia_total_mg_n_total)
@@ -167,16 +181,20 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let comammox_vmax =
         safe_rate(pp.aob_vmax_mg_n_per_g_per_hour * pp.comammox_vmax_fraction) * env.flow_factor;
     let tan_after_aob = (state.water.ammonia_total_mg_n_total - aob_rate).max(0.0);
+    let tan_after_aob_mg_n_per_l = concentration_from_total(tan_after_aob, volume_l);
     let comammox_env_factor = combined_env
         * env.f_temp
         * env.f_ph
-        * (do_budget / (do_budget + pp.comammox_k_do_mg.max(0.01)));
+        * monod_factor(
+            concentration_from_total(do_budget, volume_l),
+            comammox_k_do_mg_per_l,
+        );
     let comammox_potential = monod_rate(
         comammox_vmax,
         state.microbe.comammox_biomass_g,
         comammox_env_factor,
-        tan_after_aob,
-        pp.comammox_k_tan_mg.max(0.01),
+        tan_after_aob_mg_n_per_l,
+        comammox_k_tan_mg_n_per_l,
     );
     let comammox_rate = safe_rate(comammox_potential)
         .min(tan_after_aob)
@@ -209,14 +227,19 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
         (state.water.dissolved_oxygen_mg_total - aob_o2_cost - comammox_o2_cost).max(0.0);
 
     // 4c. NOB: nitrite -> nitrate (uses remaining DO/alk budget)
-    let nob_env_factor =
-        combined_env * env.f_temp * env.f_ph * (do_budget / (do_budget + pp.nob_k_do_mg.max(0.01)));
+    let nob_env_factor = combined_env
+        * env.f_temp
+        * env.f_ph
+        * monod_factor(
+            concentration_from_total(do_budget, volume_l),
+            nob_k_do_mg_per_l,
+        );
     let nob_potential = monod_rate(
         safe_rate(pp.nob_vmax_mg_n_per_g_per_hour) * env.flow_factor,
         state.microbe.nitrite_oxidizer_biomass_g,
         nob_env_factor,
-        state.water.nitrite_mg_n_total,
-        pp.nob_k_nitrite_mg.max(0.01),
+        state.water.nitrite_mg_n_per_l(volume_l),
+        nob_k_nitrite_mg_n_per_l,
     );
     // NOB (nitrite -> nitrate) does not consume additional alkalinity beyond
     // what AOB already consumed for the TAN -> nitrite step.  Only DO limits NOB.
@@ -347,8 +370,22 @@ fn monod_rate(
     substrate: f64,
     k_substrate: f64,
 ) -> f64 {
-    let monod = substrate / (substrate + k_substrate);
+    let monod = monod_factor(substrate, k_substrate);
     safe_rate(vmax * biomass_g * environmental_factor * monod)
+}
+
+fn monod_factor(substrate: f64, k_substrate: f64) -> f64 {
+    let substrate = safe_rate(substrate);
+    let k_substrate = safe_rate(k_substrate).max(f64::MIN_POSITIVE);
+    substrate / (substrate + k_substrate)
+}
+
+fn concentration_from_total(total: f64, volume_l: f64) -> f64 {
+    if !total.is_finite() || !volume_l.is_finite() || volume_l <= f64::EPSILON {
+        0.0
+    } else {
+        (total / volume_l).max(0.0)
+    }
 }
 
 /// Daily biofilter maturity update. Called every 24 ticks.

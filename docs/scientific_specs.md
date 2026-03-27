@@ -14,19 +14,13 @@ The project also correctly treats geometry and ambient temperature as real simul
 
 The main issues I found
 
-1. **Several core kinetics use total mass, not concentration.**
+1. **Legacy kinetics field names still look total-based even after the concentration refactor.**
 
 This is the biggest scientific problem right now.
 
-In `crates/tank_core/src/systems/plant_growth.rs:36-57`, `algae_growth.rs:31-38`, and `nitrogen_cycle.rs:76-93, 137-180, 214-219`, your Monod / half-saturation terms are fed with **tank totals** like `ammonia_total_mg_n_total`, `dissolved_organic_carbon_mg_c_total`, and `nitrate_mg_n_total`. The corresponding parameters are also named as totals, for example `plant_half_saturation_n_mg_total`, `algae_half_saturation_n_mg_total`, `decomposer_k_doc_mg`, `aob_k_tan_mg`, and `aob_k_do_mg`.
+`crates/tank_core/src/systems/plant_growth.rs`, `algae_growth.rs`, and `nitrogen_cycle.rs` now read canonical concentration helpers for water-column Monod and half-saturation math, so same concentration no longer gets a different limitation factor purely because the tank is larger. To preserve existing tuning near the historical default tank, those legacy preset values are normalized against a 20 L reference water volume. The remaining issue is naming: parameters such as `plant_half_saturation_n_mg_total`, `algae_half_saturation_n_mg_total`, `decomposer_k_doc_mg`, `aob_k_tan_mg`, and `aob_k_do_mg` still carry legacy suffixes that read like totals even though the runtime treats them as reference-volume-normalized concentration-scale values.
 
-That creates nonphysical tank-size behavior. Same concentration, same husbandry, different volume should not change the biological saturation term by itself. Right now it does. A concrete example from your defaults:
-
-* with **1 mg/L N** available, `plant_half_saturation_n_mg_total = 8`
-* in a **10 L** tank, the factor is `10 / (10 + 8) = 0.56`
-* in a **100 L** tank, the factor is `100 / (100 + 8) = 0.93`
-
-So a larger tank with the same nutrient concentration appears much less nutrient-limited purely because it contains more absolute milligrams. The same issue exists for DOC mineralization and some nitrifier DO/TAN terms.
+That specific tank-size artifact is now resolved for the water column, but the rename debt is still important because the current field ids invite future contributors to wire totals back in by mistake.
 
 This should be fixed before adding more species or more features.
 
@@ -150,7 +144,7 @@ Focus on getting the math model right before expanding content.
 
 Build goals:
 
-* convert Monod / half-saturation terms to **mg/L** or **mg/cm²** depending on process
+* finish renaming the remaining legacy Monod / half-saturation field ids so their names match the now-concentration-based runtime
 * add helper methods for concentration and areal density
 * introduce unit-safe newtypes or at least stricter field naming
 * add explicit shrimp ingestion -> assimilation -> excretion -> feces
