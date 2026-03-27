@@ -1,6 +1,9 @@
 use crate::{
     systems::{chemistry::compute_ph_from_totals, temperature::do_sat_mg_l},
-    types::{SimError, SourceWaterProfile, TankState},
+    types::{
+        algae_carbon_mg, algae_nitrogen_mg, BudgetDelta, ElementBudget, SimError,
+        SourceWaterProfile, TankState,
+    },
 };
 
 pub fn validate_source_profile(state: &TankState, source_profile_id: &str) -> Result<(), SimError> {
@@ -94,4 +97,55 @@ pub fn apply_water_change(state: &mut TankState, percent: f64, source: &SourceWa
         state.water.dissolved_inorganic_carbon_mg_c_total,
         volume_l,
     );
+}
+
+pub fn apply_water_change_with_budget(
+    state: &mut TankState,
+    percent: f64,
+    source: &SourceWaterProfile,
+) -> BudgetDelta {
+    if percent <= 0.0 {
+        return BudgetDelta::default();
+    }
+
+    let fraction = percent / 100.0;
+    let exchanged_l = state.water_volume_l() * fraction;
+    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
+
+    let nitrogen_out_mg = fraction
+        * (state.water.ammonia_total_mg_n_total
+            + state.water.nitrite_mg_n_total
+            + state.water.nitrate_mg_n_total
+            + state.water.dissolved_organic_nitrogen_mg_n_total
+            + algae_nitrogen_mg(state.algae.suspended_biomass_g));
+    let carbon_out_mg = fraction
+        * (state.water.dissolved_inorganic_carbon_mg_c_total
+            + state.water.dissolved_organic_carbon_mg_c_total
+            + algae_carbon_mg(state.algae.suspended_biomass_g, n_to_c_ratio));
+    let oxygen_out_mg = fraction * state.water.dissolved_oxygen_mg_total.max(0.0);
+
+    let nitrogen_in_mg = exchanged_l
+        * (source.ammonia_mg_n_per_l
+            + source.nitrite_mg_n_per_l
+            + source.nitrate_mg_n_per_l
+            + source.don_mg_n_per_l);
+    let carbon_in_mg = exchanged_l * (source.dic_mg_c_per_l + source.doc_mg_c_per_l);
+    let oxygen_in_mg = exchanged_l * do_sat_mg_l(source.temperature_c);
+
+    apply_water_change(state, percent, source);
+
+    BudgetDelta {
+        nitrogen: ElementBudget {
+            in_mg: nitrogen_in_mg,
+            out_mg: nitrogen_out_mg,
+        },
+        carbon: ElementBudget {
+            in_mg: carbon_in_mg,
+            out_mg: carbon_out_mg,
+        },
+        oxygen: ElementBudget {
+            in_mg: oxygen_in_mg,
+            out_mg: oxygen_out_mg,
+        },
+    }
 }

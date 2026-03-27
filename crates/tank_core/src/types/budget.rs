@@ -50,6 +50,14 @@ impl BudgetDelta {
             oxygen: ElementBudget::from_delta(after.oxygen_mg - before.oxygen_mg),
         }
     }
+
+    pub(crate) fn from_snapshots(before: &BudgetSnapshot, after: &BudgetSnapshot) -> Self {
+        Self {
+            nitrogen: gross_element_budget(&before.nitrogen_components, &after.nitrogen_components),
+            carbon: gross_element_budget(&before.carbon_components, &after.carbon_components),
+            oxygen: ElementBudget::from_delta(after.totals.oxygen_mg - before.totals.oxygen_mg),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
@@ -73,6 +81,23 @@ impl BudgetTotals {
 pub struct BudgetComponent {
     pub label: &'static str,
     pub amount_mg: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct BudgetSnapshot {
+    pub(crate) totals: BudgetTotals,
+    nitrogen_components: [BudgetComponent; 16],
+    carbon_components: [BudgetComponent; 13],
+}
+
+impl BudgetSnapshot {
+    pub(crate) fn from_state(state: &TankState) -> Self {
+        Self {
+            totals: BudgetTotals::from_state(state),
+            nitrogen_components: nitrogen_budget_components(state),
+            carbon_components: carbon_budget_components(state),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -106,12 +131,19 @@ impl TickBudgetRecord {
         }
     }
 
-    pub fn record_stage(&mut self, label: &str, before: BudgetTotals, after: BudgetTotals) {
+    pub fn record_stage(
+        &mut self,
+        label: &str,
+        before: BudgetTotals,
+        after: BudgetTotals,
+        delta: BudgetDelta,
+    ) {
+        debug_assert!(delta_net_matches_totals(delta, before, after));
         self.after = after;
         self.net_delta = BudgetDelta::between(self.before, after);
         self.entries.push(BudgetEntry {
             label: label.to_owned(),
-            delta: BudgetDelta::between(before, after),
+            delta,
         });
     }
 }
@@ -334,6 +366,16 @@ pub fn live_biomass_carbon_mg(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
     )
 }
 
+pub fn live_biomass_detrital_mass_g(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
+    if biomass_g <= f64::EPSILON {
+        return 0.0;
+    }
+
+    (live_biomass_nitrogen_mg(biomass_g, n_to_c_ratio)
+        + live_biomass_carbon_mg(biomass_g, n_to_c_ratio))
+        / 1000.0
+}
+
 pub fn shrimp_biomass_g(adults_count: u32, juveniles_count: u32) -> f64 {
     (f64::from(adults_count) * ADULT_SHRIMP_BIOMASS_G)
         + (f64::from(juveniles_count) * JUVENILE_SHRIMP_BIOMASS_G)
@@ -381,4 +423,32 @@ fn sanitize_n_to_c_ratio(n_to_c_ratio: f64) -> f64 {
     } else {
         DEFAULT_N_TO_C_RATIO
     }
+}
+
+fn gross_element_budget<const N: usize>(
+    before: &[BudgetComponent; N],
+    after: &[BudgetComponent; N],
+) -> ElementBudget {
+    let mut in_mg = 0.0;
+    let mut out_mg = 0.0;
+
+    for (before_component, after_component) in before.iter().zip(after.iter()) {
+        debug_assert_eq!(before_component.label, after_component.label);
+        let delta_mg = after_component.amount_mg - before_component.amount_mg;
+        if delta_mg >= 0.0 {
+            in_mg += delta_mg;
+        } else {
+            out_mg += -delta_mg;
+        }
+    }
+
+    ElementBudget { in_mg, out_mg }
+}
+
+fn delta_net_matches_totals(delta: BudgetDelta, before: BudgetTotals, after: BudgetTotals) -> bool {
+    const TOLERANCE_MG: f64 = 1e-6;
+
+    (delta.nitrogen.net_mg() - (after.nitrogen_mg - before.nitrogen_mg)).abs() <= TOLERANCE_MG
+        && (delta.carbon.net_mg() - (after.carbon_mg - before.carbon_mg)).abs() <= TOLERANCE_MG
+        && (delta.oxygen.net_mg() - (after.oxygen_mg - before.oxygen_mg)).abs() <= TOLERANCE_MG
 }

@@ -1,7 +1,8 @@
 use crate::systems::chemistry::compute_nh3_mg_l;
 use crate::types::{
-    algae_carbon_mg, algae_nitrogen_mg, detritus_carbon_mg, detritus_nitrogen_mg, EggCohort,
-    EventCause, EventKind, EventSeverity, ShrimpRuntimeParams, TankState,
+    algae_carbon_mg, algae_nitrogen_mg, detritus_carbon_mg, detritus_nitrogen_mg,
+    live_biomass_detrital_mass_g, EggCohort, EventCause, EventKind, EventSeverity,
+    ShrimpRuntimeParams, TankState, ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G,
 };
 
 const SHRIMP_MINERALIZED_WASTE_FRACTION: f64 = 0.35;
@@ -464,6 +465,8 @@ fn mortality(state: &mut TankState) {
         }
     }
 
+    route_dead_shrimp_to_detritus(state, adult_deaths, juv_deaths);
+
     state.animal.adults_count = state.animal.adults_count.saturating_sub(adult_deaths);
 
     // Scale maturation_accum so dead juveniles' progress doesn't leak to survivors.
@@ -475,6 +478,17 @@ fn mortality(state: &mut TankState) {
 
     // Preserve berried_females <= adults invariant (also trims egg cohorts)
     state.animal.clamp_berried_to_adults();
+}
+
+fn route_dead_shrimp_to_detritus(state: &mut TankState, adult_deaths: u32, juv_deaths: u32) {
+    if adult_deaths == 0 && juv_deaths == 0 {
+        return;
+    }
+
+    let dead_biomass_g = (f64::from(adult_deaths) * ADULT_SHRIMP_BIOMASS_G)
+        + (f64::from(juv_deaths) * JUVENILE_SHRIMP_BIOMASS_G);
+    state.detritus.fine_detritus_g_total +=
+        live_biomass_detrital_mass_g(dead_biomass_g, state.process_params.feed_n_to_c_ratio);
 }
 
 fn emit_molt_stress_warning(state: &mut TankState) {

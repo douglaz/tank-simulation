@@ -394,7 +394,7 @@ fn route_plant_loss_to_dissolved_organics(
     state.water.dissolved_organic_carbon_mg_c_total += plant_carbon_mg(biomass_g, n_to_c_ratio);
 }
 
-fn plant_detrital_mass_g(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
+pub(crate) fn plant_detrital_mass_g(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
     if biomass_g <= f64::EPSILON {
         return 0.0;
     }

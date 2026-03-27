@@ -5,8 +5,8 @@ use crate::{
     rng::SimSeed,
     systems,
     types::{
-        BudgetLedger, BudgetTotals, EventCause, EventKind, EventSeverity, PlayerAction, SimError,
-        SimEvent, TankSnapshot, TankState, TickBudgetRecord,
+        BudgetDelta, BudgetLedger, BudgetSnapshot, EventCause, EventKind, EventSeverity,
+        PlayerAction, SimError, SimEvent, TankSnapshot, TankState, TickBudgetRecord,
     },
 };
 
@@ -90,9 +90,11 @@ impl Engine {
 
         while let Some(action) = self.queued_actions.pop_front() {
             let label = action_budget_label(&action);
-            self.maybe_record_stage(&mut tick, label, move |engine| {
-                engine.process_action(action);
-            });
+            self.maybe_record_stage_with_explicit_budget(
+                &mut tick,
+                label,
+                move |engine, tracking| ((), engine.process_action(action, tracking)),
+            );
         }
 
         // Step 4: update water temperature from ambient and heater
@@ -123,9 +125,24 @@ impl Engine {
 
         // Step 10 / 11-partial: update dissolved oxygen with background respiration and
         // light-driven photosynthetic support from existing biomass.
-        self.maybe_record_stage(&mut tick, "system:dissolved_oxygen", |engine| {
-            systems::dissolved_oxygen::step_dissolved_oxygen(&mut engine.state, light_on);
-        });
+        self.maybe_record_stage_with_explicit_budget(
+            &mut tick,
+            "system:dissolved_oxygen",
+            move |engine, tracking| {
+                let delta = if tracking {
+                    Some(
+                        systems::dissolved_oxygen::step_dissolved_oxygen_with_budget(
+                            &mut engine.state,
+                            light_on,
+                        ),
+                    )
+                } else {
+                    systems::dissolved_oxygen::step_dissolved_oxygen(&mut engine.state, light_on);
+                    None
+                };
+                ((), delta)
+            },
+        );
 
         // Step 12: hourly shrimp stress accumulation.
         self.maybe_record_stage(&mut tick, "system:shrimp_stress", |engine| {
@@ -219,16 +236,45 @@ impl Engine {
     where
         F: FnOnce(&mut Self) -> R,
     {
-        let before = tick.as_ref().map(|_| BudgetTotals::from_state(&self.state));
+        let before = tick
+            .as_ref()
+            .map(|_| BudgetSnapshot::from_state(&self.state));
         let result = stage(self);
         if let (Some(tick), Some(before)) = (tick.as_mut(), before) {
-            let after = BudgetTotals::from_state(&self.state);
-            tick.record_stage(label, before, after);
+            let after = BudgetSnapshot::from_state(&self.state);
+            let delta = BudgetDelta::from_snapshots(&before, &after);
+            tick.record_stage(label, before.totals, after.totals, delta);
         }
         result
     }
 
-    fn process_action(&mut self, action: PlayerAction) {
+    fn maybe_record_stage_with_explicit_budget<F, R>(
+        &mut self,
+        tick: &mut Option<TickBudgetRecord>,
+        label: &'static str,
+        stage: F,
+    ) -> R
+    where
+        F: FnOnce(&mut Self, bool) -> (R, Option<BudgetDelta>),
+    {
+        let before = tick
+            .as_ref()
+            .map(|_| BudgetSnapshot::from_state(&self.state));
+        let (result, explicit_delta) = stage(self, tick.is_some());
+        if let (Some(tick), Some(before)) = (tick.as_mut(), before) {
+            let after = BudgetSnapshot::from_state(&self.state);
+            let delta =
+                explicit_delta.unwrap_or_else(|| BudgetDelta::from_snapshots(&before, &after));
+            tick.record_stage(label, before.totals, after.totals, delta);
+        }
+        result
+    }
+
+    fn process_action(
+        &mut self,
+        action: PlayerAction,
+        tracking_budget: bool,
+    ) -> Option<BudgetDelta> {
         match action {
             PlayerAction::Feed { grams } => {
                 self.state.detritus.particulate_organics_g_total += grams;
@@ -238,13 +284,14 @@ impl Engine {
                     vec![EventCause::Overfeeding],
                     format!("Queued feed processed: {grams:.2} g"),
                 );
+                None
             }
             PlayerAction::WaterChangePercent {
                 percent,
                 source_profile_id,
             } => {
                 if percent <= 0.0 {
-                    return;
+                    return None;
                 }
                 // Profile was pre-validated; look it up (guaranteed to exist).
                 let profile = self
@@ -253,13 +300,29 @@ impl Engine {
                     .get(&source_profile_id)
                     .cloned();
                 if let Some(profile) = profile {
-                    systems::water_change::apply_water_change(&mut self.state, percent, &profile);
+                    let delta = if tracking_budget {
+                        Some(systems::water_change::apply_water_change_with_budget(
+                            &mut self.state,
+                            percent,
+                            &profile,
+                        ))
+                    } else {
+                        systems::water_change::apply_water_change(
+                            &mut self.state,
+                            percent,
+                            &profile,
+                        );
+                        None
+                    };
                     self.push_event(
                         EventSeverity::Info,
                         EventKind::StabilityImproving,
                         vec![EventCause::WaterChange],
                         format!("Water change processed: {percent:.1}% with {source_profile_id}"),
                     );
+                    delta
+                } else {
+                    None
                 }
             }
             PlayerAction::TrimPlants { fraction } => {
@@ -269,11 +332,17 @@ impl Engine {
                     plant.biomass_g -= trimmed;
                     trimmed_biomass_g += trimmed;
                 }
-                self.state.detritus.fine_detritus_g_total += trimmed_biomass_g;
+                self.state.detritus.fine_detritus_g_total +=
+                    systems::plant_growth::plant_detrital_mass_g(
+                        trimmed_biomass_g,
+                        self.state.process_params.feed_n_to_c_ratio,
+                    );
+                None
             }
             PlayerAction::SiphonDetritus { fraction } => {
                 self.state.detritus.particulate_organics_g_total *= 1.0 - fraction;
                 self.state.detritus.fine_detritus_g_total *= 1.0 - fraction;
+                None
             }
             PlayerAction::CleanFilter { intensity } => {
                 let current_cleanliness =
@@ -295,32 +364,40 @@ impl Engine {
                     vec![EventCause::FilterMaintenance],
                     format!("Filter cleaned at intensity {intensity:.2}"),
                 );
+                None
             }
             PlayerAction::AddShrimp { count } => {
                 self.state.animal.adults_count =
                     self.state.animal.adults_count.saturating_add(count);
+                None
             }
             PlayerAction::RemoveShrimp { count } => {
                 self.state.animal.adults_count =
                     self.state.animal.adults_count.saturating_sub(count);
                 // Preserve berried_females_count <= adults_count (also trims egg cohorts)
                 self.state.animal.clamp_berried_to_adults();
+                None
             }
             PlayerAction::ChangePhotoperiod { hours } => {
                 self.state.hardware.light.photoperiod_hours = hours;
+                None
             }
             PlayerAction::ChangeLightIntensity { intensity_index } => {
                 self.state.hardware.light.intensity_index = intensity_index;
+                None
             }
             PlayerAction::ChangeHeaterSetpoint { setpoint_c } => {
                 self.state.hardware.heater.setpoint_c = setpoint_c;
+                None
             }
             PlayerAction::ChangeAmbientTemperature { target_c } => {
                 self.state.environment.ambient_temp_c = target_c;
+                None
             }
             PlayerAction::ChangeAeration { enabled, intensity } => {
                 self.state.hardware.aeration.enabled = enabled;
                 self.state.hardware.aeration.intensity = intensity;
+                None
             }
         }
     }

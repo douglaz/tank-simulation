@@ -2,8 +2,9 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 use tank_core::{
-    carbon_budget_components, nitrogen_budget_components, Engine, PlayerAction, SimError, SimSeed,
-    SimulationEngine, SourceWaterProfile, SubstrateKind, SubstrateLayerState, TankState,
+    carbon_budget_components, nitrogen_budget_components, Engine, PlantGuildState, PlayerAction,
+    SimError, SimSeed, SimulationEngine, SourceWaterProfile, SubstrateKind, SubstrateLayerState,
+    TankState,
 };
 
 fn assert_close(actual: f64, expected: f64, tolerance: f64) {
@@ -115,6 +116,27 @@ fn quiescent_budget_state(seed: SimSeed) -> TankState {
     state
 }
 
+fn trim_plants_budget_state(seed: SimSeed) -> TankState {
+    let mut state = quiescent_budget_state(seed);
+    state.plant_guilds = vec![PlantGuildState::default(), PlantGuildState::default()];
+    state.plant_guilds[0].biomass_g = 2.0;
+    state.plant_guilds[1].biomass_g = 3.5;
+    state
+}
+
+fn shrimp_mortality_budget_state(seed: SimSeed) -> TankState {
+    let mut state = quiescent_budget_state(seed);
+    state.animal.adults_count = 5;
+    state.animal.condition_index = 0.0;
+    state.animal.molt_stress_index = 1.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.5;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.shrimp_params.hatch_success_base = 0.0;
+    state.reseed_stability_tracker();
+    state
+}
+
 fn manual_organic_nitrogen_mg(mass_g: f64, n_to_c_ratio: f64) -> f64 {
     mass_g * 1000.0 * n_to_c_ratio / (1.0 + n_to_c_ratio)
 }
@@ -162,34 +184,17 @@ fn collect_numeric_paths(value: &Value, prefix: &str, paths: &mut BTreeSet<Strin
 
 fn is_shared_budget_path(path: &str) -> bool {
     path.ends_with("biomass_g")
-        || matches!(
-            path,
-            "animal.adults_count"
-                | "animal.juveniles_count"
-                | "detritus.particulate_organics_g_total"
-                | "detritus.fine_detritus_g_total"
-        )
+        || path.ends_with("particulate_organics_g_total")
+        || path.ends_with("fine_detritus_g_total")
+        || matches!(path, "animal.adults_count" | "animal.juveniles_count")
 }
 
 fn is_nitrogen_budget_path(path: &str) -> bool {
-    is_shared_budget_path(path)
-        || matches!(
-            path,
-            "water.ammonia_total_mg_n_total"
-                | "water.nitrite_mg_n_total"
-                | "water.nitrate_mg_n_total"
-                | "water.dissolved_organic_nitrogen_mg_n_total"
-                | "substrate_layers[*].nutrient_store_mg_n_total"
-        )
+    is_shared_budget_path(path) || path.ends_with("_mg_n_total")
 }
 
 fn is_carbon_budget_path(path: &str) -> bool {
-    is_shared_budget_path(path)
-        || matches!(
-            path,
-            "water.dissolved_inorganic_carbon_mg_c_total"
-                | "water.dissolved_organic_carbon_mg_c_total"
-        )
+    is_shared_budget_path(path) || path.ends_with("_mg_c_total")
 }
 
 #[test]
@@ -293,6 +298,14 @@ fn test_budget_component_labels_cover_all_element_bearing_fields() {
 }
 
 #[test]
+fn test_budget_path_rules_catch_convention_based_future_fields() {
+    assert!(is_nitrogen_budget_path("water.future_pool_mg_n_total"));
+    assert!(is_carbon_budget_path("water.future_pool_mg_c_total"));
+    assert!(is_nitrogen_budget_path("microbe.future_biomass_g"));
+    assert!(is_carbon_budget_path("microbe.future_biomass_g"));
+}
+
+#[test]
 fn test_closed_system_n_conservation() -> Result<(), SimError> {
     let state = active_budget_state(SimSeed(9_001));
     let initial_total_n = state.total_nitrogen();
@@ -359,6 +372,65 @@ fn test_closed_system_c_conservation() -> Result<(), SimError> {
 }
 
 #[test]
+fn test_trim_plants_preserves_n_and_c_when_routed_to_detritus() -> Result<(), SimError> {
+    let state = trim_plants_budget_state(SimSeed(9_010));
+    let initial_total_n = state.total_nitrogen();
+    let initial_total_c = state.total_carbon();
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_budget_tracking();
+    engine.apply_action(PlayerAction::TrimPlants { fraction: 0.25 })?;
+
+    engine.step_hours(1)?;
+
+    assert_close(engine.full_state().total_nitrogen(), initial_total_n, 1e-6);
+    assert_close(engine.full_state().total_carbon(), initial_total_c, 1e-6);
+
+    let ledger = engine.budget_ledger().expect("budget tracking enabled");
+    let trim_entry = ledger.ticks[0]
+        .entries
+        .iter()
+        .find(|entry| entry.label == "action:trim_plants")
+        .expect("trim plants entry should be recorded");
+    assert!(trim_entry.delta.nitrogen.in_mg > 0.0);
+    assert!(trim_entry.delta.nitrogen.out_mg > 0.0);
+    assert!(trim_entry.delta.carbon.in_mg > 0.0);
+    assert!(trim_entry.delta.carbon.out_mg > 0.0);
+    assert_close(trim_entry.delta.nitrogen.net_mg(), 0.0, 1e-6);
+    assert_close(trim_entry.delta.carbon.net_mg(), 0.0, 1e-6);
+
+    Ok(())
+}
+
+#[test]
+fn test_closed_system_shrimp_mortality_conserves_n_and_c() -> Result<(), SimError> {
+    let state = shrimp_mortality_budget_state(SimSeed(9_011));
+    let initial_total_n = state.total_nitrogen();
+    let initial_total_c = state.total_carbon();
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_budget_tracking();
+
+    engine.step_hours(72)?;
+
+    assert!(
+        engine.full_state().animal.adults_count < 5,
+        "expected deterministic shrimp mortality to occur"
+    );
+    assert_close(engine.full_state().total_nitrogen(), initial_total_n, 1e-6);
+    assert_close(engine.full_state().total_carbon(), initial_total_c, 1e-6);
+    assert!(engine
+        .budget_ledger()
+        .expect("budget tracking enabled")
+        .ticks
+        .iter()
+        .any(|tick| tick
+            .entries
+            .iter()
+            .any(|entry| entry.label == "system:daily_shrimp")));
+
+    Ok(())
+}
+
+#[test]
 fn test_water_change_n_export_tracked() -> Result<(), SimError> {
     let mut state = quiescent_budget_state(SimSeed(9_003));
     state.substrate_layers[0].nutrient_store_mg_n_total = 0.0;
@@ -403,6 +475,85 @@ fn test_water_change_n_export_tracked() -> Result<(), SimError> {
         residue_before * 0.75,
         1e-9,
     );
+
+    Ok(())
+}
+
+#[test]
+fn test_water_change_tracks_gross_n_import_and_export() -> Result<(), SimError> {
+    let mut state = quiescent_budget_state(SimSeed(9_012));
+    state.substrate_layers[0].nutrient_store_mg_n_total = 0.0;
+    let exchanged_fraction = 0.25;
+    let exchanged_l = state.water_volume_l() * exchanged_fraction;
+    let water_n_before = state.water.ammonia_total_mg_n_total
+        + state.water.nitrite_mg_n_total
+        + state.water.nitrate_mg_n_total
+        + state.water.dissolved_organic_nitrogen_mg_n_total;
+    state.source_water_catalog.insert(
+        "buffered".to_string(),
+        SourceWaterProfile {
+            ammonia_mg_n_per_l: 0.4,
+            nitrite_mg_n_per_l: 0.2,
+            nitrate_mg_n_per_l: 3.0,
+            don_mg_n_per_l: 0.6,
+            ..SourceWaterProfile::zero()
+        },
+    );
+    let expected_export_mg = water_n_before * exchanged_fraction;
+    let expected_import_mg = exchanged_l * (0.4 + 0.2 + 3.0 + 0.6);
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_budget_tracking();
+
+    engine.apply_action(PlayerAction::WaterChangePercent {
+        percent: 25.0,
+        source_profile_id: "buffered".to_string(),
+    })?;
+    engine.step_hours(1)?;
+
+    let ledger = engine.budget_ledger().expect("budget tracking enabled");
+    let water_change_entry = ledger.ticks[0]
+        .entries
+        .iter()
+        .find(|entry| entry.label == "action:water_change")
+        .expect("water change entry should be recorded");
+    assert_close(
+        water_change_entry.delta.nitrogen.out_mg,
+        expected_export_mg,
+        1e-6,
+    );
+    assert_close(
+        water_change_entry.delta.nitrogen.in_mg,
+        expected_import_mg,
+        1e-6,
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_dissolved_oxygen_stage_tracks_gross_in_and_out() -> Result<(), SimError> {
+    let mut state = active_budget_state(SimSeed(9_013));
+    state.environment.hour_of_day = 12;
+    state.hardware.light.enabled = true;
+    state.hardware.light.photoperiod_hours = 12.0;
+    state.hardware.light.intensity_index = 1.0;
+    state.hardware.aeration.enabled = true;
+    state.hardware.aeration.intensity = 1.0;
+    state.water.dissolved_oxygen_mg_total = 40.0;
+    state.reseed_stability_tracker();
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_budget_tracking();
+
+    engine.step_hours(1)?;
+
+    let ledger = engine.budget_ledger().expect("budget tracking enabled");
+    let do_entry = ledger.ticks[0]
+        .entries
+        .iter()
+        .find(|entry| entry.label == "system:dissolved_oxygen")
+        .expect("dissolved oxygen entry should be recorded");
+    assert!(do_entry.delta.oxygen.in_mg > 0.0);
+    assert!(do_entry.delta.oxygen.out_mg > 0.0);
 
     Ok(())
 }

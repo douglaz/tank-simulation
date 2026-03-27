@@ -3,13 +3,39 @@ use crate::{
         chemistry::{photosynthetic_biomass_g, respiring_biomass_g},
         temperature::do_sat_mg_l,
     },
-    types::TankState,
+    types::{BudgetDelta, ElementBudget, TankState},
 };
 
 pub fn step_dissolved_oxygen(state: &mut TankState, light_on: bool) {
+    let Some(terms) = dissolved_oxygen_terms(state, light_on) else {
+        return;
+    };
+
+    apply_dissolved_oxygen_terms(state, terms);
+}
+
+pub fn step_dissolved_oxygen_with_budget(state: &mut TankState, light_on: bool) -> BudgetDelta {
+    let Some(terms) = dissolved_oxygen_terms(state, light_on) else {
+        return BudgetDelta::default();
+    };
+
+    BudgetDelta {
+        oxygen: apply_dissolved_oxygen_terms(state, terms),
+        ..BudgetDelta::default()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct DissolvedOxygenTerms {
+    reaeration_mg: f64,
+    photosynthesis_mg: f64,
+    respiration_mg: f64,
+}
+
+fn dissolved_oxygen_terms(state: &TankState, light_on: bool) -> Option<DissolvedOxygenTerms> {
     let volume_l = state.water_volume_l();
     if volume_l <= f64::EPSILON {
-        return;
+        return None;
     }
 
     let do_sat_mg_l = do_sat_mg_l(state.water.temperature_c);
@@ -46,8 +72,27 @@ pub fn step_dissolved_oxygen(state: &mut TankState, light_on: bool) {
         0.0
     };
 
-    state.water.dissolved_oxygen_mg_total +=
-        delta_do_reaeration_mg + photosynthetic_o2_mg - background_bod_mg;
-    // Floor at zero so downstream stress/event paths never see negative DO.
-    state.water.dissolved_oxygen_mg_total = state.water.dissolved_oxygen_mg_total.max(0.0);
+    Some(DissolvedOxygenTerms {
+        reaeration_mg: delta_do_reaeration_mg,
+        photosynthesis_mg: photosynthetic_o2_mg,
+        respiration_mg: background_bod_mg,
+    })
+}
+
+fn apply_dissolved_oxygen_terms(
+    state: &mut TankState,
+    terms: DissolvedOxygenTerms,
+) -> ElementBudget {
+    let oxygen_before_mg = state.water.dissolved_oxygen_mg_total.max(0.0);
+    let oxygen_in_mg = terms.photosynthesis_mg + terms.reaeration_mg.max(0.0);
+    let oxygen_out_candidate_mg = terms.respiration_mg + (-terms.reaeration_mg).max(0.0);
+    let oxygen_out_mg = oxygen_out_candidate_mg.min(oxygen_before_mg + oxygen_in_mg);
+
+    state.water.dissolved_oxygen_mg_total =
+        (oxygen_before_mg + oxygen_in_mg - oxygen_out_mg).max(0.0);
+
+    ElementBudget {
+        in_mg: oxygen_in_mg,
+        out_mg: oxygen_out_mg,
+    }
 }

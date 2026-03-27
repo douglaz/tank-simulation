@@ -1,7 +1,7 @@
 use tank_core::{
     systems::{algae_growth::step_daily_algae, plant_growth::step_daily_plants},
-    Engine, EventKind, PlantGuild, PlantGuildState, PlayerAction, SimSeed, SimulationEngine,
-    SubstrateKind, SubstrateLayerState, TankState,
+    plant_carbon_mg, plant_nitrogen_mg, Engine, EventKind, PlantGuild, PlantGuildState,
+    PlayerAction, SimSeed, SimulationEngine, SubstrateKind, SubstrateLayerState, TankState,
 };
 
 fn base_growth_state(seed: SimSeed) -> TankState {
@@ -208,8 +208,12 @@ fn trim_plants_routes_mass_to_detritus() -> Result<(), tank_core::SimError> {
     engine.step_hours(1)?;
 
     let state = engine.full_state();
+    let trimmed_biomass_g = 2.5;
+    let expected_detritus_g = (plant_nitrogen_mg(trimmed_biomass_g)
+        + plant_carbon_mg(trimmed_biomass_g, state.process_params.feed_n_to_c_ratio))
+        / 1000.0;
     assert!((state.plant_guilds[0].biomass_g - 7.5).abs() < 1e-6);
-    assert!((state.detritus.fine_detritus_g_total - 2.5).abs() < 1e-6);
+    assert!((state.detritus.fine_detritus_g_total - expected_detritus_g).abs() < 1e-6);
 
     Ok(())
 }
