@@ -7,13 +7,14 @@ const ALGAE_N_MG_PER_G_GROWTH: f64 = 35.0;
 const ALGAE_P_MG_PER_G_GROWTH: f64 = 5.0;
 
 pub fn step_daily_algae(state: &mut TankState) {
-    let volume_l = state.water_volume_l();
+    let concentrations = state.concentrations();
+    let volume_l = concentrations.volume_l();
     if volume_l <= f64::EPSILON {
         return;
     }
-    let tan_mg_n_per_l = state.water.tan_mg_n_per_l(volume_l);
-    let nitrate_mg_n_per_l = state.water.nitrate_mg_n_per_l(volume_l);
-    let phosphate_mg_p_per_l = state.water.phosphate_mg_p_per_l(volume_l);
+    let tan_mg_n_per_l = concentrations.tan_mg_n_per_l();
+    let nitrate_mg_n_per_l = concentrations.nitrate_mg_n_per_l();
+    let phosphate_mg_p_per_l = concentrations.phosphate_mg_p_per_l();
     let algae_half_saturation_n_mg_n_per_l =
         legacy_total_param_to_mg_per_l(state.process_params.algae_half_saturation_n_mg_total);
     let algae_half_saturation_p_mg_p_per_l =

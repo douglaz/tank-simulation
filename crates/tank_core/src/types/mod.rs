@@ -30,4 +30,5 @@ pub use snapshot::TankSnapshot;
 pub use source_water::SourceWaterProfile;
 pub use state::{SimMeta, TankState};
 pub use substrate::{SubstrateKind, SubstrateLayerState};
+pub(crate) use water::concentration_from_total;
 pub use water::{ConcentrationView, WaterState};

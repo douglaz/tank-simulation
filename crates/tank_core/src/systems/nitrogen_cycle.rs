@@ -1,4 +1,4 @@
-use crate::types::{legacy_total_param_to_mg_per_l, TankState};
+use crate::types::{concentration_from_total, legacy_total_param_to_mg_per_l, TankState};
 
 const FEED_P_TO_N_MASS_RATIO: f64 = 0.10;
 const ADULT_SHRIMP_BIOMASS_G: f64 = 0.12;
@@ -378,14 +378,6 @@ fn monod_factor(substrate: f64, k_substrate: f64) -> f64 {
     let substrate = safe_rate(substrate);
     let k_substrate = safe_rate(k_substrate).max(f64::MIN_POSITIVE);
     substrate / (substrate + k_substrate)
-}
-
-fn concentration_from_total(total: f64, volume_l: f64) -> f64 {
-    if !total.is_finite() || !volume_l.is_finite() || volume_l <= f64::EPSILON {
-        0.0
-    } else {
-        (total / volume_l).max(0.0)
-    }
 }
 
 /// Daily biofilter maturity update. Called every 24 ticks.

@@ -120,47 +120,47 @@ impl WaterState {
     }
 
     pub fn tan_mg_n_per_l(&self, volume_l: f64) -> f64 {
-        concentration(self.ammonia_total_mg_n_total, volume_l)
+        concentration_from_total(self.ammonia_total_mg_n_total, volume_l)
     }
 
     pub fn nitrite_mg_n_per_l(&self, volume_l: f64) -> f64 {
-        concentration(self.nitrite_mg_n_total, volume_l)
+        concentration_from_total(self.nitrite_mg_n_total, volume_l)
     }
 
     pub fn nitrate_mg_n_per_l(&self, volume_l: f64) -> f64 {
-        concentration(self.nitrate_mg_n_total, volume_l)
+        concentration_from_total(self.nitrate_mg_n_total, volume_l)
     }
 
     pub fn don_mg_n_per_l(&self, volume_l: f64) -> f64 {
-        concentration(self.dissolved_organic_nitrogen_mg_n_total, volume_l)
+        concentration_from_total(self.dissolved_organic_nitrogen_mg_n_total, volume_l)
     }
 
     pub fn doc_mg_c_per_l(&self, volume_l: f64) -> f64 {
-        concentration(self.dissolved_organic_carbon_mg_c_total, volume_l)
+        concentration_from_total(self.dissolved_organic_carbon_mg_c_total, volume_l)
     }
 
     pub fn dic_mg_c_per_l(&self, volume_l: f64) -> f64 {
-        concentration(self.dissolved_inorganic_carbon_mg_c_total, volume_l)
+        concentration_from_total(self.dissolved_inorganic_carbon_mg_c_total, volume_l)
     }
 
     pub fn do_mg_per_l(&self, volume_l: f64) -> f64 {
-        concentration(self.dissolved_oxygen_mg_total, volume_l)
+        concentration_from_total(self.dissolved_oxygen_mg_total, volume_l)
     }
 
     pub fn phosphate_mg_p_per_l(&self, volume_l: f64) -> f64 {
-        concentration(self.phosphate_mg_p_total, volume_l)
+        concentration_from_total(self.phosphate_mg_p_total, volume_l)
     }
 
     pub fn alkalinity_meq_per_l(&self, volume_l: f64) -> f64 {
-        concentration(self.alkalinity_meq_total, volume_l)
+        concentration_from_total(self.alkalinity_meq_total, volume_l)
     }
 
     pub fn calcium_mg_per_l(&self, volume_l: f64) -> f64 {
-        concentration(self.calcium_mg_total, volume_l)
+        concentration_from_total(self.calcium_mg_total, volume_l)
     }
 
     pub fn magnesium_mg_per_l(&self, volume_l: f64) -> f64 {
-        concentration(self.magnesium_mg_total, volume_l)
+        concentration_from_total(self.magnesium_mg_total, volume_l)
     }
 
     pub fn gh_d(&self, volume_l: f64) -> f64 {
@@ -175,7 +175,7 @@ impl WaterState {
     }
 
     pub fn tds_mg_per_l(&self, volume_l: f64) -> f64 {
-        concentration(self.total_tracked_ions_mg(), volume_l)
+        concentration_from_total(self.total_tracked_ions_mg(), volume_l)
     }
 
     pub fn conductivity_us_cm(&self, volume_l: f64) -> f64 {
@@ -298,7 +298,7 @@ impl<'a> ConcentrationView<'a> {
     }
 }
 
-fn concentration(total: f64, volume_l: f64) -> f64 {
+pub(crate) fn concentration_from_total(total: f64, volume_l: f64) -> f64 {
     if !total.is_finite() || !volume_l.is_finite() || volume_l <= f64::EPSILON {
         0.0
     } else {
