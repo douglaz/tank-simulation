@@ -170,6 +170,15 @@ fn algae_bloom_conditions_emit_events_and_overfeeding_raises_nuisance(
     control.water.phosphate_mg_p_total = 0.4;
     control.microfauna.population_index = 0.0;
     control.microfauna.grazing_pressure_index = 0.0;
+    // Zero out turbidity extinction so detritus self-shading doesn't mask
+    // the nutrient-driven algae response this assertion verifies.
+    control
+        .process_params
+        .detritus_extinction_coeff_per_cm_per_g_l = 0.0;
+    control
+        .process_params
+        .doc_extinction_coeff_per_cm_per_mg_c_l = 0.0;
+    control.process_params.algae_extinction_coeff_per_cm_per_g_l = 0.0;
     let overfed = control.clone();
 
     let mut control_engine = Engine::from_parts(control, vec![]);
@@ -226,6 +235,14 @@ fn plant_water_column_limitation_is_volume_invariant_at_fixed_concentration() {
         let mut state = base_growth_state(SimSeed(8105));
         state.geometry.fill_height_cm = fill_height_cm;
         state.substrate_layers.clear();
+        // Zero out extinction coefficients so depth-dependent light attenuation
+        // doesn't break concentration-invariance (tested separately).
+        state.process_params.base_extinction_coeff_per_cm = 0.0;
+        state.process_params.algae_extinction_coeff_per_cm_per_g_l = 0.0;
+        state.process_params.doc_extinction_coeff_per_cm_per_mg_c_l = 0.0;
+        state
+            .process_params
+            .detritus_extinction_coeff_per_cm_per_g_l = 0.0;
         let volume_l = state.water_volume_l();
         state.plant_guilds = vec![PlantGuildState {
             guild: PlantGuild::FastStem,
@@ -357,6 +374,14 @@ fn algae_water_column_limitation_is_volume_invariant_at_fixed_concentration() {
     let build_state = |substrate_depth_cm: f64| {
         let mut state = base_growth_state(SimSeed(8106));
         state.plant_guilds.clear();
+        // Zero out extinction coefficients so depth-dependent light attenuation
+        // doesn't break concentration-invariance (tested separately).
+        state.process_params.base_extinction_coeff_per_cm = 0.0;
+        state.process_params.algae_extinction_coeff_per_cm_per_g_l = 0.0;
+        state.process_params.doc_extinction_coeff_per_cm_per_mg_c_l = 0.0;
+        state
+            .process_params
+            .detritus_extinction_coeff_per_cm_per_g_l = 0.0;
         state.substrate_layers = vec![SubstrateLayerState {
             kind: SubstrateKind::InertSand,
             depth_cm: substrate_depth_cm,
@@ -404,6 +429,14 @@ fn algae_size_independence_different_geometries() {
         state.geometry.fill_height_cm = fill_height_cm;
         state.plant_guilds.clear();
         state.substrate_layers.clear();
+        // Zero out extinction coefficients so depth-dependent light attenuation
+        // doesn't break concentration-invariance (tested separately).
+        state.process_params.base_extinction_coeff_per_cm = 0.0;
+        state.process_params.algae_extinction_coeff_per_cm_per_g_l = 0.0;
+        state.process_params.doc_extinction_coeff_per_cm_per_mg_c_l = 0.0;
+        state
+            .process_params
+            .detritus_extinction_coeff_per_cm_per_g_l = 0.0;
         state.microfauna.population_index = 0.0;
         state.microfauna.grazing_pressure_index = 0.0;
         let volume_l = state.water_volume_l();
@@ -448,6 +481,14 @@ fn algae_growth_matches_hand_computed_limitation_product() {
     state.substrate_layers.clear();
     state.microfauna.population_index = 0.0;
     state.microfauna.grazing_pressure_index = 0.0;
+    // Zero out extinction coefficients so the hand-computed formula below
+    // matches the pre-Beer-Lambert formulation this test was built around.
+    state.process_params.base_extinction_coeff_per_cm = 0.0;
+    state.process_params.algae_extinction_coeff_per_cm_per_g_l = 0.0;
+    state.process_params.doc_extinction_coeff_per_cm_per_mg_c_l = 0.0;
+    state
+        .process_params
+        .detritus_extinction_coeff_per_cm_per_g_l = 0.0;
 
     let volume_l = state.water_volume_l();
     let tan_conc = 0.5_f64;

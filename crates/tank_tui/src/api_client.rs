@@ -199,8 +199,7 @@ mod tests {
         object.remove("total_shrimp_count");
         object.remove("sub_adult_count");
 
-        let parsed =
-            parse_snapshot_value(value).expect("pre-stage snapshot should deserialize");
+        let parsed = parse_snapshot_value(value).expect("pre-stage snapshot should deserialize");
 
         assert_eq!(parsed, expected);
     }

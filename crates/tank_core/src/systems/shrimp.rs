@@ -140,7 +140,10 @@ fn shrimp_target_food_route_g(state: &TankState) -> f64 {
             .process_params
             .shrimp_periphyton_grazing_g_per_shrimp_per_day
         * shrimp_grazing_access_factor(state);
-    algae_detrital_mass_g(food_demand_biomass_g, state.process_params.feed_n_to_c_ratio)
+    algae_detrital_mass_g(
+        food_demand_biomass_g,
+        state.process_params.feed_n_to_c_ratio,
+    )
 }
 
 fn shrimp_feeding(state: &mut TankState) {
@@ -998,9 +1001,8 @@ fn gh_mineral_factor(gh_d: f64, params: &ShrimpRuntimeParams) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        refresh_carbonate_state, route_consumed_food, shrimp_feeding,
-        shrimp_grazing_access_factor, shrimp_target_food_route_g, step_daily_shrimp,
-        update_condition, MG_N_PER_MEQ_AMMONIA,
+        refresh_carbonate_state, route_consumed_food, shrimp_feeding, shrimp_grazing_access_factor,
+        shrimp_target_food_route_g, step_daily_shrimp, update_condition, MG_N_PER_MEQ_AMMONIA,
     };
     use crate::{algae_detrital_mass_g, SimSeed, TankState, WaterState};
 
