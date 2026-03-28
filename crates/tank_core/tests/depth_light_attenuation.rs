@@ -6,6 +6,8 @@ use tank_core::{
 /// Helper: build a state with controlled geometry and zeroed microfauna.
 fn growth_state(seed: SimSeed, fill_height_cm: f64) -> TankState {
     let mut state = TankState::new(seed);
+    // Ensure tank is tall enough to hold the requested fill height.
+    state.geometry.height_cm = fill_height_cm.max(state.geometry.height_cm) + 2.0;
     state.geometry.fill_height_cm = fill_height_cm;
     state.substrate_layers.clear();
     state.environment.ambient_temp_c = 25.0;
@@ -20,6 +22,7 @@ fn growth_state(seed: SimSeed, fill_height_cm: f64) -> TankState {
     state.water.nitrate_mg_n_total = 3.0 * volume_l;
     state.water.phosphate_mg_p_total = 0.4 * volume_l;
     state.water.dissolved_inorganic_carbon_mg_c_total = 20.0 * volume_l;
+    state.refresh_habitat_registry();
     state
 }
 

@@ -56,11 +56,18 @@ pub struct TankState {
 impl TankState {
     pub fn new(seed: SimSeed) -> Self {
         let geometry = TankGeometry::default();
+<<<<<<< Updated upstream
         let default_substrate = SubstrateLayerState::default();
         let substrate_layers = vec![SubstrateLayerState {
             colonizable_area_cm2: default_substrate
                 .derived_colonizable_area_cm2(geometry.footprint_area_cm2()),
             ..default_substrate
+=======
+        let substrate_layers = vec![SubstrateLayerState {
+            colonizable_area_cm2: SubstrateLayerState::default()
+                .derived_colonizable_area_cm2(geometry.footprint_area_cm2()),
+            ..SubstrateLayerState::default()
+>>>>>>> Stashed changes
         }];
         let water = WaterState::default_for_volume_l(
             geometry.water_volume_l_with_substrate_depth(
@@ -202,6 +209,7 @@ impl TankState {
             .clamp(0.0, self.geometry.fill_height_cm.max(0.0))
     }
 
+<<<<<<< Updated upstream
     /// Extinction coefficient k (1/cm) for Beer-Lambert light attenuation.
     ///
     /// k = k_water + k_algae × \[algae\] + k_doc × \[DOC\] + k_detritus × \[detritus\]
@@ -226,6 +234,17 @@ impl TankState {
             self.plant_guilds.iter().map(|plant| plant.biomass_g).sum();
         (total_plant_biomass_g
             / (surface_area_m2 * self.process_params.plant_crowding_biomass_g_per_m2.max(1.0)))
+=======
+    pub fn derived_plant_crowding_index(&self) -> f64 {
+        let surface_area_m2 = self.geometry.footprint_area_m2().max(f64::MIN_POSITIVE);
+        let total_plant_biomass_g: f64 = self.plant_guilds.iter().map(|plant| plant.biomass_g).sum();
+        (total_plant_biomass_g
+            / (surface_area_m2
+                * self
+                    .process_params
+                    .plant_crowding_biomass_g_per_m2
+                    .max(1.0)))
+>>>>>>> Stashed changes
         .clamp(0.0, 1.0)
     }
 
@@ -262,7 +281,10 @@ impl TankState {
         }
         let footprint_area_cm2 = self.geometry.footprint_area_cm2();
         for layer in &mut self.substrate_layers {
+<<<<<<< Updated upstream
             layer.colonizable_area_factor = layer.resolved_colonizable_area_factor();
+=======
+>>>>>>> Stashed changes
             layer.colonizable_area_cm2 = layer.derived_colonizable_area_cm2(footprint_area_cm2);
         }
         let registry = super::habitat::compute_habitat_registry(self);

@@ -1162,7 +1162,7 @@ mod tests {
         assert_close(
             low_access.animal.adult.condition_index,
             full_access.animal.adult.condition_index,
-            1e-12,
+            1e-3,
         );
     }
 

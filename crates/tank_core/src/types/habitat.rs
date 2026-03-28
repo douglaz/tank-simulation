@@ -110,8 +110,12 @@ pub fn compute_habitat_registry(state: &TankState) -> Vec<HabitatEntry> {
         avg_crowding: state.derived_plant_crowding_index(),
         avg_low_o2: state.avg_substrate_index(|l| l.low_oxygen_tendency_index),
         root_zone_o2_boost: if has_rooted_plants { 0.1 } else { 0.0 },
+<<<<<<< Updated upstream
         substrate_light_fraction: beer_lambert_at_depth(k, h),
         column_avg_light_fraction: column_average_attenuation_factor(k, h),
+=======
+        depth_attenuation: (1.0 - state.water_depth_above_substrate_cm() / 60.0).clamp(0.1, 1.0),
+>>>>>>> Stashed changes
     };
 
     HabitatKind::ALL
