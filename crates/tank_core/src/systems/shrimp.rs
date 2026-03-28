@@ -2,9 +2,12 @@ use crate::systems::chemistry::{compute_nh3_mg_n_per_l, resolve_carbonate_state}
 use crate::types::{
     algae_carbon_mg, algae_detrital_mass_g, algae_nitrogen_mg, detritus_carbon_mg,
     detritus_nitrogen_mg, shrimp_body_detrital_mass_g, EggCohort, EventCause, EventKind,
-    EventSeverity, ShrimpRuntimeParams, TankState, ADULT_FEEDING_WEIGHT, ADULT_SHRIMP_BIOMASS_G,
-    JUVENILE_FEEDING_WEIGHT, JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
-    SUB_ADULT_FEEDING_WEIGHT, SUB_ADULT_SHRIMP_BIOMASS_G,
+    EventSeverity, ShrimpRuntimeParams, TankState, ADULT_SHRIMP_BIOMASS_G,
+    JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G, SUB_ADULT_SHRIMP_BIOMASS_G,
+};
+#[cfg(test)]
+use crate::types::biology::{
+    ADULT_FEEDING_WEIGHT, JUVENILE_FEEDING_WEIGHT, SUB_ADULT_FEEDING_WEIGHT,
 };
 
 const MG_N_PER_MEQ_AMMONIA: f64 = 14.007;
@@ -1097,8 +1100,9 @@ mod tests {
         let o2_demand_mg = target_respired_c_mg * params.shrimp_o2_per_mg_c_respired;
         let respiration_scale = state.water.dissolved_oxygen_mg_total / o2_demand_mg;
 
-        // Route with all feeding weight going to adults (no sub-adults or juveniles)
-        route_consumed_food(&mut state, consumed_n_mg, consumed_c_mg, 1.0, 0.0, 0.0, 1.0);
+        // Route with all feeding weight going to adults (no sub-adults or juveniles).
+        state.animal.adult.count = 1;
+        route_consumed_food(&mut state, consumed_n_mg, consumed_c_mg);
 
         assert_close(state.water.dissolved_oxygen_mg_total, 0.0, 1e-12);
         assert_close(

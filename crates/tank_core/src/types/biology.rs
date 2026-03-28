@@ -440,7 +440,7 @@ impl AnimalState {
 
     /// Feeding demand units used by shrimp grazing and reserve routing.
     pub fn feeding_units(&self) -> f64 {
-        f64::from(self.adult.count)
+        f64::from(self.adult.count) * ADULT_FEEDING_WEIGHT
             + f64::from(self.sub_adult.count) * SUB_ADULT_FEEDING_WEIGHT
             + f64::from(self.juvenile.count) * JUVENILE_FEEDING_WEIGHT
     }
