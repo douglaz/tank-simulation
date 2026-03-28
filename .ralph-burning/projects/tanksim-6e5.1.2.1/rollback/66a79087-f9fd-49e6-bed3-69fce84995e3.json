@@ -1,0 +1,36 @@
+{
+  "rollback_id": "66a79087-f9fd-49e6-bed3-69fce84995e3",
+  "created_at": "2026-03-27T19:40:24.304118250Z",
+  "stage_id": "apply_fixes",
+  "cycle": 1,
+  "git_sha": "435affe04315e5f9d12c59bcd6326f4142e84258",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260327192401",
+      "stage_cursor": {
+        "stage": "final_review",
+        "cycle": 1,
+        "attempt": 1,
+        "completion_round": 1
+      },
+      "started_at": "2026-03-27T19:24:01.216526655Z",
+      "prompt_hash_at_cycle_start": "c5220483c766bac7",
+      "prompt_hash_at_stage_start": "c5220483c766bac7",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 0
+    },
+    "status": "running",
+    "cycle_history": [],
+    "completion_rounds": 1,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [],
+      "processed_count": 0
+    },
+    "status_summary": "running: completed Apply Fixes, next Final Review"
+  }
+}

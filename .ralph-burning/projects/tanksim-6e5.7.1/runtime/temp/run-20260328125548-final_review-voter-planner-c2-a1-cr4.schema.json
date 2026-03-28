@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "description": "Payload returned by the planner-position step and each reviewer voting pass.",
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "votes": {
+      "items": {
+        "additionalProperties": false,
+        "description": "A vote on a single amendment.",
+        "properties": {
+          "amendment_id": {
+            "type": "string"
+          },
+          "decision": {
+            "description": "Per-amendment vote used by both the planner-position step and reviewer voting.",
+            "enum": [
+              "accept",
+              "reject"
+            ],
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "amendment_id",
+          "decision",
+          "rationale"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "summary",
+    "votes"
+  ],
+  "title": "FinalReviewVotePayload",
+  "type": "object"
+}

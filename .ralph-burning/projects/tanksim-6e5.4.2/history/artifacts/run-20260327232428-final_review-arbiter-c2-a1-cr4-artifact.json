@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327232428-final_review-arbiter-c2-a1-cr4-artifact",
+  "payload_id": "run-20260327232428-final_review-arbiter-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T02:23:44.509815282Z",
+  "content": "# Final Review Arbiter\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nReject fr-4-8b7458ba. The decisive evidence is that the codebase intentionally separates solver robustness from source-water admissibility: the solver may clamp to 8.5 for edge-case runtime stability, while source-water validation explicitly requires an interior-range result and rejects boundary-resolved profiles.\n\n## Rulings\n\n- `fr-4-8b7458ba`: Reject\n  `validate_source_water_carbonate_profile` is explicitly documented to require source-water inputs to resolve \"inside the calibrated interior gameplay range rather than on the clamp boundary\" (chemistry.rs:385-386), and its `<=`/`>=` check enforces exactly that policy. The opposing evidence is real but not decisive: `fallback_zero_dic` does return `CARBONATE_PH_MAX` for zero-DIC, positive-alkalinity cases, but that is part of the solver’s runtime stability behavior, not proof that clamp-boundary outputs are intended to be valid source-water presets. The carbonate contract treats these fallbacks as guards for edge cases, not as admission criteria for all inputs. Because the cited profile reaches 8.5 only through that fallback/clamp path, this shows a deliberate solver-vs-validator distinction rather than a concrete correctness bug in the supported source-water envelope. A more specific error could be a reasonable follow-up, but this amendment does not justify changing the validation boundary.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

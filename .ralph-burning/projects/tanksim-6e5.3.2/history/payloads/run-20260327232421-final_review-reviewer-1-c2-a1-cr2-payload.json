@@ -1,0 +1,27 @@
+{
+  "payload_id": "run-20260327232421-final_review-reviewer-1-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T00:57:42.028529005Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "`crates/tank_core/src/systems/shrimp.rs:446-451`, `crates/tank_core/src/systems/shrimp.rs:532-538`, and especially `crates/tank_core/src/systems/shrimp.rs:631-670` let hatching and juvenile maturation fund new shrimp biomass from `DON/TAN` and `DOC/DIC` whenever `animal.reserve_g` is short. That bypasses the new ingestion -> assimilation -> retained-reserve pathway and allows shrimp biomass to be created from dissolved waste/carbonate pools instead of only from retained intake. Reproduction/growth should stay limited by reserve (or explicitly fail/stall) rather than mining water-column dissolved pools.",
+        "rationale": "This breaks the semantics of the retained share: respired/excreted material can be turned back into shrimp biomass without another feeding step, so starvation behavior and the new pathway accounting are no longer biologically or mechanically trustworthy."
+      },
+      {
+        "body": "`crates/tank_core/src/systems/shrimp.rs:78-86` runs `shrimp_feeding()` before `update_condition()`, but the carbonate cache is not refreshed until `refresh_carbonate_state()` at the end of the daily step. `route_consumed_food()` mutates TAN/DIC/DO in `crates/tank_core/src/systems/shrimp.rs:211-229`, and `update_condition()` immediately recomputes NH3 using `state.water.ph` in `crates/tank_core/src/systems/shrimp.rs:243-245`. Same-day condition/reproduction logic therefore uses stale pre-feeding pH instead of the post-feeding carbonate state. Refresh carbonate state immediately after feeding (or inside the routing helper) before any pH-dependent calculations.",
+        "rationale": "As written, shrimp can be penalized or spared based on outdated NH3 speciation, especially in low-alkalinity or high-feeding cases where the feeding-driven DIC delta materially shifts pH."
+      }
+    ],
+    "summary": "Reviewed the branch diff against `origin/master`, read the shrimp/pathway, process, biology, budget, water, chemistry, snapshot, engine, and save/load code plus the new shrimp tests end-to-end, and ran targeted `tank_core` tests for shrimp, budget tracking, chemistry, validation, and save/load. Those tests passed, but I found 2 correctness gaps in the new shrimp pathway implementation."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

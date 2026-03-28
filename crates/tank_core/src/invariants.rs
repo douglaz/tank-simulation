@@ -42,6 +42,10 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
     state.animal.clamp_berried_to_adults();
     state.animal.egg_progress_days = state.animal.egg_progress_days.max(0.0);
     state.animal.egg_cohorts.retain(|c| c.count > 0);
+    state.animal.reconcile_egg_cohort_counts();
+    state.animal.adult.clamp_maturation_accum_to_count();
+    state.animal.sub_adult.clamp_maturation_accum_to_count();
+    state.animal.juvenile.clamp_maturation_accum_to_count();
     state.stability_tracker.instability_index =
         state.stability_tracker.instability_index.clamp(0.0, 1.0);
 

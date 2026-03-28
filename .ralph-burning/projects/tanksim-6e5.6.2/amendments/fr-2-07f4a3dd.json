@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-2-07f4a3dd",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 2,
+  "body": "Add a test that explicitly checks population count conservation across a multi-day run: `total_count_change == total_births - total_deaths`. The existing tests verify conditions, events, and individual stage counts, but no test asserts the fundamental accounting identity that population change equals births minus deaths. This is the central invariant of the stage model per the acceptance criteria ('counts conserved except for explicit births and deaths'). A test could track `juvenile.count` additions from hatching vs `total_count()` delta and mortality counts over a 30-day run.",
+  "created_at": "2026-03-28T15:14:54.078068394Z",
+  "batch_sequence": 3,
+  "source": "workflow_stage",
+  "dedup_key": "d8703e76791126c0519f74c700e9bd2ebe6e34d4b3f035ef4cf461713667006b"
+}

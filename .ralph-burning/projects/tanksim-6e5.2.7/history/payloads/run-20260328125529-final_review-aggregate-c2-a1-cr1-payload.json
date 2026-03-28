@@ -1,0 +1,205 @@
+{
+  "payload_id": "run-20260328125529-final_review-aggregate-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T13:50:17.479863914Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-1-7cc502dc",
+      "fr-1-84c60567",
+      "fr-1-6e910aa8",
+      "fr-1-59fbe31e",
+      "fr-1-85925171",
+      "fr-1-3f440546",
+      "fr-1-9ac0386b"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-1-7cc502dc",
+        "normalized_body": "BiologySnapshot struct in crates/tank_api/src/handlers/snapshot.rs (line 144-162) is missing the sub_adult_count field. TankSnapshot now has sub_adult_count (snapshot.rs:39) and it's populated from state.animal.sub_adult.count (snapshot.rs:138), but the /biology API endpoint silently omits sub-adults. Add `pub sub_adult_count: u32` to BiologySnapshot and populate it from `s.sub_adult_count` in get_biology().",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-84c60567",
+        "normalized_body": "The conductivity calculation in crates/tank_core/src/types/water.rs:174 uses a bare magic number 0.65 (`self.tds_mg_per_l(volume_l) / 0.65`). Per the project prompt's requirement that 'conversion factors should be defined as named constants, not magic numbers scattered through rendering code', this should be a named constant (e.g., `const TDS_TO_CONDUCTIVITY_FACTOR: f64 = 0.65;`) with a doc comment explaining its derivation and limitations.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-381e5d84",
+        "normalized_body": "The legacy API alias names (e.g., `nitrate_mg_l`, `phosphate_mg_l` in crates/tank_api/src/handlers/snapshot.rs:86-97) are misleading: the old name `nitrate_mg_l` sounds like mg-NO3/L (ion mass) but actually returns the mg-N/L (element basis) value. The `legacy_chemistry_aliases` metadata at line 122-131 maps old→new names but does not warn that the old names were always on an element basis. Consider adding a `legacy_field_basis_note` or deprecation warning in the metadata to alert API consumers that `nitrate_mg_l` was always mg-N/L, not mg-NO3/L.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-6e910aa8",
+        "normalized_body": "The chemistry_field_semantics metadata (snapshot.rs:100-112) only documents the new-style field names. It should also document `do_mg_l` and `do_sat_mg_l` (which appear in the chemistry response at lines 57-58) since these lack the explicit unit suffix pattern used by other fields and could be confused with dissolved organic matter.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-59fbe31e",
+        "normalized_body": "The GH/KH conversion constants in water.rs (lines 5-6, and the inline coefficients 2.497 and 4.118 at line 162) are bare magic numbers without documentation of their chemical derivation. Like the N/P conversion factors in conversions.rs, these should be named constants with doc comments explaining the molar mass ratios they represent (Ca²+ equivalent weight → CaCO3, Mg²+ equivalent weight → CaCO3).",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-85925171",
+        "normalized_body": "`snapshot_response_json()` only backfills legacy aliases for TAN/NH3/NO2/NO3/PO4/TDS/conductivity in `crates/tank_api/src/handlers/snapshot.rs:86-96`, but `TankSnapshot` also renamed `dissolved_inorganic_carbon_mg_l` to `dissolved_inorganic_carbon_mg_c_per_l` in `crates/tank_core/src/types/snapshot.rs:20-21`. As a result, `/snapshot`, `/time/step`, `/load`, and scenario-load responses no longer contain the old DIC key, so pre-rename API clients that deserialize the old snapshot shape will fail even though the other renamed fields were kept backward-compatible. Add the missing top-level `dissolved_inorganic_carbon_mg_l` alias and include it in `legacy_chemistry_aliases`.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-3f440546",
+        "normalized_body": "`OMITTED_TDS_CONTRIBUTORS` in `crates/tank_api/src/handlers/snapshot.rs:9-12` says the 7-ion estimate omits \"untracked nitrogen and phosphorus ions\". That is false for this model: TAN/NH3, nitrite, nitrate, and phosphate are tracked and surfaced in the same response; they are merely excluded from the TDS/conductivity proxy. Reword this metadata to say those tracked species are omitted from the estimate, otherwise the new self-description still misstates model scope and can mislead users about what the simulation actually tracks.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-9ac0386b",
+        "normalized_body": "`crates/tank_tui/src/screens/chemistry.rs:51-59` and `crates/tank_tui/src/screens/overview.rs:49-58` stop at `Est. TDS (7-ion)` / `Est. conductivity`, but never tell the TUI user which seven ions are counted or that nitrate/phosphate/organics are excluded. The API now carries that scope metadata, so the UI portion of this bead is still incomplete: a TUI user cannot actually tell what the estimate includes or omits, which was part of the acceptance criteria for the chemistry-semantics change.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-1-7cc502dc",
+        "normalized_body": "BiologySnapshot struct in crates/tank_api/src/handlers/snapshot.rs (line 144-162) is missing the sub_adult_count field. TankSnapshot now has sub_adult_count (snapshot.rs:39) and it's populated from state.animal.sub_adult.count (snapshot.rs:138), but the /biology API endpoint silently omits sub-adults. Add `pub sub_adult_count: u32` to BiologySnapshot and populate it from `s.sub_adult_count` in get_biology().",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-84c60567",
+        "normalized_body": "The conductivity calculation in crates/tank_core/src/types/water.rs:174 uses a bare magic number 0.65 (`self.tds_mg_per_l(volume_l) / 0.65`). Per the project prompt's requirement that 'conversion factors should be defined as named constants, not magic numbers scattered through rendering code', this should be a named constant (e.g., `const TDS_TO_CONDUCTIVITY_FACTOR: f64 = 0.65;`) with a doc comment explaining its derivation and limitations.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-6e910aa8",
+        "normalized_body": "The chemistry_field_semantics metadata (snapshot.rs:100-112) only documents the new-style field names. It should also document `do_mg_l` and `do_sat_mg_l` (which appear in the chemistry response at lines 57-58) since these lack the explicit unit suffix pattern used by other fields and could be confused with dissolved organic matter.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-59fbe31e",
+        "normalized_body": "The GH/KH conversion constants in water.rs (lines 5-6, and the inline coefficients 2.497 and 4.118 at line 162) are bare magic numbers without documentation of their chemical derivation. Like the N/P conversion factors in conversions.rs, these should be named constants with doc comments explaining the molar mass ratios they represent (Ca²+ equivalent weight → CaCO3, Mg²+ equivalent weight → CaCO3).",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-85925171",
+        "normalized_body": "`snapshot_response_json()` only backfills legacy aliases for TAN/NH3/NO2/NO3/PO4/TDS/conductivity in `crates/tank_api/src/handlers/snapshot.rs:86-96`, but `TankSnapshot` also renamed `dissolved_inorganic_carbon_mg_l` to `dissolved_inorganic_carbon_mg_c_per_l` in `crates/tank_core/src/types/snapshot.rs:20-21`. As a result, `/snapshot`, `/time/step`, `/load`, and scenario-load responses no longer contain the old DIC key, so pre-rename API clients that deserialize the old snapshot shape will fail even though the other renamed fields were kept backward-compatible. Add the missing top-level `dissolved_inorganic_carbon_mg_l` alias and include it in `legacy_chemistry_aliases`.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-3f440546",
+        "normalized_body": "`OMITTED_TDS_CONTRIBUTORS` in `crates/tank_api/src/handlers/snapshot.rs:9-12` says the 7-ion estimate omits \"untracked nitrogen and phosphorus ions\". That is false for this model: TAN/NH3, nitrite, nitrate, and phosphate are tracked and surfaced in the same response; they are merely excluded from the TDS/conductivity proxy. Reword this metadata to say those tracked species are omitted from the estimate, otherwise the new self-description still misstates model scope and can mislead users about what the simulation actually tracks.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-9ac0386b",
+        "normalized_body": "`crates/tank_tui/src/screens/chemistry.rs:51-59` and `crates/tank_tui/src/screens/overview.rs:49-58` stop at `Est. TDS (7-ion)` / `Est. conductivity`, but never tell the TUI user which seven ions are counted or that nitrate/phosphate/organics are excluded. The API now carries that scope metadata, so the UI portion of this bead is still incomplete: a TUI user cannot actually tell what the estimate includes or omits, which was part of the acceptance criteria for the chemistry-semantics change.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 1,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-1-381e5d84"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 7 amendment(s); restart required.",
+    "total_proposed_amendments": 8,
+    "total_reviewers": 2,
+    "unique_amendment_count": 8
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 1
+}

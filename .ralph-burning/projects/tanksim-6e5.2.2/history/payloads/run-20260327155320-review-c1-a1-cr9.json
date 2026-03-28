@@ -1,0 +1,46 @@
+{
+  "payload_id": "run-20260327155320-review-c1-a1-cr9",
+  "stage_id": "review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T20:01:34.519108505Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All 125 workspace tests pass with zero failures across 31 test suites",
+        "cargo clippy --all-targets --quiet passes clean with no warnings",
+        "cargo fmt --all --check passes with no diffs",
+        "CR9 amendment fr-8-cd41c2dd verified: monod_rate doc comment now reads 'substrate and k_substrate must use the same units; after the concentration migration, current call sites pass mg/L rather than totals'; monod_factor doc comment now reads 'Monod factor S/(K+S) for substrate and half-saturation values in the same units. Current call sites use concentration terms in mg/L'",
+        "CR9 amendment fr-8-b5b1b923 verified: substrate_displacement_l doc comment now reads 'Returns the liters displaced by substrate, assuming 100% of the substrate column excludes water. This intentionally ignores real-world pore volume until substrate porosity is modeled explicitly'; water_volume_l_with_substrate_depth doc comment reads 'Net water volume after subtracting substrate displacement under the current 100%-displacement / 0%-porosity assumption'",
+        "CR9 amendment fr-8-91607365 verified: TankGeometry methods renamed to gross_water_volume_l(), surface_area_to_gross_volume_ratio(), wall_area_to_gross_volume_ratio() with doc comments clarifying 'gross filled-prism volume before substrate displacement'",
+        "No remaining references to old geometry method names (water_volume_l, surface_area_to_volume_ratio, wall_area_to_volume_ratio) found anywhere in the crates/ directory — rename is complete",
+        "Only two water_volume_l definitions remain: TankState::water_volume_l() (state.rs:177, canonical net volume) and TankGeometry::water_volume_l_with_substrate_depth() (geometry.rs:37, parameterized helper) — no naming collision",
+        "All 15+ canonical concentration helpers intact on WaterState and TankState with ConcentrationView cache layer",
+        "concentration_from_total() has exactly one definition at water.rs:301-307 with proper NaN/infinity/zero-volume guards",
+        "Substrate areal density helpers (substrate_n_mg_n_per_m2, substrate_p_mg_p_per_m2) verified present on TankState",
+        "plant_growth.rs guild loop recomputes concentrations inside each iteration so later guilds see post-uptake chemistry",
+        "Schema-2 save migration with stability tracker reseeding verified intact",
+        "Save schema version is 3 with legacy schema-2 migration path",
+        "Startup TUI shows both 'Filled capacity ... gross' and 'Net water volume ... after substrate displacement'"
+      ],
+      "findings_or_gaps": [
+        "Legacy process field names (plant_half_saturation_n_mg_total, aob_k_tan_mg, decomposer_k_doc_mg) still read as total-mass parameters even though runtime semantics now normalize them onto concentration- or area-based units — correctly deferred to downstream normalization beads tanksim-6e5.2.3/2.4/2.5",
+        "TankState individual convenience methods (state.rs:213-296) each independently call self.concentrations() which re-invokes water_volume_l(); hot paths correctly use ConcentrationView, so this is a minor efficiency concern for infrequent convenience usage only",
+        "Schema-2 save migration assumes legacy saves were authored with gross-volume-scaled dissolved totals; a hand-edited or previously pre-migrated schema-2 file could be rescaled again on load — acceptable for a transitional format",
+        "The geometry-side gross-volume API rename is source-breaking for any downstream callers outside this workspace that still reference the old method names — acceptable since this is an internal workspace"
+      ],
+      "follow_up_or_amendments": [
+        "Legacy process field names should be renamed as part of the downstream normalization beads (tanksim-6e5.2.3, 6e5.2.4, 6e5.2.5) to match their now-concentration-based runtime semantics"
+      ],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 9
+}

@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-2-c660eb57",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 2,
+  "body": "Cap `maturation_accum` on each StageCohort so it cannot exceed the stage's `count`. In `juvenile_to_subadult` (shrimp.rs:641) and `subadult_to_adult` (shrimp.rs:700), unfunded candidates are added back to `maturation_accum` without bound. If reserves are chronically insufficient, the accumulator grows by `count * daily_rate` per tick indefinitely. When reserves finally recover, the entire cohort promotes in a single tick (bounded by count, so correct), but the unbounded float accumulation wastes precision and makes the state harder to reason about. Add a clamp like `maturation_accum = maturation_accum.min(count as f64)` after the unfunded re-addition, or in `enforce_invariants`.",
+  "created_at": "2026-03-28T15:14:54.078063665Z",
+  "batch_sequence": 2,
+  "source": "workflow_stage",
+  "dedup_key": "43027d168db313355aafc48ae075261d91fc2230abb8ace2583c69243a764145"
+}

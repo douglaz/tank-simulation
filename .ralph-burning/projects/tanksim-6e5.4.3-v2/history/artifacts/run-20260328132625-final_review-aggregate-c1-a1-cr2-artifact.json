@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260328132625-final_review-aggregate-c1-a1-cr2-artifact",
+  "payload_id": "run-20260328132625-final_review-aggregate-c1-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T14:04:11.105131800Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 1 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 1\n**Final Review Restarts:** 2/20\n\n## Accepted\n\n- `fr-2-ac995bdf`\n\n## Rejected\n\nNone.\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-2-ac995bdf`\n\nPre-existing test failure in `crates/tank_core/tests/concentration_helpers.rs::canonical_helpers_use_net_water_volume` — GH helper returns 3.9520 vs expected 3.9518 (tolerance 1e-9). Not caused by the CO2 changes but present on the branch. The test's tolerance (1e-9) is too tight for the observed floating-point discrepancy (~3e-4). Either the test expectation or the helper computation needs updating.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 2
+}

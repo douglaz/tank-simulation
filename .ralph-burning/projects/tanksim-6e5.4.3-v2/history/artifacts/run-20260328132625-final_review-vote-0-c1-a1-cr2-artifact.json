@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328132625-final_review-vote-0-c1-a1-cr2-artifact",
+  "payload_id": "run-20260328132625-final_review-vote-0-c1-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T14:03:14.550949180Z",
+  "content": "# Final Review Votes\n**Producer:** agent:claude/claude-opus-4-6\n\n## Summary\n\nAmendment fr-2 is verified as a genuine, deterministic test defect. The test helper `expected_gh_d` uses hardcoded rounded constants (2.497, 4.118) that diverge from the implementation's precise molar-mass-derived constants (100.0869/40.078 ≈ 2.49730, 100.0869/24.305 ≈ 4.11796). This produces a ~3.27e-4 discrepancy against a 1e-9 tolerance — exceeding it by a factor of ~327,000. The fix should update the test helper to use the same molar-mass-derived constants, since those are chemically more accurate.\n\n## Votes\n\n- `fr-2-ac995bdf`: Accept\n  Verified by reading both the test (concentration_helpers.rs:41-43) and implementation (water.rs:5-18, 175-183). The test helper hardcodes 2.497 and 4.118, while the implementation computes CALCIUM_AS_CACO3_FACTOR = 100.0869/40.078 ≈ 2.49730 and MAGNESIUM_AS_CACO3_FACTOR = 100.0869/24.305 ≈ 4.11796. With the test inputs (Ca=20 mg/L, Mg=5 mg/L), this yields a ~3.27e-4 discrepancy against a 1e-9 tolerance — a deterministic failure. The correct fix is to update the test constants to match the implementation's molar-mass-derived values, which are scientifically more precise. This is a real broken test that should be fixed regardless of whether it was introduced by recent changes.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}

@@ -535,7 +535,11 @@ fn egg_development(state: &mut TankState) {
 
     // Successful hatches produce juveniles
     if total_successful > 0 {
-        state.animal.juvenile.count += total_successful * effective_clutch_size;
+        state.animal.juvenile.receive_entrants(
+            total_successful * effective_clutch_size,
+            0.0,
+            state.animal.adult.condition_index,
+        );
     }
 
     // Only resolved clutches leave berried_females_count
@@ -639,8 +643,10 @@ fn juvenile_to_subadult(state: &mut TankState) {
 
     let unfunded_maturing = candidate_maturing.saturating_sub(funded_maturing);
     state.animal.juvenile.maturation_accum += f64::from(unfunded_maturing);
+    let incoming_condition = state.animal.juvenile.condition_index;
 
     // Transfer proportional reserve from juvenile to sub_adult
+    let mut reserve_transfer = 0.0;
     if funded_maturing > 0 {
         let pre_count = state.animal.juvenile.count;
         let transfer_fraction = if pre_count > 0 {
@@ -648,13 +654,16 @@ fn juvenile_to_subadult(state: &mut TankState) {
         } else {
             0.0
         };
-        let reserve_transfer = state.animal.juvenile.reserve_g * transfer_fraction;
+        reserve_transfer = state.animal.juvenile.reserve_g * transfer_fraction;
         state.animal.juvenile.reserve_g -= reserve_transfer;
-        state.animal.sub_adult.reserve_g += reserve_transfer;
     }
 
     state.animal.juvenile.count -= funded_maturing;
-    state.animal.sub_adult.count += funded_maturing;
+    state.animal.juvenile.clamp_maturation_accum_to_count();
+    state
+        .animal
+        .sub_adult
+        .receive_entrants(funded_maturing, reserve_transfer, incoming_condition);
 }
 
 /// Sub-adult -> adult stage transition.
@@ -698,8 +707,10 @@ fn subadult_to_adult(state: &mut TankState) {
 
     let unfunded_maturing = candidate_maturing.saturating_sub(funded_maturing);
     state.animal.sub_adult.maturation_accum += f64::from(unfunded_maturing);
+    let incoming_condition = state.animal.sub_adult.condition_index;
 
     // Transfer proportional reserve from sub_adult to adult
+    let mut reserve_transfer = 0.0;
     if funded_maturing > 0 {
         let pre_count = state.animal.sub_adult.count;
         let transfer_fraction = if pre_count > 0 {
@@ -707,13 +718,16 @@ fn subadult_to_adult(state: &mut TankState) {
         } else {
             0.0
         };
-        let reserve_transfer = state.animal.sub_adult.reserve_g * transfer_fraction;
+        reserve_transfer = state.animal.sub_adult.reserve_g * transfer_fraction;
         state.animal.sub_adult.reserve_g -= reserve_transfer;
-        state.animal.adult.reserve_g += reserve_transfer;
     }
 
     state.animal.sub_adult.count -= funded_maturing;
-    state.animal.adult.count += funded_maturing;
+    state.animal.sub_adult.clamp_maturation_accum_to_count();
+    state
+        .animal
+        .adult
+        .receive_entrants(funded_maturing, reserve_transfer, incoming_condition);
 }
 
 fn mortality(state: &mut TankState) {

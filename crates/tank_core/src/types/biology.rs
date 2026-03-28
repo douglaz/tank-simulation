@@ -89,6 +89,44 @@ impl Default for StageCohort {
     }
 }
 
+impl StageCohort {
+    /// Adds entrants to a stage cohort.
+    ///
+    /// Empty stages are re-seeded from the incoming animals so stale reserve,
+    /// condition, or maturation state cannot leak into newly recruited shrimp.
+    pub fn receive_entrants(
+        &mut self,
+        incoming_count: u32,
+        incoming_reserve_g: f64,
+        incoming_condition_index: f64,
+    ) {
+        if incoming_count == 0 {
+            return;
+        }
+
+        let incoming_condition_index = incoming_condition_index.clamp(0.0, 1.0);
+        let previous_count = self.count;
+        if previous_count == 0 {
+            self.count = incoming_count;
+            self.reserve_g = incoming_reserve_g;
+            self.condition_index = incoming_condition_index;
+            self.maturation_accum = 0.0;
+            return;
+        }
+
+        let total_count = previous_count + incoming_count;
+        self.count = total_count;
+        self.reserve_g += incoming_reserve_g;
+        self.condition_index = ((f64::from(previous_count) * self.condition_index)
+            + (f64::from(incoming_count) * incoming_condition_index))
+            / f64::from(total_count);
+    }
+
+    pub fn clamp_maturation_accum_to_count(&mut self) {
+        self.maturation_accum = self.maturation_accum.clamp(0.0, f64::from(self.count));
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AnimalState {
     /// Adult stage cohort.
@@ -500,6 +538,10 @@ impl AnimalState {
         self.sub_adult.maturation_accum + self.juvenile.maturation_accum
     }
 
+    pub fn egg_cohort_count_total(&self) -> u32 {
+        self.egg_cohorts.iter().map(|cohort| cohort.count).sum()
+    }
+
     /// Adds retained reserve back into the stage pools using the same weights
     /// that the legacy feeding model used for daily food demand.
     pub fn add_reserve_by_feeding_units(&mut self, reserve_g: f64) {
@@ -551,6 +593,29 @@ impl AnimalState {
             self.berried_females_count = self.adult.count;
             trim_egg_cohorts(&mut self.egg_cohorts, excess);
         }
+    }
+
+    /// Repairs egg cohort bookkeeping so clutch cohorts never imply more or
+    /// fewer berried females than the top-level adult subset count.
+    pub fn reconcile_egg_cohort_counts(&mut self) {
+        let cohort_total = self.egg_cohort_count_total();
+        if cohort_total > self.berried_females_count {
+            trim_egg_cohorts(
+                &mut self.egg_cohorts,
+                cohort_total - self.berried_females_count,
+            );
+        } else if cohort_total < self.berried_females_count {
+            let progress_days = self
+                .egg_cohorts
+                .iter()
+                .map(|cohort| cohort.progress_days)
+                .fold(self.egg_progress_days.max(0.0), f64::max);
+            self.egg_cohorts.push(EggCohort {
+                count: self.berried_females_count - cohort_total,
+                progress_days,
+            });
+        }
+        self.sync_egg_progress_from_cohorts();
     }
 
     /// Derives `egg_progress_days` from the most-advanced cohort for display.
