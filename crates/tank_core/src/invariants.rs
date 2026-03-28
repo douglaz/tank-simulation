@@ -1,4 +1,5 @@
 use crate::types::{SimError, TankState};
+use crate::systems::chemistry::{CARBONATE_PH_MAX, CARBONATE_PH_MIN};
 
 const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
 
@@ -11,7 +12,7 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
 
     state.water.dissolved_oxygen_mg_total =
         normalized_non_negative_if_finite(state.water.dissolved_oxygen_mg_total);
-    state.water.ph = state.water.ph.clamp(5.5, 8.5);
+    state.water.ph = state.water.ph.clamp(CARBONATE_PH_MIN, CARBONATE_PH_MAX);
     state.geometry.lid_exchange_factor = state.geometry.lid_exchange_factor.clamp(0.0, 1.0);
     state.hardware.light.intensity_index = state.hardware.light.intensity_index.clamp(0.0, 1.0);
     state.hardware.filter.cleanliness_index =

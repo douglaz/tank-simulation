@@ -201,9 +201,10 @@ impl WaterState {
         self.magnesium_mg_total *= scale;
         self.sodium_mg_total *= scale;
         self.potassium_mg_total *= scale;
-        self.bicarbonate_mg_total *= scale;
         self.chloride_mg_total *= scale;
         self.sulfate_mg_total *= scale;
+
+        crate::systems::chemistry::resolve_carbonate_state(self, new_volume_l.max(0.0));
     }
 
     pub fn total_tracked_ions_mg(&self) -> f64 {

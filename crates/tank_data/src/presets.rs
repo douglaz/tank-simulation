@@ -1,6 +1,76 @@
 use serde::{Deserialize, Serialize};
 
 const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
+const SOURCE_WATER_PH_MIN: f64 = 5.5;
+const SOURCE_WATER_PH_MAX: f64 = 8.5;
+const SOURCE_WATER_DIAGNOSTIC_PH_MIN: f64 = 4.0;
+const SOURCE_WATER_DIAGNOSTIC_PH_MAX: f64 = 10.0;
+const CARBONATE_PKA2: f64 = 10.33;
+
+fn carbonate_pka1(temperature_c: f64) -> f64 {
+    let t_k = temperature_c + 273.15;
+    3404.71 / t_k + 0.032786 * t_k - 14.8435
+}
+
+fn acid_only_carbonate_ph(dic_mol_per_l: f64, ka1: f64) -> Option<f64> {
+    let discriminant = ka1 * ka1 + 4.0 * ka1 * dic_mol_per_l.max(0.0);
+    let h = (-ka1 + discriminant.sqrt()) / 2.0;
+    (h.is_finite() && h > 0.0).then(|| -h.log10())
+}
+
+fn predicted_carbonate_ph(
+    dic_mg_c_per_l: f64,
+    alkalinity_meq_per_l: f64,
+    temperature_c: f64,
+) -> Option<f64> {
+    let dic = dic_mg_c_per_l / 12_000.0;
+    let alk = alkalinity_meq_per_l / 1_000.0;
+
+    if dic <= 1e-12 {
+        return Some(7.0);
+    }
+
+    let ka1 = 10.0_f64.powf(-carbonate_pka1(temperature_c));
+    let ka2 = 10.0_f64.powf(-CARBONATE_PKA2);
+
+    if alk <= 1e-9 {
+        return acid_only_carbonate_ph(dic, ka1);
+    }
+
+    let a = alk;
+    let b = ka1 * (alk - dic);
+    let c = ka1 * ka2 * (alk - 2.0 * dic);
+    let discriminant = b * b - 4.0 * a * c;
+
+    if discriminant < 0.0 {
+        return acid_only_carbonate_ph(dic, ka1);
+    }
+
+    let sqrt_d = discriminant.sqrt();
+    let h1 = (-b + sqrt_d) / (2.0 * a);
+    let h2 = (-b - sqrt_d) / (2.0 * a);
+
+    let h = if h1 > 0.0 && h2 <= 0.0 {
+        Some(h1)
+    } else if h2 > 0.0 && h1 <= 0.0 {
+        Some(h2)
+    } else if h1 > 0.0 && h2 > 0.0 {
+        let ph1 = -h1.log10();
+        let ph2 = -h2.log10();
+        let in1 = (SOURCE_WATER_DIAGNOSTIC_PH_MIN..=SOURCE_WATER_DIAGNOSTIC_PH_MAX).contains(&ph1);
+        let in2 = (SOURCE_WATER_DIAGNOSTIC_PH_MIN..=SOURCE_WATER_DIAGNOSTIC_PH_MAX).contains(&ph2);
+        Some(match (in1, in2) {
+            (true, false) => h1,
+            (false, true) => h2,
+            _ => h1.max(h2),
+        })
+    } else {
+        None
+    }?;
+
+    let ph = -h.log10();
+    ph.is_finite().then_some(ph)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Provenance {
@@ -67,6 +137,27 @@ impl SourceWaterPreset {
             return Err(format!(
                 "field `temperature_c` must be > 0.0, got {}",
                 self.temperature_c
+            ));
+        }
+        let ph = predicted_carbonate_ph(
+            self.dic_mg_c_per_l,
+            self.alkalinity_meq_per_l,
+            self.temperature_c,
+        )
+        .ok_or_else(|| {
+            format!(
+                "could not derive carbonate pH from dic_mg_c_per_l={} and alkalinity_meq_per_l={}",
+                self.dic_mg_c_per_l, self.alkalinity_meq_per_l
+            )
+        })?;
+        if !(SOURCE_WATER_PH_MIN..=SOURCE_WATER_PH_MAX).contains(&ph) {
+            return Err(format!(
+                "carbonate-derived pH {:.3} falls outside supported aquarium range {}..={} for dic_mg_c_per_l={} and alkalinity_meq_per_l={}",
+                ph,
+                SOURCE_WATER_PH_MIN,
+                SOURCE_WATER_PH_MAX,
+                self.dic_mg_c_per_l,
+                self.alkalinity_meq_per_l
             ));
         }
         Ok(())
@@ -865,11 +956,15 @@ pub struct ScenarioPreset {
 
 #[cfg(test)]
 mod tests {
-    use super::ProcessParamsPreset;
+    use super::{predicted_carbonate_ph, ProcessParamsPreset, SourceWaterPreset};
 
     fn default_process_preset() -> ProcessParamsPreset {
         toml::from_str(include_str!("../data/process/default.toml"))
             .expect("default process preset should parse")
+    }
+
+    fn source_preset(contents: &str) -> SourceWaterPreset {
+        toml::from_str(contents).expect("source preset should parse")
     }
 
     #[test]
@@ -888,5 +983,58 @@ mod tests {
 
         let err = preset.validate().expect_err("preset should be rejected");
         assert!(err.contains("partition sum"));
+    }
+
+    #[test]
+    fn source_water_preset_rejects_out_of_range_carbonate_ph() {
+        let mut preset = source_preset(include_str!("../data/source_water/moderate.toml"));
+        preset.dic_mg_c_per_l = 10.0;
+
+        let err = preset.validate().expect_err("preset should be rejected");
+        assert!(err.contains("carbonate-derived pH"));
+    }
+
+    #[test]
+    fn shipped_source_water_presets_have_distinct_carbonate_ph() {
+        let soft = source_preset(include_str!("../data/source_water/soft_acidic.toml"));
+        let moderate = source_preset(include_str!("../data/source_water/moderate.toml"));
+        let hard = source_preset(include_str!("../data/source_water/hard_shrimp.toml"));
+        let ro = source_preset(include_str!("../data/source_water/ro_like.toml"));
+
+        for preset in [&soft, &moderate, &hard, &ro] {
+            preset.validate().expect("shipped preset should validate");
+        }
+
+        let soft_ph = predicted_carbonate_ph(
+            soft.dic_mg_c_per_l,
+            soft.alkalinity_meq_per_l,
+            soft.temperature_c,
+        )
+        .expect("soft preset pH");
+        let moderate_ph = predicted_carbonate_ph(
+            moderate.dic_mg_c_per_l,
+            moderate.alkalinity_meq_per_l,
+            moderate.temperature_c,
+        )
+        .expect("moderate preset pH");
+        let hard_ph = predicted_carbonate_ph(
+            hard.dic_mg_c_per_l,
+            hard.alkalinity_meq_per_l,
+            hard.temperature_c,
+        )
+        .expect("hard preset pH");
+        let ro_ph = predicted_carbonate_ph(
+            ro.dic_mg_c_per_l,
+            ro.alkalinity_meq_per_l,
+            ro.temperature_c,
+        )
+        .expect("ro preset pH");
+
+        assert!(soft_ph < moderate_ph, "soft acidic should stay below moderate");
+        assert!(moderate_ph < hard_ph, "moderate should stay below hard shrimp");
+        assert!((super::SOURCE_WATER_PH_MIN..=super::SOURCE_WATER_PH_MAX).contains(&soft_ph));
+        assert!((super::SOURCE_WATER_PH_MIN..=super::SOURCE_WATER_PH_MAX).contains(&moderate_ph));
+        assert!((super::SOURCE_WATER_PH_MIN..=super::SOURCE_WATER_PH_MAX).contains(&hard_ph));
+        assert_eq!(ro_ph, 7.0);
     }
 }

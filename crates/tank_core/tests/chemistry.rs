@@ -82,9 +82,9 @@ fn ph_formula_uses_state_storage_bounds() {
     // High alkalinity + low DIC → high pH
     let high = solve_carbonate_equilibrium(0.01, 12.0, 25.0, 20.0).ph;
 
-    // The carbonate solver clamps output to 4.0–10.0.
-    assert!((4.0..=10.0).contains(&low), "low pH {low} out of bounds");
-    assert!((4.0..=10.0).contains(&high), "high pH {high} out of bounds");
+    // The carbonate solver clamps output to the gameplay storage bounds.
+    assert!((5.5..=8.5).contains(&low), "low pH {low} out of bounds");
+    assert!((5.5..=8.5).contains(&high), "high pH {high} out of bounds");
     assert!(
         low < high,
         "low pH ({low}) should be less than high pH ({high})"
@@ -257,10 +257,19 @@ fn solver_edge_case_zero_dic() {
 #[test]
 fn solver_edge_case_zero_alkalinity() {
     let eq = solve_carbonate_equilibrium(400.0, 0.0, 25.0, 20.0);
-    assert_eq!(eq.ph, 7.0);
+    assert_eq!(eq.ph, 5.5);
     let dic_mmol = 20.0 / 12.0;
     assert!((eq.co2_aq_mmol_per_l - dic_mmol).abs() < 0.001);
     assert_eq!(eq.hco3_mmol_per_l, 0.0);
+}
+
+#[test]
+fn solver_edge_case_extreme_high_buffer_clamps_to_storage_ceiling() {
+    let eq = solve_carbonate_equilibrium(1e-6, 0.0001, 25.0, 20.0);
+    assert_eq!(eq.ph, 8.5);
+    let species_sum = eq.co2_aq_mmol_per_l + eq.hco3_mmol_per_l + eq.co3_mmol_per_l;
+    let dic_mmol = (1e-6 / 20.0) / 12.0;
+    assert!((species_sum - dic_mmol).abs() < 1e-6);
 }
 
 #[test]
@@ -292,8 +301,8 @@ fn solver_species_conservation_sweep() -> Result<(), tank_core::SimError> {
                 );
 
                 assert!(
-                    eq.ph.is_finite() && eq.ph >= 4.0 && eq.ph <= 10.0,
-                    "pH out of guard band: DIC={dic_mg_l}, Alk={alk_meq_l}, T={temp}: pH={:.3}",
+                    eq.ph.is_finite() && eq.ph >= 5.5 && eq.ph <= 8.5,
+                    "pH out of storage bounds: DIC={dic_mg_l}, Alk={alk_meq_l}, T={temp}: pH={:.3}",
                     eq.ph
                 );
             }
@@ -347,6 +356,30 @@ fn resolve_updates_ph_and_bicarbonate() {
     assert!(
         water.bicarbonate_mg_total > 0.0,
         "resolve should set positive bicarbonate"
+    );
+}
+
+#[test]
+fn volume_rescale_rederives_cached_bicarbonate() {
+    let old_volume_l = 20.0;
+    let new_volume_l = 10.0;
+    let mut water = WaterState::default_for_volume_l(old_volume_l);
+    water.dissolved_inorganic_carbon_mg_c_total = 18.0 * old_volume_l;
+    water.alkalinity_meq_total = 1.8 * old_volume_l;
+    water.temperature_c = 25.0;
+    water.bicarbonate_mg_total = 1.0;
+
+    water.rescale_totals_for_volume(old_volume_l, new_volume_l);
+
+    let expected = solve_carbonate_equilibrium(
+        water.dissolved_inorganic_carbon_mg_c_total,
+        water.alkalinity_meq_total,
+        water.temperature_c,
+        new_volume_l,
+    );
+    assert!((water.ph - expected.ph).abs() < 1e-12);
+    assert!(
+        (water.bicarbonate_mg_total - expected.hco3_mmol_per_l * 61.0 * new_volume_l).abs() < 1e-9
     );
 }
 
