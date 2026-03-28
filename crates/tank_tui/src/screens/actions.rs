@@ -517,6 +517,12 @@ fn parse_u32(field: &'static str, raw: &str) -> Result<u32, String> {
 mod tests {
     use super::*;
 
+    fn select_action(form: &mut ActionFormState, target: ActionKind) {
+        while form.selected_action() != target {
+            form.select_next_action();
+        }
+    }
+
     #[test]
     fn builds_water_change_action_with_profile_selection() {
         let mut form = ActionFormState::default();
@@ -537,9 +543,7 @@ mod tests {
     #[test]
     fn rejects_invalid_integer_counts() {
         let mut form = ActionFormState::default();
-        for _ in 0..5 {
-            form.select_next_action();
-        }
+        select_action(&mut form, ActionKind::AddShrimp);
         form.add_shrimp_count = "1.5".to_string();
 
         let error = form.submit().expect_err("count should require integers");

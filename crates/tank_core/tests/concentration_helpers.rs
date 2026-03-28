@@ -39,7 +39,11 @@ fn assert_close(actual: f64, expected: f64) {
 }
 
 fn expected_gh_d(calcium_mg_per_l: f64, magnesium_mg_per_l: f64) -> f64 {
-    ((2.497 * calcium_mg_per_l) + (4.118 * magnesium_mg_per_l)) / 17.848
+    // Use the same molar-mass-based conversion as the library code
+    // (CaCO3 = 100.0869 g/mol, Ca = 40.078 g/mol, Mg = 24.305 g/mol).
+    let ca_as_caco3 = calcium_mg_per_l * (100.0869 / 40.078);
+    let mg_as_caco3 = magnesium_mg_per_l * (100.0869 / 24.305);
+    (ca_as_caco3 + mg_as_caco3) / 17.848
 }
 
 fn expected_kh_d(alkalinity_meq_per_l: f64) -> f64 {

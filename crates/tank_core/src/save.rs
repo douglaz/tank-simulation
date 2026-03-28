@@ -93,7 +93,9 @@ const MIGRATIONS: &[MigrationFn] = &[
     // condition_index, reserve_g, maturation_accum) into nested StageCohort
     // structs (juvenile, sub_adult, adult) with proportional reserve
     // distribution. Adds new molt lifecycle fields with sensible defaults.
-    // Also renames the TrimPlants queued action to TrimPlantsAndRemove.
+    // Also renames the TrimPlants queued action to
+    // TrimPlantsAndLeaveCuttings so legacy queued trims preserve their
+    // original in-tank cuttings behavior.
     migrate_v4_to_v5,
     // Index 3: schema 5 → 6
     // Add habitat registry, geometry.hardscape_area_cm2, and filter.media_area_cm2.
@@ -400,8 +402,9 @@ fn migrate_v3_to_v4(value: &mut Value) -> Result<(), SimError> {
 ///    New molt lifecycle fields (`molt_readiness`, `inter_molt_timer_days`,
 ///    `last_molt_success`, `failed_molt_accum`) get sensible defaults.
 ///
-/// 2. **Action rename**: `TrimPlants` → `TrimPlantsAndRemove` in the
-///    `queued_actions` array.
+/// 2. **Action rename**: `TrimPlants` → `TrimPlantsAndLeaveCuttings` in the
+///    `queued_actions` array so legacy queued trims keep their original
+///    closed-system semantics.
 fn migrate_v4_to_v5(value: &mut Value) -> Result<(), SimError> {
     // --- Stage-structured shrimp model migration ---
     //
@@ -552,7 +555,7 @@ fn migrate_v4_to_v5(value: &mut Value) -> Result<(), SimError> {
         }
     }
 
-    // --- Migrate queued actions: rename TrimPlants → TrimPlantsAndRemove ---
+    // --- Migrate queued actions: legacy TrimPlants left cuttings in-tank ---
 
     if let Some(actions) = value
         .get_mut("queued_actions")
@@ -561,7 +564,7 @@ fn migrate_v4_to_v5(value: &mut Value) -> Result<(), SimError> {
         for action in actions.iter_mut() {
             if let Some(obj) = action.as_object_mut() {
                 if let Some(inner) = obj.remove("TrimPlants") {
-                    obj.insert("TrimPlantsAndRemove".to_string(), inner);
+                    obj.insert("TrimPlantsAndLeaveCuttings".to_string(), inner);
                 }
             }
         }

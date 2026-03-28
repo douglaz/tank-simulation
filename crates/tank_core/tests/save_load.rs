@@ -414,7 +414,7 @@ fn legacy_schema_v3_saves_seed_reserve_from_existing_shrimp_biomass() -> Result<
 }
 
 #[test]
-fn legacy_schema_v4_saves_migrate_trim_plants_to_trim_and_remove() -> Result<(), SimError> {
+fn legacy_schema_v4_saves_preserve_trim_plants_as_leave_cuttings() -> Result<(), SimError> {
     let mut legacy_state = TankState::new(SimSeed(110));
     legacy_state.animal.berried_females_count = 1;
     legacy_state.animal.molt_stress_index = 0.25;
@@ -474,9 +474,9 @@ fn legacy_schema_v4_saves_migrate_trim_plants_to_trim_and_remove() -> Result<(),
     assert_eq!(
         migrated.queued_actions,
         vec![
-            PlayerAction::TrimPlantsAndRemove { fraction: 0.3 },
+            PlayerAction::TrimPlantsAndLeaveCuttings { fraction: 0.3 },
             PlayerAction::Feed { grams: 1.0 },
-            PlayerAction::TrimPlantsAndRemove { fraction: 0.5 },
+            PlayerAction::TrimPlantsAndLeaveCuttings { fraction: 0.5 },
         ]
     );
 
@@ -485,12 +485,12 @@ fn legacy_schema_v4_saves_migrate_trim_plants_to_trim_and_remove() -> Result<(),
     assert_eq!(actions.len(), 3);
     assert_eq!(
         actions[0],
-        PlayerAction::TrimPlantsAndRemove { fraction: 0.3 }
+        PlayerAction::TrimPlantsAndLeaveCuttings { fraction: 0.3 }
     );
     assert_eq!(actions[1], PlayerAction::Feed { grams: 1.0 });
     assert_eq!(
         actions[2],
-        PlayerAction::TrimPlantsAndRemove { fraction: 0.5 }
+        PlayerAction::TrimPlantsAndLeaveCuttings { fraction: 0.5 }
     );
 
     Ok(())
