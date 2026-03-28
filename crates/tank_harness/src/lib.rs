@@ -174,7 +174,7 @@ impl Envelope {
             }
         }
         if let Some((min, max)) = self.shrimp_count_bounds {
-            let total = snap.adult_shrimp_count + snap.juveniles_count;
+            let total = snap.total_shrimp_count;
             if total < min || total > max {
                 violations.push(format!("shrimp count {} outside [{}, {}]", total, min, max));
             }
@@ -251,6 +251,25 @@ impl From<tank_core::SimError> for HarnessError {
 impl From<tank_data::PresetError> for HarnessError {
     fn from(e: tank_data::PresetError) -> Self {
         HarnessError::Setup(e.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Envelope;
+    use tank_core::{SimSeed, TankSnapshot, TankState};
+
+    #[test]
+    fn shrimp_envelope_uses_total_population_count() {
+        let mut state = TankState::new(SimSeed(8_001));
+        state.animal.adult.count = 2;
+        state.animal.sub_adult.count = 3;
+        state.animal.juvenile.count = 1;
+        let snapshot = TankSnapshot::from_state(&state);
+
+        let violations = Envelope::default().shrimp_count(6, 6).check(&snapshot);
+
+        assert!(violations.is_empty(), "unexpected violations: {violations:?}");
     }
 }
 

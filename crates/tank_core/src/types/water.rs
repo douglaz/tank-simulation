@@ -2,8 +2,26 @@ use serde::{Deserialize, Serialize};
 
 use super::{SourceWaterProfile, SubstrateLayerState, TankGeometry};
 
+/// Equivalent weight of CaCO3 on the conventional alkalinity/hardness scale, in mg/meq.
 const MG_CACO3_PER_MEQ: f64 = 50.0;
+/// One German degree of hardness, expressed as mg/L CaCO3.
 const MG_CACO3_PER_DEGREE: f64 = 17.848;
+/// Molar mass of CaCO3, used to express Ca2+/Mg2+ hardness on a CaCO3 basis.
+const MOLAR_MASS_CACO3_G_PER_MOL: f64 = 100.0869;
+/// Atomic mass of calcium for Ca2+ -> CaCO3 hardness conversion.
+const MOLAR_MASS_CALCIUM_G_PER_MOL: f64 = 40.078;
+/// Atomic mass of magnesium for Mg2+ -> CaCO3 hardness conversion.
+const MOLAR_MASS_MAGNESIUM_G_PER_MOL: f64 = 24.305;
+/// Converts mg/L Ca2+ to mg/L as CaCO3 for GH reporting.
+const CALCIUM_AS_CACO3_FACTOR: f64 = MOLAR_MASS_CACO3_G_PER_MOL / MOLAR_MASS_CALCIUM_G_PER_MOL;
+/// Converts mg/L Mg2+ to mg/L as CaCO3 for GH reporting.
+const MAGNESIUM_AS_CACO3_FACTOR: f64 =
+    MOLAR_MASS_CACO3_G_PER_MOL / MOLAR_MASS_MAGNESIUM_G_PER_MOL;
+/// Empirical freshwater TDS-to-conductivity divisor for the current 7-ion proxy.
+///
+/// This is an approximate ppm-to-uS/cm conversion used for display only; it is
+/// not a physical conductivity solver and should be interpreted as an estimate.
+const ESTIMATED_TDS_TO_CONDUCTIVITY_DIVISOR: f64 = 0.65;
 
 fn default_ph() -> f64 {
     7.0
@@ -159,7 +177,10 @@ impl WaterState {
         let calcium_mg_per_l = self.calcium_mg_per_l(volume_l);
         let magnesium_mg_per_l = self.magnesium_mg_per_l(volume_l);
 
-        (((2.497 * calcium_mg_per_l) + (4.118 * magnesium_mg_per_l)) / MG_CACO3_PER_DEGREE).max(0.0)
+        (((CALCIUM_AS_CACO3_FACTOR * calcium_mg_per_l)
+            + (MAGNESIUM_AS_CACO3_FACTOR * magnesium_mg_per_l))
+            / MG_CACO3_PER_DEGREE)
+            .max(0.0)
     }
 
     pub fn kh_d(&self, volume_l: f64) -> f64 {
@@ -171,7 +192,7 @@ impl WaterState {
     }
 
     pub fn conductivity_us_cm(&self, volume_l: f64) -> f64 {
-        (self.tds_mg_per_l(volume_l) / 0.65).max(0.0)
+        (self.tds_mg_per_l(volume_l) / ESTIMATED_TDS_TO_CONDUCTIVITY_DIVISOR).max(0.0)
     }
 
     pub fn concentration_view(&self, volume_l: f64) -> ConcentrationView<'_> {

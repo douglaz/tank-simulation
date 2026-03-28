@@ -3,6 +3,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Sparkline},
 };
 
+use super::ESTIMATED_TDS_SCOPE_LINES;
 use crate::TuiApp;
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
@@ -43,23 +44,27 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
     );
     frame.render_widget(dissolved, top[0]);
 
-    let derived = Paragraph::new(vec![
+    let mut derived_lines = vec![
         Line::from(format!(
             "DO {:.3}/{:.3} mg/L",
             snapshot.do_mg_l, snapshot.do_sat_mg_l
         )),
-        Line::from(format!("GH (Ca+Mg) {:.1} d", snapshot.gh_d)),
-        Line::from(format!("KH (alkalinity) {:.1} d", snapshot.kh_d)),
+        Line::from(format!(
+            "GH (Ca+Mg) {:.1} d  KH (alk) {:.1} d",
+            snapshot.gh_d, snapshot.kh_d
+        )),
         Line::from(format!(
             "Est. TDS (7-ion) {:.0} mg/L",
             snapshot.estimated_tds_7_ion_mg_per_l
         )),
         Line::from(format!(
-            "Est. conductivity {:.0} uS/cm",
+            "Est. conductivity (7-ion) {:.0} uS/cm",
             snapshot.estimated_conductivity_us_cm
         )),
         Line::from(format!("Temp {:.2} C", snapshot.water_temp_c)),
-    ])
+    ];
+    derived_lines.extend(ESTIMATED_TDS_SCOPE_LINES.into_iter().map(Line::from));
+    let derived = Paragraph::new(derived_lines)
     .block(
         Block::default()
             .title("Derived display values")

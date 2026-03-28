@@ -3,12 +3,13 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
 
+use super::ESTIMATED_TDS_SCOPE_LINES;
 use crate::TuiApp;
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
     let snapshot = &app.snapshot;
     let layout = Layout::vertical([
-        Constraint::Length(9),
+        Constraint::Length(10),
         Constraint::Length(6),
         Constraint::Min(6),
     ])
@@ -40,7 +41,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
     .block(Block::default().title("Water column").borders(Borders::ALL));
     frame.render_widget(chemistry, top[0]);
 
-    let systems = Paragraph::new(vec![
+    let mut systems_lines = vec![
         Line::from(format!(
             "Volume {:.1} L  DIC {:.2} mg C/L",
             snapshot.water_volume_l, snapshot.dissolved_inorganic_carbon_mg_c_per_l
@@ -50,12 +51,8 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
             snapshot.gh_d, snapshot.kh_d
         )),
         Line::from(format!(
-            "Est. TDS (7-ion) {:.0} mg/L",
-            snapshot.estimated_tds_7_ion_mg_per_l
-        )),
-        Line::from(format!(
-            "Est. cond {:.0} uS/cm",
-            snapshot.estimated_conductivity_us_cm
+            "7-ion TDS {:.0} mg/L  Cond {:.0} uS/cm",
+            snapshot.estimated_tds_7_ion_mg_per_l, snapshot.estimated_conductivity_us_cm
         )),
         Line::from(format!(
             "Light {} @ {:.2} for {:.1}h",
@@ -70,7 +67,12 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
             on_off(snapshot.aeration_enabled),
             snapshot.aeration_intensity
         )),
-    ])
+    ];
+    systems_lines.splice(
+        3..3,
+        ESTIMATED_TDS_SCOPE_LINES.into_iter().map(Line::from),
+    );
+    let systems = Paragraph::new(systems_lines)
     .block(Block::default().title("Hardware").borders(Borders::ALL));
     frame.render_widget(systems, top[1]);
 
@@ -93,8 +95,12 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
 
     let shrimp_summary = Paragraph::new(vec![
         Line::from(format!(
-            "Adults {}  Juveniles {}  Berried {}",
-            snapshot.adult_shrimp_count, snapshot.juveniles_count, snapshot.berried_females_count
+            "Total {}  Adults {}  Sub-adults {}",
+            snapshot.total_shrimp_count, snapshot.adult_shrimp_count, snapshot.sub_adult_count
+        )),
+        Line::from(format!(
+            "Juveniles {}  Berried {}",
+            snapshot.juveniles_count, snapshot.berried_females_count
         )),
         Line::from(format!(
             "Condition {:.2}  Molt stress {:.2}",

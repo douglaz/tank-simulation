@@ -9,6 +9,7 @@ use crate::types::{
 const MG_N_PER_MEQ_AMMONIA: f64 = 14.007;
 const ROUTING_MASS_ASSERT_TOLERANCE_G: f64 = 1e-12;
 const DEATH_DETRITUS_FRACTION_TOLERANCE: f64 = 1e-9;
+const DETERMINISTIC_CARRY_MAX: f64 = 1.0 - 1e-12;
 
 // ── Hourly ──────────────────────────────────────────────────────────────────
 
@@ -363,24 +364,29 @@ fn molt_cycle(state: &mut TankState) {
     let gh_d = state.concentrations().gh_d();
     let params = &state.shrimp_params;
     let base_interval = params.base_molt_interval_days.max(1.0);
+    let temp_factor = temp_condition_factor(state.water.temperature_c, params).max(0.25);
+    let effective_interval = (base_interval / temp_factor).max(1.0);
 
-    let timer_factor = (state.animal.inter_molt_timer_days / base_interval).clamp(0.0, 1.0);
+    let timer_factor = (state.animal.inter_molt_timer_days / effective_interval).clamp(0.0, 1.0);
     let mineral_factor = gh_mineral_factor(gh_d, params);
     let condition_factor = state.animal.population_condition_index();
+    let instability_factor = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
+    let thermal_factor = temp_condition_factor(state.water.temperature_c, params);
 
-    let molt_readiness = timer_factor * mineral_factor * condition_factor;
-    state.animal.molt_readiness = molt_readiness;
+    state.animal.molt_readiness = timer_factor;
 
-    if molt_readiness >= 0.8 {
-        // Molt event triggered
-        if mineral_factor >= 0.5 && condition_factor >= 0.3 {
-            // Success
-            state.animal.inter_molt_timer_days = 0.0;
+    if timer_factor >= 1.0 {
+        let success_score = (0.45 * mineral_factor
+            + 0.35 * condition_factor
+            + 0.10 * instability_factor
+            + 0.10 * thermal_factor)
+            .clamp(0.0, 1.0);
+        state.animal.inter_molt_timer_days = 0.0;
+
+        if success_score >= 0.55 {
             state.animal.last_molt_success = true;
-            state.animal.failed_molt_accum = (state.animal.failed_molt_accum - 0.5).max(0.0);
+            state.animal.failed_molt_accum = (state.animal.failed_molt_accum - 0.35).max(0.0);
         } else {
-            // Failure
-            state.animal.inter_molt_timer_days = 0.0;
             state.animal.last_molt_success = false;
             state.animal.failed_molt_accum = (state.animal.failed_molt_accum + 0.3).min(1.0);
         }
@@ -428,23 +434,14 @@ fn spawning(state: &mut TankState) {
         return;
     }
 
-    let temp = state.water.temperature_c;
     let params = &state.shrimp_params;
-    let f_temp = temp_repro_factor(temp, params);
-    let f_condition = state.animal.adult.condition_index;
-    let f_stability = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
-
     let gh_d = state.concentrations().gh_d();
     let f_mineral = gh_mineral_factor(gh_d, params);
-
-    let p_spawn = params.base_spawn_rate * f_temp * f_condition * f_stability * f_mineral;
-
-    let mut new_berried = 0u32;
-    for _ in 0..eligible {
-        if state.rng.next_f64() < p_spawn {
-            new_berried += 1;
-        }
-    }
+    let spawn_rate =
+        (params.base_spawn_rate * state.animal.reproductive_readiness_index * f_mineral)
+            .clamp(0.0, 1.0);
+    let new_berried =
+        deterministic_transfer_count(eligible, spawn_rate, &mut state.animal.spawn_progress_accum);
 
     if new_berried > 0 {
         state.animal.berried_females_count += new_berried;
@@ -491,8 +488,9 @@ fn egg_development(state: &mut TankState) {
     let gh_d = chemistry.gh_d();
     let f_mineral = gh_mineral_factor(gh_d, params);
 
-    let p_hatch =
-        params.hatch_success_base * f_condition * f_oxygen * f_temp * f_stability * f_mineral;
+    let hatch_rate = (params.hatch_success_base * f_condition * f_oxygen * f_temp * f_stability
+        * f_mineral)
+        .clamp(0.0, 1.0);
 
     // Condition-dependent clutch size
     let adult_condition = state.animal.adult.condition_index;
@@ -513,17 +511,22 @@ fn egg_development(state: &mut TankState) {
             let cohort = state.animal.egg_cohorts.remove(i);
             resolved_berried += cohort.count;
 
-            for _ in 0..cohort.count {
-                if state.rng.next_f64() < p_hatch {
-                    if fund_hatched_clutch_biomass(state, effective_clutch_size) {
-                        total_successful += 1;
-                    } else {
-                        total_resource_limited += 1;
-                    }
-                } else {
-                    total_failed += 1;
-                }
-            }
+            let successful_clutches = if effective_clutch_size == 0 {
+                0
+            } else {
+                deterministic_transfer_count(
+                    cohort.count,
+                    hatch_rate,
+                    &mut state.animal.hatch_success_carry,
+                )
+            };
+            let failed_clutches = cohort.count.saturating_sub(successful_clutches);
+            let funded_successful =
+                fund_hatched_clutches(state, successful_clutches, effective_clutch_size);
+
+            total_successful += funded_successful;
+            total_failed += failed_clutches;
+            total_resource_limited += successful_clutches.saturating_sub(funded_successful);
             // Don't increment i; the next cohort shifted into position
         } else {
             i += 1;
@@ -821,12 +824,35 @@ fn route_dead_shrimp_to_detritus(
     }
 }
 
-/// Fund the biomass for a hatched clutch from the adult reserve.
-fn fund_hatched_clutch_biomass(state: &mut TankState, effective_clutch_size: u32) -> bool {
-    fund_live_shrimp_biomass(
-        &mut state.animal.adult.reserve_g,
-        f64::from(effective_clutch_size) * JUVENILE_SHRIMP_BIOMASS_G,
-    )
+fn deterministic_transfer_count(available: u32, rate: f64, carry: &mut f64) -> u32 {
+    let transfer_budget = f64::from(available) * rate.clamp(0.0, 1.0) + *carry;
+    let transferred = transfer_budget.floor().clamp(0.0, f64::from(available)) as u32;
+    *carry = (transfer_budget - f64::from(transferred)).clamp(0.0, DETERMINISTIC_CARRY_MAX);
+    transferred
+}
+
+/// Fund multiple hatched clutches from the adult reserve in one deterministic transfer.
+fn fund_hatched_clutches(
+    state: &mut TankState,
+    requested_clutches: u32,
+    effective_clutch_size: u32,
+) -> u32 {
+    if requested_clutches == 0 || effective_clutch_size == 0 {
+        return 0;
+    }
+
+    let reserve_per_clutch =
+        f64::from(effective_clutch_size) * JUVENILE_SHRIMP_BIOMASS_G * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+    if reserve_per_clutch <= f64::EPSILON {
+        return requested_clutches;
+    }
+
+    let affordable = ((state.animal.adult.reserve_g + f64::EPSILON) / reserve_per_clutch).floor()
+        as u32;
+    let funded = requested_clutches.min(affordable);
+    state.animal.adult.reserve_g =
+        (state.animal.adult.reserve_g - f64::from(funded) * reserve_per_clutch).max(0.0);
+    funded
 }
 
 /// Attempts to fund growth biomass from a given reserve pool.

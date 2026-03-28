@@ -7,7 +7,7 @@ use crate::state::AppState;
 
 const TRACKED_TDS_IONS: [&str; 7] = ["Ca", "Mg", "Na", "K", "HCO3", "Cl", "SO4"];
 const OMITTED_TDS_CONTRIBUTORS: [&str; 3] = [
-    "untracked nitrogen and phosphorus ions",
+    "tracked TAN/NH3, nitrite, nitrate, and phosphate species are excluded from this estimate",
     "trace ions and micronutrients",
     "dissolved organics and other untracked solutes",
 ];
@@ -90,6 +90,10 @@ fn insert_legacy_chemistry_fields(object: &mut Map<String, Value>, snapshot: &Ta
         ("nitrite_mg_l", snapshot.nitrite_mg_n_per_l),
         ("nitrate_mg_l", snapshot.nitrate_mg_n_per_l),
         ("phosphate_mg_l", snapshot.phosphate_mg_p_per_l),
+        (
+            "dissolved_inorganic_carbon_mg_l",
+            snapshot.dissolved_inorganic_carbon_mg_c_per_l,
+        ),
         ("tds_mg_l", snapshot.estimated_tds_7_ion_mg_per_l),
         ("conductivity_us_cm", snapshot.estimated_conductivity_us_cm),
     ] {
@@ -105,6 +109,8 @@ fn chemistry_field_semantics_json() -> Value {
         "nitrate_mg_n_per_l": "Nitrate on a nitrogen basis, mg N/L.",
         "phosphate_mg_p_per_l": "Orthophosphate on a phosphorus basis, mg P/L.",
         "dissolved_inorganic_carbon_mg_c_per_l": "Dissolved inorganic carbon on a carbon basis, mg C/L.",
+        "do_mg_l": "Dissolved oxygen concentration, mg O2/L.",
+        "do_sat_mg_l": "Oxygen saturation concentration at the current temperature, mg O2/L.",
         "gh_d": "General hardness derived from tracked calcium plus magnesium, in German degrees.",
         "kh_d": "Carbonate hardness proxy derived from tracked alkalinity, in German degrees.",
         "estimated_tds_7_ion_mg_per_l": "Estimated TDS from 7 tracked major ions only, in mg/L.",
@@ -126,6 +132,7 @@ fn legacy_chemistry_aliases_json() -> Value {
         "nitrite_mg_l": "nitrite_mg_n_per_l",
         "nitrate_mg_l": "nitrate_mg_n_per_l",
         "phosphate_mg_l": "phosphate_mg_p_per_l",
+        "dissolved_inorganic_carbon_mg_l": "dissolved_inorganic_carbon_mg_c_per_l",
         "tds_mg_l": "estimated_tds_7_ion_mg_per_l",
         "conductivity_us_cm": "estimated_conductivity_us_cm"
     })
@@ -286,6 +293,14 @@ mod tests {
             json!(snapshot.estimated_tds_7_ion_mg_per_l)
         );
         assert_eq!(
+            value["dissolved_inorganic_carbon_mg_l"],
+            json!(snapshot.dissolved_inorganic_carbon_mg_c_per_l)
+        );
+        assert_eq!(
+            value["legacy_chemistry_aliases"]["dissolved_inorganic_carbon_mg_l"],
+            json!("dissolved_inorganic_carbon_mg_c_per_l")
+        );
+        assert_eq!(
             value["legacy_chemistry_aliases"]["conductivity_us_cm"],
             json!("estimated_conductivity_us_cm")
         );
@@ -296,6 +311,14 @@ mod tests {
         let snapshot = tank_core::TankSnapshot::from_state(&TankState::new(SimSeed(7002)));
         let value = chemistry_response_json(&snapshot);
 
+        assert_eq!(
+            value["chemistry_field_semantics"]["do_mg_l"],
+            json!("Dissolved oxygen concentration, mg O2/L.")
+        );
+        assert_eq!(
+            value["chemistry_field_semantics"]["do_sat_mg_l"],
+            json!("Oxygen saturation concentration at the current temperature, mg O2/L.")
+        );
         assert_eq!(
             value["chemistry_field_semantics"]["gh_d"],
             json!(
@@ -314,6 +337,12 @@ mod tests {
                 .into_iter()
                 .map(|ion| json!(ion))
                 .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            value["estimated_tds_scope"]["omitted_contributors"][0],
+            json!(
+                "tracked TAN/NH3, nitrite, nitrate, and phosphate species are excluded from this estimate"
+            )
         );
         assert_eq!(
             value["phosphate_mg_l"],
