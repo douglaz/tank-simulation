@@ -2,11 +2,38 @@ use serde::{Deserialize, Serialize};
 
 use super::TankState;
 
+/// Average wet mass of one adult shrimp (grams).
 pub const ADULT_SHRIMP_BIOMASS_G: f64 = 0.12;
+/// Average wet mass of one juvenile shrimp (grams).
 pub const JUVENILE_SHRIMP_BIOMASS_G: f64 = 0.05;
+
+/// Plant nitrogen content: mg N per gram wet biomass.
 pub const PLANT_N_MG_PER_G_BIOMASS: f64 = 28.0;
+/// Algae nitrogen content: mg N per gram wet biomass.
 pub const ALGAE_N_MG_PER_G_BIOMASS: f64 = 35.0;
+
+/// Fraction of animal/microbe wet mass that is metabolizable organic matter.
+/// Used for shrimp and microbial biomass N/C accounting.
+///
+/// Shrimp body composition (derived at default `feed_n_to_c_ratio` = 0.16):
+///   - N content: ~2.8% of wet mass (literature: 2–3% N by wet mass)
+///   - C content: ~17.2% of wet mass (model simplification where organic = N + C)
+///
+/// The effective N and C fractions are:
+///   N fraction = ORGANIC_FRACTION × n_to_c_ratio / (1 + n_to_c_ratio)
+///   C fraction = ORGANIC_FRACTION / (1 + n_to_c_ratio)
 pub const LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G: f64 = 0.20;
+
+/// Shrimp body N content: mg N per gram wet mass at default N:C ratio.
+/// = LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G × 1000 × 0.16 / 1.16 ≈ 27.6 mg/g.
+/// Literature: freshwater shrimp ≈ 20–30 mg N per gram wet mass.
+pub const SHRIMP_N_MG_PER_G_WET_MASS: f64 =
+    LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G * 1000.0 * 0.16 / 1.16;
+
+/// Shrimp body C content: mg C per gram wet mass at default N:C ratio.
+/// = LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G × 1000 / 1.16 ≈ 172.4 mg/g.
+pub const SHRIMP_C_MG_PER_G_WET_MASS: f64 = LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G * 1000.0 / 1.16;
+
 const DEFAULT_N_TO_C_RATIO: f64 = 0.16;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]

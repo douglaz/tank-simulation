@@ -208,6 +208,14 @@ pub struct ProcessParams {
     #[serde(default = "default_shrimp_o2_per_mg_c_respired")]
     pub shrimp_o2_per_mg_c_respired: f64,
 
+    // -- Death routing --
+    /// Fraction of dead organism biomass that enters fine_detritus_g_total.
+    /// Default 1.0 means all dead biomass decays in-tank. Values < 1.0
+    /// represent biomass removed/exported (e.g., a future "remove dead
+    /// organisms" player action). See docs/ROUTING.md §Death routing.
+    #[serde(default = "default_death_biomass_to_detritus_fraction")]
+    pub death_biomass_to_detritus_fraction: f64,
+
     // -- Microfauna turnover --
     pub microfauna_mineralization_boost: f64,
     pub microfauna_periphyton_consumption: f64,
@@ -298,6 +306,8 @@ impl Default for ProcessParams {
             shrimp_growth_fraction_of_assimilated: default_shrimp_growth_fraction(),
             shrimp_o2_per_mg_c_respired: default_shrimp_o2_per_mg_c_respired(),
 
+            death_biomass_to_detritus_fraction: default_death_biomass_to_detritus_fraction(),
+
             microfauna_mineralization_boost: 0.15,
             microfauna_periphyton_consumption: 0.02,
             microfauna_population_smoothing: 0.1,
@@ -325,4 +335,9 @@ fn default_shrimp_growth_fraction() -> f64 {
 /// Stoichiometric O2:C for organic matter oxidation (32/12 ≈ 2.67).
 fn default_shrimp_o2_per_mg_c_respired() -> f64 {
     2.67
+}
+
+/// All dead biomass stays in-tank as fine detritus by default.
+fn default_death_biomass_to_detritus_fraction() -> f64 {
+    1.0
 }

@@ -3,9 +3,13 @@ use std::collections::BTreeSet;
 use serde_json::Value;
 use tank_core::{
     carbon_budget_components, nitrogen_budget_components,
-    systems::{algae_growth::step_daily_algae, plant_growth::step_daily_plants},
-    Engine, PlantGuildState, PlayerAction, SimError, SimSeed, SimulationEngine, SourceWaterProfile,
-    SubstrateKind, SubstrateLayerState, TankState,
+    systems::{
+        algae_growth::step_daily_algae, plant_growth::step_daily_plants,
+        shrimp::step_daily_shrimp,
+    },
+    Engine, PlantGuildState, PlayerAction, ProcessParams, SimError, SimSeed, SimulationEngine,
+    SourceWaterProfile, SubstrateKind, SubstrateLayerState, TankState, WaterState,
+    ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G,
 };
 
 fn assert_close(actual: f64, expected: f64, tolerance: f64) {

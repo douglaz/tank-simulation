@@ -430,6 +430,8 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
         shrimp_growth_fraction_of_assimilated: preset.shrimp_growth_fraction_of_assimilated,
         shrimp_o2_per_mg_c_respired: preset.shrimp_o2_per_mg_c_respired,
 
+        death_biomass_to_detritus_fraction: 1.0,
+
         microfauna_mineralization_boost: preset.microfauna_mineralization_boost,
         microfauna_periphyton_consumption: preset.microfauna_periphyton_consumption,
         microfauna_population_smoothing: preset.microfauna_population_smoothing,

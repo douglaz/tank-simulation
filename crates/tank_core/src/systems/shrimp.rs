@@ -620,18 +620,26 @@ fn route_dead_shrimp_to_detritus(state: &mut TankState, adult_deaths: u32, juv_d
 
     let total_shrimp = state.animal.adults_count + state.animal.juveniles_count;
     let total_dead = adult_deaths + juv_deaths;
+    let detritus_fraction = state
+        .process_params
+        .death_biomass_to_detritus_fraction
+        .clamp(0.0, 1.0);
 
+    // Route dead body mass: fraction stays in-tank as detritus, remainder is
+    // implicitly exported (future "remove dead organisms" action).
     let dead_biomass_g = (f64::from(adult_deaths) * ADULT_SHRIMP_BIOMASS_G)
         + (f64::from(juv_deaths) * JUVENILE_SHRIMP_BIOMASS_G);
-    state.detritus.fine_detritus_g_total +=
-        live_biomass_detrital_mass_g(dead_biomass_g, state.process_params.feed_n_to_c_ratio);
+    state.detritus.fine_detritus_g_total += live_biomass_detrital_mass_g(
+        dead_biomass_g * detritus_fraction,
+        state.process_params.feed_n_to_c_ratio,
+    );
 
     // Proportionally transfer dead shrimp's share of the reserve pool to detritus.
     if total_shrimp > 0 && state.animal.reserve_g > f64::EPSILON {
         let dead_fraction = f64::from(total_dead) / f64::from(total_shrimp);
         let reserve_transfer_g = state.animal.reserve_g * dead_fraction;
         state.animal.reserve_g -= reserve_transfer_g;
-        state.detritus.fine_detritus_g_total += reserve_transfer_g;
+        state.detritus.fine_detritus_g_total += reserve_transfer_g * detritus_fraction;
     }
 }
 

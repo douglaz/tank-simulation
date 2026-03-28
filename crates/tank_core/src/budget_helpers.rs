@@ -31,8 +31,8 @@
 use crate::{
     engine::Engine,
     types::{
-        BudgetDelta, BudgetEntry, BudgetLedger, BudgetTotals, ElementBudget, SimError,
-        TankSnapshot, TankState, TickBudgetRecord,
+        BudgetDelta, BudgetLedger, BudgetTotals, ElementBudget, SimError, TankSnapshot,
+        TickBudgetRecord,
     },
     SimulationEngine,
 };
@@ -133,18 +133,15 @@ impl BudgetInspector {
         element: Element,
     ) -> Option<SystemElementDelta> {
         self.ledger.ticks.get(tick_index).and_then(|tick| {
-            tick.entries
-                .iter()
-                .find(|e| e.label == label)
-                .map(|entry| {
-                    let eb = select_element(&entry.delta, element);
-                    SystemElementDelta {
-                        label: entry.label.clone(),
-                        in_mg: eb.in_mg,
-                        out_mg: eb.out_mg,
-                        net_mg: eb.net_mg(),
-                    }
-                })
+            tick.entries.iter().find(|e| e.label == label).map(|entry| {
+                let eb = select_element(&entry.delta, element);
+                SystemElementDelta {
+                    label: entry.label.clone(),
+                    in_mg: eb.in_mg,
+                    out_mg: eb.out_mg,
+                    net_mg: eb.net_mg(),
+                }
+            })
         })
     }
 }
@@ -158,15 +155,10 @@ impl BudgetInspector {
 ///
 /// Budget tracking is enabled before stepping and left enabled afterward so
 /// callers can continue inspecting if needed.
-pub fn step_and_inspect(
-    engine: &mut Engine,
-    hours: u32,
-) -> Result<InspectionResult, SimError> {
+pub fn step_and_inspect(engine: &mut Engine, hours: u32) -> Result<InspectionResult, SimError> {
     engine.enable_budget_tracking();
     let before_totals = engine.full_state().budget_totals();
-    let tick_offset = engine
-        .budget_ledger()
-        .map_or(0, |l| l.ticks.len());
+    let tick_offset = engine.budget_ledger().map_or(0, |l| l.ticks.len());
 
     engine.step_hours(hours)?;
 
@@ -277,11 +269,7 @@ pub fn assert_budget_balanced(budget: &BudgetInspector, element: Element, tolera
 /// Assert that every tick individually has its element net delta within
 /// `tolerance_mg`. Useful for catching single-tick spikes that cancel out
 /// across a multi-tick run.
-pub fn assert_per_tick_balanced(
-    budget: &BudgetInspector,
-    element: Element,
-    tolerance_mg: f64,
-) {
+pub fn assert_per_tick_balanced(budget: &BudgetInspector, element: Element, tolerance_mg: f64) {
     for (i, net) in budget.per_tick_net(element).iter().enumerate() {
         if net.abs() > tolerance_mg {
             let element_name = match element {

@@ -3,8 +3,8 @@
 
 use tank_core::{
     budget_helpers::{
-        assert_budget_balanced, assert_c_conserved, assert_n_conserved, assert_o2_balanced,
-        assert_per_tick_balanced, step_and_inspect, Element,
+        assert_budget_balanced, assert_c_conserved, assert_n_conserved, assert_per_tick_balanced,
+        step_and_inspect, Element,
     },
     Engine, PlantGuildState, PlayerAction, SimError, SimSeed, SimulationEngine, SourceWaterProfile,
     SubstrateLayerState, TankState,
@@ -310,9 +310,10 @@ fn o2_balance_check_with_aeration() -> Result<(), SimError> {
 
     // O2 is open-system with atmospheric exchange, so we just verify the
     // assertion API runs and the dissolved_oxygen stage is tracked
-    let do_delta = result
-        .budget
-        .system_delta_in_tick(0, "system:dissolved_oxygen", Element::Oxygen);
+    let do_delta =
+        result
+            .budget
+            .system_delta_in_tick(0, "system:dissolved_oxygen", Element::Oxygen);
     assert!(
         do_delta.is_some(),
         "dissolved_oxygen system should appear in budget"
@@ -355,8 +356,7 @@ fn net_delta_accessor_matches_before_after() -> Result<(), SimError> {
     let result = step_and_inspect(&mut engine, 24)?;
 
     let n_delta = result.budget.net_delta(Element::Nitrogen);
-    let expected =
-        result.budget.after_totals.nitrogen_mg - result.budget.before_totals.nitrogen_mg;
+    let expected = result.budget.after_totals.nitrogen_mg - result.budget.before_totals.nitrogen_mg;
     assert!(
         (n_delta - expected).abs() < 1e-12,
         "net_delta should match before/after difference"

@@ -25,7 +25,8 @@ pub use budget::{
     shrimp_biomass_g, shrimp_carbon_mg, shrimp_nitrogen_mg, BudgetComponent, BudgetDelta,
     BudgetEntry, BudgetLedger, BudgetTotals, ElementBudget, TickBudgetRecord,
     ADULT_SHRIMP_BIOMASS_G, ALGAE_N_MG_PER_G_BIOMASS, JUVENILE_SHRIMP_BIOMASS_G,
-    LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G, PLANT_N_MG_PER_G_BIOMASS,
+    LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G, PLANT_N_MG_PER_G_BIOMASS, SHRIMP_C_MG_PER_G_WET_MASS,
+    SHRIMP_N_MG_PER_G_WET_MASS,
 };
 pub use environment::EnvironmentState;
 pub use events::{EventCause, EventKind, EventSeverity, SimEvent};
