@@ -1,0 +1,22 @@
+{
+  "rollback_id": "aba1b79d-054b-4457-8f82-a31f776a138d",
+  "created_at": "2026-03-27T15:15:26.211077609Z",
+  "stage_id": "review",
+  "cycle": 1,
+  "git_sha": "23ac69a46f920cf65350b4bd3c3904d0cf3222ad",
+  "run_snapshot": {
+    "active_run": null,
+    "status": "completed",
+    "cycle_history": [],
+    "completion_rounds": 1,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [],
+      "processed_count": 0
+    },
+    "status_summary": "completed"
+  }
+}

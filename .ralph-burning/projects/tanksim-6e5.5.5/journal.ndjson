@@ -1,0 +1,5 @@
+{"sequence":1,"timestamp":"2026-03-28T15:46:17.569594206Z","event_type":"project_created","details":{"flow":"quick_dev","project_id":"tanksim-6e5.5.5"}}
+{"sequence":2,"timestamp":"2026-03-28T15:46:20.476204878Z","event_type":"run_started","details":{"first_stage":"plan_and_implement","run_id":"run-20260328154620"}}
+{"sequence":3,"timestamp":"2026-03-28T15:46:20.492937347Z","event_type":"stage_entered","details":{"attempt":1,"cycle":1,"run_id":"run-20260328154620","stage_id":"plan_and_implement"}}
+{"sequence":4,"timestamp":"2026-03-28T16:16:33.960213382Z","event_type":"stage_failed","details":{"attempt":1,"cycle":1,"failure_class":"schema_validation_failure","message":"backend invocation failed for contract 'plan_and_implement' via 'claude': schema validation failed for stage 'plan_and_implement': invalid type: map, expected a string","run_id":"run-20260328154620","stage_id":"plan_and_implement","will_retry":true}}
+{"sequence":5,"timestamp":"2026-03-28T16:16:33.979282751Z","event_type":"stage_entered","details":{"attempt":2,"cycle":1,"run_id":"run-20260328154620","stage_id":"plan_and_implement"}}

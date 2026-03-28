@@ -1,0 +1,23 @@
+{
+  "payload_id": "run-20260327155320-final_review-reviewer-1-c1-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T17:06:24.157545424Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "Fix the zero-volume startup override path in `crates/tank_scenarios/src/lib.rs:546-600`. When `source_water_profile_id` is `None`, substrate-only overrides rescale the existing totals instead of rebuilding from the scenario’s source water. That breaks as soon as the original materialized state has `old_volume_l <= f64::EPSILON`: `WaterState::rescale_totals_for_volume` in `crates/tank_core/src/types/water.rs:179-184` returns a zero scale in that case, so switching to a shallower substrate after a low-fill materialization leaves a positive `water_volume_l()` but zero nitrate/alkalinity/calcium/etc. Repro: `medium_planted` with `fill_ratio=0.1`, `source_water_profile_id=None`, `substrate_preset=InertSand` produces ~0.36 L of water with all dissolved totals still at 0. Rebuild from the effective source-water profile (or at least special-case `0 -> positive` volume changes) and add a regression test for this path.",
+        "rationale": "This creates impossible startup chemistry for valid public API inputs (`StartupOverrides::default()` leaves `source_water_profile_id` unset) and silently returns a tank whose helper concentrations are all zero despite having nonzero water volume."
+      }
+    ],
+    "summary": "Reviewed the helper/net-volume refactor across geometry, water/state helpers, snapshots, and scenario materialization, and ran `cargo test`. I found one real correctness issue: substrate-only startup overrides can zero out chemistry after a zero-volume initial fill instead of rebuilding source-water concentrations."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

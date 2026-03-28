@@ -1,0 +1,23 @@
+{
+  "payload_id": "run-20260327232421-final_review-reviewer-1-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T02:31:30.479920881Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "`crates/tank_core/src/save.rs:324-331` makes the schema-3 to schema-4 migration a no-op, so every legacy save loads with `animal.reserve_g = 0`. That would be safe only if reserve were optional, but it is now the sole funding source for retained biomass and for both hatching and juvenile maturation (`crates/tank_core/src/systems/shrimp.rs:252-260`, `crates/tank_core/src/systems/shrimp.rs:469-475`, `crates/tank_core/src/systems/shrimp.rs:555-562`, `crates/tank_core/src/systems/shrimp.rs:650-656`). A valid v3 colony with near-hatch egg cohorts or ready-to-mature juveniles will therefore stall or fail those transitions immediately after upgrade until later feeding rebuilds reserve, so the resumed simulation diverges from the pre-upgrade state even though loading succeeds. `crates/tank_core/tests/save_load.rs:274-320` currently codifies that zero-reserve migration, so this compatibility regression would persist unnoticed.",
+        "rationale": "This is a save-compatibility correctness bug: legacy colonies can no longer continue ongoing reproduction/maturation after upgrade because the new reserve gate is introduced without any migration path for already-existing biomass obligations."
+      }
+    ],
+    "summary": "Reviewed the shrimp feeding/reserve/save-load implementation and ran `cargo test -p tank_core`. I found one substantive issue: schema-3 save migration hard-resets reserve even though hatching and maturation are now reserve-gated, which breaks continuity for legacy colonies."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 5
+}

@@ -1,0 +1,31 @@
+{
+  "payload_id": "run-20260327232421-final_review-reviewer-0-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-27T23:59:56.936193102Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "In `engine.rs:491`, the pre-step `enforce_invariants(&mut self.state)?` both clamps fields (e.g. `condition_index`, `ph`) and returns hard errors (e.g. for negative `reserve_g`). If the state has multiple issues, fields clamped before the first hard error remain silently modified even though the function returns `Err`. The validation tests in `validation.rs` (lines 90-123) assert `engine.full_state() == expected` after a failed `step_hours`, which only passes because each test injects exactly one bad field into an otherwise well-formed `TankState::new`. Consider splitting `enforce_invariants` into a read-only validation pass (for the pre-step guard) and a separate clamp-and-validate pass (for the post-step cleanup), or at minimum document the partial-mutation behavior and adjust the tests to tolerate it.",
+        "rationale": "A pre-step guard that mutates state on error violates the principle of least surprise. If a save file or programmatic manipulation introduces two invalid fields (e.g. `assimilation_efficiency = 1.5` AND `condition_index = 2.0`), the guard will silently clamp `condition_index` to 1.0 before returning the error for `assimilation_efficiency`. The caller has no way to know the state was modified. This is not exploitable today because the existing tests are single-fault, but it is a latent correctness gap that will bite when multi-field validation tests or save-file migration edge cases are added."
+      },
+      {
+        "body": "The `reserve_g` pool in `animal` accumulates from the `growth_fraction_of_assimilated` pathway (shrimp.rs:234) but is only drained by shrimp mortality (shrimp.rs:601-606). No metabolic baseline drain, molt cost, or reproductive cost draws from `reserve_g`. With default parameters (10 adults, ae=0.5, growth_frac=0.2), reserve accumulates ~0.001 g/day and exceeds total shrimp body mass (~1.2g) within a few simulated years. The `total_nitrogen` / `total_carbon` accounting (budget.rs:247-248, 332-333) correctly tracks this pool, so mass is conserved, but the unbounded accumulation is biologically implausible and may confuse diagnostic outputs. Add a code comment in `route_consumed_food` noting that `reserve_g` will grow without bound in phase 1 and that a metabolic maintenance drain is expected in the reserve/condition bead (tanksim-6e5.6.1).",
+        "rationale": "The bead description says 'Track assimilated reserve/condition explicitly enough that later shrimp realism work can build on the same pathway instead of bypassing it.' The current implementation tracks it but doesn't document the known unbounded-growth behavior. A downstream implementer working on C4 (bookkeeping audit) or F1 (reserve/condition bead) might misinterpret large reserve values as a conservation bug rather than a known phase-1 simplification. A brief comment costs nothing and prevents a future debugging detour."
+      },
+      {
+        "body": "The invariant `check_unit_interval` for `shrimp_assimilation_efficiency` (invariants.rs:186-188) accepts the boundary values 0.0 and 1.0. With `ae = 0.0`, all food becomes feces and nothing is assimilated (no TAN, no DIC, no O2 demand, no reserve growth). With `ae = 1.0`, no feces are produced at all. Both are physically degenerate. The doc comment on the field says 'Literature range: 0.4–0.7' (process.rs:187). Consider using a strict open-interval check `(0.0 < ae < 1.0)` or at minimum `check_positive` to reject exactly-zero, matching the intent expressed by the test `default_fraction_sums_are_valid` (shrimp_feeding_pathway.rs:81) which asserts `ae > 0.0 && ae < 1.0`.",
+        "rationale": "The test already asserts strict inequality but the invariant allows the boundary. If a future save-file migration or UI slider lands exactly on 0.0 or 1.0, the simulation would silently run with a degenerate pathway (no assimilation or no feces). This is a minor robustness gap between the test's expectation and the runtime guard."
+      }
+    ],
+    "summary": "Reviewed the full diff (8 files, ~165 insertions) covering the shrimp ingestion→assimilation→excretion→feces→respiration loop. The core routing logic in `route_consumed_food` (shrimp.rs:182-235) is mathematically sound: elemental N and C are correctly partitioned through fecal, excretion (TAN+DOC), respiration (DIC+O2), and retained (reserve_g) pathways. The `(N_mg + C_mg) / 1000` conversion back to organic-matter grams is algebraically consistent with the `detritus_nitrogen_mg`/`detritus_carbon_mg` budget helpers, because both food sources (periphyton and fine detritus) share the same effective N:C ratio. The new invariant checks (unit-interval fractions, partition-sum-to-one, positive O2 ratio, non-negative reserve) are comprehensive and well-tested by dedicated save_load and validation tests. The conservation regression tests (`closed_system_shrimp_feeding_conserves_nitrogen/carbon`) run 7 simulated days and verify N and C within 0.01 mg tolerance. Documentation updates in ROUTING.md and scientific_inventory.md are accurate and consistent with the code. All tests pass. Three amendments proposed: (1) `enforce_invariants` as a pre-step guard can partially mutate state before returning an error, (2) `reserve_g` grows without bound in phase 1 and should be documented, (3) boundary values 0.0/1.0 for assimilation efficiency are accepted by invariants but are physically degenerate."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

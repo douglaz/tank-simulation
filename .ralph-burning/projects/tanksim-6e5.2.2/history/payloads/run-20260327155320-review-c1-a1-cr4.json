@@ -1,0 +1,41 @@
+{
+  "payload_id": "run-20260327155320-review-c1-a1-cr4",
+  "stage_id": "review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T18:09:01.594348160Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All 115 workspace tests pass (9 concentration_helpers, 5 save_load, 9 cycling, 3 startup_overrides, 17 end_to_end, 6 plant_algae_integration, etc.) with zero failures",
+        "cargo clippy --all-targets --quiet passes clean with no warnings (StartupOverrides derivable_impls warning resolved via derive(Default))",
+        "ConcentrationView (water.rs:35-39) caches volume once; TankState::concentrations() (state.rs:188-190) produces it from a single water_volume_l() call; snapshot.rs:64-76 uses this pattern to avoid redundant volume recomputation, addressing amendment fr-3-4597e839",
+        "nitrogen_cycle.rs now uses concentration-based Monod kinetics: lines 78-79 call state.water.doc_mg_c_per_l(volume_l) and do_mg_per_l(volume_l); lines 84-86,93 use legacy_total_param_to_mg_per_l for k_* conversion; AOB/NOB/comammox substrate terms at lines 139-144,158,184,196,241 all use concentration-based parameters, addressing amendment fr-3-fdb11c9d",
+        "algae_growth.rs:14-20 uses state.water.tan_mg_n_per_l(volume_l), nitrate_mg_n_per_l(volume_l), phosphate_mg_p_per_l(volume_l) with legacy_total_param_to_mg_per_l for half-saturation conversion, addressing fr-3-fdb11c9d",
+        "plant_growth.rs:8-13 converts legacy total-mass params via legacy_total_param_to_mg_per_l; lines 30,53-57 use state.water concentration helpers for DIC, TAN, nitrate, phosphate, addressing fr-3-fdb11c9d",
+        "legacy_total_param_to_mg_per_l (process.rs:5-11) divides by LEGACY_KINETIC_REFERENCE_VOLUME_L=20.0 to normalize total-mass params to concentration-based equivalents, making biological rates volume-invariant",
+        "save.rs:46-51 handles LEGACY_SCHEMA_VERSION=2 via migrate_schema_v2_to_v3 which rescales dissolved totals from gross geometry volume to net water volume, restoring schema-2 save compatibility and addressing amendment fr-3-0224bf60",
+        "All k_* ProcessParams doc comments (process.rs:47-53, 63-69, 78-84, 93-99, 119-129, 140-146) now document 'Legacy compatibility name... Runtime code normalizes this total-style value onto a 20 L reference tank so the effective Monod constant stays concentration-based', addressing amendment fr-3-784b3602",
+        "soft_acidic.toml provenance notes (line 24) document 'KH was kept at ~3 so cycling still has enough buffer to avoid an immediate acid crash', providing rationale for the alkalinity/DIC/bicarbonate values, partially addressing amendment fr-3-460dea74",
+        "All 15 concentration helpers present on WaterState and TankState with ConcentrationView wrappers; property test validates non-negativity across random inputs"
+      ],
+      "findings_or_gaps": [
+        "Minor formatting issue: crates/tank_scenarios/src/lib.rs:190-191 has an extra blank line after the StartupOverrides struct closing brace. cargo fmt --all --check reports a diff. This indicates the last edit to that file (derive(Default) cleanup) was not followed by a fmt pass.",
+        "Amendment fr-3-cbfff7db (nitrifier yield changes bundled with helper refactor) was not directly addressed as a changeset-hygiene concern — the ~50x yield values (AOB 0.05, NOB 0.04, comammox 0.03) and 0.5g logistic capacity remain in the same changeset as the concentration helper work. This is a process/organizational issue rather than a code correctness defect at this point, since the values are stable and tested.",
+        "TankState individual convenience methods (tan_mg_n_per_l, nitrite_mg_n_per_l, etc. at state.rs:192-250) each independently call self.concentrations() which re-invokes water_volume_l(). Call sites using individual TankState methods in sequence (rather than concentrations() once) still pay repeated volume recomputation. The hot path (snapshot.rs) correctly uses ConcentrationView, but the convenience methods themselves are not cached."
+      ],
+      "follow_up_or_amendments": [
+        "Run cargo fmt --all to fix the extra blank line in crates/tank_scenarios/src/lib.rs before merging — this is a trivial fix but cargo fmt --check currently fails."
+      ],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 4
+}

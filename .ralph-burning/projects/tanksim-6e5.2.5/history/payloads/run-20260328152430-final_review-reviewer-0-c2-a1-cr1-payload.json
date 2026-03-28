@@ -1,0 +1,35 @@
+{
+  "payload_id": "run-20260328152430-final_review-reviewer-0-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T16:07:53.477784887Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "Fix the `algae_growth_matches_hand_computed_limitation_product` test in `crates/tank_core/tests/plant_algae_integration.rs:479-502`. The hand computation on lines 480-482 calculates `eff_light = intensity × photoperiod_norm` but does not include the Beer-Lambert `depth_factor` that was added to `algae_light_factor()` at `algae_growth.rs:292-294`. The test must compute `k` (extinction coefficient) and `h` (water depth) from the test state, call `column_average_attenuation_factor(k, h)`, and multiply into `eff_light` before the half-saturation calculation. Currently fails: expected 1.092762, got 1.057578.",
+        "rationale": "This is a correctness bug — the hand-computed verification test no longer matches the actual model formula. The test was clearly designed to validate the algae growth equation against known inputs, but the equation changed (Beer-Lambert added) without updating the test. This makes the test useless as a regression guard."
+      },
+      {
+        "body": "Fix 4 tank-size-independence tests that now fail because Beer-Lambert attenuation is inherently depth-dependent: `algae_size_independence_different_geometries` (line 401), `algae_water_column_limitation_is_volume_invariant_at_fixed_concentration` (line 356), `plant_water_column_limitation_is_volume_invariant_at_fixed_concentration` (line 224) in `plant_algae_integration.rs`, and `plant_limitation_is_tank_size_independent` in `plant_nutrient_normalization.rs`. These tests vary fill_height_cm or substrate_depth_cm while keeping concentrations identical, but different water depths now produce different depth_factors via Beer-Lambert. Either (a) make the tests use identical water depths (same fill height and substrate depth), or (b) update the assertion to compare nutrient limitation factors only (excluding the intentionally geometry-dependent light attenuation), or (c) document that size-independence applies to nutrient kinetics while light is intentionally geometry-sensitive.",
+        "rationale": "These 4 failures represent the core acceptance criterion for this bead ('a tank-size-independence unit test... two tanks with identical concentrations but different volumes produce identical algae limitation factors'). The Beer-Lambert addition is physically correct (deeper water gets less light), but the test design conflicts with it. The tests must be redesigned so that size-independence is verified for the concentration-based nutrient/temperature terms while acknowledging that light attenuation is geometry-dependent by design."
+      },
+      {
+        "body": "The `algae_bloom_conditions_emit_events_and_overfeeding_raises_nuisance` test at `plant_algae_integration.rs:138-192` is failing: 'overfeeding should increase algae nuisance pressure (control=0.054, overfed=0.041)'. This is a pre-existing failure but represents a broken acceptance criterion for algae playability. The overfed tank should have higher nuisance than the control. Investigate whether the Beer-Lambert self-shading feedback (more algae → higher extinction → less light → less growth) is suppressing bloom dynamics too aggressively, or whether the parameter tuning needs adjustment (e.g., `algae_extinction_coeff_per_cm_per_g_l` default of 2.0 may be too high for the test's biomass levels).",
+        "rationale": "While pre-existing, this test failure directly contradicts the acceptance criterion that 'algae behavior remains playable/tunable after the refactor'. The self-shading feedback introduced by Beer-Lambert may have changed the dynamics enough that overfeeding no longer reliably produces higher nuisance than baseline, which would be a gameplay regression."
+      },
+      {
+        "body": "The `beer_lambert_at_depth` function in `light.rs:6-8` is `pub` but does not guard against negative k or z inputs. While `extinction_coefficient()` clamps k ≥ 0 and `water_depth_above_substrate_cm()` clamps z ≥ 0, external callers (the function is pub) could pass negative values, producing attenuation factors > 1.0 (light amplification). Add a `.max(0.0)` clamp on both parameters, or at minimum on the result, consistent with `column_average_attenuation_factor`'s `.clamp(0.0, 1.0)` pattern.",
+        "rationale": "Minor robustness issue. The companion function `column_average_attenuation_factor` already clamps its output to [0, 1], but `beer_lambert_at_depth` does not. Since both are public API, they should have consistent safety guarantees."
+      }
+    ],
+    "summary": "Reviewed bead 2.5 changes: snapshot.rs refactoring to use helper methods, water.rs conductivity deduplication fix, presets.rs unused import removal. The actual bead-2.5 delta is very small (3 files, ~30 lines). However, the broader Beer-Lambert light attenuation integration (added by cooperating beads and wired into algae_growth.rs and plant_growth.rs) has introduced 6 test failures across 3 test files. The core math (column_average_attenuation_factor, extinction_coefficient) is correct, but tests were not updated to account for the new depth-dependent light attenuation. The hand-computed verification test omits the depth_factor entirely, and the tank-size-independence tests now fail because different water depths produce different Beer-Lambert attenuation. Additionally, the overfeeding→nuisance test is failing (pre-existing), suggesting the self-shading feedback may be too aggressive for gameplay balance."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

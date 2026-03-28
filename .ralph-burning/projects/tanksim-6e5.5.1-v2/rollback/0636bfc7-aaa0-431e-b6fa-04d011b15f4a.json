@@ -1,0 +1,88 @@
+{
+  "rollback_id": "0636bfc7-aaa0-431e-b6fa-04d011b15f4a",
+  "created_at": "2026-03-28T16:03:20.421172482Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "7769773ca7feed2dfce4421ae9b1484dcd03f082",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260328140833",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 4
+      },
+      "started_at": "2026-03-28T14:08:33.514231762Z",
+      "prompt_hash_at_cycle_start": "6c708419a1fe1858",
+      "prompt_hash_at_stage_start": "6c708419a1fe1858",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 3
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-28T14:19:21.093626959Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 4,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-3-df697556",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "In `affects_habitat_registry()` (actions.rs:159-169), `ChangePhotoperiod` is listed as affecting the habitat registry, but the habitat computation in `compute_habitat_registry` reads `hardware.light.intensity_index` not `hardware.light.photoperiod_hours`. Photoperiod changes produce a redundant registry refresh. Either remove `ChangePhotoperiod` from the match, or add a code comment explaining the deliberate over-approximation so future maintainers don't second-guess it.",
+          "created_at": "2026-03-28T16:03:20.347869083Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "0a8427528301c46ea8859076455b9f943ef9f367ab67c9840ce21bcd081fd419"
+        },
+        {
+          "amendment_id": "fr-3-77143f76",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "The legacy `total_colonizable_area_cm2()` (biology.rs:660-669) used by `algae_growth.rs:167` computes colonizable area as `wall_area_cm2 + substrate_layers.colonizable_area_cm2`, which omits `geometry.hardscape_area_cm2`. Now that hardscape area is a configurable field on `TankGeometry`, adding hardscape to a tank increases habitat registry `GlassHardscape` area but the algae carrying-capacity model ignores it entirely. Add a note (doc comment or inline TODO) clarifying this omission so the downstream habitatization task (tanksim-6e5.5.3) knows to migrate algae to the habitat registry rather than the legacy helper.",
+          "created_at": "2026-03-28T16:03:20.347873030Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "043be8ca07d0584ed94b90ba3d9acc6e2127855e3e30a8e484f5ae2b34e6a293"
+        }
+      ],
+      "processed_count": 8
+    },
+    "status_summary": "running: final review restart round 4 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T15:41:54.790562465Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}
