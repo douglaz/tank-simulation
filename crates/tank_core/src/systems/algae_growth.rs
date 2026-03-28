@@ -2,7 +2,7 @@ use crate::{
     systems::chemistry::resolve_carbonate_state,
     systems::events,
     types::{
-        algae_carbon_mg, algae_nitrogen_mg, legacy_total_param_to_mg_per_l,
+        algae_carbon_mg, algae_detrital_mass_g, legacy_total_param_to_mg_per_l,
         total_colonizable_area_cm2, TankState, ALGAE_N_MG_PER_G_BIOMASS,
     },
 };
@@ -119,7 +119,9 @@ pub fn step_daily_algae(state: &mut TankState) {
         .min(suspended_available_after_growth_g);
     let suspended_new_g = (suspended_available_after_growth_g - suspended_realized_loss_g).max(0.0);
     state.algae.suspended_biomass_g = suspended_new_g;
-    route_algae_loss_to_dissolved_organics(state, suspended_realized_loss_g, n_to_c_ratio);
+    // Daily algae-loss fractions are modeled as particulate turnover here;
+    // the separate hourly chemistry/DO passes own explicit respiration.
+    route_algae_loss_to_fine_detritus(state, suspended_realized_loss_g, n_to_c_ratio);
 
     let colonizable_area_m2 =
         total_colonizable_area_cm2(&state.substrate_layers, state.geometry.wall_area_cm2())
@@ -204,8 +206,7 @@ pub fn step_daily_algae(state: &mut TankState) {
     let excess_g = (periphyton_post_loss_g - periphyton_capacity_g.max(0.0)).max(0.0);
     let periphyton_new_g = (periphyton_post_loss_g - excess_g).max(0.0);
     state.algae.periphyton_biomass_g = periphyton_new_g;
-    route_algae_loss_to_dissolved_organics(state, periphyton_realized_loss_g, n_to_c_ratio);
-    route_algae_loss_to_dissolved_organics(state, excess_g, n_to_c_ratio);
+    route_algae_loss_to_fine_detritus(state, periphyton_realized_loss_g + excess_g, n_to_c_ratio);
 
     let suspended_pressure = (state.algae.suspended_biomass_g / volume_l)
         / state
@@ -273,17 +274,8 @@ fn consume_algae_nutrients(
     (ammonia_removed, nitrate_removed, phosphate_removed)
 }
 
-fn route_algae_loss_to_dissolved_organics(
-    state: &mut TankState,
-    biomass_g: f64,
-    n_to_c_ratio: f64,
-) {
-    if biomass_g <= f64::EPSILON {
-        return;
-    }
-
-    state.water.dissolved_organic_nitrogen_mg_n_total += algae_nitrogen_mg(biomass_g);
-    state.water.dissolved_organic_carbon_mg_c_total += algae_carbon_mg(biomass_g, n_to_c_ratio);
+fn route_algae_loss_to_fine_detritus(state: &mut TankState, biomass_g: f64, n_to_c_ratio: f64) {
+    state.detritus.fine_detritus_g_total += algae_detrital_mass_g(biomass_g, n_to_c_ratio);
 }
 
 fn half_saturation(value: f64, half_sat: f64) -> f64 {

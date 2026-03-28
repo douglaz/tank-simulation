@@ -56,8 +56,14 @@ pub struct MicrofaunaState {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AnimalState {
+    /// Top-level animal count fields with the `_count` suffix are treated as
+    /// implicit biomass-bearing pools by the canonical N/C budget helpers.
     pub adults_count: u32,
+    /// Top-level animal count fields with the `_count` suffix are treated as
+    /// implicit biomass-bearing pools by the canonical N/C budget helpers.
     pub juveniles_count: u32,
+    /// Subset bookkeeping only: these shrimp are already included in
+    /// `adults_count` and therefore do not represent an extra biomass pool.
     pub berried_females_count: u32,
     pub condition_index: f64,
     pub molt_stress_index: f64,

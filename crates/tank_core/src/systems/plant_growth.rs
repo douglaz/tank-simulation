@@ -154,9 +154,13 @@ pub fn step_daily_plants(state: &mut TankState) {
         let new_biomass_g =
             (biomass_after_growth_g - realized_respiration_g - realized_senescence_g).max(0.0);
         state.plant_guilds[index].biomass_g = new_biomass_g;
-        route_plant_loss_to_dissolved_organics(state, realized_respiration_g, n_to_c_ratio);
-        state.detritus.fine_detritus_g_total +=
-            plant_detrital_mass_g(realized_senescence_g, n_to_c_ratio);
+        // Daily plant-loss fractions are modeled as particulate turnover here;
+        // the separate hourly chemistry/DO passes own explicit respiration.
+        route_plant_loss_to_fine_detritus(
+            state,
+            realized_respiration_g + realized_senescence_g,
+            n_to_c_ratio,
+        );
 
         let stress_driver = nutrient_limitation.min(f_light).min(habitat_index);
         let poor_conditions = stress_driver < 0.55;
@@ -380,17 +384,8 @@ fn remove_substrate_pool(state: &mut TankState, target_mg: f64, is_nitrogen: boo
     removed_total
 }
 
-fn route_plant_loss_to_dissolved_organics(
-    state: &mut TankState,
-    biomass_g: f64,
-    n_to_c_ratio: f64,
-) {
-    if biomass_g <= f64::EPSILON {
-        return;
-    }
-
-    state.water.dissolved_organic_nitrogen_mg_n_total += plant_nitrogen_mg(biomass_g);
-    state.water.dissolved_organic_carbon_mg_c_total += plant_carbon_mg(biomass_g, n_to_c_ratio);
+fn route_plant_loss_to_fine_detritus(state: &mut TankState, biomass_g: f64, n_to_c_ratio: f64) {
+    state.detritus.fine_detritus_g_total += plant_detrital_mass_g(biomass_g, n_to_c_ratio);
 }
 
 fn clamp_partitioned_losses(

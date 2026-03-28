@@ -57,6 +57,9 @@ pub fn apply_water_change(state: &mut TankState, percent: f64, source: &SourceWa
     state.water.dissolved_inorganic_carbon_mg_c_total *= retention;
     state.water.dissolved_organic_carbon_mg_c_total *= retention;
     state.water.dissolved_organic_nitrogen_mg_n_total *= retention;
+    // This is only a shadow counter that mirrors DOC/DON-origin residue mass.
+    // The real exported C/N is already accounted through the dissolved pools,
+    // so this bookkeeping adjustment must stay out of the explicit budget delta.
     state.detritus.dissolved_feed_residue_g_total *= retention;
     state.water.dissolved_oxygen_mg_total *= retention;
     state.water.alkalinity_meq_total *= retention;

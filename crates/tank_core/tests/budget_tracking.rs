@@ -241,14 +241,18 @@ fn collect_numeric_paths(value: &Value, prefix: &str, paths: &mut BTreeSet<Strin
     }
 }
 
+fn is_animal_mass_budget_path(path: &str) -> bool {
+    path.starts_with("animal.")
+        && path.ends_with("_count")
+        && path != "animal.berried_females_count"
+}
+
 fn is_shared_budget_path(path: &str) -> bool {
     path.ends_with("biomass_g")
         || path.ends_with("particulate_organics_g_total")
         || path.ends_with("fine_detritus_g_total")
-        || matches!(
-            path,
-            "animal.adults_count" | "animal.juveniles_count" | "animal.reserve_g"
-        )
+        || path == "animal.reserve_g"
+        || is_animal_mass_budget_path(path)
 }
 
 fn is_nitrogen_budget_path(path: &str) -> bool {
@@ -287,10 +291,8 @@ fn test_total_n_helper_sums_all_pools() {
             ratio,
         )
         + manual_organic_nitrogen_mg(state.animal.reserve_g, ratio)
-        + manual_organic_nitrogen_mg(
-            state.detritus.particulate_organics_g_total + state.detritus.fine_detritus_g_total,
-            ratio,
-        );
+        + manual_organic_nitrogen_mg(state.detritus.particulate_organics_g_total, ratio)
+        + manual_organic_nitrogen_mg(state.detritus.fine_detritus_g_total, ratio);
 
     assert_close(state.total_nitrogen(), expected, 1e-9);
 }
@@ -315,10 +317,8 @@ fn test_total_c_helper_sums_all_pools() {
             ratio,
         )
         + manual_organic_carbon_mg(state.animal.reserve_g, ratio)
-        + manual_organic_carbon_mg(
-            state.detritus.particulate_organics_g_total + state.detritus.fine_detritus_g_total,
-            ratio,
-        );
+        + manual_organic_carbon_mg(state.detritus.particulate_organics_g_total, ratio)
+        + manual_organic_carbon_mg(state.detritus.fine_detritus_g_total, ratio);
 
     assert_close(state.total_carbon(), expected, 1e-9);
 }
@@ -367,6 +367,10 @@ fn test_budget_path_rules_catch_convention_based_future_fields() {
     assert!(is_carbon_budget_path("water.future_pool_mg_c_total"));
     assert!(is_nitrogen_budget_path("microbe.future_biomass_g"));
     assert!(is_carbon_budget_path("microbe.future_biomass_g"));
+    assert!(is_nitrogen_budget_path("animal.larvae_count"));
+    assert!(is_carbon_budget_path("animal.larvae_count"));
+    assert!(!is_nitrogen_budget_path("animal.berried_females_count"));
+    assert!(!is_carbon_budget_path("animal.berried_females_count"));
 }
 
 #[test]
@@ -440,7 +444,7 @@ fn test_closed_system_c_conservation() -> Result<(), SimError> {
 }
 
 #[test]
-fn test_periphyton_capacity_excess_routes_to_dissolved_organics() {
+fn test_periphyton_capacity_excess_routes_to_fine_detritus() {
     let mut state = quiescent_budget_state(SimSeed(9_016));
     state.hardware.light.enabled = false;
     state.algae.suspended_biomass_g = 0.0;
@@ -450,6 +454,7 @@ fn test_periphyton_capacity_excess_routes_to_dissolved_organics() {
     state.process_params.periphyton_capacity_g_per_m2 = 0.0;
     let initial_total_n = state.total_nitrogen();
     let initial_total_c = state.total_carbon();
+    let initial_fine_detritus = state.detritus.fine_detritus_g_total;
     let initial_don = state.water.dissolved_organic_nitrogen_mg_n_total;
     let initial_doc = state.water.dissolved_organic_carbon_mg_c_total;
 
@@ -458,12 +463,21 @@ fn test_periphyton_capacity_excess_routes_to_dissolved_organics() {
     assert_close(state.algae.periphyton_biomass_g, 0.0, 1e-9);
     assert_close(state.total_nitrogen(), initial_total_n, 1e-6);
     assert_close(state.total_carbon(), initial_total_c, 1e-6);
-    assert!(state.water.dissolved_organic_nitrogen_mg_n_total > initial_don);
-    assert!(state.water.dissolved_organic_carbon_mg_c_total > initial_doc);
+    assert!(state.detritus.fine_detritus_g_total > initial_fine_detritus);
+    assert_close(
+        state.water.dissolved_organic_nitrogen_mg_n_total,
+        initial_don,
+        1e-9,
+    );
+    assert_close(
+        state.water.dissolved_organic_carbon_mg_c_total,
+        initial_doc,
+        1e-9,
+    );
 }
 
 #[test]
-fn test_algae_loss_routing_is_clamped_to_available_biomass() {
+fn test_algae_loss_routing_is_clamped_to_available_biomass_and_stays_particulate() {
     let mut state = quiescent_budget_state(SimSeed(9_017));
     state.hardware.light.enabled = false;
     state.algae.suspended_biomass_g = 0.4;
@@ -474,6 +488,9 @@ fn test_algae_loss_routing_is_clamped_to_available_biomass() {
     state.process_params.periphyton_capacity_g_per_m2 = 1_000.0;
     let initial_total_n = state.total_nitrogen();
     let initial_total_c = state.total_carbon();
+    let initial_fine_detritus = state.detritus.fine_detritus_g_total;
+    let initial_don = state.water.dissolved_organic_nitrogen_mg_n_total;
+    let initial_doc = state.water.dissolved_organic_carbon_mg_c_total;
 
     step_daily_algae(&mut state);
 
@@ -481,10 +498,21 @@ fn test_algae_loss_routing_is_clamped_to_available_biomass() {
     assert_close(state.algae.periphyton_biomass_g, 0.0, 1e-9);
     assert_close(state.total_nitrogen(), initial_total_n, 1e-6);
     assert_close(state.total_carbon(), initial_total_c, 1e-6);
+    assert!(state.detritus.fine_detritus_g_total > initial_fine_detritus);
+    assert_close(
+        state.water.dissolved_organic_nitrogen_mg_n_total,
+        initial_don,
+        1e-9,
+    );
+    assert_close(
+        state.water.dissolved_organic_carbon_mg_c_total,
+        initial_doc,
+        1e-9,
+    );
 }
 
 #[test]
-fn test_plant_loss_routing_is_clamped_to_available_biomass() {
+fn test_plant_loss_routing_is_clamped_to_available_biomass_and_stays_particulate() {
     let mut state = quiescent_budget_state(SimSeed(9_018));
     state.hardware.light.enabled = false;
     state.plant_guilds = vec![PlantGuildState::default(), PlantGuildState::default()];
@@ -494,12 +522,26 @@ fn test_plant_loss_routing_is_clamped_to_available_biomass() {
     state.process_params.plant_senescence_fraction_per_day = 1.0;
     let initial_total_n = state.total_nitrogen();
     let initial_total_c = state.total_carbon();
+    let initial_fine_detritus = state.detritus.fine_detritus_g_total;
+    let initial_don = state.water.dissolved_organic_nitrogen_mg_n_total;
+    let initial_doc = state.water.dissolved_organic_carbon_mg_c_total;
 
     step_daily_plants(&mut state);
 
     assert_close(state.plant_guilds[0].biomass_g, 0.0, 1e-9);
     assert_close(state.total_nitrogen(), initial_total_n, 1e-6);
     assert_close(state.total_carbon(), initial_total_c, 1e-6);
+    assert!(state.detritus.fine_detritus_g_total > initial_fine_detritus);
+    assert_close(
+        state.water.dissolved_organic_nitrogen_mg_n_total,
+        initial_don,
+        1e-9,
+    );
+    assert_close(
+        state.water.dissolved_organic_carbon_mg_c_total,
+        initial_doc,
+        1e-9,
+    );
 }
 
 #[test]
