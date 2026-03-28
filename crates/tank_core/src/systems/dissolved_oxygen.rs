@@ -6,6 +6,27 @@ use crate::{
     types::{BudgetDelta, ElementBudget, TankState},
 };
 
+/// Computes the raw volumetric gas-transfer coefficient K_LA (h⁻¹) for O₂
+/// based on surface exchange, aeration, and filter agitation.
+///
+/// Callers should cap the returned value (e.g., `.min(1.0)`) before using it
+/// in an explicit Euler step to prevent overshooting equilibrium.
+pub fn compute_o2_kla(state: &TankState) -> f64 {
+    let aeration_intensity = if state.hardware.aeration.enabled {
+        state.hardware.aeration.intensity
+    } else {
+        0.0
+    };
+    let filter_kla_boost = if state.hardware.filter.enabled {
+        0.02 * (state.hardware.filter.flow_lph / 200.0).min(2.0)
+    } else {
+        0.0
+    };
+    (state.process_params.reaeration_kla_base * state.geometry.top_exchange_factor())
+        + (state.process_params.aeration_kla_boost * aeration_intensity)
+        + filter_kla_boost
+}
+
 pub fn step_dissolved_oxygen(state: &mut TankState, light_on: bool) {
     let Some(terms) = dissolved_oxygen_terms(state, light_on) else {
         return;
