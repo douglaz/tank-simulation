@@ -76,7 +76,8 @@ pub enum SimError {
     SchemaVersionTooNew { actual: u32, max_supported: u32 },
     #[error(
         "save file version {actual} is too old; \
-         minimum supported version is {min_supported}"
+         minimum supported version is {min_supported}; \
+         re-create this save with a newer version of the application"
     )]
     SchemaVersionTooOld { actual: u32, min_supported: u32 },
     #[error("save migration {from} -> {to} failed: {message}")]

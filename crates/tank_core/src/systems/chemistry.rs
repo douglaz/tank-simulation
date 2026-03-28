@@ -96,6 +96,32 @@ fn fallback_all_co2(dic_mol_per_l: f64, ka1: f64) -> CarbonateEquilibrium {
     }
 }
 
+fn fallback_high_buffer(dic_mol_per_l: f64, ka1: f64, ka2: f64) -> CarbonateEquilibrium {
+    let ph = CARBONATE_PH_MAX;
+    let (co2_aq_mmol_per_l, hco3_mmol_per_l, co3_mmol_per_l) =
+        carbonate_species_for_ph(dic_mol_per_l, ph, ka1, ka2);
+
+    CarbonateEquilibrium {
+        ph,
+        co2_aq_mmol_per_l,
+        hco3_mmol_per_l,
+        co3_mmol_per_l,
+    }
+}
+
+fn fallback_outside_quadratic_envelope(
+    dic_mol_per_l: f64,
+    alk_eq_per_l: f64,
+    ka1: f64,
+    ka2: f64,
+) -> CarbonateEquilibrium {
+    if alk_eq_per_l >= dic_mol_per_l {
+        fallback_high_buffer(dic_mol_per_l, ka1, ka2)
+    } else {
+        fallback_all_co2(dic_mol_per_l, ka1)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Solver
 // ---------------------------------------------------------------------------
@@ -145,7 +171,7 @@ pub fn solve_carbonate_equilibrium(
     let discriminant = b * b - 4.0 * a * c;
 
     if discriminant < 0.0 {
-        return fallback_all_co2(dic, ka1);
+        return fallback_outside_quadratic_envelope(dic, alk, ka1, ka2);
     }
 
     let sqrt_d = discriminant.sqrt();
@@ -171,7 +197,7 @@ pub fn solve_carbonate_equilibrium(
         }
     } else {
         // No positive root: fallback.
-        return fallback_all_co2(dic, ka1);
+        return fallback_outside_quadratic_envelope(dic, alk, ka1, ka2);
     };
 
     // Reproject the species fractions at the storage pH bounds so pH and the

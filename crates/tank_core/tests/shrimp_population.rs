@@ -108,7 +108,7 @@ fn spawning_creates_berried_females() -> Result<(), SimError> {
 }
 
 #[test]
-fn hatch_produces_juveniles() -> Result<(), SimError> {
+fn hatch_produces_juveniles() {
     let mut state = shrimp_test_state(SimSeed(7100));
     state
         .process_params
@@ -117,6 +117,10 @@ fn hatch_produces_juveniles() -> Result<(), SimError> {
     state.process_params.shrimp_stress_mortality_scale = 0.0;
     state.shrimp_params.base_spawn_rate = 0.0;
     state.shrimp_params.hatch_success_base = 1.0;
+    state.animal.condition_index = 1.0;
+    state.animal.molt_stress_index = 0.0;
+    state.animal.reproductive_readiness_index = 1.0;
+    state.stability_tracker.instability_index = 0.0;
     state.animal.berried_females_count = 1;
     state.animal.egg_progress_days = 20.0;
     state.animal.egg_cohorts = vec![EggCohort {
@@ -126,35 +130,33 @@ fn hatch_produces_juveniles() -> Result<(), SimError> {
     state.animal.reserve_g =
         f64::from(25) * JUVENILE_SHRIMP_BIOMASS_G * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
 
-    let mut engine = Engine::from_parts(state, vec![]);
-    engine.step_hours(24)?;
+    // Keep all hatch factors at 1.0 so this test exercises a deterministic
+    // success path instead of depending on a lucky RNG draw through the engine.
+    step_daily_shrimp(&mut state);
 
-    let snap = engine.snapshot();
-    let final_state = engine.full_state();
-    let final_view = final_state.concentrations();
+    let final_view = state.concentrations();
     assert!(
-        snap.juveniles_count >= 25,
-        "A healthy near-hatch clutch with enough reserve should produce juveniles. \
+        state.animal.juveniles_count == 25,
+        "An ideal near-hatch clutch should deterministically produce 25 juveniles. \
          Adults: {}, Juveniles: {}, Reserve={:.3}, TAN={:.3} mg/L, NH3={:.4} mg/L, NO2={:.3} mg/L, DO={:.3} mg/L, GH={:.3} dGH, condition={:.3}, instability={:.3}, periphyton={:.3} g",
-        snap.adult_shrimp_count,
-        snap.juveniles_count,
-        final_state.animal.reserve_g,
+        state.animal.adults_count,
+        state.animal.juveniles_count,
+        state.animal.reserve_g,
         final_view.tan_mg_n_per_l(),
         compute_nh3_mg_l(
             final_view.tan_mg_n_per_l(),
-            final_state.water.ph,
-            final_state.water.temperature_c,
+            state.water.ph,
+            state.water.temperature_c,
         ),
         final_view.nitrite_mg_n_per_l(),
         final_view.do_mg_per_l(),
         final_view.gh_d(),
-        final_state.animal.condition_index,
-        final_state.stability_tracker.instability_index,
-        final_state.algae.periphyton_biomass_g
+        state.animal.condition_index,
+        state.stability_tracker.instability_index,
+        state.algae.periphyton_biomass_g
     );
-    assert_close(final_state.animal.reserve_g, 0.0, 1e-9);
-
-    Ok(())
+    assert_eq!(state.animal.berried_females_count, 0);
+    assert_close(state.animal.reserve_g, 0.0, 1e-9);
 }
 
 #[test]
