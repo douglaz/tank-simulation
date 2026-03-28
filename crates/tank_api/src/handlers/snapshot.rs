@@ -1,23 +1,19 @@
 use axum::{extract::State, Json};
 use serde::Serialize;
 use serde_json::{json, Map, Value};
-use tank_core::{SimulationEngine, TankSnapshot};
+use tank_core::{
+    SimulationEngine, TankSnapshot, ESTIMATED_TDS_OMITTED_CONTRIBUTORS,
+    ESTIMATED_TDS_TRACKED_MAJOR_IONS, LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES,
+};
 
 use crate::state::AppState;
-
-const TRACKED_TDS_IONS: [&str; 7] = ["Ca", "Mg", "Na", "K", "HCO3", "Cl", "SO4"];
-const OMITTED_TDS_CONTRIBUTORS: [&str; 3] = [
-    "tracked TAN/NH3, nitrite, nitrate, and phosphate species are excluded from this estimate",
-    "trace ions and micronutrients",
-    "dissolved organics and other untracked solutes",
-];
 
 pub(crate) fn snapshot_response_json(snapshot: &TankSnapshot) -> Value {
     let mut value = serde_json::to_value(snapshot).expect("TankSnapshot should serialize");
     let object = value
         .as_object_mut()
         .expect("TankSnapshot JSON should be an object");
-    insert_legacy_chemistry_fields(object, snapshot);
+    insert_legacy_chemistry_fields(object);
     object.insert(
         "chemistry_field_semantics".to_string(),
         chemistry_field_semantics_json(),
@@ -79,25 +75,16 @@ pub(crate) fn chemistry_response_json(snapshot: &TankSnapshot) -> Value {
             legacy_chemistry_aliases_json(),
         ),
     ]);
-    insert_legacy_chemistry_fields(&mut object, snapshot);
+    insert_legacy_chemistry_fields(&mut object);
     Value::Object(object)
 }
 
-fn insert_legacy_chemistry_fields(object: &mut Map<String, Value>, snapshot: &TankSnapshot) {
-    for (key, value) in [
-        ("tan_mg_l", snapshot.tan_mg_n_per_l),
-        ("nh3_mg_l", snapshot.nh3_mg_n_per_l),
-        ("nitrite_mg_l", snapshot.nitrite_mg_n_per_l),
-        ("nitrate_mg_l", snapshot.nitrate_mg_n_per_l),
-        ("phosphate_mg_l", snapshot.phosphate_mg_p_per_l),
-        (
-            "dissolved_inorganic_carbon_mg_l",
-            snapshot.dissolved_inorganic_carbon_mg_c_per_l,
-        ),
-        ("tds_mg_l", snapshot.estimated_tds_7_ion_mg_per_l),
-        ("conductivity_us_cm", snapshot.estimated_conductivity_us_cm),
-    ] {
-        object.insert(key.to_string(), json!(value));
+fn insert_legacy_chemistry_fields(object: &mut Map<String, Value>) {
+    for (legacy, canonical) in LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES {
+        let Some(value) = object.get(canonical).cloned() else {
+            continue;
+        };
+        object.insert(legacy.to_string(), value);
     }
 }
 
@@ -120,22 +107,17 @@ fn chemistry_field_semantics_json() -> Value {
 
 fn estimated_tds_scope_json() -> Value {
     json!({
-        "tracked_major_ions": TRACKED_TDS_IONS,
-        "omitted_contributors": OMITTED_TDS_CONTRIBUTORS
+        "tracked_major_ions": ESTIMATED_TDS_TRACKED_MAJOR_IONS,
+        "omitted_contributors": ESTIMATED_TDS_OMITTED_CONTRIBUTORS
     })
 }
 
 fn legacy_chemistry_aliases_json() -> Value {
-    json!({
-        "tan_mg_l": "tan_mg_n_per_l",
-        "nh3_mg_l": "nh3_mg_n_per_l",
-        "nitrite_mg_l": "nitrite_mg_n_per_l",
-        "nitrate_mg_l": "nitrate_mg_n_per_l",
-        "phosphate_mg_l": "phosphate_mg_p_per_l",
-        "dissolved_inorganic_carbon_mg_l": "dissolved_inorganic_carbon_mg_c_per_l",
-        "tds_mg_l": "estimated_tds_7_ion_mg_per_l",
-        "conductivity_us_cm": "estimated_conductivity_us_cm"
-    })
+    Value::Object(Map::from_iter(
+        LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES
+            .into_iter()
+            .map(|(legacy, canonical)| (legacy.to_string(), json!(canonical))),
+    ))
 }
 
 pub async fn get_snapshot(State(state): State<AppState>) -> Json<Value> {
@@ -273,12 +255,11 @@ pub async fn get_environment(State(state): State<AppState>) -> Json<EnvironmentS
 #[cfg(test)]
 mod tests {
     use serde_json::json;
-    use tank_core::{SimSeed, TankState};
-
-    use super::{
-        biology_snapshot_from_snapshot, chemistry_response_json, snapshot_response_json,
-        TRACKED_TDS_IONS,
+    use tank_core::{
+        SimSeed, TankState, ESTIMATED_TDS_OMITTED_CONTRIBUTORS, ESTIMATED_TDS_TRACKED_MAJOR_IONS,
     };
+
+    use super::{biology_snapshot_from_snapshot, chemistry_response_json, snapshot_response_json};
 
     #[test]
     fn snapshot_response_keeps_legacy_chemistry_aliases() {
@@ -333,16 +314,14 @@ mod tests {
             value["estimated_tds_scope"]["tracked_major_ions"]
                 .as_array()
                 .expect("tracked ion list"),
-            &TRACKED_TDS_IONS
+            &ESTIMATED_TDS_TRACKED_MAJOR_IONS
                 .into_iter()
                 .map(|ion| json!(ion))
                 .collect::<Vec<_>>()
         );
         assert_eq!(
             value["estimated_tds_scope"]["omitted_contributors"][0],
-            json!(
-                "tracked TAN/NH3, nitrite, nitrate, and phosphate species are excluded from this estimate"
-            )
+            json!(ESTIMATED_TDS_OMITTED_CONTRIBUTORS[0])
         );
         assert_eq!(
             value["phosphate_mg_l"],

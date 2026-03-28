@@ -11,6 +11,8 @@ pub enum SubstrateKind {
 impl SubstrateKind {
     /// Effective interstitial colonizable-area multiplier per cm of substrate
     /// depth for the coarse substrate classes the engine currently supports.
+    /// Keep these values aligned with the substrate preset pack until the
+    /// factor is promoted into first-class serialized layer metadata.
     pub fn colonizable_area_factor(&self) -> f64 {
         match self {
             Self::InertSand => 0.5,

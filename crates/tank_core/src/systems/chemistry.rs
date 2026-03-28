@@ -480,6 +480,12 @@ pub fn validate_source_water_carbonate_profile(
     }
 }
 
+/// Projects solved bicarbonate concentration (mmol/L) back to the cached
+/// `WaterState.bicarbonate_mg_total` field.
+pub fn bicarbonate_mg_total_from_mmol_per_l(hco3_mmol_per_l: f64, volume_l: f64) -> f64 {
+    hco3_mmol_per_l.max(0.0) * HCO3_MG_PER_MMOL * volume_l.max(0.0)
+}
+
 /// Resolves the carbonate equilibrium and updates `WaterState.ph` and
 /// `WaterState.bicarbonate_mg_total` from the solver output.
 ///
@@ -493,7 +499,7 @@ pub fn resolve_carbonate_state(water: &mut WaterState, volume_l: f64) {
         volume_l,
     );
     water.ph = eq.ph;
-    water.bicarbonate_mg_total = eq.hco3_mmol_per_l * HCO3_MG_PER_MMOL * volume_l;
+    water.bicarbonate_mg_total = bicarbonate_mg_total_from_mmol_per_l(eq.hco3_mmol_per_l, volume_l);
 }
 
 // ---------------------------------------------------------------------------

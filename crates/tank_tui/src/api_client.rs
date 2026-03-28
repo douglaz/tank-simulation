@@ -1,20 +1,12 @@
 use anyhow::{bail, Context};
 use reqwest::blocking::Client;
 use serde_json::{Map, Value};
-use tank_core::{PlayerAction, SaveFile, TankSnapshot};
+use tank_core::{PlayerAction, SaveFile, TankSnapshot, LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES};
 
-const LEGACY_SNAPSHOT_CHEMISTRY_FIELDS: [(&str, &str); 8] = [
-    ("tan_mg_l", "tan_mg_n_per_l"),
-    ("nh3_mg_l", "nh3_mg_n_per_l"),
-    ("nitrite_mg_l", "nitrite_mg_n_per_l"),
-    ("nitrate_mg_l", "nitrate_mg_n_per_l"),
-    ("phosphate_mg_l", "phosphate_mg_p_per_l"),
-    (
-        "dissolved_inorganic_carbon_mg_l",
-        "dissolved_inorganic_carbon_mg_c_per_l",
-    ),
-    ("tds_mg_l", "estimated_tds_7_ion_mg_per_l"),
-    ("conductivity_us_cm", "estimated_conductivity_us_cm"),
+const SNAPSHOT_METADATA_FIELDS: [&str; 3] = [
+    "chemistry_field_semantics",
+    "estimated_tds_scope",
+    "legacy_chemistry_aliases",
 ];
 
 #[derive(Debug, Clone)]
@@ -136,7 +128,7 @@ fn normalize_snapshot_value(value: &mut Value) {
 }
 
 fn normalize_snapshot_object(object: &mut Map<String, Value>) {
-    for (legacy, canonical) in LEGACY_SNAPSHOT_CHEMISTRY_FIELDS {
+    for (legacy, canonical) in LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES {
         if object.contains_key(canonical) {
             continue;
         }
@@ -144,27 +136,77 @@ fn normalize_snapshot_object(object: &mut Map<String, Value>) {
             object.insert(canonical.to_string(), legacy_value);
         }
     }
+    for (legacy, _) in LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES {
+        object.remove(legacy);
+    }
+    for metadata_field in SNAPSHOT_METADATA_FIELDS {
+        object.remove(metadata_field);
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-    use tank_core::{rng::SimSeed, TankState};
+    use serde_json::{json, Map};
+    use tank_core::{
+        rng::SimSeed, TankState, ESTIMATED_TDS_OMITTED_CONTRIBUTORS,
+        ESTIMATED_TDS_TRACKED_MAJOR_IONS, LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES,
+    };
 
-    use super::{parse_load_response, parse_snapshot_value, LEGACY_SNAPSHOT_CHEMISTRY_FIELDS};
+    use super::{parse_load_response, parse_snapshot_value};
+
+    fn canonical_snapshot_value(seed: SimSeed) -> serde_json::Value {
+        let snapshot = tank_core::TankSnapshot::from_state(&TankState::new(seed));
+        serde_json::to_value(&snapshot).expect("snapshot should serialize")
+    }
 
     fn legacy_snapshot_value(seed: SimSeed) -> serde_json::Value {
-        let snapshot = tank_core::TankSnapshot::from_state(&TankState::new(seed));
-        let mut value = serde_json::to_value(&snapshot).expect("snapshot should serialize");
+        let mut value = canonical_snapshot_value(seed);
         let object = value
             .as_object_mut()
             .expect("serialized snapshot should be an object");
-        for (legacy, canonical) in LEGACY_SNAPSHOT_CHEMISTRY_FIELDS {
+        for (legacy, canonical) in LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES {
             let canonical_value = object
                 .remove(canonical)
                 .expect("compatibility test expects canonical chemistry field");
             object.insert(legacy.to_string(), canonical_value);
         }
+        value
+    }
+
+    fn enriched_api_snapshot_value(seed: SimSeed) -> serde_json::Value {
+        let mut value = canonical_snapshot_value(seed);
+        let object = value
+            .as_object_mut()
+            .expect("serialized snapshot should be an object");
+        for (legacy, canonical) in LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES {
+            let canonical_value = object
+                .get(canonical)
+                .cloned()
+                .expect("compatibility test expects canonical chemistry field");
+            object.insert(legacy.to_string(), canonical_value);
+        }
+        object.insert(
+            "chemistry_field_semantics".to_string(),
+            json!({
+                "tan_mg_n_per_l": "Total ammonia nitrogen, mg N/L.",
+                "estimated_tds_7_ion_mg_per_l": "Estimated TDS from 7 tracked major ions only, in mg/L."
+            }),
+        );
+        object.insert(
+            "estimated_tds_scope".to_string(),
+            json!({
+                "tracked_major_ions": ESTIMATED_TDS_TRACKED_MAJOR_IONS,
+                "omitted_contributors": ESTIMATED_TDS_OMITTED_CONTRIBUTORS,
+            }),
+        );
+        object.insert(
+            "legacy_chemistry_aliases".to_string(),
+            serde_json::Value::Object(Map::from_iter(
+                LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES
+                    .into_iter()
+                    .map(|(legacy, canonical)| (legacy.to_string(), json!(canonical))),
+            )),
+        );
         value
     }
 
@@ -185,11 +227,21 @@ mod tests {
         let object = value
             .as_object_mut()
             .expect("serialized snapshot should be an object");
-        for (legacy, _canonical) in LEGACY_SNAPSHOT_CHEMISTRY_FIELDS {
+        for (legacy, _canonical) in LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES {
             object.insert(legacy.to_string(), json!(-999.0));
         }
 
         let parsed = parse_snapshot_value(value).expect("canonical snapshot should deserialize");
+
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn parses_enriched_api_snapshot_response() {
+        let expected = tank_core::TankSnapshot::from_state(&TankState::new(SimSeed(889)));
+        let value = enriched_api_snapshot_value(SimSeed(889));
+
+        let parsed = parse_snapshot_value(value).expect("enriched API snapshot should deserialize");
 
         assert_eq!(parsed, expected);
     }
@@ -200,6 +252,19 @@ mod tests {
         let body = json!({ "snapshot": legacy_snapshot_value(SimSeed(999)) });
 
         let parsed = parse_load_response(body).expect("legacy load response should deserialize");
+
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn parses_load_response_with_enriched_api_snapshot() {
+        let expected = tank_core::TankSnapshot::from_state(&TankState::new(SimSeed(1000)));
+        let body = json!({
+            "status": "loaded",
+            "snapshot": enriched_api_snapshot_value(SimSeed(1000)),
+        });
+
+        let parsed = parse_load_response(body).expect("enriched load response should deserialize");
 
         assert_eq!(parsed, expected);
     }

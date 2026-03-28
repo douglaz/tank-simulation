@@ -22,6 +22,24 @@ const MAGNESIUM_AS_CACO3_FACTOR: f64 = MOLAR_MASS_CACO3_G_PER_MOL / MOLAR_MASS_M
 /// not a physical conductivity solver and should be interpreted as an estimate.
 const ESTIMATED_TDS_TO_CONDUCTIVITY_DIVISOR: f64 = 0.65;
 
+/// Major ions currently counted by the TDS/conductivity display estimate.
+pub const ESTIMATED_TDS_TRACKED_MAJOR_IONS: [&str; 7] =
+    ["Ca", "Mg", "Na", "K", "HCO3", "Cl", "SO4"];
+
+/// Important contributors intentionally omitted from the current 7-ion estimate.
+pub const ESTIMATED_TDS_OMITTED_CONTRIBUTORS: [&str; 3] = [
+    "tracked TAN/NH3, nitrite, nitrate, and phosphate species are excluded from this estimate",
+    "trace ions and micronutrients",
+    "dissolved organics and other untracked solutes",
+];
+
+/// Short TUI-ready summary lines describing the 7-ion estimate scope.
+pub const ESTIMATED_TDS_SCOPE_LINES: [&str; 3] = [
+    "7 ions: Ca Mg Na K HCO3 Cl SO4",
+    "Omits TAN/NH3 NO2 NO3 PO4",
+    "Omits organics + trace ions",
+];
+
 fn default_ph() -> f64 {
     7.0
 }
@@ -187,11 +205,39 @@ impl WaterState {
     }
 
     pub fn tds_mg_per_l(&self, volume_l: f64) -> f64 {
-        concentration_from_total(self.total_tracked_ions_mg(), volume_l)
+        self.tds_mg_per_l_with_bicarbonate_total(volume_l, self.bicarbonate_mg_total)
     }
 
     pub fn conductivity_us_cm(&self, volume_l: f64) -> f64 {
-        (self.tds_mg_per_l(volume_l) / ESTIMATED_TDS_TO_CONDUCTIVITY_DIVISOR).max(0.0)
+        self.conductivity_us_cm_with_bicarbonate_total(volume_l, self.bicarbonate_mg_total)
+    }
+
+    /// Computes the estimated 7-ion TDS using an explicitly supplied
+    /// bicarbonate total instead of the cached `bicarbonate_mg_total`.
+    ///
+    /// This lets callers reuse a fresh carbonate solve before the cache has
+    /// been synchronized back onto `WaterState`.
+    pub(crate) fn tds_mg_per_l_with_bicarbonate_total(
+        &self,
+        volume_l: f64,
+        bicarbonate_mg_total: f64,
+    ) -> f64 {
+        concentration_from_total(
+            self.total_tracked_ions_mg_with_bicarbonate_total(bicarbonate_mg_total),
+            volume_l,
+        )
+    }
+
+    /// Computes the estimated conductivity from the same 7-ion proxy while
+    /// allowing callers to override the bicarbonate contribution.
+    pub(crate) fn conductivity_us_cm_with_bicarbonate_total(
+        &self,
+        volume_l: f64,
+        bicarbonate_mg_total: f64,
+    ) -> f64 {
+        (self.tds_mg_per_l_with_bicarbonate_total(volume_l, bicarbonate_mg_total)
+            / ESTIMATED_TDS_TO_CONDUCTIVITY_DIVISOR)
+            .max(0.0)
     }
 
     pub fn concentration_view(&self, volume_l: f64) -> ConcentrationView<'_> {
@@ -233,11 +279,18 @@ impl WaterState {
     /// `resolve_carbonate_state()` has run after the most recent DIC or
     /// alkalinity mutation before reading this aggregate.
     pub fn total_tracked_ions_mg(&self) -> f64 {
+        self.total_tracked_ions_mg_with_bicarbonate_total(self.bicarbonate_mg_total)
+    }
+
+    pub(crate) fn total_tracked_ions_mg_with_bicarbonate_total(
+        &self,
+        bicarbonate_mg_total: f64,
+    ) -> f64 {
         self.calcium_mg_total
             + self.magnesium_mg_total
             + self.sodium_mg_total
             + self.potassium_mg_total
-            + self.bicarbonate_mg_total
+            + bicarbonate_mg_total.max(0.0)
             + self.chloride_mg_total
             + self.sulfate_mg_total
     }

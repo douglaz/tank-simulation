@@ -1516,7 +1516,7 @@ pub struct ScenarioPreset {
 
 #[cfg(test)]
 mod tests {
-    use super::{ProcessParamsPreset, SourceWaterPreset};
+    use super::{ProcessParamsPreset, ShrimpPreset, SourceWaterPreset};
     use tank_core::types::provenance::{
         check_param_range, format_param, ConfidenceLevel, ParamMeta,
     };
@@ -1530,7 +1530,103 @@ mod tests {
         toml::from_str(contents).expect("source preset should parse")
     }
 
+    fn shrimp_preset(contents: &str) -> ShrimpPreset {
+        toml::from_str(contents).expect("shrimp preset should parse")
+    }
+
     // ---- Provenance acceptance-criteria tests ----
+
+    #[test]
+    fn test_source_water_param_meta_roundtrip_and_range_warning(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let toml_str = r#"
+id = "test"
+name = "Test"
+temperature_c = 24.0
+ammonia_mg_n_per_l = 0.0
+nitrite_mg_n_per_l = 0.0
+nitrate_mg_n_per_l = 5.0
+phosphate_mg_p_per_l = 0.1
+dic_mg_c_per_l = 18.0
+doc_mg_c_per_l = 0.0
+don_mg_n_per_l = 0.0
+alkalinity_meq_per_l = 1.249
+calcium_mg_per_l = 25.0
+magnesium_mg_per_l = 10.0
+sodium_mg_per_l = 12.0
+potassium_mg_per_l = 3.0
+bicarbonate_mg_per_l = 76.2
+chloride_mg_per_l = 18.0
+sulfate_mg_per_l = 15.8
+
+[param_meta.nitrate_mg_n_per_l]
+unit = "mg N/L"
+source = "Municipal water report"
+confidence = "literature"
+valid_range = [0.0, 2.0]
+notes = "Winter baseline"
+"#;
+        let preset: SourceWaterPreset = toml::from_str(toml_str)?;
+        preset.validate().expect("source preset should validate");
+
+        let meta = preset
+            .param_meta
+            .get("nitrate_mg_n_per_l")
+            .expect("metadata should exist");
+        assert_eq!(meta.unit.as_deref(), Some("mg N/L"));
+        assert_eq!(meta.confidence, Some(ConfidenceLevel::Literature));
+
+        let warnings = preset.check_ranges();
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].param_name, "nitrate_mg_n_per_l");
+        assert_eq!(warnings[0].value, 5.0);
+
+        let display = preset
+            .format_param("nitrate_mg_n_per_l")
+            .expect("parameter should format");
+        assert!(display.contains("Municipal water report"));
+        assert!(display.contains("range [0.0, 2.0]"));
+
+        let serialized = toml::to_string(&preset)?;
+        let roundtrip: SourceWaterPreset = toml::from_str(&serialized)?;
+        assert_eq!(roundtrip.param_meta, preset.param_meta);
+        Ok(())
+    }
+
+    #[test]
+    fn test_source_water_unknown_param_meta_keys_are_rejected(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let toml_str = r#"
+id = "test"
+name = "Test"
+temperature_c = 24.0
+ammonia_mg_n_per_l = 0.0
+nitrite_mg_n_per_l = 0.0
+nitrate_mg_n_per_l = 5.0
+phosphate_mg_p_per_l = 0.1
+dic_mg_c_per_l = 18.0
+doc_mg_c_per_l = 0.0
+don_mg_n_per_l = 0.0
+alkalinity_meq_per_l = 1.249
+calcium_mg_per_l = 25.0
+magnesium_mg_per_l = 10.0
+sodium_mg_per_l = 12.0
+potassium_mg_per_l = 3.0
+bicarbonate_mg_per_l = 76.2
+chloride_mg_per_l = 18.0
+sulfate_mg_per_l = 15.8
+
+[param_meta.nitrate_typo]
+unit = "mg N/L"
+"#;
+        let preset: SourceWaterPreset = toml::from_str(toml_str)?;
+        let err = preset
+            .validate()
+            .expect_err("unknown source-water param_meta key should fail");
+        assert!(err.contains("unknown param_meta entries"));
+        assert!(err.contains("nitrate_typo"));
+        Ok(())
+    }
 
     /// AC 1: A parameter with full provenance metadata serializes and
     /// deserializes correctly via TOML.
@@ -1874,6 +1970,61 @@ unit = "mg N/L"
         Ok(())
     }
 
+    #[test]
+    fn test_shrimp_param_meta_supports_defaulted_and_optional_fields(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let toml_str = r#"
+id = "test"
+name = "Test shrimp"
+species = "Neocaridina davidi"
+optimal_temp_min_c = 22.0
+optimal_temp_max_c = 26.0
+gh_min_d = 5.0
+gh_max_d = 10.0
+egg_duration_days = 21
+hatch_success_base = 0.7
+juvenile_sensitivity = 1.5
+high_temp_repro_penalty_start_c = 28.0
+high_temp_repro_penalty_full_c = 33.0
+base_molt_interval_days = 50.0
+
+[param_meta.base_spawn_rate]
+unit = "per day"
+confidence = "heuristic"
+notes = "Serde default should still be provenance-visible"
+
+[param_meta.base_clutch_size]
+unit = "eggs"
+confidence = "expert"
+notes = "Optional field may remain unset"
+
+[param_meta.base_molt_interval_days]
+unit = "days"
+confidence = "expert"
+valid_range = [20.0, 40.0]
+"#;
+        let preset = shrimp_preset(toml_str);
+        preset.validate().expect("shrimp preset should validate");
+
+        assert_eq!(preset.base_spawn_rate, 0.15);
+        let spawn_display = preset
+            .format_param("base_spawn_rate")
+            .expect("defaulted field should format");
+        assert!(spawn_display.contains("base_spawn_rate: 0.15"));
+        assert!(spawn_display.contains("heuristic"));
+
+        assert!(
+            preset.format_param("base_clutch_size").is_none(),
+            "unset optional fields should not fabricate values"
+        );
+
+        let warnings = preset.check_ranges();
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].param_name, "base_molt_interval_days");
+        assert_eq!(warnings[0].value, 50.0);
+        Ok(())
+    }
+
     // ---- Original tests ----
 
     #[test]
@@ -1892,6 +2043,21 @@ unit = "mg N/L"
 
         let err = preset.validate().expect_err("preset should be rejected");
         assert!(err.contains("partition sum"));
+    }
+
+    #[test]
+    fn process_preset_rejects_invalid_dic_rates() {
+        let mut preset = default_process_preset();
+        preset.respiration_dic_rate_mg_c_per_g_per_hour = -0.01;
+
+        let err = preset.validate().expect_err("preset should be rejected");
+        assert!(err.contains("respiration_dic_rate_mg_c_per_g_per_hour"));
+
+        let mut preset = default_process_preset();
+        preset.photosynthesis_dic_rate_mg_c_per_g_per_hour = f64::NAN;
+
+        let err = preset.validate().expect_err("preset should be rejected");
+        assert!(err.contains("photosynthesis_dic_rate_mg_c_per_g_per_hour"));
     }
 
     #[test]

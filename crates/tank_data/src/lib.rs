@@ -167,7 +167,11 @@ where
     Ok((preset, diagnostics))
 }
 
-fn format_range_diagnostics(category: &'static str, id: &str, warnings: &[RangeWarning]) -> Vec<String> {
+fn format_range_diagnostics(
+    category: &'static str,
+    id: &str,
+    warnings: &[RangeWarning],
+) -> Vec<String> {
     warnings
         .iter()
         .map(|warning| format!("warning: preset `{id}` in category `{category}`: {warning}"))
@@ -275,13 +279,14 @@ valid_range = [0.1, 5.0]
 "#,
         )];
 
-        let (_preset, diagnostics) = load_validated_with_range_diagnostics::<ProcessParamsPreset, _, _>(
-            "process",
-            "test",
-            registry,
-            ProcessParamsPreset::validate,
-            ProcessParamsPreset::check_ranges,
-        )?;
+        let (_preset, diagnostics) =
+            load_validated_with_range_diagnostics::<ProcessParamsPreset, _, _>(
+                "process",
+                "test",
+                registry,
+                ProcessParamsPreset::validate,
+                ProcessParamsPreset::check_ranges,
+            )?;
 
         assert_eq!(diagnostics.len(), 1);
         assert!(diagnostics[0].contains("warning: preset `test` in category `process`"));
@@ -292,8 +297,12 @@ valid_range = [0.1, 5.0]
     #[test]
     fn shipped_param_meta_loaders_return_no_diagnostics() -> Result<(), PresetError> {
         assert!(load_source_water_with_diagnostics("moderate")?.1.is_empty());
-        assert!(load_shrimp_with_diagnostics("neocaridina_davidi")?.1.is_empty());
-        assert!(load_process_params_with_diagnostics("default")?.1.is_empty());
+        assert!(load_shrimp_with_diagnostics("neocaridina_davidi")?
+            .1
+            .is_empty());
+        assert!(load_process_params_with_diagnostics("default")?
+            .1
+            .is_empty());
         Ok(())
     }
 }

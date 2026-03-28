@@ -73,6 +73,10 @@ pub struct Envelope {
     pub do_mg_l_bounds: Option<(f64, f64)>,
     pub shrimp_count_bounds: Option<(u32, u32)>,
     pub plant_biomass_g_bounds: Option<(f64, f64)>,
+    pub algae_nuisance_bounds: Option<(f64, f64)>,
+    pub biofilter_maturity_bounds: Option<(f64, f64)>,
+    pub fast_stem_biomass_g_bounds: Option<(f64, f64)>,
+    pub periphyton_biomass_g_bounds: Option<(f64, f64)>,
 }
 
 impl Envelope {
@@ -118,6 +122,26 @@ impl Envelope {
 
     pub fn plant_biomass_g(mut self, min: f64, max: f64) -> Self {
         self.plant_biomass_g_bounds = Some((min, max));
+        self
+    }
+
+    pub fn algae_nuisance(mut self, min: f64, max: f64) -> Self {
+        self.algae_nuisance_bounds = Some((min, max));
+        self
+    }
+
+    pub fn biofilter_maturity(mut self, min: f64, max: f64) -> Self {
+        self.biofilter_maturity_bounds = Some((min, max));
+        self
+    }
+
+    pub fn fast_stem_biomass_g(mut self, min: f64, max: f64) -> Self {
+        self.fast_stem_biomass_g_bounds = Some((min, max));
+        self
+    }
+
+    pub fn periphyton_biomass_g(mut self, min: f64, max: f64) -> Self {
+        self.periphyton_biomass_g_bounds = Some((min, max));
         self
     }
 

@@ -5,14 +5,9 @@ pub mod log;
 pub mod overview;
 
 use ratatui::prelude::*;
+pub(crate) use tank_core::ESTIMATED_TDS_SCOPE_LINES;
 
 use crate::{Screen, TuiApp};
-
-pub(crate) const ESTIMATED_TDS_SCOPE_LINES: [&str; 3] = [
-    "7 ions: Ca Mg Na K HCO3 Cl SO4",
-    "Omits TAN/NH3 NO2 NO3 PO4",
-    "Omits organics + trace ions",
-];
 
 pub fn render_screen(screen: Screen, frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
     match screen {

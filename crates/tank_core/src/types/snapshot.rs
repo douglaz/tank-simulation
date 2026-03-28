@@ -2,9 +2,26 @@ use serde::{Deserialize, Serialize};
 
 use super::{PlantGuild, SimEvent, TankState};
 use crate::systems::{
-    chemistry::{compute_nh3_mg_n_per_l, solve_carbonate_equilibrium},
+    chemistry::{
+        bicarbonate_mg_total_from_mmol_per_l, compute_nh3_mg_n_per_l, solve_carbonate_equilibrium,
+    },
     temperature::do_sat_mg_l,
 };
+
+/// Legacy chemistry field names kept in API responses for compatibility.
+pub const LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES: [(&str, &str); 8] = [
+    ("tan_mg_l", "tan_mg_n_per_l"),
+    ("nh3_mg_l", "nh3_mg_n_per_l"),
+    ("nitrite_mg_l", "nitrite_mg_n_per_l"),
+    ("nitrate_mg_l", "nitrate_mg_n_per_l"),
+    ("phosphate_mg_l", "phosphate_mg_p_per_l"),
+    (
+        "dissolved_inorganic_carbon_mg_l",
+        "dissolved_inorganic_carbon_mg_c_per_l",
+    ),
+    ("tds_mg_l", "estimated_tds_7_ion_mg_per_l"),
+    ("conductivity_us_cm", "estimated_conductivity_us_cm"),
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TankSnapshot {
@@ -84,8 +101,14 @@ impl TankSnapshot {
         let do_mg_l_val = chemistry.do_mg_per_l();
         let gh_d = chemistry.gh_d();
         let kh_d = chemistry.kh_d();
-        let estimated_tds_7_ion_mg_per_l = chemistry.tds_mg_per_l();
-        let estimated_conductivity_us_cm = chemistry.conductivity_us_cm();
+        let bicarbonate_mg_total =
+            bicarbonate_mg_total_from_mmol_per_l(carbonate_eq.hco3_mmol_per_l, volume_l);
+        let estimated_tds_7_ion_mg_per_l = state
+            .water
+            .tds_mg_per_l_with_bicarbonate_total(volume_l, bicarbonate_mg_total);
+        let estimated_conductivity_us_cm = state
+            .water
+            .conductivity_us_cm_with_bicarbonate_total(volume_l, bicarbonate_mg_total);
         let ph = carbonate_eq.ph;
         let nh3_mg_n_per_l = compute_nh3_mg_n_per_l(tan_mg_n_per_l, ph, state.water.temperature_c);
         let fast_stem_biomass_g: f64 = state
@@ -193,7 +216,11 @@ fn average_guild_health_index(state: &TankState, guild: PlantGuild) -> Option<f6
 #[cfg(test)]
 mod tests {
     use super::TankSnapshot;
-    use crate::{rng::SimSeed, systems::chemistry::solve_carbonate_equilibrium, TankState};
+    use crate::{
+        rng::SimSeed,
+        systems::chemistry::{bicarbonate_mg_total_from_mmol_per_l, solve_carbonate_equilibrium},
+        TankState,
+    };
 
     fn assert_close(actual: f64, expected: f64, tolerance: f64) {
         assert!(
@@ -222,6 +249,43 @@ mod tests {
         assert_close(
             snapshot.co2_aq_mmol_per_l,
             expected.co2_aq_mmol_per_l,
+            1e-12,
+        );
+    }
+
+    #[test]
+    fn snapshot_tds_and_conductivity_use_fresh_carbonate_projection() {
+        let mut state = TankState::new(SimSeed(406));
+        let volume_l = state.water_volume_l();
+        state.water.dissolved_inorganic_carbon_mg_c_total = 42.0 * volume_l;
+        state.water.alkalinity_meq_total = 3.4 * volume_l;
+        state.water.bicarbonate_mg_total = 0.0;
+
+        let expected = solve_carbonate_equilibrium(
+            state.water.dissolved_inorganic_carbon_mg_c_total,
+            state.water.alkalinity_meq_total,
+            state.water.temperature_c,
+            volume_l,
+        );
+        let fresh_bicarbonate_mg_total =
+            bicarbonate_mg_total_from_mmol_per_l(expected.hco3_mmol_per_l, volume_l);
+        let cached_tds = state.water.tds_mg_per_l(volume_l);
+        let snapshot = TankSnapshot::from_state(&state);
+
+        assert!(fresh_bicarbonate_mg_total > 0.0);
+        assert!(snapshot.estimated_tds_7_ion_mg_per_l > cached_tds);
+        assert_close(
+            snapshot.estimated_tds_7_ion_mg_per_l,
+            state
+                .water
+                .tds_mg_per_l_with_bicarbonate_total(volume_l, fresh_bicarbonate_mg_total),
+            1e-12,
+        );
+        assert_close(
+            snapshot.estimated_conductivity_us_cm,
+            state
+                .water
+                .conductivity_us_cm_with_bicarbonate_total(volume_l, fresh_bicarbonate_mg_total),
             1e-12,
         );
     }

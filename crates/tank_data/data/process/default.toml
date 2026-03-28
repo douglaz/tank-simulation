@@ -110,5 +110,8 @@ source_title = "Starter preset pack"
 source_year = 2026
 # Whole-file provenance confidence is intentionally coarse/free-form;
 # per-parameter [param_meta.*].confidence uses the validated enum.
+# For legacy `_mg` / `_mg_total` parameter names, any future
+# [param_meta.*].valid_range should use the normalized concentration unit
+# shown by `unit` (for example mg/L), not the raw historical storage total.
 confidence = "medium"
 notes = "Default process coefficients including heat-transfer parameters for the hourly thermal model."

@@ -131,3 +131,20 @@ fn apply_dissolved_oxygen_terms(
         out_mg: oxygen_out_mg,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::REFERENCE_SA_V_CM2_PER_L;
+    use crate::{rng::SimSeed, TankState};
+
+    #[test]
+    fn reference_sa_v_matches_default_tank_geometry() {
+        let state = TankState::new(SimSeed(60_001));
+        let actual = state.geometry.surface_area_cm2() / state.water_volume_l();
+
+        assert!(
+            (actual - REFERENCE_SA_V_CM2_PER_L).abs() < 0.01,
+            "default tank SA/V drifted from oxygen reference: actual={actual}, reference={REFERENCE_SA_V_CM2_PER_L}"
+        );
+    }
+}

@@ -47,9 +47,12 @@ pub use process::{
 pub use provenance::{
     check_all_ranges, check_param_range, format_param, ConfidenceLevel, ParamMeta, RangeWarning,
 };
-pub use snapshot::TankSnapshot;
+pub use snapshot::{TankSnapshot, LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES};
 pub use source_water::SourceWaterProfile;
 pub use state::{SimMeta, TankState};
 pub use substrate::{SubstrateKind, SubstrateLayerState};
 pub(crate) use water::concentration_from_total;
-pub use water::{ConcentrationView, WaterState};
+pub use water::{
+    ConcentrationView, WaterState, ESTIMATED_TDS_OMITTED_CONTRIBUTORS, ESTIMATED_TDS_SCOPE_LINES,
+    ESTIMATED_TDS_TRACKED_MAJOR_IONS,
+};
