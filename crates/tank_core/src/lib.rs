@@ -1,4 +1,5 @@
 pub mod budget_helpers;
+pub mod conversions;
 pub mod engine;
 pub mod invariants;
 pub mod rng;

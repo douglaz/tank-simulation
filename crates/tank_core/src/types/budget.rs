@@ -205,7 +205,7 @@ impl BudgetLedger {
 /// When adding a new explicit nitrogen-bearing field, update this function in
 /// the same change. If the field uses a non-standard name, also extend the
 /// budget-path discovery rules used by the coverage test.
-pub fn nitrogen_budget_components(state: &TankState) -> [BudgetComponent; 18] {
+pub fn nitrogen_budget_components(state: &TankState) -> [BudgetComponent; 19] {
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let substrate_n_mg: f64 = state
         .substrate_layers
@@ -330,7 +330,7 @@ pub fn nitrogen_budget_components(state: &TankState) -> [BudgetComponent; 18] {
 /// When adding a new explicit carbon-bearing field, update this function in the
 /// same change. If the field uses a non-standard name, also extend the
 /// budget-path discovery rules used by the coverage test.
-pub fn carbon_budget_components(state: &TankState) -> [BudgetComponent; 15] {
+pub fn carbon_budget_components(state: &TankState) -> [BudgetComponent; 16] {
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let plant_c_mg: f64 = state
         .plant_guilds
