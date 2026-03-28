@@ -945,8 +945,7 @@ fn gh_mineral_factor(gh_d: f64, params: &ShrimpRuntimeParams) -> f64 {
 mod tests {
     use super::{
         refresh_carbonate_state, route_consumed_food, shrimp_feeding, step_daily_shrimp,
-        update_condition, ADULT_FEEDING_WEIGHT, JUVENILE_FEEDING_WEIGHT, MG_N_PER_MEQ_AMMONIA,
-        SUB_ADULT_FEEDING_WEIGHT,
+        update_condition, MG_N_PER_MEQ_AMMONIA,
     };
     use crate::{algae_detrital_mass_g, SimSeed, TankState, WaterState};
 
