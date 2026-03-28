@@ -296,12 +296,13 @@ fn detail_tracing_surfaces_daily_shrimp_internal_state_deltas() -> Result<(), ta
         .system("system:daily_shrimp")
         .expect("daily shrimp stage should be traced");
 
-    assert!(SystemTraceEntry::tracks_pool(
-        "animal.daily_food_consumed_g"
-    ));
+    assert!(SystemTraceEntry::tracks_pool("animal.molt_stress"));
     assert!(
-        daily_shrimp.delta_for("animal.daily_food_consumed_g") > 0.0,
-        "daily shrimp tracing should surface feeding-driven internal state deltas"
+        daily_shrimp
+            .pool_deltas
+            .iter()
+            .any(|delta| delta.pool == "animal.molt_stress"),
+        "daily shrimp tracing should surface internal shrimp-state deltas explicitly"
     );
 
     Ok(())

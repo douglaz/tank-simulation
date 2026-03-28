@@ -223,6 +223,28 @@ pub struct ProcessParams {
     pub microfauna_periphyton_consumption: f64,
     pub microfauna_population_smoothing: f64,
     pub microfauna_shrimp_pressure_threshold: f64,
+
+    // -- Microfauna feeding pathway fractions (consumer routing contract) --
+    // Same routing template as shrimp: ingested = feces + assimilated,
+    // assimilated = respired + excreted + retained.
+    // Microfauna are index-based so the retained share accumulates in a
+    // lightweight reserve_g pool rather than discrete biomass.
+    /// Fraction of ingested organic matter that is assimilated (remainder is feces).
+    #[serde(default = "default_microfauna_assimilation_efficiency")]
+    pub microfauna_assimilation_efficiency: f64,
+
+    /// Of the assimilated share, fraction routed to respiration (O2 demand + DIC).
+    #[serde(default = "default_microfauna_respiration_fraction")]
+    pub microfauna_respiration_fraction_of_assimilated: f64,
+
+    /// Of the assimilated share, fraction excreted as dissolved TAN + DOC.
+    #[serde(default = "default_microfauna_excretion_fraction")]
+    pub microfauna_excretion_fraction_of_assimilated: f64,
+
+    /// Of the assimilated share, fraction retained as microfauna reserve.
+    /// Derived: 1.0 - respiration_fraction - excretion_fraction.
+    #[serde(default = "default_microfauna_growth_fraction")]
+    pub microfauna_growth_fraction_of_assimilated: f64,
 }
 
 impl Default for ProcessParams {
