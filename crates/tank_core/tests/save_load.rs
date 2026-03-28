@@ -1,9 +1,9 @@
 use tank_core::systems::chemistry::solve_carbonate_equilibrium;
 use tank_core::systems::shrimp::update_stability_tracker;
 use tank_core::{
-    shrimp_biomass_g, Engine, MicrobeState, PlayerAction, ProcessParams, SaveFile, SimError,
-    SimSeed, SimulationEngine, SourceWaterProfile, StabilityTracker, TankState, WaterState,
-    APP_VERSION, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G, SCHEMA_VERSION,
+    compute_habitat_registry, shrimp_biomass_g, Engine, MicrobeState, PlayerAction, ProcessParams,
+    SaveFile, SimError, SimSeed, SimulationEngine, SourceWaterProfile, StabilityTracker, TankState,
+    WaterState, APP_VERSION, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G, SCHEMA_VERSION,
 };
 
 fn legacy_pre_stage_state_json(
@@ -87,6 +87,30 @@ fn save_load_roundtrip() -> Result<(), tank_core::SimError> {
     assert_eq!(save, restored);
     assert_eq!(engine.full_state(), restored_engine.full_state());
     assert_eq!(engine.queued_actions(), restored_engine.queued_actions());
+
+    Ok(())
+}
+
+#[test]
+fn current_schema_load_rebuilds_stale_habitat_registry() -> Result<(), tank_core::SimError> {
+    let mut state = TankState::new(SimSeed(142));
+    let stale_registry = state.habitat_registry.clone();
+    state.plant_guilds[0].biomass_g *= 3.0;
+    state.habitat_registry = stale_registry;
+
+    let json = serde_json::to_string(&SaveFile {
+        schema_version: SCHEMA_VERSION,
+        app_version: APP_VERSION.to_string(),
+        state,
+        queued_actions: vec![],
+    })
+    .expect("serialize current-schema save");
+
+    let loaded = SaveFile::from_json(&json)?;
+    assert_eq!(
+        loaded.state.habitat_registry,
+        compute_habitat_registry(&loaded.state)
+    );
 
     Ok(())
 }

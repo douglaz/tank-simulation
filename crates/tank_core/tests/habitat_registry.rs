@@ -1,6 +1,7 @@
 use tank_core::{
-    compute_habitat_registry, find_habitat, HabitatEntry, HabitatKind, PlantGuild, PlantGuildState,
-    SimSeed, SubstrateKind, SubstrateLayerState, TankGeometry, TankState, WaterState,
+    compute_habitat_registry, find_habitat, Engine, HabitatEntry, HabitatKind, PlantGuild,
+    PlantGuildState, PlayerAction, SimSeed, SimulationEngine, SubstrateKind, SubstrateLayerState,
+    TankGeometry, TankState, WaterState,
 };
 
 // ---------------------------------------------------------------------------
@@ -16,7 +17,7 @@ fn bare_state() -> TankState {
     state.plant_guilds.clear();
     state.substrate_layers.clear();
     state.water = WaterState::default_for_volume_l(state.water_volume_l());
-    state.habitat_registry = compute_habitat_registry(&state);
+    state.refresh_habitat_registry();
     state
 }
 
@@ -545,6 +546,76 @@ fn plant_biomass_change_updates_area() -> Result<(), Box<dyn std::error::Error>>
         (area_before - 200.0).abs() < 0.01,
         "expected 200 cm² for 5g FastStem: got {area_before}"
     );
+    Ok(())
+}
+
+#[test]
+fn engine_from_parts_refreshes_stale_registry() {
+    let mut state = default_state();
+    let stale_registry = state.habitat_registry.clone();
+    state.plant_guilds[0].biomass_g *= 4.0;
+    state.habitat_registry = stale_registry;
+
+    let expected = compute_habitat_registry(&state);
+    let engine = Engine::from_parts(state, vec![]);
+
+    assert_eq!(engine.full_state().habitat_registry, expected);
+}
+
+#[test]
+fn trim_action_hourly_step_keeps_stored_registry_current() -> Result<(), tank_core::SimError> {
+    let mut state = bare_state();
+    state.plant_guilds = vec![PlantGuildState {
+        guild: PlantGuild::FastStem,
+        biomass_g: 10.0,
+        health_index: 0.8,
+        crowding_index: 0.1,
+        habitat_index: 0.8,
+        water_column_uptake_bias: None,
+        substrate_uptake_bias: None,
+    }];
+    state.refresh_habitat_registry();
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.apply_action(PlayerAction::TrimPlantsAndRemove { fraction: 0.5 })?;
+    engine.step_hours(1)?;
+
+    assert_eq!(
+        engine.full_state().habitat_registry,
+        compute_habitat_registry(engine.full_state())
+    );
+    assert!(
+        (find(
+            &engine.full_state().habitat_registry,
+            HabitatKind::PlantSurfaces
+        )
+        .colonizable_area_cm2
+            - 200.0)
+            .abs()
+            < 0.01
+    );
+
+    Ok(())
+}
+
+#[test]
+fn daily_update_keeps_stored_registry_current() -> Result<(), tank_core::SimError> {
+    let mut state = default_state();
+    state.hardware.filter.enabled = true;
+    state.hardware.filter.cleanliness_index = 1.0;
+    state.detritus.fine_detritus_g_total = 3.0;
+    state.filter_state.clogging_index = 0.0;
+    state.refresh_habitat_registry();
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.step_hours(24)?;
+
+    assert!(engine.full_state().filter_state.clogging_index > 0.0);
+    assert_eq!(
+        engine.full_state().habitat_registry,
+        compute_habitat_registry(engine.full_state())
+    );
+
     Ok(())
 }
 
