@@ -1031,15 +1031,18 @@ mod tests {
             hard.temperature_c,
         )
         .expect("hard preset pH");
-        let ro_ph = predicted_carbonate_ph(
-            ro.dic_mg_c_per_l,
-            ro.alkalinity_meq_per_l,
-            ro.temperature_c,
-        )
-        .expect("ro preset pH");
+        let ro_ph =
+            predicted_carbonate_ph(ro.dic_mg_c_per_l, ro.alkalinity_meq_per_l, ro.temperature_c)
+                .expect("ro preset pH");
 
-        assert!(soft_ph < moderate_ph, "soft acidic should stay below moderate");
-        assert!(moderate_ph < hard_ph, "moderate should stay below hard shrimp");
+        assert!(
+            soft_ph < moderate_ph,
+            "soft acidic should stay below moderate"
+        );
+        assert!(
+            moderate_ph < hard_ph,
+            "moderate should stay below hard shrimp"
+        );
         assert!(soft_ph > super::SOURCE_WATER_PH_MIN && soft_ph < super::SOURCE_WATER_PH_MAX);
         assert!(
             moderate_ph > super::SOURCE_WATER_PH_MIN && moderate_ph < super::SOURCE_WATER_PH_MAX

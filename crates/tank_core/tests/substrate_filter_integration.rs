@@ -56,12 +56,13 @@ fn base_state(seed: SimSeed, geometry: TankGeometry) -> TankState {
     state.microfauna.grazing_pressure_index = 0.0;
 
     let volume_l = state.water_volume_l();
-    state.water.alkalinity_meq_total = 8.0 * volume_l;
-    state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * volume_l;
+    state.water.alkalinity_meq_total = 3.0 * volume_l;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 40.0 * volume_l;
     state.water.dissolved_oxygen_mg_total = 8.0 * volume_l;
     state.water.calcium_mg_total = 35.0 * volume_l;
     state.water.magnesium_mg_total = 10.0 * volume_l;
-    state.water.bicarbonate_mg_total = 260.0 * volume_l;
+    state.water.bicarbonate_mg_total = 183.0 * volume_l;
+    tank_core::systems::chemistry::resolve_carbonate_state(&mut state.water, volume_l);
 
     state.microbe.decomposer_biomass_g = 0.12;
     state.microbe.ammonia_oxidizer_biomass_g = 0.05;

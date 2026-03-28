@@ -62,12 +62,7 @@ fn clamp_carbonate_ph(ph: f64) -> f64 {
     }
 }
 
-fn carbonate_species_for_ph(
-    dic_mol_per_l: f64,
-    ph: f64,
-    ka1: f64,
-    ka2: f64,
-) -> (f64, f64, f64) {
+fn carbonate_species_for_ph(dic_mol_per_l: f64, ph: f64, ka1: f64, ka2: f64) -> (f64, f64, f64) {
     let h = 10.0_f64.powf(-ph);
     let denom = h * h + ka1 * h + ka1 * ka2;
     let co2 = dic_mol_per_l * h * h / denom;
