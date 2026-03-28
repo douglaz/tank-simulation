@@ -442,8 +442,7 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
             .microfauna_respiration_fraction_of_assimilated,
         microfauna_excretion_fraction_of_assimilated: preset
             .microfauna_excretion_fraction_of_assimilated,
-        microfauna_growth_fraction_of_assimilated: preset
-            .microfauna_growth_fraction_of_assimilated,
+        microfauna_growth_fraction_of_assimilated: preset.microfauna_growth_fraction_of_assimilated,
     }
 }
 

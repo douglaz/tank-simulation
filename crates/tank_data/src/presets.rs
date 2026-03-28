@@ -510,9 +510,7 @@ impl ProcessParamsPreset {
                 Some(self.shrimp_growth_fraction_of_assimilated)
             }
             "shrimp_o2_per_mg_c_respired" => Some(self.shrimp_o2_per_mg_c_respired),
-            "death_biomass_to_detritus_fraction" => {
-                Some(self.death_biomass_to_detritus_fraction)
-            }
+            "death_biomass_to_detritus_fraction" => Some(self.death_biomass_to_detritus_fraction),
             "microfauna_mineralization_boost" => Some(self.microfauna_mineralization_boost),
             "microfauna_periphyton_consumption" => Some(self.microfauna_periphyton_consumption),
             "microfauna_population_smoothing" => Some(self.microfauna_population_smoothing),
@@ -535,7 +533,10 @@ impl ProcessParamsPreset {
 
     fn provenance_value(&self, name: &str) -> Option<f64> {
         let value = self.param_value(name)?;
-        let unit = self.param_meta.get(name).and_then(|meta| meta.unit.as_deref());
+        let unit = self
+            .param_meta
+            .get(name)
+            .and_then(|meta| meta.unit.as_deref());
         Some(normalize_process_param_for_provenance(name, value, unit))
     }
 
@@ -560,7 +561,9 @@ impl ProcessParamsPreset {
     /// Check all param_meta entries with valid_range against current values.
     /// Returns warnings for out-of-range values (never errors).
     pub fn check_ranges(&self) -> Vec<RangeWarning> {
-        tank_core::types::provenance::check_all_ranges(&self.param_meta, &|name| self.provenance_value(name))
+        tank_core::types::provenance::check_all_ranges(&self.param_meta, &|name| {
+            self.provenance_value(name)
+        })
     }
 }
 
