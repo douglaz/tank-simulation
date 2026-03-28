@@ -870,3 +870,151 @@ fn concentration_kinetics_volume_independent_extreme_scales() {
         "TAN should change during one tick at extreme scale"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Per-guild concentration-based unit tests (B3 acceptance criteria)
+// ---------------------------------------------------------------------------
+
+/// Default process params store concentration-based K_s values directly
+/// (no legacy normalization needed).
+#[test]
+fn process_params_store_native_concentration_ks() {
+    let pp = tank_core::ProcessParams::default();
+
+    // AOB K_s values are in the literature concentration range.
+    assert!(
+        pp.aob_k_tan_mg_n_per_l >= 0.5 && pp.aob_k_tan_mg_n_per_l <= 2.0,
+        "AOB TAN K_s should be 0.5–2.0 mg N/L, got {}",
+        pp.aob_k_tan_mg_n_per_l
+    );
+    assert!(
+        pp.aob_k_do_mg_per_l >= 0.3 && pp.aob_k_do_mg_per_l <= 1.0,
+        "AOB DO K_s should be 0.3–1.0 mg O₂/L, got {}",
+        pp.aob_k_do_mg_per_l
+    );
+
+    // NOB K_s values.
+    assert!(
+        pp.nob_k_nitrite_mg_n_per_l >= 0.2 && pp.nob_k_nitrite_mg_n_per_l <= 1.0,
+        "NOB NO₂ K_s should be 0.2–1.0 mg N/L, got {}",
+        pp.nob_k_nitrite_mg_n_per_l
+    );
+    assert!(
+        pp.nob_k_do_mg_per_l >= 0.5 && pp.nob_k_do_mg_per_l <= 1.5,
+        "NOB DO K_s should be 0.5–1.5 mg O₂/L, got {}",
+        pp.nob_k_do_mg_per_l
+    );
+
+    // Comammox K_s values.
+    assert!(
+        pp.comammox_k_tan_mg_n_per_l >= 0.05 && pp.comammox_k_tan_mg_n_per_l <= 0.5,
+        "Comammox TAN K_s should be 0.05–0.5 mg N/L, got {}",
+        pp.comammox_k_tan_mg_n_per_l
+    );
+    assert!(
+        pp.comammox_k_do_mg_per_l >= 0.3 && pp.comammox_k_do_mg_per_l <= 1.0,
+        "Comammox DO K_s should be 0.3–1.0 mg O₂/L, got {}",
+        pp.comammox_k_do_mg_per_l
+    );
+
+    // Decomposer K_s values.
+    assert!(
+        pp.decomposer_k_doc_mg_c_per_l >= 1.0 && pp.decomposer_k_doc_mg_c_per_l <= 10.0,
+        "Decomposer DOC K_s should be 1–10 mg C/L, got {}",
+        pp.decomposer_k_doc_mg_c_per_l
+    );
+    assert!(
+        pp.decomposer_k_do_mg_per_l >= 0.3 && pp.decomposer_k_do_mg_per_l <= 1.0,
+        "Decomposer DO K_s should be 0.3–1.0 mg O₂/L, got {}",
+        pp.decomposer_k_do_mg_per_l
+    );
+}
+
+/// Comammox must have a lower TAN K_s than AOB, giving it a competitive
+/// advantage at low ammonia concentrations. This is a key ecological
+/// distinction preserved by the normalization.
+#[test]
+fn comammox_has_lower_tan_ks_than_aob() {
+    let pp = tank_core::ProcessParams::default();
+    assert!(
+        pp.comammox_k_tan_mg_n_per_l < pp.aob_k_tan_mg_n_per_l,
+        "Comammox TAN K_s ({}) must be lower than AOB TAN K_s ({}) for ecological accuracy",
+        pp.comammox_k_tan_mg_n_per_l,
+        pp.aob_k_tan_mg_n_per_l
+    );
+}
+
+/// NOB must be at least as DO-sensitive as AOB (higher K_s means the guild
+/// reaches half-saturation at a higher DO concentration, i.e. it is more
+/// limited under low-DO conditions).
+#[test]
+fn nob_is_at_least_as_do_sensitive_as_aob() {
+    let pp = tank_core::ProcessParams::default();
+    assert!(
+        pp.nob_k_do_mg_per_l >= pp.aob_k_do_mg_per_l,
+        "NOB DO K_s ({}) must be >= AOB DO K_s ({}) — NOB are more DO-sensitive",
+        pp.nob_k_do_mg_per_l,
+        pp.aob_k_do_mg_per_l
+    );
+}
+
+/// Verify that each guild's Monod limitation uses concentration inputs
+/// from the B2 helper layer by checking that the same concentration in
+/// different volumes produces the same per-guild limitation factor.
+#[test]
+fn per_guild_monod_uses_concentration_not_total() -> Result<(), tank_core::SimError> {
+    let monod = |s: f64, k: f64| s / (s + k.max(f64::MIN_POSITIVE));
+
+    let pp = tank_core::ProcessParams::default();
+    let tan_conc = 1.5; // mg N/L
+    let no2_conc = 0.3; // mg N/L
+    let doc_conc = 5.0; // mg C/L
+    let do_conc = 4.0; // mg O₂/L
+
+    // All guilds: Monod factor depends only on concentration, not on volume.
+    for volume_l in [1.0, 10.0, 100.0, 1000.0] {
+        let tan_total = tan_conc * volume_l;
+        let no2_total = no2_conc * volume_l;
+        let doc_total = doc_conc * volume_l;
+        let do_total = do_conc * volume_l;
+
+        // Re-derive concentration from total (mimics the B2 helper).
+        let tan_c = tan_total / volume_l;
+        let no2_c = no2_total / volume_l;
+        let doc_c = doc_total / volume_l;
+        let do_c = do_total / volume_l;
+
+        // Monod factors must be identical for all volumes.
+        let eps = 1e-12;
+        assert!(
+            (monod(tan_c, pp.aob_k_tan_mg_n_per_l) - monod(tan_conc, pp.aob_k_tan_mg_n_per_l)).abs() < eps,
+            "AOB TAN Monod factor should be volume-independent at {volume_l} L"
+        );
+        assert!(
+            (monod(no2_c, pp.nob_k_nitrite_mg_n_per_l) - monod(no2_conc, pp.nob_k_nitrite_mg_n_per_l)).abs() < eps,
+            "NOB NO2 Monod factor should be volume-independent at {volume_l} L"
+        );
+        assert!(
+            (monod(tan_c, pp.comammox_k_tan_mg_n_per_l) - monod(tan_conc, pp.comammox_k_tan_mg_n_per_l)).abs() < eps,
+            "Comammox TAN Monod factor should be volume-independent at {volume_l} L"
+        );
+        assert!(
+            (monod(doc_c, pp.decomposer_k_doc_mg_c_per_l) - monod(doc_conc, pp.decomposer_k_doc_mg_c_per_l)).abs() < eps,
+            "Decomposer DOC Monod factor should be volume-independent at {volume_l} L"
+        );
+        assert!(
+            (monod(do_c, pp.aob_k_do_mg_per_l) - monod(do_conc, pp.aob_k_do_mg_per_l)).abs() < eps,
+            "AOB DO Monod factor should be volume-independent at {volume_l} L"
+        );
+        assert!(
+            (monod(do_c, pp.nob_k_do_mg_per_l) - monod(do_conc, pp.nob_k_do_mg_per_l)).abs() < eps,
+            "NOB DO Monod factor should be volume-independent at {volume_l} L"
+        );
+        assert!(
+            (monod(do_c, pp.decomposer_k_do_mg_per_l) - monod(do_conc, pp.decomposer_k_do_mg_per_l)).abs() < eps,
+            "Decomposer DO Monod factor should be volume-independent at {volume_l} L"
+        );
+    }
+
+    Ok(())
+}

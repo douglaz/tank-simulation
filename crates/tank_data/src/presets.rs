@@ -1356,50 +1356,10 @@ fn move_legacy_process_param_meta_key(
         .or_insert(legacy_value);
 }
 
-fn normalize_process_param_for_provenance(name: &str, value: f64, unit: Option<&str>) -> f64 {
-    match legacy_process_param_normalization(name, unit) {
-        ProvenanceNormalization::None => value,
-        ProvenanceNormalization::LegacyMgPerL => {
-            preserve_non_finite_division(value, LEGACY_KINETIC_REFERENCE_VOLUME_L)
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ProvenanceNormalization {
-    None,
-    LegacyMgPerL,
-}
-
-fn legacy_process_param_normalization(name: &str, _unit: Option<&str>) -> ProvenanceNormalization {
-    match name {
-        // All nitrogen-cycle, plant, and algae half-saturation fields are now
-        // natively concentration-based; no legacy normalization needed.
-        "decomposer_k_doc_mg_c_per_l"
-        | "decomposer_k_do_mg_per_l"
-        | "aob_k_tan_mg_n_per_l"
-        | "aob_k_do_mg_per_l"
-        | "nob_k_nitrite_mg_n_per_l"
-        | "nob_k_do_mg_per_l"
-        | "comammox_k_tan_mg_n_per_l"
-        | "comammox_k_do_mg_per_l"
-        | "algae_half_saturation_n_mg_n_per_l"
-        | "algae_half_saturation_p_mg_p_per_l"
-        | "plant_half_saturation_n_mg_n_per_l"
-        | "plant_half_saturation_p_mg_p_per_l"
-        | "plant_half_saturation_c_mg_c_per_l"
-        | "plant_half_saturation_n_substrate_mg_n_per_m2"
-        | "plant_half_saturation_p_substrate_mg_p_per_m2" => ProvenanceNormalization::None,
-        _ => ProvenanceNormalization::None,
-    }
-}
-
-fn preserve_non_finite_division(value: f64, denominator: f64) -> f64 {
-    if value.is_finite() {
-        value / denominator
-    } else {
-        value
-    }
+/// All half-saturation parameters are now natively concentration-based;
+/// no legacy normalization is needed for provenance display.
+fn normalize_process_param_for_provenance(_name: &str, value: f64, _unit: Option<&str>) -> f64 {
+    value
 }
 
 impl ParamMetaPreset for ProcessParamsPreset {

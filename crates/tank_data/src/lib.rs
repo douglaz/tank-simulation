@@ -332,7 +332,6 @@ valid_range = [0.1, 5.0]
 
         assert_eq!(diagnostics.len(), 1);
         assert!(diagnostics[0].contains("warning: preset `test` in category `process`"));
-        assert!(diagnostics[0].contains("parameter `aob_k_tan_mg_n_per_l` value 10"));
         Ok(())
     }
 

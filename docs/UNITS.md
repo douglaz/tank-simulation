@@ -81,13 +81,14 @@ Legacy compatibility names that downstream rename-only work must migrate:
 
 | Current field | Canonical target name | Notes |
 | --- | --- | --- |
-| `decomposer_k_doc_mg` | `decomposer_k_doc_mg_c_per_l` | concentration-normalized DOC Monod term |
-| `aob_k_tan_mg` | `aob_k_tan_mg_n_per_l` | TAN as elemental N |
-| `aob_k_do_mg` | `aob_k_do_mg_per_l` | dissolved oxygen mass concentration |
-| `nob_k_nitrite_mg` | `nob_k_nitrite_mg_n_per_l` | nitrite as elemental N |
-| `nob_k_do_mg` | `nob_k_do_mg_per_l` | dissolved oxygen mass concentration |
-| `comammox_k_tan_mg` | `comammox_k_tan_mg_n_per_l` | TAN as elemental N |
-| `comammox_k_do_mg` | `comammox_k_do_mg_per_l` | dissolved oxygen mass concentration |
+| ~~`decomposer_k_doc_mg`~~ | `decomposer_k_doc_mg_c_per_l` | concentration-normalized DOC Monod term | **done** (tanksim-6e5.2.3) |
+| ~~`decomposer_k_do_mg`~~ | `decomposer_k_do_mg_per_l` | dissolved oxygen mass concentration | **done** (tanksim-6e5.2.3) |
+| ~~`aob_k_tan_mg`~~ | `aob_k_tan_mg_n_per_l` | TAN as elemental N | **done** (tanksim-6e5.2.3) |
+| ~~`aob_k_do_mg`~~ | `aob_k_do_mg_per_l` | dissolved oxygen mass concentration | **done** (tanksim-6e5.2.3) |
+| ~~`nob_k_nitrite_mg`~~ | `nob_k_nitrite_mg_n_per_l` | nitrite as elemental N | **done** (tanksim-6e5.2.3) |
+| ~~`nob_k_do_mg`~~ | `nob_k_do_mg_per_l` | dissolved oxygen mass concentration | **done** (tanksim-6e5.2.3) |
+| ~~`comammox_k_tan_mg`~~ | `comammox_k_tan_mg_n_per_l` | TAN as elemental N | **done** (tanksim-6e5.2.3) |
+| ~~`comammox_k_do_mg`~~ | `comammox_k_do_mg_per_l` | dissolved oxygen mass concentration | **done** (tanksim-6e5.2.3) |
 | ~~`plant_half_saturation_n_mg_total`~~ | `plant_half_saturation_n_mg_n_per_l` | water-column elemental N exposure | **done** (tanksim-6e5.2.4) |
 | ~~`plant_half_saturation_p_mg_total`~~ | `plant_half_saturation_p_mg_p_per_l` | water-column elemental P exposure | **done** (tanksim-6e5.2.4) |
 | ~~`plant_half_saturation_c_mg_total`~~ | `plant_half_saturation_c_mg_c_per_l` | water-column DIC as elemental C | **done** (tanksim-6e5.2.4) |
@@ -96,8 +97,7 @@ Legacy compatibility names that downstream rename-only work must migrate:
 | ~~`algae_half_saturation_n_mg_total`~~ | `algae_half_saturation_n_mg_n_per_l` | water-column elemental N exposure | **done** (tanksim-6e5.2.5) |
 | ~~`algae_half_saturation_p_mg_total`~~ | `algae_half_saturation_p_mg_p_per_l` | water-column elemental P exposure | **done** (tanksim-6e5.2.5) |
 
-Plant and algae renames are complete; the remaining nitrogen-cycle renames
-belong to downstream bead `tanksim-6e5.2.3`.
+All legacy parameter renames in this table are complete.
 
 ## Helper Naming Policy
 
