@@ -192,6 +192,44 @@ fn step_hours_rejects_non_positive_shrimp_o2_ratio_before_simulation() {
 }
 
 #[test]
+fn step_hours_rejects_out_of_range_death_biomass_fraction_before_simulation() {
+    let mut state = tank_core::TankState::new(SimSeed(19));
+    state.process_params.death_biomass_to_detritus_fraction = 1.2;
+    let expected = state.clone();
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    let result = engine.step_hours(1);
+
+    assert_eq!(
+        result,
+        Err(SimError::InvariantViolation {
+            field: "process.death_biomass_to_detritus_fraction",
+            value: 1.2,
+        })
+    );
+    assert_eq!(engine.full_state(), &expected);
+}
+
+#[test]
+fn step_hours_rejects_sub_unity_death_biomass_fraction_without_export_path() {
+    let mut state = tank_core::TankState::new(SimSeed(20));
+    state.process_params.death_biomass_to_detritus_fraction = 0.5;
+    let expected = state.clone();
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    let result = engine.step_hours(1);
+
+    assert_eq!(
+        result,
+        Err(SimError::InvariantViolation {
+            field: "process.death_biomass_to_detritus_fraction",
+            value: 0.5,
+        })
+    );
+    assert_eq!(engine.full_state(), &expected);
+}
+
+#[test]
 fn step_hours_read_only_validation_does_not_preserve_partial_clamps() {
     let mut state = tank_core::TankState::new(SimSeed(18));
     state.water.ph = 9.2;

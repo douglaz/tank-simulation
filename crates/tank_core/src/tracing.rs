@@ -144,8 +144,10 @@ impl TraceSink for StderrSink {
 // ---------------------------------------------------------------------------
 
 /// Snapshot of key simulation pool values for computing deltas.
+#[allow(dead_code)]
 pub(crate) struct PoolSnapshot {
     pools: Vec<(&'static str, f64)>,
+    event_count: usize,
 }
 
 impl PoolSnapshot {

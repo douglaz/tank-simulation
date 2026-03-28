@@ -1,6 +1,6 @@
 use tank_core::{
     systems::{light::is_light_on, temperature::do_sat_mg_l},
-    Engine, ProcessParams, SimSeed, SimulationEngine, TankState,
+    Engine, ProcessParams, SimSeed, SimTracer, SimulationEngine, TankState, Verbosity,
 };
 
 fn oxygen_test_state(seed: SimSeed) -> TankState {
@@ -121,6 +121,48 @@ fn reaeration_converges_toward_saturation() -> Result<(), tank_core::SimError> {
         (do_sat - do_now).abs() < 0.25,
         "DO should converge toward saturation: do={do_now:.2}, sat={do_sat:.2}"
     );
+
+    Ok(())
+}
+
+/// Retrofitted test: uses tracing output to verify that the dissolved_oxygen
+/// system produces positive DO deltas during reaeration from zero.
+#[test]
+fn tracing_shows_do_system_positive_deltas_during_reaeration() -> Result<(), tank_core::SimError> {
+    let mut state = oxygen_test_state(SimSeed(3300));
+    state.water.dissolved_oxygen_mg_total = 0.0;
+    state
+        .process_params
+        .background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
+    state
+        .process_params
+        .plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
+    state.process_params.reaeration_kla_base = 0.5;
+    state.algae.periphyton_biomass_g = 0.0;
+    for plant in &mut state.plant_guilds {
+        plant.biomass_g = 0.0;
+    }
+    state.animal.adults_count = 0;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_tracing(SimTracer::new(Verbosity::Detail));
+    engine.step_hours(6)?;
+
+    let tracer = engine.tracer().unwrap();
+    assert_eq!(tracer.tick_count(), 6);
+
+    // Every tick's dissolved_oxygen system should show a positive water.do_mg delta
+    // because we started at zero and reaeration drives DO upward.
+    for (i, tick) in tracer.ticks().iter().enumerate() {
+        let do_system = tick
+            .system("system:dissolved_oxygen")
+            .unwrap_or_else(|| panic!("tick {i}: dissolved_oxygen system missing from trace"));
+        let do_delta = do_system.delta_for("water.do_mg");
+        assert!(
+            do_delta > 0.0,
+            "tick {i}: dissolved_oxygen system should increase water.do_mg during reaeration, got delta={do_delta}"
+        );
+    }
 
     Ok(())
 }

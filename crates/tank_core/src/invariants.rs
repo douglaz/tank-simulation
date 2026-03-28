@@ -211,6 +211,16 @@ fn validate_invariants_inner(state: &TankState) -> Result<(), SimError> {
         "process.shrimp_growth_fraction_of_assimilated",
         pp.shrimp_growth_fraction_of_assimilated,
     )?;
+    check_unit_interval(
+        "process.death_biomass_to_detritus_fraction",
+        pp.death_biomass_to_detritus_fraction,
+    )?;
+    // Mortality routing stays closed-loop until the engine has an explicit
+    // export destination for carcass removal.
+    check_sum_close_to_one(
+        "process.death_biomass_to_detritus_fraction",
+        pp.death_biomass_to_detritus_fraction,
+    )?;
     check_positive(
         "process.shrimp_o2_per_mg_c_respired",
         pp.shrimp_o2_per_mg_c_respired,

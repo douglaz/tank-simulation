@@ -18,6 +18,17 @@ fn assert_close(actual: f64, expected: f64, tolerance: f64) {
     );
 }
 
+fn close_budget_gas_exchange(state: &mut TankState) {
+    // Keep the filter enabled so nitrification scenarios still exercise the
+    // same pathways, but zero all gas-transfer terms that would otherwise make
+    // closed-system carbon checks observe atmospheric exchange.
+    state.process_params.reaeration_kla_base = 0.0;
+    state.process_params.aeration_kla_boost = 0.0;
+    state.hardware.filter.flow_lph = 0.0;
+    state.hardware.aeration.enabled = false;
+    state.hardware.aeration.intensity = 0.0;
+}
+
 fn known_budget_state() -> TankState {
     let mut state = TankState::new(SimSeed(4_242));
     state.process_params.feed_n_to_c_ratio = 0.16;
@@ -59,6 +70,7 @@ fn known_budget_state() -> TankState {
 
 fn active_budget_state(seed: SimSeed) -> TankState {
     let mut state = TankState::new(seed);
+    close_budget_gas_exchange(&mut state);
     state.water.ammonia_total_mg_n_total = 6.5;
     state.water.nitrite_mg_n_total = 1.5;
     state.water.nitrate_mg_n_total = 14.0;
@@ -88,6 +100,7 @@ fn active_budget_state(seed: SimSeed) -> TankState {
 
 fn quiescent_budget_state(seed: SimSeed) -> TankState {
     let mut state = TankState::new(seed);
+    close_budget_gas_exchange(&mut state);
     state.hardware.light.enabled = false;
     state.plant_guilds.clear();
     state.algae.suspended_biomass_g = 0.0;
@@ -170,6 +183,9 @@ fn shrimp_mortality_budget_state(seed: SimSeed) -> TankState {
 
 fn shrimp_reproduction_budget_state(seed: SimSeed) -> TankState {
     let mut state = TankState::new(seed);
+    // NOTE: We intentionally keep K_LA at defaults here so O2 reaeration
+    // works over the 1440-hour run.  The test adjusts its carbon assertion
+    // to account for the open-system CO2 atmospheric exchange that results.
     state.hardware.light.enabled = true;
     state.hardware.light.photoperiod_hours = 12.0;
     state.hardware.light.intensity_index = 0.8;
@@ -388,8 +404,8 @@ fn test_budget_path_rules_catch_convention_based_future_fields() {
 
 #[test]
 fn test_closed_system_n_conservation() -> Result<(), SimError> {
-    // Closed-system conservation assertions intentionally use the code-default
-    // ProcessParams, where hourly DIC respiration/photosynthesis exchange is off.
+    // Closed-system conservation assertions use the fixture helper that zeros
+    // all gas-transfer terms while leaving the biological pathways intact.
     let state = active_budget_state(SimSeed(9_001));
     let initial_total_n = state.total_nitrogen();
     let mut engine = Engine::from_parts(state, vec![]);
@@ -423,8 +439,8 @@ fn test_closed_system_n_conservation() -> Result<(), SimError> {
 
 #[test]
 fn test_closed_system_c_conservation() -> Result<(), SimError> {
-    // Closed-system conservation assertions intentionally use the code-default
-    // ProcessParams, where hourly DIC respiration/photosynthesis exchange is off.
+    // Closed-system conservation assertions use the fixture helper that zeros
+    // all gas-transfer terms while leaving the biological pathways intact.
     let state = active_budget_state(SimSeed(9_002));
     let initial_total_c = state.total_carbon();
     let mut engine = Engine::from_parts(state, vec![]);
@@ -687,7 +703,24 @@ fn test_closed_system_shrimp_reproduction_conserves_n_and_c() -> Result<(), SimE
         "expected deterministic hatching to occur in the reproducing shrimp fixture"
     );
     assert_close(engine.full_state().total_nitrogen(), initial_total_n, 1e-6);
-    assert_close(engine.full_state().total_carbon(), initial_total_c, 1e-6);
+
+    // Carbon assertion: the CO2 atmospheric exchange via K_LA is an open-system
+    // flux tracked under "system:chemistry".  Subtract it so we can verify that
+    // all *other* pathways conserve carbon exactly.
+    let chemistry_c_flux: f64 = engine
+        .budget_ledger()
+        .expect("budget tracking enabled")
+        .ticks
+        .iter()
+        .flat_map(|tick| tick.entries.iter())
+        .filter(|entry| entry.label == "system:chemistry")
+        .map(|entry| entry.delta.carbon.net_mg())
+        .sum();
+    assert_close(
+        engine.full_state().total_carbon(),
+        initial_total_c + chemistry_c_flux,
+        1e-6,
+    );
 
     let reproduction_entry = engine
         .budget_ledger()
@@ -1208,6 +1241,11 @@ fn test_high_mortality_200_hours_conserves_n_c_and_accumulates_detritus() -> Res
     state.hardware.aeration.intensity = 0.2; // weak aeration → low DO recovery
 
     state.process_params = ProcessParams::default();
+    // Zero K_LA so CO2 atmospheric exchange does not break closed-system
+    // carbon conservation assertions.
+    state.process_params.reaeration_kla_base = 0.0;
+    state.process_params.aeration_kla_boost = 0.0;
+    state.hardware.filter.flow_lph = 0.0;
     // Elevated base mortality for this stress scenario
     state.process_params.shrimp_base_mortality_per_day = 0.01;
     state.process_params.shrimp_stress_mortality_scale = 0.25;

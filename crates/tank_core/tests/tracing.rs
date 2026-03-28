@@ -98,7 +98,10 @@ fn summary_verbosity_records_systems_without_pool_deltas() -> Result<(), tank_co
     let tick = &tracer.ticks()[0];
 
     // Systems should be recorded
-    assert!(!tick.systems.is_empty(), "summary should record system names");
+    assert!(
+        !tick.systems.is_empty(),
+        "summary should record system names"
+    );
 
     // But no pool deltas at Summary level
     for system in &tick.systems {

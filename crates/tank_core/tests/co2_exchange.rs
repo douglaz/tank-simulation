@@ -15,11 +15,19 @@ fn co2_test_state(seed: SimSeed) -> TankState {
     state.water.alkalinity_meq_total = 2.0 * volume_l;
     state.water.temperature_c = 25.0;
     // Zero biology-driven DIC fluxes so only gas exchange drives DIC changes.
-    state.process_params.respiration_dic_rate_mg_c_per_g_per_hour = 0.0;
-    state.process_params.photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
+    state
+        .process_params
+        .respiration_dic_rate_mg_c_per_g_per_hour = 0.0;
+    state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
     // Zero O2 biology to avoid indirect coupling.
-    state.process_params.background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
-    state.process_params.plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
+    state
+        .process_params
+        .background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
+    state
+        .process_params
+        .plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
     // Resolve carbonate state after DIC/alk changes.
     tank_core::systems::chemistry::resolve_carbonate_state(&mut state.water, volume_l);
     state
@@ -225,10 +233,18 @@ fn test_co2_exchange_independent_of_tank_volume() -> Result<(), tank_core::SimEr
         state.water.alkalinity_meq_total = 2.0 * volume_l;
         state.water.dissolved_oxygen_mg_total = 8.0 * volume_l;
         state.water.temperature_c = 25.0;
-        state.process_params.respiration_dic_rate_mg_c_per_g_per_hour = 0.0;
-        state.process_params.photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
-        state.process_params.background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
-        state.process_params.plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
+        state
+            .process_params
+            .respiration_dic_rate_mg_c_per_g_per_hour = 0.0;
+        state
+            .process_params
+            .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
+        state
+            .process_params
+            .background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
+        state
+            .process_params
+            .plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
         state.hardware.aeration.enabled = false;
         tank_core::systems::chemistry::resolve_carbonate_state(&mut state.water, volume_l);
         state
@@ -288,10 +304,18 @@ fn test_high_co2_from_respiration_drives_offgassing() -> Result<(), tank_core::S
     state.plant_guilds[0].biomass_g = 15.0;
     state.plant_guilds[1].biomass_g = 10.0;
     state.animal.adults_count = 20;
-    state.process_params.respiration_dic_rate_mg_c_per_g_per_hour = 0.15;
-    state.process_params.photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
-    state.process_params.background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
-    state.process_params.plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
+    state
+        .process_params
+        .respiration_dic_rate_mg_c_per_g_per_hour = 0.15;
+    state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
+    state
+        .process_params
+        .background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
+    state
+        .process_params
+        .plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
     tank_core::systems::chemistry::resolve_carbonate_state(&mut state.water, volume_l);
 
     let co2_before_dark = snapshot_co2_mg_per_l(&state);
@@ -340,10 +364,18 @@ fn test_aerated_vs_nonaerated_co2_levels() -> Result<(), tank_core::SimError> {
         state.plant_guilds[0].biomass_g = 12.0;
         state.plant_guilds[1].biomass_g = 8.0;
         state.animal.adults_count = 15;
-        state.process_params.respiration_dic_rate_mg_c_per_g_per_hour = 0.10;
-        state.process_params.photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.15;
-        state.process_params.background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
-        state.process_params.plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
+        state
+            .process_params
+            .respiration_dic_rate_mg_c_per_g_per_hour = 0.10;
+        state
+            .process_params
+            .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.15;
+        state
+            .process_params
+            .background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
+        state
+            .process_params
+            .plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
         tank_core::systems::chemistry::resolve_carbonate_state(&mut state.water, volume_l);
         state
     };
@@ -442,10 +474,7 @@ fn test_co2_kla_proportional_to_o2_kla() {
     let k_la_o2 = compute_o2_kla(&state);
     let k_la_co2 = k_la_o2 * 0.91;
 
-    assert!(
-        k_la_o2 > 0.0,
-        "O2 K_LA should be positive"
-    );
+    assert!(k_la_o2 > 0.0, "O2 K_LA should be positive");
     assert!(
         (k_la_co2 / k_la_o2 - 0.91).abs() < 1e-10,
         "K_LA(CO2)/K_LA(O2) should equal 0.91"

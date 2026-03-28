@@ -7,7 +7,14 @@
 //! # Quick start
 //!
 //! ```rust,ignore
-//! use tank_core::budget_helpers::{step_and_inspect, assert_n_conserved, assert_c_conserved};
+//! use tank_core::budget_helpers::{
+//!     assert_c_conserved, assert_n_conserved, assert_o2_balanced, step_and_inspect, Element,
+//! };
+//!
+//! // Closed-system C assertions require gas exchange to be disabled in the fixture.
+//! state.process_params.reaeration_kla_base = 0.0;
+//! state.process_params.aeration_kla_boost = 0.0;
+//! state.hardware.filter.flow_lph = 0.0;
 //!
 //! let mut engine = Engine::from_parts(state, vec![]);
 //! let result = step_and_inspect(&mut engine, 24)?;
@@ -15,6 +22,7 @@
 //! // One-liner conservation checks:
 //! assert_n_conserved(&result.budget, 1e-6);
 //! assert_c_conserved(&result.budget, 1e-6);
+//! assert_o2_balanced(&result.budget, 1e-6);
 //!
 //! // Inspect which system moved nitrogen:
 //! for entry in result.budget.system_deltas(Element::Nitrogen) {
@@ -112,6 +120,17 @@ impl BudgetInspector {
             .collect()
     }
 
+    /// Gross recorded inflow/outflow for a given element across all inspected ticks.
+    pub fn gross_flow(&self, element: Element) -> ElementBudget {
+        self.ledger
+            .ticks
+            .iter()
+            .fold(ElementBudget::default(), |mut total, tick| {
+                add_element_budget(&mut total, tick_gross_flow(tick, element));
+                total
+            })
+    }
+
     /// Find the system with the largest absolute net delta for a given element
     /// across all ticks. Useful for locating the source of a conservation bug.
     pub fn largest_mover(&self, element: Element) -> Option<SystemElementDelta> {
@@ -192,25 +211,84 @@ pub fn assert_n_conserved(budget: &BudgetInspector, tolerance_mg: f64) {
 
 /// Assert that total carbon is conserved (net delta within `tolerance_mg`).
 ///
-/// Panics with a diagnostic message identifying the largest mover if the
-/// assertion fails.
+/// This is for carbon-closed fixtures only. If the scenario intentionally uses
+/// atmospheric CO2 exchange or the chemistry DIC shortcut, assert against the
+/// explicit chemistry entry instead of treating total carbon as conserved.
 pub fn assert_c_conserved(budget: &BudgetInspector, tolerance_mg: f64) {
     assert_budget_balanced(budget, Element::Carbon, tolerance_mg);
 }
 
 /// Assert that the O2 demand balance is within `tolerance_mg`.
 ///
-/// This checks that the net oxygen delta across all ticks stays within the
-/// given tolerance. For closed systems (no aeration exchange), this should
-/// be near zero.
+/// Unlike [`assert_budget_balanced`], this does not require oxygen inventory
+/// to stay flat. It checks that the recorded gross O2 inputs and outputs across
+/// each tick reconcile to the observed inventory delta, which is the useful
+/// contract for aerated/open systems.
 pub fn assert_o2_balanced(budget: &BudgetInspector, tolerance_mg: f64) {
-    assert_budget_balanced(budget, Element::Oxygen, tolerance_mg);
+    let gross = budget.gross_flow(Element::Oxygen);
+    let net = budget.net_delta(Element::Oxygen);
+    let accounting_error = net - gross.net_mg();
+    let worst_tick = budget
+        .ledger
+        .ticks
+        .iter()
+        .enumerate()
+        .map(|(index, tick)| {
+            let gross = tick_gross_flow(tick, Element::Oxygen);
+            let observed = tick.net_delta.oxygen.net_mg();
+            let error = observed - gross.net_mg();
+            (index, error, gross, tick)
+        })
+        .max_by(|(_, a, _, _), (_, b, _, _)| a.abs().partial_cmp(&b.abs()).unwrap());
+
+    if accounting_error.abs() <= tolerance_mg
+        && worst_tick
+            .as_ref()
+            .map_or(true, |(_, error, _, _)| error.abs() <= tolerance_mg)
+    {
+        return;
+    }
+
+    let mut msg = format!(
+        "oxygen demand balance mismatch: inventory delta = {net:+.9} mg, \
+         recorded stage net = {:+.9} mg (gross in={:.9}, gross out={:.9}, tolerance={tolerance_mg:.9})\n",
+        gross.net_mg(),
+        gross.in_mg,
+        gross.out_mg
+    );
+    if let Some((index, error, gross, tick)) = worst_tick {
+        msg.push_str(&format!(
+            "  worst tick: index {index} (day {}, hour {}) error {error:+.9} mg, \
+             gross in={:.9}, gross out={:.9}, observed net={:+.9}\n",
+            tick.day,
+            tick.hour,
+            gross.in_mg,
+            gross.out_mg,
+            tick.net_delta.oxygen.net_mg()
+        ));
+    }
+    if let Some(mover) = budget.largest_mover(Element::Oxygen) {
+        msg.push_str(&format!(
+            "  largest mover: {} ({:+.9} mg net, in={:.9} out={:.9})\n",
+            mover.label, mover.net_mg, mover.in_mg, mover.out_mg
+        ));
+    }
+    msg.push_str("  per-system totals:\n");
+    for sd in budget.system_deltas(Element::Oxygen) {
+        msg.push_str(&format!(
+            "    {}: {:+.9} mg (in={:.9} out={:.9})\n",
+            sd.label, sd.net_mg, sd.in_mg, sd.out_mg
+        ));
+    }
+    panic!("{msg}");
 }
 
 /// Generic per-element conservation assertion.
 ///
 /// Checks that the absolute net delta for `element` across all inspected ticks
-/// is within `tolerance_mg`. On failure, the panic message includes:
+/// is within `tolerance_mg`. Use this for closed-system assertions; open oxygen
+/// scenarios should prefer [`assert_o2_balanced`]. On failure, the panic
+/// message includes:
 /// - the actual net delta
 /// - the system with the largest absolute contribution
 /// - per-tick breakdown
@@ -376,6 +454,20 @@ fn largest_mover_in_tick(tick: &TickBudgetRecord, element: Element) -> Option<(S
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+fn tick_gross_flow(tick: &TickBudgetRecord, element: Element) -> ElementBudget {
+    tick.entries
+        .iter()
+        .fold(ElementBudget::default(), |mut total, entry| {
+            add_element_budget(&mut total, select_element(&entry.delta, element));
+            total
+        })
+}
+
+fn add_element_budget(total: &mut ElementBudget, delta: ElementBudget) {
+    total.in_mg += delta.in_mg;
+    total.out_mg += delta.out_mg;
+}
 
 fn select_element(delta: &BudgetDelta, element: Element) -> ElementBudget {
     match element {

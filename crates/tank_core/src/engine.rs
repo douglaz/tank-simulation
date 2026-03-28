@@ -335,10 +335,7 @@ impl Engine {
             .as_ref()
             .filter(|t| t.verbosity >= Verbosity::Detail)
             .map(|_| PoolSnapshot::capture(&self.state));
-        let event_count_before = ctx
-            .trace
-            .as_ref()
-            .map(|_| self.state.event_log.len());
+        let event_count_before = ctx.trace.as_ref().map(|_| self.state.event_log.len());
 
         let result = stage(self);
 
@@ -387,10 +384,7 @@ impl Engine {
             .as_ref()
             .filter(|t| t.verbosity >= Verbosity::Detail)
             .map(|_| PoolSnapshot::capture(&self.state));
-        let event_count_before = ctx
-            .trace
-            .as_ref()
-            .map(|_| self.state.event_log.len());
+        let event_count_before = ctx.trace.as_ref().map(|_| self.state.event_log.len());
 
         let (result, explicit_delta) = stage(self, ctx.budget.is_some());
 

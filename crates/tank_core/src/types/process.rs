@@ -210,9 +210,11 @@ pub struct ProcessParams {
 
     // -- Death routing --
     /// Fraction of dead organism biomass that enters fine_detritus_g_total.
-    /// Default 1.0 means all dead biomass decays in-tank. Values < 1.0
-    /// represent biomass removed/exported (e.g., a future "remove dead
-    /// organisms" player action). See docs/ROUTING.md §Death routing.
+    /// Phase 1 keeps this fixed at 1.0 until the simulation has an explicit
+    /// export path for removed carcasses/reserve; lower values would silently
+    /// delete tracked N/C from the closed-system budget. The field remains
+    /// serialized so a later export-aware bead can relax the invariant without
+    /// another schema change. See docs/ROUTING.md §Death routing.
     #[serde(default = "default_death_biomass_to_detritus_fraction")]
     pub death_biomass_to_detritus_fraction: f64,
 

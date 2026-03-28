@@ -1,25 +1,38 @@
 //! Tests for the budget_helpers module: step_and_inspect, assertion API, debug output,
 //! and per-system inspection.
 
+use std::{
+    ffi::OsString,
+    sync::{Mutex, MutexGuard, OnceLock},
+};
+
 use tank_core::{
     budget_helpers::{
-        assert_budget_balanced, assert_c_conserved, assert_n_conserved, assert_per_tick_balanced,
-        step_and_inspect, Element,
+        assert_budget_balanced, assert_c_conserved, assert_n_conserved, assert_o2_balanced,
+        assert_per_tick_balanced, step_and_inspect, Element,
     },
-    Engine, PlantGuildState, PlayerAction, SimError, SimSeed, SimulationEngine, SourceWaterProfile,
-    SubstrateLayerState, TankState,
+    Engine, PlantGuildState, PlayerAction, ProcessParams, SimError, SimSeed, SimulationEngine,
+    SourceWaterProfile, SubstrateLayerState, TankState,
 };
 
 // ---------------------------------------------------------------------------
 // State fixtures (reused from budget_tracking.rs patterns)
 // ---------------------------------------------------------------------------
 
-fn active_budget_state(seed: SimSeed) -> TankState {
-    let mut state = TankState::new(seed);
-    // Zero K_LA so CO2 atmospheric exchange does not break closed-system
-    // carbon conservation assertions.
+fn close_budget_gas_exchange(state: &mut TankState) {
+    // Keep the filter enabled so nitrification fixtures still behave like
+    // filtered tanks, but zero all gas-transfer terms that would otherwise
+    // make the carbon helper observe atmospheric exchange.
     state.process_params.reaeration_kla_base = 0.0;
     state.process_params.aeration_kla_boost = 0.0;
+    state.hardware.filter.flow_lph = 0.0;
+    state.hardware.aeration.enabled = false;
+    state.hardware.aeration.intensity = 0.0;
+}
+
+fn active_budget_state(seed: SimSeed) -> TankState {
+    let mut state = TankState::new(seed);
+    close_budget_gas_exchange(&mut state);
     state.water.ammonia_total_mg_n_total = 6.5;
     state.water.nitrite_mg_n_total = 1.5;
     state.water.nitrate_mg_n_total = 14.0;
@@ -49,6 +62,7 @@ fn active_budget_state(seed: SimSeed) -> TankState {
 
 fn quiescent_budget_state(seed: SimSeed) -> TankState {
     let mut state = TankState::new(seed);
+    close_budget_gas_exchange(&mut state);
     state.hardware.light.enabled = false;
     state.plant_guilds.clear();
     state.algae.suspended_biomass_g = 0.0;
@@ -79,6 +93,39 @@ fn quiescent_budget_state(seed: SimSeed) -> TankState {
     state.water.dissolved_organic_carbon_mg_c_total = 16.0;
     state.reseed_stability_tracker();
     state
+}
+
+fn budget_debug_env_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+struct BudgetDebugEnvGuard {
+    _lock: MutexGuard<'static, ()>,
+    previous: Option<OsString>,
+}
+
+impl BudgetDebugEnvGuard {
+    fn enable() -> Self {
+        let lock = budget_debug_env_lock()
+            .lock()
+            .expect("budget debug env lock poisoned");
+        let previous = std::env::var_os("TANK_BUDGET_DEBUG");
+        std::env::set_var("TANK_BUDGET_DEBUG", "1");
+        Self {
+            _lock: lock,
+            previous,
+        }
+    }
+}
+
+impl Drop for BudgetDebugEnvGuard {
+    fn drop(&mut self) {
+        match &self.previous {
+            Some(value) => std::env::set_var("TANK_BUDGET_DEBUG", value),
+            None => std::env::remove_var("TANK_BUDGET_DEBUG"),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -113,14 +160,13 @@ fn closed_system_n_and_c_conserved_via_helpers() -> Result<(), SimError> {
 
 #[test]
 fn assert_budget_balanced_covers_all_three_elements() -> Result<(), SimError> {
-    let state = active_budget_state(SimSeed(9_050));
+    let state = quiescent_budget_state(SimSeed(9_050));
     let mut engine = Engine::from_parts(state, vec![]);
     let result = step_and_inspect(&mut engine, 1)?;
 
     assert_budget_balanced(&result.budget, Element::Nitrogen, 1e-6);
     assert_budget_balanced(&result.budget, Element::Carbon, 1e-6);
-    // O2 is open-system (atmospheric exchange), use a wider tolerance
-    assert_budget_balanced(&result.budget, Element::Oxygen, 50.0);
+    assert_budget_balanced(&result.budget, Element::Oxygen, 1e-6);
 
     Ok(())
 }
@@ -301,19 +347,23 @@ fn multiple_inspections_are_independent() -> Result<(), SimError> {
 #[test]
 fn o2_balance_check_with_aeration() -> Result<(), SimError> {
     let mut state = active_budget_state(SimSeed(9_058));
+    let defaults = ProcessParams::default();
     state.environment.hour_of_day = 12;
     state.hardware.light.enabled = true;
     state.hardware.light.photoperiod_hours = 12.0;
     state.hardware.aeration.enabled = true;
     state.hardware.aeration.intensity = 1.0;
+    state.hardware.filter.flow_lph = 200.0;
+    state.process_params.reaeration_kla_base = defaults.reaeration_kla_base;
+    state.process_params.aeration_kla_boost = defaults.aeration_kla_boost;
     state.water.dissolved_oxygen_mg_total = 40.0;
     state.reseed_stability_tracker();
     let mut engine = Engine::from_parts(state, vec![]);
 
     let result = step_and_inspect(&mut engine, 1)?;
 
-    // O2 is open-system with atmospheric exchange, so we just verify the
-    // assertion API runs and the dissolved_oxygen stage is tracked
+    assert_o2_balanced(&result.budget, 1e-6);
+
     let do_delta =
         result
             .budget
@@ -336,10 +386,8 @@ fn o2_balance_check_with_aeration() -> Result<(), SimError> {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn debug_output_does_not_panic() -> Result<(), SimError> {
-    // We can't easily assert stderr content, but we verify that enabling the
-    // env var doesn't cause a panic during step_and_inspect.
-    // This test always runs (debug output is a no-op when TANK_BUDGET_DEBUG is unset).
+fn debug_output_env_path_does_not_panic() -> Result<(), SimError> {
+    let _debug_env = BudgetDebugEnvGuard::enable();
     let state = quiescent_budget_state(SimSeed(9_059));
     let mut engine = Engine::from_parts(state, vec![]);
 

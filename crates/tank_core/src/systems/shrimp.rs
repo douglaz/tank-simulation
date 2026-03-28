@@ -8,6 +8,8 @@ use crate::types::{
 
 const JUVENILES_PER_CLUTCH: u32 = 25;
 const MG_N_PER_MEQ_AMMONIA: f64 = 14.007;
+const ROUTING_MASS_ASSERT_TOLERANCE_G: f64 = 1e-12;
+const DEATH_DETRITUS_FRACTION_TOLERANCE: f64 = 1e-9;
 
 // ── Hourly ──────────────────────────────────────────────────────────────────
 
@@ -166,6 +168,14 @@ fn shrimp_feeding(state: &mut TankState) {
         + detritus_nitrogen_mg(detritus_consumed_route_g, n_to_c_ratio);
     let consumed_c_mg = algae_carbon_mg(periph_consumed_biomass_g, n_to_c_ratio)
         + detritus_carbon_mg(detritus_consumed_route_g, n_to_c_ratio);
+    let elemental_food_mass_g = (consumed_n_mg + consumed_c_mg) / 1000.0;
+    debug_assert!(
+        (state.animal.daily_food_consumed_g - elemental_food_mass_g).abs()
+            <= ROUTING_MASS_ASSERT_TOLERANCE_G,
+        "shrimp feeding routed {} g but elemental bookkeeping implies {} g",
+        state.animal.daily_food_consumed_g,
+        elemental_food_mass_g,
+    );
 
     route_consumed_food(state, consumed_n_mg, consumed_c_mg);
 }
@@ -620,13 +630,15 @@ fn route_dead_shrimp_to_detritus(state: &mut TankState, adult_deaths: u32, juv_d
 
     let total_shrimp = state.animal.adults_count + state.animal.juveniles_count;
     let total_dead = adult_deaths + juv_deaths;
-    let detritus_fraction = state
-        .process_params
-        .death_biomass_to_detritus_fraction
-        .clamp(0.0, 1.0);
+    let detritus_fraction = state.process_params.death_biomass_to_detritus_fraction;
+    debug_assert!(
+        (detritus_fraction - 1.0).abs() <= DEATH_DETRITUS_FRACTION_TOLERANCE,
+        "death_biomass_to_detritus_fraction must remain 1.0 until explicit export accounting exists; got {}",
+        detritus_fraction,
+    );
 
-    // Route dead body mass: fraction stays in-tank as detritus, remainder is
-    // implicitly exported (future "remove dead organisms" action).
+    // Phase-1 mortality is closed-loop: all dead biomass and reserve stay
+    // in-tank as detritus until an explicit export path exists.
     let dead_biomass_g = (f64::from(adult_deaths) * ADULT_SHRIMP_BIOMASS_G)
         + (f64::from(juv_deaths) * JUVENILE_SHRIMP_BIOMASS_G);
     state.detritus.fine_detritus_g_total += live_biomass_detrital_mass_g(

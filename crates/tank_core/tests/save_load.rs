@@ -597,6 +597,34 @@ fn malformed_v4_save_with_invalid_shrimp_partition_sum_is_rejected() -> Result<(
 }
 
 #[test]
+fn malformed_v4_save_with_out_of_range_death_biomass_fraction_is_rejected() -> Result<(), SimError>
+{
+    let mut state = TankState::new(SimSeed(104));
+    state.process_params.death_biomass_to_detritus_fraction = 2.0;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    let err = loaded.into_engine().unwrap_err();
+
+    assert_eq!(
+        err,
+        SimError::InvariantViolation {
+            field: "process.death_biomass_to_detritus_fraction",
+            value: 2.0,
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
 fn current_schema_load_repairs_stale_carbonate_caches() -> Result<(), SimError> {
     let mut state = TankState::new(SimSeed(103));
     let volume_l = state.water_volume_l();
