@@ -170,6 +170,8 @@ pub fn step_daily_algae(state: &mut TankState) {
     // the separate hourly chemistry/DO passes own explicit respiration.
     route_algae_loss_to_fine_detritus(state, suspended_realized_loss_g, n_to_c_ratio);
 
+    // TODO(tanksim-6e5.5.3): replace this legacy aggregate with habitat-based
+    // periphyton capacity so configurable hardscape area contributes here too.
     let colonizable_area_m2 =
         total_colonizable_area_cm2(&state.substrate_layers, state.geometry.wall_area_cm2())
             / 10_000.0;

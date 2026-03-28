@@ -162,7 +162,6 @@ impl PlayerAction {
             Self::TrimPlantsAndRemove { .. }
                 | Self::TrimPlantsAndLeaveCuttings { .. }
                 | Self::CleanFilter { .. }
-                | Self::ChangePhotoperiod { .. }
                 | Self::ChangeLightIntensity { .. }
                 | Self::ChangeAeration { .. }
         )

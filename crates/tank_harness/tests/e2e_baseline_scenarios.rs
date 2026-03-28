@@ -33,7 +33,7 @@ fn medium_planted_shrimp_husbandry_overrides(initial_adult_shrimp_count: u32) ->
         },
         source_water_profile_id: Some("hard_shrimp".to_string()),
         substrate_preset: Some(StartupSubstratePreset::ActivePlantedWithCoarsePorous),
-        plant_selection: Some(StartupPlantSelection::FastStemOnly),
+        plant_selection: Some(StartupPlantSelection::BothGuilds),
         filter_enabled: Some(true),
         light_preset: Some(StartupLightPreset::Hours12),
         heater_preset: Some(StartupHeaterPreset::Celsius25),
@@ -121,7 +121,7 @@ fn nano_cycle_baseline_envelope() -> Result<(), Box<dyn std::error::Error>> {
 
     // --- Phase 2: Stock shrimp into an uncycled tank ---
     // This deliberately tests the "bad outcome" path: stocking too early kills shrimp
-    run.apply_action(PlayerAction::AddShrimp { count: 8 })?;
+    run.apply_action(PlayerAction::AddShrimp { count: 4 })?;
     run.step_hours(1)?;
 
     run.assert_envelope(
@@ -914,11 +914,11 @@ fn shrimp_husbandry_fixture_reaches_reproduction_window() -> Result<(), Box<dyn 
         &Envelope::default()
             .temperature_c(23.0, 27.0)
             .do_min(7.0)
-            .shrimp_count(8, 8),
+            .shrimp_count(4, 4),
     );
 
-    for day in 1..=120 {
-        run.apply_action(PlayerAction::Feed { grams: 0.06 })?;
+    for day in 1..=180 {
+        run.apply_action(PlayerAction::Feed { grams: 0.08 })?;
         run.step_hours(24)?;
 
         if day % 7 == 0 {
@@ -942,7 +942,7 @@ fn shrimp_husbandry_fixture_reaches_reproduction_window() -> Result<(), Box<dyn 
                     .nitrite_mg_n_per_l(0.0, 2.5)
                     .nitrate_mg_n_per_l(4.0, 12.5)
                     .do_min(7.0)
-                    .shrimp_count(6, 20)
+                    .shrimp_count(3, 10)
                     .shrimp_reproductive_readiness(0.15, 0.9),
             );
         }
@@ -954,7 +954,7 @@ fn shrimp_husbandry_fixture_reaches_reproduction_window() -> Result<(), Box<dyn 
                     .nitrite_mg_n_per_l(0.0, 2.5)
                     .nitrate_mg_n_per_l(4.0, 12.5)
                     .do_min(7.0)
-                    .shrimp_count(6, 40)
+                    .shrimp_count(3, 20)
                     .shrimp_reproductive_readiness(0.2, 0.95),
             );
         }
@@ -966,8 +966,8 @@ fn shrimp_husbandry_fixture_reaches_reproduction_window() -> Result<(), Box<dyn 
                     .nitrite_mg_n_per_l(0.0, 2.5)
                     .nitrate_mg_n_per_l(4.0, 12.5)
                     .do_min(7.0)
-                    .shrimp_count(4, 60)
-                    .berried_females_count(0, 6),
+                    .shrimp_count(2, 30)
+                    .berried_females_count(0, 4),
             );
         }
         if day == 120 {
@@ -978,7 +978,7 @@ fn shrimp_husbandry_fixture_reaches_reproduction_window() -> Result<(), Box<dyn 
                     .nitrite_mg_n_per_l(0.0, 2.5)
                     .nitrate_mg_n_per_l(4.0, 12.5)
                     .do_min(7.0)
-                    .shrimp_count(4, 80)
+                    .shrimp_count(2, 40)
                     .juveniles_count(0, 80),
             );
         }

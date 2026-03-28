@@ -736,6 +736,15 @@ fn light_action_hourly_step_keeps_stored_registry_current() -> Result<(), tank_c
 }
 
 #[test]
+fn photoperiod_action_does_not_mark_habitat_registry_dirty() {
+    assert!(!PlayerAction::ChangePhotoperiod { hours: 6.0 }.affects_habitat_registry());
+    assert!(PlayerAction::ChangeLightIntensity {
+        intensity_index: 0.7,
+    }
+    .affects_habitat_registry());
+}
+
+#[test]
 fn daily_update_keeps_stored_registry_current() -> Result<(), tank_core::SimError> {
     let mut state = default_state();
     state.hardware.filter.enabled = true;

@@ -538,7 +538,8 @@ fn decomposer_monod_uses_concentration_instead_of_total_mass() {
 /// for all four guilds (decomposers, AOB, NOB, comammox). After one tick of
 /// `step_nitrogen_cycle`, both tanks must show:
 ///   1. Equal Monod limitation factors (same concentrations → same S/(K+S)).
-///   2. Equal concentration changes per liter for TAN, NO2, NO3, DOC, and DON.
+///   2. Equal concentration changes per liter for TAN, NO2, NO3, DOC, DON, DO,
+///      and alkalinity.
 ///
 /// Any accidental use of total-mass pools where concentrations belong, or any
 /// volume leak in the rate-to-mass conversion, will cause this test to fail.
@@ -688,10 +689,12 @@ fn concentration_kinetics_are_volume_independent() {
             st.water.nitrate_mg_n_per_l(v),
             st.water.doc_mg_c_per_l(v),
             st.water.don_mg_n_per_l(v),
+            st.water.do_mg_per_l(v),
+            st.water.alkalinity_meq_per_l(v),
         )
     };
-    let (s_tan0, s_no2_0, s_no3_0, s_doc0, s_don0) = before(&small, sv);
-    let (l_tan0, l_no2_0, l_no3_0, l_doc0, l_don0) = before(&large, lv);
+    let (s_tan0, s_no2_0, s_no3_0, s_doc0, s_don0, s_do0, s_alk0) = before(&small, sv);
+    let (l_tan0, l_no2_0, l_no3_0, l_doc0, l_don0, l_do0, l_alk0) = before(&large, lv);
 
     // ---- Run one tick of nitrogen kinetics ----
     step_nitrogen_cycle(&mut small);
@@ -734,6 +737,23 @@ fn concentration_kinetics_are_volume_independent() {
         "DON Δ mg/L must be volume-independent: small={s_don_d:.12}, large={l_don_d:.12}"
     );
 
+    // DO and alkalinity are consumed stoichiometrically by nitrification;
+    // volume leaks in the bookkeeping (lines 230-235, 288-289, 332-334,
+    // 362-364 of nitrogen_cycle.rs) would show up here.
+    let s_do_d = small.water.do_mg_per_l(sv) - s_do0;
+    let l_do_d = large.water.do_mg_per_l(lv) - l_do0;
+    assert!(
+        (s_do_d - l_do_d).abs() <= tol,
+        "DO Δ mg/L must be volume-independent: small={s_do_d:.12}, large={l_do_d:.12}"
+    );
+
+    let s_alk_d = small.water.alkalinity_meq_per_l(sv) - s_alk0;
+    let l_alk_d = large.water.alkalinity_meq_per_l(lv) - l_alk0;
+    assert!(
+        (s_alk_d - l_alk_d).abs() <= tol,
+        "Alkalinity Δ meq/L must be volume-independent: small={s_alk_d:.12}, large={l_alk_d:.12}"
+    );
+
     // Sanity: verify kinetics actually did something (non-zero deltas).
     assert!(
         s_tan_d.abs() > 1e-12,
@@ -743,12 +763,18 @@ fn concentration_kinetics_are_volume_independent() {
         s_doc_d.abs() > 1e-12,
         "DOC should change during one tick (got zero delta)"
     );
+    assert!(
+        s_do_d.abs() > 1e-12,
+        "DO should change during one tick (got zero delta)"
+    );
 }
 
 /// Stress-test volume independence at extreme scales: 1 L vs 1000 L.
 ///
-/// Same logic as [`concentration_kinetics_are_volume_independent`] but with a
-/// 1000× volume ratio to flush out any subtle floating-point or scaling issues.
+/// Same invariants as [`concentration_kinetics_are_volume_independent`] —
+/// Monod factor equality and per-liter delta equality for all seven species
+/// (TAN, NO2, NO3, DOC, DON, DO, alkalinity) — but with a 1000× volume ratio
+/// to flush out any subtle floating-point or scaling issues.
 #[test]
 fn concentration_kinetics_volume_independent_extreme_scales() {
     let build_state = |length_cm: f64, width_cm: f64, fill_height_cm: f64| {
@@ -814,6 +840,66 @@ fn concentration_kinetics_volume_independent_extreme_scales() {
         "huge tank should be 1000 L, got {hv}"
     );
 
+    // ---- Verify Monod limitation factors are equal (pre-tick) ----
+    let monod = |s: f64, k: f64| s / (s + k.max(f64::MIN_POSITIVE));
+    let pp = &tiny.process_params;
+
+    let tan_conc = tiny.water.tan_mg_n_per_l(tv);
+    let no2_conc = tiny.water.nitrite_mg_n_per_l(tv);
+    let doc_conc = tiny.water.doc_mg_c_per_l(tv);
+    let do_conc = tiny.water.do_mg_per_l(tv);
+
+    let eps_conc = 1e-12;
+    let monod_pairs = [
+        (
+            "TAN",
+            monod(tan_conc, pp.aob_k_tan_mg_n_per_l.max(0.01)),
+            monod(
+                huge.water.tan_mg_n_per_l(hv),
+                pp.aob_k_tan_mg_n_per_l.max(0.01),
+            ),
+        ),
+        (
+            "NO2",
+            monod(no2_conc, pp.nob_k_nitrite_mg_n_per_l.max(0.01)),
+            monod(
+                huge.water.nitrite_mg_n_per_l(hv),
+                pp.nob_k_nitrite_mg_n_per_l.max(0.01),
+            ),
+        ),
+        (
+            "DOC",
+            monod(doc_conc, pp.decomposer_k_doc_mg_c_per_l.max(0.01)),
+            monod(
+                huge.water.doc_mg_c_per_l(hv),
+                pp.decomposer_k_doc_mg_c_per_l.max(0.01),
+            ),
+        ),
+        (
+            "DO-AOB",
+            monod(do_conc, pp.aob_k_do_mg_per_l.max(0.01)),
+            monod(
+                huge.water.do_mg_per_l(hv),
+                pp.aob_k_do_mg_per_l.max(0.01),
+            ),
+        ),
+        (
+            "DO-decomp",
+            monod(do_conc, pp.decomposer_k_do_mg_per_l.max(0.01)),
+            monod(
+                huge.water.do_mg_per_l(hv),
+                pp.decomposer_k_do_mg_per_l.max(0.01),
+            ),
+        ),
+    ];
+    for (name, tiny_m, huge_m) in &monod_pairs {
+        assert!(
+            (tiny_m - huge_m).abs() < eps_conc,
+            "Monod {name} factor at 1 L vs 1000 L: tiny={tiny_m}, huge={huge_m}"
+        );
+    }
+
+    // ---- Record pre-tick concentrations ----
     let concs = |st: &TankState, v: f64| {
         (
             st.water.tan_mg_n_per_l(v),
@@ -821,14 +907,18 @@ fn concentration_kinetics_volume_independent_extreme_scales() {
             st.water.nitrate_mg_n_per_l(v),
             st.water.doc_mg_c_per_l(v),
             st.water.don_mg_n_per_l(v),
+            st.water.do_mg_per_l(v),
+            st.water.alkalinity_meq_per_l(v),
         )
     };
-    let (t0_tan, t0_no2, t0_no3, t0_doc, t0_don) = concs(&tiny, tv);
-    let (h0_tan, h0_no2, h0_no3, h0_doc, h0_don) = concs(&huge, hv);
+    let (t0_tan, t0_no2, t0_no3, t0_doc, t0_don, t0_do, t0_alk) = concs(&tiny, tv);
+    let (h0_tan, h0_no2, h0_no3, h0_doc, h0_don, h0_do, h0_alk) = concs(&huge, hv);
 
+    // ---- Run one tick ----
     step_nitrogen_cycle(&mut tiny);
     step_nitrogen_cycle(&mut huge);
 
+    // ---- Assert per-liter concentration deltas are equal ----
     let tol = 1e-9;
     let pairs = [
         (
@@ -856,11 +946,21 @@ fn concentration_kinetics_volume_independent_extreme_scales() {
             tiny.water.don_mg_n_per_l(tv) - t0_don,
             huge.water.don_mg_n_per_l(hv) - h0_don,
         ),
+        (
+            "DO",
+            tiny.water.do_mg_per_l(tv) - t0_do,
+            huge.water.do_mg_per_l(hv) - h0_do,
+        ),
+        (
+            "Alkalinity",
+            tiny.water.alkalinity_meq_per_l(tv) - t0_alk,
+            huge.water.alkalinity_meq_per_l(hv) - h0_alk,
+        ),
     ];
     for (name, tiny_d, huge_d) in &pairs {
         assert!(
             (tiny_d - huge_d).abs() <= tol,
-            "{name} Δ mg/L must be volume-independent at 1 L vs 1000 L: tiny={tiny_d:.12}, huge={huge_d:.12}"
+            "{name} Δ must be volume-independent at 1 L vs 1000 L: tiny={tiny_d:.12}, huge={huge_d:.12}"
         );
     }
 
@@ -868,6 +968,10 @@ fn concentration_kinetics_volume_independent_extreme_scales() {
     assert!(
         pairs[0].1.abs() > 1e-12,
         "TAN should change during one tick at extreme scale"
+    );
+    assert!(
+        pairs[5].1.abs() > 1e-12,
+        "DO should change during one tick at extreme scale"
     );
 }
 

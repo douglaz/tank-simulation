@@ -74,8 +74,10 @@ pub struct StageCohort {
     pub maturation_accum: f64,
 }
 
+pub const DEFAULT_STAGE_CONDITION_INDEX: f64 = 0.8;
+
 fn default_condition_index() -> f64 {
-    0.8
+    DEFAULT_STAGE_CONDITION_INDEX
 }
 
 impl Default for StageCohort {
@@ -83,7 +85,7 @@ impl Default for StageCohort {
         Self {
             count: 0,
             reserve_g: 0.0,
-            condition_index: 0.8,
+            condition_index: DEFAULT_STAGE_CONDITION_INDEX,
             maturation_accum: 0.0,
         }
     }
@@ -657,6 +659,11 @@ fn trim_egg_cohorts(cohorts: &mut Vec<EggCohort>, mut to_remove: u32) {
     }
 }
 
+/// Legacy aggregate colonizable-area helper for algae/periphyton code paths.
+///
+/// This intentionally excludes `geometry.hardscape_area_cm2`; downstream
+/// habitatization work in `tanksim-6e5.5.3` should migrate callers to the
+/// habitat registry instead of extending this flattened total.
 pub fn total_colonizable_area_cm2(
     substrate_layers: &[SubstrateLayerState],
     wall_area_cm2: f64,
