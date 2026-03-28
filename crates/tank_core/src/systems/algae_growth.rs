@@ -2,8 +2,8 @@ use crate::{
     systems::chemistry::resolve_carbonate_state,
     systems::events,
     types::{
-        algae_carbon_mg, algae_detrital_mass_g, legacy_total_param_to_mg_per_l,
-        total_colonizable_area_cm2, TankState, ALGAE_N_MG_PER_G_BIOMASS,
+        algae_carbon_mg, algae_detrital_mass_g, total_colonizable_area_cm2, TankState,
+        ALGAE_N_MG_PER_G_BIOMASS,
     },
 };
 
