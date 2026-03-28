@@ -1,0 +1,29 @@
+{
+  "payload_id": "run-20260327155320-final_review-vote-1-c1-a1-cr7-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T19:33:37.609071670Z",
+  "payload": {
+    "summary": "Reviewed both amendments against the code. The UI-volume amendment identifies a real inconsistency between what the scenario screen labels as water volume and the net volume used by chemistry. The legacy-reference-volume amendment is based on an incorrect derivation, so documenting it that way would be misleading rather than protective.",
+    "votes": [
+      {
+        "amendment_id": "fr-7-801f49b2",
+        "decision": "accept",
+        "rationale": "`crates/tank_tui/src/main.rs:597` shows \"Filled volume\" using `geometry.water_volume_l()`, and `crates/tank_core/src/types/geometry.rs:18-20` defines that as gross filled-prism volume before substrate displacement. Meanwhile chemistry and water-state calculations use `state.water_volume_l()` (`crates/tank_core/src/types/state.rs:177-180`), which subtracts substrate displacement. That mismatch can mislead users about the actual water volume backing concentrations, so relabeling or showing both values is a sound fix."
+      },
+      {
+        "amendment_id": "fr-7-501d15bd",
+        "decision": "reject",
+        "rationale": "The amendment's factual premise does not match the code. `LEGACY_KINETIC_REFERENCE_VOLUME_L` is 20.0 in `crates/tank_core/src/types/process.rs:3`, but the default substrate depth is 3.0 cm in `crates/tank_core/src/types/substrate.rs:24-28`, and the default geometry is 40×25 cm footprint with 22 cm fill height in `crates/tank_core/src/types/geometry.rs:83-93`, yielding 22 L gross and 19 L net, not 20 L. Adding a doc comment claiming the constant is derived from the default tank net volume would therefore encode false provenance and reduce maintainability."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 7
+}

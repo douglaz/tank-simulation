@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260328125548-final_review-aggregate-c2-a1-cr5-artifact",
+  "payload_id": "run-20260328125548-final_review-aggregate-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T16:07:15.554033334Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 1 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 3\n**Final Review Restarts:** 5/20\n\n## Accepted\n\n- `fr-5-b7289131`\n\n## Rejected\n\n- `fr-5-b737f90d`\n- `fr-5-60828312`\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-5-b7289131`\n\nRestore a real migration path for legacy kinetic `_mg` process keys instead of treating them as raw mg/L aliases. The runtime/data structs now only add `serde(alias = \"..._mg\")` for `decomposer_*`, `aob_*`, `nob_*`, and `comammox_*` in `crates/tank_core/src/types/process.rs:59-111` and `crates/tank_data/src/presets.rs:763-801`, while `parse_process_params_preset()` only renormalizes the plant/algae `*_mg_total` keys in `crates/tank_data/src/presets.rs:1186-1291`. `legacy_process_param_normalization()` no longer returns `LegacyMgPerL` for any renamed kinetic parameter in `crates/tank_data/src/presets.rs:1345-1365`, so a legacy file such as `aob_k_tan_mg = 0.5` is now interpreted as `0.5 mg N/L` instead of the previous `0.025 mg N/L`. The still-stale regression in `crates/tank_data/src/lib.rs:316-335` expecting `aob_k_tan_mg = 200.0` to report `value 10` shows the old 20 L compatibility contract was intended to remain intact.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 5
+}

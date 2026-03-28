@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328132625-final_review-reviewer-1-c1-a1-cr1-artifact",
+  "payload_id": "run-20260328132625-final_review-reviewer-1-c1-a1-cr1-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T13:42:33.889501116Z",
+  "content": "# Final Review Proposal\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nReviewed the added habitat-registry regression suite against the underlying habitat/state/geometry implementation and did not find correctness, safety, or robustness issues in this change set. Targeted `cargo test -p tank_core --test habitat_registry` and `cargo test -p tank_core --test co2_exchange` both pass. The broader `cargo test -p tank_core` run still fails in `crates/tank_core/tests/budget_helpers.rs::trim_plants_is_closed_system_via_helpers`, but that failure is outside the reviewed diff.\n\n## Amendments\n\nNone.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

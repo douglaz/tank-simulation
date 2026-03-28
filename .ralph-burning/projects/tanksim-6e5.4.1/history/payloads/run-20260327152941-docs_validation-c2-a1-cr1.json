@@ -1,0 +1,22 @@
+{
+  "payload_id": "run-20260327152941-docs_validation-c2-a1-cr1",
+  "stage_id": "docs_validation",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-27T15:47:38.097759995Z",
+  "payload": {
+    "data": {
+      "evidence": [],
+      "findings_or_gaps": [],
+      "follow_up_or_amendments": [],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "local_validation",
+    "command": "docs_validation"
+  },
+  "completion_round": 1
+}

@@ -1,0 +1,44 @@
+{
+  "payload_id": "run-20260328140833-final_review-vote-0-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T16:00:33.679972643Z",
+  "payload": {
+    "summary": "Verified all five amendments against current source. The two documentation/maintainability amendments (fr-3-df697556, fr-3-77143f76) identify real inconsistencies in the code. The three defect claims (fr-3-dc32db9e, fr-3-3d1fd76b, fr-3-bc5a66d7) describe bugs that are not present in the current implementation — the code already handles depth in substrate area derivation, uses water_depth_above_substrate_cm() for light calculations, and recomputes crowding from live biomass on every registry refresh.",
+    "votes": [
+      {
+        "amendment_id": "fr-3-df697556",
+        "decision": "accept",
+        "rationale": "Verified: compute_habitat_registry() builds HabitatEnv.light_intensity from hardware.light.intensity_index only (habitat.rs:105-109). It never reads photoperiod_hours. ChangePhotoperiod in affects_habitat_registry() therefore triggers a redundant registry refresh. The mismatch is real and should be tightened or documented."
+      },
+      {
+        "amendment_id": "fr-3-77143f76",
+        "decision": "accept",
+        "rationale": "Verified: total_colonizable_area_cm2() (biology.rs:660-669) sums wall_area_cm2 + substrate layer areas, omitting geometry.hardscape_area_cm2. Meanwhile compute_glass_hardscape() (habitat.rs:172) includes both wall + hardscape in the habitat registry. The algae carrying-capacity model in algae_growth.rs:173-175 uses the legacy helper and therefore ignores hardscape surfaces. A TODO or doc comment clarifying this gap for the downstream habitatization task is justified."
+      },
+      {
+        "amendment_id": "fr-3-dc32db9e",
+        "decision": "reject",
+        "rationale": "Verified: SubstrateLayerState::derived_colonizable_area_cm2() (substrate.rs:54-58) computes footprint_area_cm2 * depth_cm * colonizable_area_factor — depth IS included. refresh_habitat_registry() (state.rs:258-270) rewrites each layer's colonizable_area_cm2 from this derivation, and compute_substrate_deep() (habitat.rs:222-228) sums freshly derived values. Scenario materialization also calls the depth-aware derivation. The claimed geometry-insensitive behavior is not present in the current code."
+      },
+      {
+        "amendment_id": "fr-3-3d1fd76b",
+        "decision": "reject",
+        "rationale": "Verified: habitat.rs:94-95 computes substrate light using state.water_depth_above_substrate_cm(), not geometry.mean_depth_cm(). The water_depth_above_substrate_cm() method (state.rs:200-203) subtracts substrate_depth_cm from fill_height_cm, so a deeper substrate bed correctly results in less water above it and more light reaching the substrate surface. The bug described — that substrate thickness is ignored — is not present."
+      },
+      {
+        "amendment_id": "fr-3-bc5a66d7",
+        "decision": "reject",
+        "rationale": "Verified: refresh_habitat_registry() (state.rs:258-262) calls derived_plant_crowding_index() which recomputes crowding from current live biomass_g values (state.rs:223-230), then writes the result back to all plant guilds before recomputing the registry. Both trim actions are marked as habitat-affecting (actions.rs:162-163), so the engine calls refresh_habitat_registry() immediately after reducing biomass. Crowding is therefore updated from post-trim biomass, not stale."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 3
+}

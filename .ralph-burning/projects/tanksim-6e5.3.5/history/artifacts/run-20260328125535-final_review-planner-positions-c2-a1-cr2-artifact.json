@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328125535-final_review-planner-positions-c2-a1-cr2-artifact",
+  "payload_id": "run-20260328125535-final_review-planner-positions-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T14:00:56.249134655Z",
+  "content": "# Final Review Planner Positions\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nBoth amendments identify real regressions: one is a broken, index-coupled TUI test, and the other is a save-migration semantic change that silently alters queued trim behavior.\n\n## Votes\n\n- `fr-2-5f3aaec6`: Accept\n  The current test is demonstrably wrong: after inserting `TrimPlantsAndLeaveCuttings` into `ActionKind::ALL`, advancing 5 times lands on `CleanFilter`, so the test no longer exercises integer count validation at all. Fixing the navigation count, or better selecting `ActionKind::AddShrimp` directly, restores the intended coverage and removes brittle dependence on enum ordering.\n- `fr-2-d613a3c7`: Accept\n  The migration currently rewrites legacy `TrimPlants` to `TrimPlantsAndRemove`, which changes queued-action behavior from keeping trimmed biomass in-system to exporting it. Historical code and routing docs show legacy `TrimPlants` behaved as the in-tank variant, so this is a real save-compatibility bug; even if the exact preservation path needs nuance, the amendment correctly identifies an unsafe silent semantic change that should be fixed or explicitly documented as intentional.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

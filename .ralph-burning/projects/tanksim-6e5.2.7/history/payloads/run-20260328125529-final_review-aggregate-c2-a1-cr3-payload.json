@@ -1,0 +1,123 @@
+{
+  "payload_id": "run-20260328125529-final_review-aggregate-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T14:55:48.296880805Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-3-528ad2ff",
+      "fr-3-05a63920",
+      "fr-3-95eadc35",
+      "fr-3-0fe2ed5a"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-3-528ad2ff",
+        "normalized_body": "Add a test asserting that REFERENCE_SA_V_CM2_PER_L matches the actual default TankState geometry. Currently the constant 1000.0/19.0 is documented to match the default 40x25 cm footprint with 3 cm substrate (~19 L net), but nothing enforces this at compile-time or test-time. If the default substrate depth, geometry dimensions, or displacement model change, compute_o2_kla silently produces incorrect normalization (ratio != 1.0) for the default tank. A single test like `assert!((state.geometry.surface_area_cm2() / state.water_volume_l() - REFERENCE_SA_V_CM2_PER_L).abs() < 0.01)` on a default TankState would catch this.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-05a63920",
+        "normalized_body": "The TUI api_client normalize_snapshot_object function adds canonical fields from legacy aliases but does not strip the legacy or API-injected metadata fields (chemistry_field_semantics, estimated_tds_scope, legacy_chemistry_aliases) before calling serde_json::from_value. This works only because TankSnapshot omits #[serde(deny_unknown_fields)]. Add a test to api_client that deserializes a full snapshot_response_json() output (which includes all metadata fields) through parse_snapshot_value, verifying the TUI client can handle the enriched API response end-to-end — not just hand-crafted legacy-only payloads.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-95eadc35",
+        "normalized_body": "Fix the snapshot TDS/conductivity projection so it is derived from the same fresh carbonate solve as the snapshot pH/CO2 values. In `crates/tank_core/src/types/snapshot.rs:78-90`, `TankSnapshot::from_state()` recomputes `carbonate_eq` from authoritative DIC + alkalinity, but `estimated_tds_7_ion_mg_per_l` / `estimated_conductivity_us_cm` still come from `chemistry.tds_mg_per_l()` and `chemistry.conductivity_us_cm()`. Those helpers read `WaterState::bicarbonate_mg_total` through `crates/tank_core/src/types/water.rs:189-240`, and that field is only a cache. If DIC/alkalinity changed without a preceding `resolve_carbonate_state()`, the snapshot can report internally inconsistent chemistry: fresh pH/CO2 with stale bicarbonate-backed TDS. Derive the bicarbonate contribution from `carbonate_eq.hco3_mmol_per_l` inside `TankSnapshot::from_state()` (or force a carbonate refresh before reading TDS), and add a regression test that mutates DIC/alkalinity while leaving the cache stale.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-0fe2ed5a",
+        "normalized_body": "Centralize the 7-ion scope metadata next to the actual TDS calculation instead of maintaining separate hardcoded copies in core, API, and TUI. The authoritative ion set is implicit in `crates/tank_core/src/types/water.rs:235-242`, but the explanatory strings are duplicated in `crates/tank_api/src/handlers/snapshot.rs:8-12` / `crates/tank_api/src/handlers/snapshot.rs:121-125` and again in `crates/tank_tui/src/screens/mod.rs:11-15`. Move the tracked/omitted-ion metadata into `tank_core` and have both API and TUI consume that shared definition.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-3-528ad2ff",
+        "normalized_body": "Add a test asserting that REFERENCE_SA_V_CM2_PER_L matches the actual default TankState geometry. Currently the constant 1000.0/19.0 is documented to match the default 40x25 cm footprint with 3 cm substrate (~19 L net), but nothing enforces this at compile-time or test-time. If the default substrate depth, geometry dimensions, or displacement model change, compute_o2_kla silently produces incorrect normalization (ratio != 1.0) for the default tank. A single test like `assert!((state.geometry.surface_area_cm2() / state.water_volume_l() - REFERENCE_SA_V_CM2_PER_L).abs() < 0.01)` on a default TankState would catch this.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-05a63920",
+        "normalized_body": "The TUI api_client normalize_snapshot_object function adds canonical fields from legacy aliases but does not strip the legacy or API-injected metadata fields (chemistry_field_semantics, estimated_tds_scope, legacy_chemistry_aliases) before calling serde_json::from_value. This works only because TankSnapshot omits #[serde(deny_unknown_fields)]. Add a test to api_client that deserializes a full snapshot_response_json() output (which includes all metadata fields) through parse_snapshot_value, verifying the TUI client can handle the enriched API response end-to-end — not just hand-crafted legacy-only payloads.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-95eadc35",
+        "normalized_body": "Fix the snapshot TDS/conductivity projection so it is derived from the same fresh carbonate solve as the snapshot pH/CO2 values. In `crates/tank_core/src/types/snapshot.rs:78-90`, `TankSnapshot::from_state()` recomputes `carbonate_eq` from authoritative DIC + alkalinity, but `estimated_tds_7_ion_mg_per_l` / `estimated_conductivity_us_cm` still come from `chemistry.tds_mg_per_l()` and `chemistry.conductivity_us_cm()`. Those helpers read `WaterState::bicarbonate_mg_total` through `crates/tank_core/src/types/water.rs:189-240`, and that field is only a cache. If DIC/alkalinity changed without a preceding `resolve_carbonate_state()`, the snapshot can report internally inconsistent chemistry: fresh pH/CO2 with stale bicarbonate-backed TDS. Derive the bicarbonate contribution from `carbonate_eq.hco3_mmol_per_l` inside `TankSnapshot::from_state()` (or force a carbonate refresh before reading TDS), and add a regression test that mutates DIC/alkalinity while leaving the cache stale.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-0fe2ed5a",
+        "normalized_body": "Centralize the 7-ion scope metadata next to the actual TDS calculation instead of maintaining separate hardcoded copies in core, API, and TUI. The authoritative ion set is implicit in `crates/tank_core/src/types/water.rs:235-242`, but the explanatory strings are duplicated in `crates/tank_api/src/handlers/snapshot.rs:8-12` / `crates/tank_api/src/handlers/snapshot.rs:121-125` and again in `crates/tank_tui/src/screens/mod.rs:11-15`. Move the tracked/omitted-ion metadata into `tank_core` and have both API and TUI consume that shared definition.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 3,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [],
+    "restart_required": true,
+    "summary": "Final review accepted 4 amendment(s); restart required.",
+    "total_proposed_amendments": 4,
+    "total_reviewers": 2,
+    "unique_amendment_count": 4
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 3
+}
