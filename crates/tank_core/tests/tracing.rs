@@ -1,5 +1,10 @@
 //! Integration tests for the simulation tracing facility.
 
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc,
+};
+
 use tank_core::{
     Engine, JsonLinesSink, PlayerAction, SimSeed, SimTracer, SimulationEngine, TankState,
     TickTrace, TraceSink, Verbosity,
@@ -30,6 +35,16 @@ fn active_state(seed: SimSeed) -> TankState {
     state.animal.berried_females_count = 0;
     state.reseed_stability_tracker();
     state
+}
+
+struct CountingSink {
+    emitted_ticks: Arc<AtomicUsize>,
+}
+
+impl TraceSink for CountingSink {
+    fn emit_tick(&mut self, _tick: &TickTrace) {
+        self.emitted_ticks.fetch_add(1, Ordering::SeqCst);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +125,56 @@ fn summary_verbosity_records_systems_without_pool_deltas() -> Result<(), tank_co
             "summary verbosity should not capture pool deltas for {}",
             system.system
         );
+        assert!(
+            system.notes.is_empty(),
+            "summary verbosity should not capture notes for {}",
+            system.system
+        );
     }
+
+    Ok(())
+}
+
+#[test]
+fn trace_verbosity_records_intermediate_notes_and_post_stage_events(
+) -> Result<(), tank_core::SimError> {
+    let mut state = active_state(SimSeed(350));
+    state.environment.hour_of_day = 23;
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_tracing(SimTracer::new(Verbosity::Trace));
+    engine.step_hours(1)?;
+
+    let tracer = engine.tracer().unwrap();
+    let tick = &tracer.ticks()[0];
+    let biofilter = tick
+        .system("system:daily_biofilter_maturity")
+        .expect("daily biofilter maturity stage should be traced");
+
+    assert_eq!(
+        biofilter.events_generated, 2,
+        "daily biofilter maturity should attribute both maturity events to the traced stage"
+    );
+    assert!(
+        biofilter
+            .notes
+            .iter()
+            .any(|note| note.starts_with("biofilter_maturity.delta=")),
+        "trace verbosity should expose deterministic intermediate notes"
+    );
+    assert!(
+        biofilter
+            .notes
+            .iter()
+            .any(|note| note == "biofilter_maturity.emitted.biofilm_maturity_increase=true"),
+        "trace notes should record whether the biofilm maturity event fired"
+    );
+    assert!(
+        biofilter
+            .notes
+            .iter()
+            .any(|note| note == "biofilter_maturity.emitted.cycle_progressing=true"),
+        "trace notes should record whether the cycle-progressing event fired"
+    );
 
     Ok(())
 }
@@ -297,6 +361,35 @@ fn tracing_does_not_alter_simulation_results() -> Result<(), tank_core::SimError
     assert_eq!(
         snapshot_no_trace, snapshot_traced,
         "tracing should not alter simulation results"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn verbosity_off_records_no_ticks_and_emits_no_sink_output() -> Result<(), tank_core::SimError> {
+    let emitted_ticks = Arc::new(AtomicUsize::new(0));
+    let sink = CountingSink {
+        emitted_ticks: Arc::clone(&emitted_ticks),
+    };
+    let mut engine = Engine::from_parts(active_state(SimSeed(950)), vec![]);
+    engine.enable_tracing(SimTracer::with_sink(Verbosity::Off, Box::new(sink)));
+    engine.step_hours(3)?;
+
+    let tracer = engine.tracer().expect("tracer should stay attached");
+    assert_eq!(
+        tracer.tick_count(),
+        0,
+        "off verbosity should not retain ticks"
+    );
+    assert!(
+        tracer.ticks().is_empty(),
+        "off verbosity should leave the in-memory trace buffer empty"
+    );
+    assert_eq!(
+        emitted_ticks.load(Ordering::SeqCst),
+        0,
+        "off verbosity should not emit sink output"
     );
 
     Ok(())

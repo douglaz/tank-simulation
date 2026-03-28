@@ -6,7 +6,7 @@
 //!
 //! # Verbosity levels
 //!
-//! - **Off**: no tracing (zero overhead via `Option<SimTracer>`)
+//! - **Off**: no tracing (records nothing and emits nothing)
 //! - **Summary**: per-tick system names and event counts
 //! - **Detail**: per-system pool deltas
 //! - **Trace**: per-system pool deltas plus intermediate notes
@@ -33,7 +33,7 @@ use crate::types::TankState;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Verbosity {
-    /// No tracing. Real "off" is `Option::<SimTracer>::None` on the engine.
+    /// No tracing. The engine skips tick builders, in-memory storage, and sink writes.
     Off,
     /// Per-tick system names and event counts only.
     Summary,

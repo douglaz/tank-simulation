@@ -195,9 +195,7 @@ impl Engine {
             self.maybe_record_stage_with_explicit_budget(
                 &mut ctx,
                 label,
-                move |engine, _stage_trace, tracking| {
-                    ((), engine.process_action(action, tracking))
-                },
+                move |engine, _stage_trace, tracking| ((), engine.process_action(action, tracking)),
             );
         }
 
@@ -352,13 +350,16 @@ impl Engine {
         self.maybe_record_stage(ctx, "system:daily_shrimp", |engine, _stage_trace| {
             systems::shrimp::step_daily_shrimp(&mut engine.state);
         });
-        self.maybe_record_stage(ctx, "system:daily_filter_clogging", |engine, _stage_trace| {
-            systems::nitrogen_cycle::update_daily_filter_clogging(&mut engine.state);
-        });
+        self.maybe_record_stage(
+            ctx,
+            "system:daily_filter_clogging",
+            |engine, _stage_trace| {
+                systems::nitrogen_cycle::update_daily_filter_clogging(&mut engine.state);
+            },
+        );
 
         // Biofilter maturity summary update
-        let maturity_delta =
-            self.maybe_record_stage(ctx, "system:daily_biofilter_maturity", |engine, stage_trace| {
+        self.maybe_record_stage(ctx, "system:daily_biofilter_maturity", |engine, stage_trace| {
                 let maturity_before = engine.state.filter_state.biofilter_maturity_index;
                 let total_nitrifier_g = engine.state.microbe.ammonia_oxidizer_biomass_g
                     + engine.state.microbe.nitrite_oxidizer_biomass_g
@@ -404,7 +405,6 @@ impl Engine {
                 }
                 maturity_delta
             });
-        let _ = maturity_delta;
     }
 
     fn maybe_record_stage<F, R>(
