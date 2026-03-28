@@ -246,7 +246,8 @@ impl WaterState {
         let bicarbonate_mg_total =
             bicarbonate_mg_total_from_mmol_per_l(carbonate_eq.hco3_mmol_per_l, volume_l);
         let tds_mg_per_l = self.tds_mg_per_l_with_bicarbonate_total(volume_l, bicarbonate_mg_total);
-        let conductivity_us_cm = (tds_mg_per_l / ESTIMATED_TDS_TO_CONDUCTIVITY_DIVISOR).max(0.0);
+        let conductivity_us_cm =
+            self.conductivity_us_cm_with_bicarbonate_total(volume_l, bicarbonate_mg_total);
 
         EstimatedDissolvedSolids {
             bicarbonate_mg_total,

@@ -237,23 +237,13 @@ impl TankSnapshot {
         let nitrate_mg_n_per_l = chemistry.nitrate_mg_n_per_l();
         let phosphate_mg_p_per_l = chemistry.phosphate_mg_p_per_l();
         let dissolved_inorganic_carbon_mg_c_per_l = chemistry.dic_mg_c_per_l();
-        let carbonate_eq = solve_carbonate_equilibrium(
-            state.water.dissolved_inorganic_carbon_mg_c_total,
-            state.water.alkalinity_meq_total,
-            state.water.temperature_c,
-            volume_l,
-        );
+        let carbonate_eq = state.water.projected_carbonate_equilibrium(volume_l);
         let do_mg_l_val = chemistry.do_mg_per_l();
         let gh_d = chemistry.gh_d();
         let kh_d = chemistry.kh_d();
-        let bicarbonate_mg_total =
-            bicarbonate_mg_total_from_mmol_per_l(carbonate_eq.hco3_mmol_per_l, volume_l);
-        let estimated_tds_7_ion_mg_per_l = state
+        let estimated_dissolved_solids = state
             .water
-            .tds_mg_per_l_with_bicarbonate_total(volume_l, bicarbonate_mg_total);
-        let estimated_conductivity_us_cm = state
-            .water
-            .conductivity_us_cm_with_bicarbonate_total(volume_l, bicarbonate_mg_total);
+            .estimated_dissolved_solids_with_carbonate_equilibrium(volume_l, carbonate_eq);
         let ph = carbonate_eq.ph;
         let nh3_mg_n_per_l = compute_nh3_mg_n_per_l(tan_mg_n_per_l, ph, state.water.temperature_c);
         let fast_stem_biomass_g: f64 = state
@@ -292,8 +282,8 @@ impl TankSnapshot {
             do_sat_mg_l: do_sat_mg_l(state.water.temperature_c),
             gh_d,
             kh_d,
-            estimated_tds_7_ion_mg_per_l,
-            estimated_conductivity_us_cm,
+            estimated_tds_7_ion_mg_per_l: estimated_dissolved_solids.tds_mg_per_l,
+            estimated_conductivity_us_cm: estimated_dissolved_solids.conductivity_us_cm,
             ph,
             light_enabled: state.hardware.light.enabled,
             photoperiod_hours: state.hardware.light.photoperiod_hours,
@@ -364,9 +354,8 @@ mod tests {
 
     use super::{TankSnapshot, LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES};
     use crate::{
-        rng::SimSeed,
-        systems::chemistry::{bicarbonate_mg_total_from_mmol_per_l, solve_carbonate_equilibrium},
-        TankState, ESTIMATED_TDS_OMITTED_CONTRIBUTORS, ESTIMATED_TDS_TRACKED_MAJOR_IONS,
+        rng::SimSeed, systems::chemistry::solve_carbonate_equilibrium, TankState,
+        ESTIMATED_TDS_OMITTED_CONTRIBUTORS, ESTIMATED_TDS_TRACKED_MAJOR_IONS,
     };
 
     fn assert_close(actual: f64, expected: f64, tolerance: f64) {
