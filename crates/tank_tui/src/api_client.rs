@@ -190,6 +190,22 @@ mod tests {
     }
 
     #[test]
+    fn parses_pre_stage_snapshot_payloads_without_stage_totals() {
+        let expected = tank_core::TankSnapshot::from_state(&TankState::new(SimSeed(778)));
+        let mut value = canonical_snapshot_value(SimSeed(778));
+        let object = value
+            .as_object_mut()
+            .expect("serialized snapshot should be an object");
+        object.remove("total_shrimp_count");
+        object.remove("sub_adult_count");
+
+        let parsed =
+            parse_snapshot_value(value).expect("pre-stage snapshot should deserialize");
+
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
     fn keeps_canonical_snapshot_fields_when_legacy_aliases_are_also_present() {
         let expected = tank_core::TankSnapshot::from_state(&TankState::new(SimSeed(888)));
         let mut value = serde_json::to_value(&expected).expect("snapshot should serialize");
