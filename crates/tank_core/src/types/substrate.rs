@@ -11,15 +11,9 @@ pub enum SubstrateKind {
 }
 
 impl SubstrateKind {
-<<<<<<< Updated upstream
     /// Default interstitial colonizable-area multiplier per cm of substrate
     /// depth for the coarse substrate classes the engine currently supports.
     pub fn default_colonizable_area_factor(&self) -> f64 {
-=======
-    /// Effective interstitial colonizable-area multiplier per cm of substrate
-    /// depth for the coarse substrate classes the engine currently supports.
-    pub fn colonizable_area_factor(self) -> f64 {
->>>>>>> Stashed changes
         match self {
             Self::InertSand => 0.5,
             Self::InertGravel => 0.6,
@@ -47,7 +41,6 @@ pub struct SubstrateLayerState {
 }
 
 impl SubstrateLayerState {
-<<<<<<< Updated upstream
     pub fn resolved_colonizable_area_factor(&self) -> f64 {
         if self.colonizable_area_factor.is_finite() && self.colonizable_area_factor > 0.0 {
             self.colonizable_area_factor
@@ -62,14 +55,6 @@ impl SubstrateLayerState {
         footprint_area_cm2.max(0.0)
             * self.depth_cm.max(0.0)
             * self.resolved_colonizable_area_factor()
-=======
-    /// Derived internal colonizable area for this layer from the current tank
-    /// footprint, substrate kind, and actual layer depth.
-    pub fn derived_colonizable_area_cm2(&self, footprint_area_cm2: f64) -> f64 {
-        footprint_area_cm2.max(0.0)
-            * self.depth_cm.max(0.0)
-            * self.kind.colonizable_area_factor()
->>>>>>> Stashed changes
     }
 }
 

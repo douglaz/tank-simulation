@@ -202,7 +202,6 @@ impl TankState {
             .clamp(0.0, self.geometry.fill_height_cm.max(0.0))
     }
 
-<<<<<<< Updated upstream
     /// Extinction coefficient k (1/cm) for Beer-Lambert light attenuation.
     ///
     /// k = k_water + k_algae × \[algae\] + k_doc × \[DOC\] + k_detritus × \[detritus\]
@@ -263,10 +262,7 @@ impl TankState {
         }
         let footprint_area_cm2 = self.geometry.footprint_area_cm2();
         for layer in &mut self.substrate_layers {
-<<<<<<< Updated upstream
             layer.colonizable_area_factor = layer.resolved_colonizable_area_factor();
-=======
->>>>>>> Stashed changes
             layer.colonizable_area_cm2 = layer.derived_colonizable_area_cm2(footprint_area_cm2);
         }
         let registry = super::habitat::compute_habitat_registry(self);

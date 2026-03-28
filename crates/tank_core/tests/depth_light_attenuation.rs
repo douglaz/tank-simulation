@@ -227,11 +227,14 @@ fn algae_self_shading_increases_extinction() {
 // ---------------------------------------------------------------------------
 
 /// AC: shallow (20cm) vs deep (50cm) tank → shallow has higher plant growth
-/// over 200 hours.
+/// over 200 hours.  Elevated base extinction makes the depth difference
+/// significant enough to dominate over the deeper tank's larger nutrient pool.
 #[test]
 fn shallow_vs_deep_200h_plant_growth() -> Result<(), tank_core::SimError> {
     let build = |fill_height_cm: f64| -> TankState {
         let mut state = growth_state(SimSeed(9600), fill_height_cm);
+        // Boost base extinction so depth has a measurable light effect.
+        state.process_params.base_extinction_coeff_per_cm = 0.03;
         state.plant_guilds = vec![PlantGuildState {
             guild: PlantGuild::FastStem,
             biomass_g: 4.0,
@@ -241,6 +244,7 @@ fn shallow_vs_deep_200h_plant_growth() -> Result<(), tank_core::SimError> {
             water_column_uptake_bias: Some(1.0),
             substrate_uptake_bias: Some(0.0),
         }];
+        state.refresh_habitat_registry();
         state
     };
 
@@ -267,9 +271,11 @@ fn shallow_vs_deep_200h_plant_growth() -> Result<(), tank_core::SimError> {
 fn shallow_vs_deep_algae_competition() -> Result<(), tank_core::SimError> {
     let build = |fill_height_cm: f64| -> TankState {
         let mut state = growth_state(SimSeed(9601), fill_height_cm);
+        state.process_params.base_extinction_coeff_per_cm = 0.03;
         state.plant_guilds.clear();
         state.algae.suspended_biomass_g = 0.3;
         state.algae.periphyton_biomass_g = 0.2;
+        state.refresh_habitat_registry();
         state
     };
 
