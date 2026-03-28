@@ -3,7 +3,10 @@ use serde_json::Value;
 
 use crate::{
     engine::{Engine, SimulationEngine},
-    types::{PlayerAction, SimError, StabilityTracker, TankState},
+    types::{
+        PlayerAction, SimError, StabilityTracker, TankState, ADULT_SHRIMP_BIOMASS_G,
+        JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
+    },
 };
 
 /// Current schema version. Bump this when the save format changes.
@@ -81,8 +84,9 @@ const MIGRATIONS: &[MigrationFn] = &[
     migrate_v2_to_v3,
     // Index 1: schema 3 → 4
     // Add shrimp feeding pathway parameters and animal.reserve_g. Process
-    // parameters and reserve_g now both rely on serde defaults so legacy saves
-    // preserve their prior physical state instead of gaining synthetic reserve.
+    // parameters still rely on serde defaults, but reserve_g is reconstructed
+    // from legacy shrimp biomass so reserve-funded hatch/maturation logic does
+    // not stall immediately after upgrading an old colony.
     migrate_v3_to_v4,
 ];
 
@@ -322,10 +326,48 @@ fn migrate_v2_to_v3(value: &mut Value) -> Result<(), SimError> {
 
 /// Schema 3 → 4: add shrimp feeding pathway parameters (assimilation
 /// efficiency, respiration/excretion/growth fractions, O2:C quotient) and
-/// `animal.reserve_g`. All of these fields deserialize through
-/// `#[serde(default)]`, so the migration is intentionally a no-op.
+/// `animal.reserve_g`. Process parameters still deserialize through
+/// `#[serde(default)]`, but reserve_g is seeded from serialized shrimp counts
+/// so legacy colonies keep enough retained biomass to continue reserve-funded
+/// growth and reproduction after upgrade.
 fn migrate_v3_to_v4(value: &mut Value) -> Result<(), SimError> {
-    let _ = value;
+    let animal = required_object_mut_at(value, 3, 4, "/state/animal")?;
+    if animal.contains_key("reserve_g") {
+        return Ok(());
+    }
+
+    let adults_count = animal
+        .get("adults_count")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            schema_migration_error(3, 4, "expected integer at /state/animal/adults_count")
+        })?;
+    let juveniles_count = animal
+        .get("juveniles_count")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            schema_migration_error(3, 4, "expected integer at /state/animal/juveniles_count")
+        })?;
+    let adults_count = u32::try_from(adults_count).map_err(|_| {
+        schema_migration_error(
+            3,
+            4,
+            "expected /state/animal/adults_count to fit within u32",
+        )
+    })?;
+    let juveniles_count = u32::try_from(juveniles_count).map_err(|_| {
+        schema_migration_error(
+            3,
+            4,
+            "expected /state/animal/juveniles_count to fit within u32",
+        )
+    })?;
+
+    let reserve_g = ((f64::from(adults_count) * ADULT_SHRIMP_BIOMASS_G)
+        + (f64::from(juveniles_count) * JUVENILE_SHRIMP_BIOMASS_G))
+        * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+    animal.insert("reserve_g".to_string(), serde_json::json!(reserve_g));
+
     Ok(())
 }
 

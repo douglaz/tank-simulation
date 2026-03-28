@@ -136,20 +136,28 @@ fn feeding_generates_tan_and_dic_and_feces() -> Result<(), SimError> {
 
 #[test]
 fn feeding_consumes_dissolved_oxygen() -> Result<(), SimError> {
-    let mut state = feeding_test_state();
-    // Disable aeration to isolate O2 consumption
-    state.hardware.aeration.enabled = false;
-    let do_before = state.water.dissolved_oxygen_mg_total;
+    let mut fed_state = feeding_test_state();
+    let mut unfed_state = fed_state.clone();
 
-    let mut engine = Engine::from_parts(state, vec![]);
-    engine.step_hours(24)?;
+    // Disable aeration so both runs see the same passive gas exchange only.
+    fed_state.hardware.aeration.enabled = false;
+    unfed_state.hardware.aeration.enabled = false;
+    unfed_state
+        .process_params
+        .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
 
-    let after = engine.full_state();
-    // The respiration pathway should have consumed O2
+    let mut fed_engine = Engine::from_parts(fed_state, vec![]);
+    let mut unfed_engine = Engine::from_parts(unfed_state, vec![]);
+    fed_engine.step_hours(24)?;
+    unfed_engine.step_hours(24)?;
+
+    let fed_after = fed_engine.full_state();
+    let unfed_after = unfed_engine.full_state();
     assert!(
-        after.water.dissolved_oxygen_mg_total < do_before,
-        "DO should decrease from shrimp respiration: before={do_before}, after={}",
-        after.water.dissolved_oxygen_mg_total
+        fed_after.water.dissolved_oxygen_mg_total < unfed_after.water.dissolved_oxygen_mg_total,
+        "feeding should leave less DO than the unfed control: fed={}, unfed={}",
+        fed_after.water.dissolved_oxygen_mg_total,
+        unfed_after.water.dissolved_oxygen_mg_total
     );
     Ok(())
 }

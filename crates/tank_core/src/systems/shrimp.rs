@@ -145,8 +145,11 @@ fn shrimp_feeding(state: &mut TankState) {
     state.algae.periphyton_biomass_g =
         (state.algae.periphyton_biomass_g - periph_consumed).max(0.0);
 
-    // Shrimp also eat fine detritus (biofilm, decomposing organic matter)
-    let detritus_demand = total_feeding_units * rate * grazing_access_factor;
+    // Fine detritus only fills the portion of the same daily appetite that
+    // periphyton could not satisfy. This keeps total intake bounded by the
+    // configured grazing rate instead of double-counting one day's demand
+    // against both food pools.
+    let detritus_demand = (food_demand - periph_consumed).max(0.0);
     let max_detritus = state.detritus.fine_detritus_g_total * 0.2;
     let detritus_consumed = detritus_demand.min(max_detritus).max(0.0);
     state.detritus.fine_detritus_g_total =
@@ -271,11 +274,13 @@ fn update_condition(state: &mut TankState) {
     let total_feeding_units =
         state.animal.adults_count as f64 + state.animal.juveniles_count as f64 * 0.3;
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
-    let target_food_g = total_feeding_units
-        * state
-            .process_params
-            .shrimp_periphyton_grazing_g_per_shrimp_per_day
-        * (1.0 + algae_detrital_mass_g(1.0, n_to_c_ratio));
+    let target_food_g = algae_detrital_mass_g(
+        total_feeding_units
+            * state
+                .process_params
+                .shrimp_periphyton_grazing_g_per_shrimp_per_day,
+        n_to_c_ratio,
+    );
     let food_factor = if target_food_g > f64::EPSILON {
         let satiation = (state.animal.daily_food_consumed_g / target_food_g).clamp(0.0, 1.0);
         0.4 + (0.6 * satiation)
@@ -823,6 +828,47 @@ mod tests {
             "expected {}, got {}",
             expected_consumed_g,
             state.animal.daily_food_consumed_g
+        );
+    }
+
+    #[test]
+    fn shrimp_feeding_uses_detritus_only_for_unmet_demand() {
+        let mut state = TankState::new(SimSeed(10_003));
+        state.algae.periphyton_biomass_g = 0.08;
+        state.detritus.fine_detritus_g_total = 5.0;
+        state.animal.adults_count = 10;
+        state.animal.juveniles_count = 0;
+        state
+            .process_params
+            .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.01;
+        state.process_params.shrimp_assimilation_efficiency = 1.0 - 1e-12;
+        for layer in &mut state.substrate_layers {
+            layer.grazing_surface_index = 1.0;
+        }
+
+        let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
+        let total_feeding_units =
+            state.animal.adults_count as f64 + state.animal.juveniles_count as f64 * 0.3;
+        let max_daily_intake_g = total_feeding_units
+            * state
+                .process_params
+                .shrimp_periphyton_grazing_g_per_shrimp_per_day;
+
+        shrimp_feeding(&mut state);
+
+        let periphyton_consumed = 0.08 - state.algae.periphyton_biomass_g;
+        let detritus_consumed = 5.0 - state.detritus.fine_detritus_g_total;
+
+        assert_close(periphyton_consumed, 0.04, 1e-12);
+        assert_close(
+            periphyton_consumed + detritus_consumed,
+            max_daily_intake_g,
+            1e-9,
+        );
+        assert_close(
+            state.animal.daily_food_consumed_g,
+            algae_detrital_mass_g(periphyton_consumed, n_to_c_ratio) + detritus_consumed,
+            1e-9,
         );
     }
 

@@ -2,8 +2,9 @@ use tank_core::systems::chemistry::solve_carbonate_equilibrium;
 use tank_core::systems::shrimp::update_stability_tracker;
 use tank_core::{
     Engine, MicrobeState, PlayerAction, ProcessParams, SaveFile, SimError, SimSeed,
-    SimulationEngine, SourceWaterProfile, StabilityTracker, TankState, WaterState, APP_VERSION,
-    SCHEMA_VERSION,
+    SimulationEngine, SourceWaterProfile, StabilityTracker, TankState, WaterState,
+    ADULT_SHRIMP_BIOMASS_G, APP_VERSION, JUVENILE_SHRIMP_BIOMASS_G,
+    LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G, SCHEMA_VERSION,
 };
 
 #[test]
@@ -271,7 +272,7 @@ fn legacy_schema_v2_saves_with_unseeded_tracker_reseed_stability_baselines(
 }
 
 #[test]
-fn legacy_schema_v3_saves_leave_missing_reserve_at_default_zero() -> Result<(), SimError> {
+fn legacy_schema_v3_saves_seed_reserve_from_existing_shrimp_biomass() -> Result<(), SimError> {
     let legacy_state = TankState::new(SimSeed(103));
     let mut state_json = serde_json::to_value(&legacy_state).expect("serialize legacy state");
     let state_obj = state_json.as_object_mut().expect("state json object");
@@ -316,8 +317,14 @@ fn legacy_schema_v3_saves_leave_missing_reserve_at_default_zero() -> Result<(), 
 
     let migrated = SaveFile::from_json(&json)?;
     let defaults = ProcessParams::default();
+    let expected_reserve_g = ((30.0 * ADULT_SHRIMP_BIOMASS_G) + (20.0 * JUVENILE_SHRIMP_BIOMASS_G))
+        * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
     assert_eq!(migrated.schema_version, SCHEMA_VERSION);
-    assert_eq!(migrated.state.animal.reserve_g, 0.0);
+    assert!(
+        (migrated.state.animal.reserve_g - expected_reserve_g).abs() <= 1e-12,
+        "expected reserve_g {expected_reserve_g}, got {}",
+        migrated.state.animal.reserve_g
+    );
     assert_eq!(
         migrated.state.process_params.shrimp_assimilation_efficiency,
         defaults.shrimp_assimilation_efficiency
