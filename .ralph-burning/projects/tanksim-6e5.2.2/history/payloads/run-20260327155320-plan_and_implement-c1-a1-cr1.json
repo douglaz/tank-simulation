@@ -1,0 +1,53 @@
+{
+  "payload_id": "run-20260327155320-plan_and_implement-c1-a1-cr1",
+  "stage_id": "plan_and_implement",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T16:07:07.517350803Z",
+  "payload": {
+    "data": {
+      "change_summary": "Added a canonical net-water-volume and concentration helper layer centered on `TankState`, backed by new `WaterState` concentration methods and `TankGeometry` substrate-displacement helpers. Implemented the required TAN, nitrite, nitrate, DOC, DIC, dissolved oxygen, phosphate, alkalinity, and `water_volume_l()` APIs; updated snapshot generation, stability seeding, water changes, scenario materialization, and core system paths to use the helpers instead of repeated raw `total / volume` math; and added deterministic plus property-based helper coverage. The bead `tanksim-6e5.2.2` was closed after validation.",
+      "outstanding_risks": [
+        "Kinetic normalization is still incomplete in systems whose Monod/half-saturation constants are intentionally still defined in total-mass terms; this change establishes the canonical helper layer but does not rename or retune those parameters yet.",
+        "`TankGeometry::water_volume_l()` still represents gross filled-prism volume for compatibility; canonical chemistry/exposure math should use `TankState::water_volume_l()` so future callers do not accidentally ignore substrate displacement."
+      ],
+      "steps": [
+        {
+          "description": "Inspected existing geometry, water, state, snapshot, scenario materialization, and system code to locate duplicated concentration math and current volume semantics.",
+          "order": 0,
+          "status": "completed"
+        },
+        {
+          "description": "Implemented canonical helper APIs in the core types: substrate displacement and net water volume on `TankState`, volume-aware concentration helpers on `WaterState`, and supporting geometry helpers for substrate displacement.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Refactored immediate call sites to consume the helpers, including snapshot export, stability tracking, water changes, shrimp/events/DO paths, density-based system calculations, and scenario water materialization/rescaling.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Added deterministic helper tests for known totals and edge cases, added a property test asserting helper outputs never go negative, updated affected scenario/water-change expectations, and ran repository validation.",
+          "order": 3,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo fmt --all` completed successfully.",
+        "`cargo test --quiet` completed successfully across the workspace.",
+        "`br lint` completed successfully with no template warnings.",
+        "Added `crates/tank_core/tests/concentration_helpers.rs`, which covers known total/volume conversions, zero-volume and empty-tank handling, very large tank behavior, and a property test for non-negative helper outputs.",
+        "Closed the backlog item with `br close tanksim-6e5.2.2 --reason=\"Completed\"`."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-1-a0ecdac3",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 1,
+  "body": "Derive plant crowding inside the habitat registry refresh path, or recompute `PlantGuildState.crowding_index` before every registry rebuild. `compute_habitat_registry()` attenuates habitat light from the cached `crowding_index` field (`crates/tank_core/src/types/habitat.rs:85-94`, `crates/tank_core/src/types/habitat.rs:179`, `crates/tank_core/src/types/habitat.rs:199`, `crates/tank_core/src/types/habitat.rs:215`), but scenario materialization seeds every plant with a placeholder `crowding_index: 0.1` regardless of biomass or tank size (`crates/tank_scenarios/src/lib.rs:783-788`), and trim actions change biomass then immediately refresh the registry without recalculating crowding (`crates/tank_core/src/engine.rs:628-649`, `crates/tank_core/src/engine.rs:727`). That leaves `GlassHardscape`, `PlantSurfaces`, and `SubstrateSurface` light exposure stale after startup and after biomass-changing actions until the next daily plant-growth pass.",
+  "created_at": "2026-03-28T14:48:14.215415322Z",
+  "batch_sequence": 4,
+  "source": "workflow_stage",
+  "dedup_key": "58d6f3ee6da82256475628f2302060de36b70e4e1b2b6709ed82b28d42e85381"
+}

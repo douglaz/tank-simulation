@@ -1,0 +1,40 @@
+{
+  "payload_id": "run-20260327155320-review-c1-a1-cr7",
+  "stage_id": "review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T19:18:25.317493987Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All 118 workspace tests pass (10 concentration_helpers, 6 save_load, 9 cycling, 8 plant_algae_integration, 17 end_to_end, 3 startup_overrides, etc.) with zero failures",
+        "cargo fmt --all --check passes with no diffs",
+        "cargo clippy --all-targets --quiet passes clean with no warnings",
+        "CR7 fix verified: plant_growth.rs:50-57 now recomputes TAN, nitrate, and phosphate concentrations inside the guild loop via state.concentrations(), so each guild evaluates nutrient limitation and health against the post-uptake water column rather than the stale pre-loop snapshot",
+        "DIC (line 9) correctly remains outside the loop since plant nutrient removal does not mutate dissolved_inorganic_carbon_mg_c_total — no staleness concern",
+        "Substrate areal densities (lines 46-47: substrate_n_mg_n_per_m2, substrate_p_mg_p_per_m2) are also read inside the loop at each iteration, so later guilds see depleted substrate from earlier guild removals — consistent with the water-column fix",
+        "Regression test later_plant_guilds_see_updated_water_column_chemistry (plant_algae_integration.rs:249-289) creates two identical FastStem guilds with 100% water-column bias (no substrate), runs step_daily_plants, and asserts guild[0].biomass_g > guild[1].biomass_g + 0.005 and guild[0].health_index > guild[1].health_index — confirming later guilds now experience depleted chemistry",
+        "save.rs stability tracker handling (lines 47-57) remains intact from CR5: has_serialized_stability_tracker checks JSON for the field, reseed_stability_tracker_if_missing reseeds only when absent, and schema-2 migration rescales gross-to-net before the optional reseed",
+        "All 15+ canonical concentration helpers remain intact on WaterState and TankState with ConcentrationView cache layer",
+        "water_volume_l() on TankState (state.rs:177-181) still correctly computes net volume = geometry.water_volume_l_with_substrate_depth(substrate_depth_cm).max(0.0)"
+      ],
+      "findings_or_gaps": [
+        "Legacy process field names (plant_half_saturation_n_mg_total, aob_k_tan_mg, decomposer_k_doc_mg) still read as total-mass parameters even though runtime semantics now normalize them onto concentration- or area-based units — correctly deferred to downstream normalization beads tanksim-6e5.2.3/2.4/2.5",
+        "Guild iteration order determines which guild gets first access to nutrients; in the current implementation this is array-index order. If guilds were reordered in the array, competitive outcomes would change. This is an inherent property of sequential competition models and not a defect, but worth noting for simulation users",
+        "Schema-2 save migration assumes legacy saves were authored with gross-volume-scaled dissolved totals; a hand-edited or previously pre-migrated schema-2 file could be rescaled again on load — acceptable for a transitional format"
+      ],
+      "follow_up_or_amendments": [
+        "Legacy process field names should be renamed as part of the downstream normalization beads (tanksim-6e5.2.3, 6e5.2.4, 6e5.2.5) to match their now-concentration-based runtime semantics"
+      ],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 7
+}

@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327192401-final_review-arbiter-c1-a1-cr2-artifact",
+  "payload_id": "run-20260327192401-final_review-arbiter-c1-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-27T20:50:11.291680681Z",
+  "content": "# Final Review Arbiter\n**Producer:** agent:claude/claude-opus-4-6\n\n## Summary\n\nThe sole disputed amendment (fr-2-54872de9) is rejected. CleanFilter's reduction of microbe biomass without routing to in-tank pools is documented intentional behavior, not a conservation bug. ROUTING.md explicitly classifies CleanFilter as a maintenance export (lines 146, 163), and the budget system records the mass decrease as a visible negative delta on the action stage. The same export-by-reduction pattern is used by SiphonDetritus, confirming it as the established convention. The amendment's proposed fix of routing to DON/DOC would contradict the design by keeping exported waste in the tank.\n\n## Rulings\n\n- `fr-2-54872de9`: Reject\n  ROUTING.md explicitly documents CleanFilter as a maintenance export (line 146: 'Removed fouling is treated as maintenance export'; line 163: 'Filter fouling removal is implicit: CleanFilter exports maintenance waste without modeling a separate captured-solids pool'). This is listed as a deliberate phase-1 simplification. The budget system records the mass reduction as a negative delta on the action:clean_filter stage via maybe_record_stage (engine.rs:91-95), so the loss is tracked and visible — it does not silently vanish. SiphonDetritus follows the identical pattern (reduce in-tank pools, documented as export, no routing to other pools), confirming this is the established convention for export actions. The amendment's proposed fix — routing removed microbe biomass to DON/DOC — would keep exported waste inside the tank, directly contradicting the documented export semantics. Reviewer 2 correctly identifies that the documented design intent is export, not in-tank recycling. If more precise export accounting is desired in the future, the correct approach would be to add a formal export ledger to the budget system, not to route exports back into in-tank dissolved pools.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}

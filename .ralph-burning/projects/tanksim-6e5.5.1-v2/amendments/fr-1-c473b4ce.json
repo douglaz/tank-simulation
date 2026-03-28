@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-1-c473b4ce",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 1,
+  "body": "Use the actual water column above the substrate when computing `SubstrateSurface.light_exposure`. The current attenuation term is based on `state.geometry.mean_depth_cm()` (`crates/tank_core/src/types/habitat.rs:117`), but `mean_depth_cm()` is just `fill_height_cm` (`crates/tank_core/src/types/geometry.rs:60-61`), so changing substrate depth does not change substrate-surface light even though the habitat surface moves closer to or farther from the lamp. `TankState::substrate_depth_cm()` already exists (`crates/tank_core/src/types/state.rs:172-177`) and could be used to derive the real water depth above the substrate.",
+  "created_at": "2026-03-28T14:48:14.215419039Z",
+  "batch_sequence": 5,
+  "source": "workflow_stage",
+  "dedup_key": "0643139b56999ad1cf9847805d8d87a9ace5a69b33af7c9133b6938836b4a934"
+}

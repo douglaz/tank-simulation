@@ -126,6 +126,7 @@ fn step_hours_leaves_state_untouched_when_clamps_precede_a_validation_error() {
         progress_days: 4.0,
     });
     state.process_params.shrimp_assimilation_efficiency = 1.2;
+    state.refresh_habitat_registry();
     let expected = state.clone();
 
     let mut engine = Engine::from_parts(state, vec![]);

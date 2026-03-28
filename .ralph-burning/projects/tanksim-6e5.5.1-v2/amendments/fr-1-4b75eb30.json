@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-1-4b75eb30",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 1,
+  "body": "In `crates/tank_core/src/engine.rs` line 727, the unconditional `self.state.refresh_habitat_registry()` at the end of `process_action` runs after every player action including `Feed`, `AddShrimp`, `RemoveShrimp`, and `SiphonDetritus`, none of which modify habitat-relevant state (geometry, hardware, plants, substrate, or filter). Consider either (a) making the refresh conditional on action type, or (b) adding a brief comment explaining that the unconditional approach is an intentional simplicity-over-performance trade-off. This prevents future confusion about whether the unconditional call is deliberate or an oversight.",
+  "created_at": "2026-03-28T14:48:14.215405293Z",
+  "batch_sequence": 2,
+  "source": "workflow_stage",
+  "dedup_key": "f07200065c72efe4e025dc938eb4faa89fa651888fdbc8d53975d92b6f81b0ec"
+}

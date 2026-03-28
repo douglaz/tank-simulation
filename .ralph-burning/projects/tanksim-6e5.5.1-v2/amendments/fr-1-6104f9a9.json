@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-1-6104f9a9",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 1,
+  "body": "Add a comment to the `system:habitat_registry_finalize` stage in `crates/tank_core/src/engine.rs` (around line 376-382) explaining WHY a second refresh is needed: `update_daily_filter_clogging` modifies `filter_state.clogging_index`, which `compute_filter_media` reads (habitat.rs:164) to compute FilterMedia oxygen exposure. Without this comment, the dual-refresh pattern looks redundant and a future contributor may remove it, silently introducing stale clogging data in the serialized registry.",
+  "created_at": "2026-03-28T14:48:14.215400434Z",
+  "batch_sequence": 1,
+  "source": "workflow_stage",
+  "dedup_key": "5549110975e42ef4191944f136e7bf05a954abab45fd6fe40a39a873efec2151"
+}
