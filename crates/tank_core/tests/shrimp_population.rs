@@ -109,6 +109,37 @@ fn spawning_creates_berried_females() -> Result<(), SimError> {
 }
 
 #[test]
+fn spawning_uses_deterministic_fractional_progress() {
+    let mut state = shrimp_test_state(SimSeed(7_005));
+    state
+        .process_params
+        .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.24;
+    state.shrimp_params.egg_duration_days = 99;
+    state.animal.adult.count = 10;
+    state.animal.set_population_condition_index(1.0);
+    state.animal.molt_stress_index = 0.0;
+    state.animal.reproductive_readiness_index = 1.0;
+    state.stability_tracker.instability_index = 0.0;
+
+    step_daily_shrimp(&mut state);
+
+    assert_eq!(state.animal.berried_females_count, 1);
+    assert_eq!(state.animal.egg_cohorts.len(), 1);
+    assert_eq!(state.animal.egg_cohorts[0].count, 1);
+    assert_close(state.animal.spawn_progress_accum, 0.2, 1e-9);
+
+    step_daily_shrimp(&mut state);
+
+    assert_eq!(state.animal.berried_females_count, 2);
+    assert_eq!(state.animal.egg_cohorts.len(), 2);
+    assert_eq!(state.animal.egg_cohorts[1].count, 1);
+    assert_close(state.animal.spawn_progress_accum, 0.16, 1e-9);
+}
+
+#[test]
 fn hatch_produces_juveniles() {
     let mut state = shrimp_test_state(SimSeed(7100));
     state
@@ -158,6 +189,39 @@ fn hatch_produces_juveniles() {
     );
     assert_eq!(state.animal.berried_females_count, 0);
     assert_close(state.animal.adult.reserve_g, 0.0, 1e-9);
+}
+
+#[test]
+fn hatch_resolution_uses_deterministic_counts() {
+    let mut state = shrimp_test_state(SimSeed(7_106));
+    state
+        .process_params
+        .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.shrimp_params.hatch_success_base = 0.5;
+    state.shrimp_params.base_clutch_size = 2;
+    state.animal.adult.count = 6;
+    state.animal.set_population_condition_index(1.0);
+    state.animal.molt_stress_index = 0.0;
+    state.animal.reproductive_readiness_index = 1.0;
+    state.stability_tracker.instability_index = 0.0;
+    state.animal.berried_females_count = 3;
+    state.animal.egg_progress_days = 20.0;
+    state.animal.egg_cohorts = vec![EggCohort {
+        count: 3,
+        progress_days: 20.0,
+    }];
+    state.animal.adult.reserve_g =
+        f64::from(4) * JUVENILE_SHRIMP_BIOMASS_G * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+
+    step_daily_shrimp(&mut state);
+
+    assert_eq!(state.animal.juvenile.count, 4);
+    assert_eq!(state.animal.berried_females_count, 0);
+    assert_eq!(state.animal.egg_cohorts.len(), 0);
+    assert_close(state.animal.hatch_success_carry, -0.5, 1e-9);
 }
 
 #[test]
@@ -386,7 +450,7 @@ fn mortality_under_combined_stress() -> Result<(), SimError> {
     }
 
     let snap = engine.snapshot();
-    let total_survivors = snap.adult_shrimp_count + snap.juveniles_count;
+    let total_survivors = snap.total_shrimp_count;
     assert!(
         total_survivors < 30,
         "Population should decline under combined stress. Survivors: {}",
@@ -529,4 +593,27 @@ fn population_fields_never_negative() -> Result<(), SimError> {
     assert!(state.animal.berried_females_count <= state.animal.adult.count);
 
     Ok(())
+}
+
+#[test]
+fn poor_conditions_can_force_failed_molts() {
+    let mut state = shrimp_test_state(SimSeed(7_154));
+    state
+        .process_params
+        .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+    state.process_params.shrimp_condition_smoothing = 1.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.animal.set_population_condition_index(0.1);
+    state.animal.inter_molt_timer_days = state.shrimp_params.base_molt_interval_days;
+
+    let vol = state.water_volume_l();
+    state.water.calcium_mg_total = 1.0 * vol;
+    state.water.magnesium_mg_total = 0.1 * vol;
+
+    step_daily_shrimp(&mut state);
+
+    assert!(!state.animal.last_molt_success);
+    assert!(state.animal.failed_molt_accum > 0.0);
 }

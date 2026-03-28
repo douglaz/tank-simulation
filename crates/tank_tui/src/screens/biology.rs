@@ -68,7 +68,6 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
             snapshot.juveniles_count, snapshot.berried_females_count
         )),
         Line::from(format!(
-            snapshot.adult_shrimp_count,
             "Condition {:.2}  Molt stress {:.2}",
             snapshot.shrimp_condition_index, snapshot.shrimp_molt_stress_index
         )),

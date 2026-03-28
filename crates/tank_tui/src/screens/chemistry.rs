@@ -46,8 +46,8 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
 
     let mut derived_lines = vec![
         Line::from(format!(
-            "DO {:.3}/{:.3} mg/L",
-            snapshot.do_mg_l, snapshot.do_sat_mg_l
+            "DO {:.3}/{:.3} mg/L  Temp {:.2} C",
+            snapshot.do_mg_l, snapshot.do_sat_mg_l, snapshot.water_temp_c
         )),
         Line::from(format!(
             "GH (Ca+Mg) {:.1} d  KH (alk) {:.1} d",
@@ -61,11 +61,9 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
             "Est. conductivity (7-ion) {:.0} uS/cm",
             snapshot.estimated_conductivity_us_cm
         )),
-        Line::from(format!("Temp {:.2} C", snapshot.water_temp_c)),
     ];
     derived_lines.extend(ESTIMATED_TDS_SCOPE_LINES.into_iter().map(Line::from));
-    let derived = Paragraph::new(derived_lines)
-    .block(
+    let derived = Paragraph::new(derived_lines).block(
         Block::default()
             .title("Derived display values")
             .borders(Borders::ALL),

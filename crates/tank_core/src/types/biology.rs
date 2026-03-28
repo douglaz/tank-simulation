@@ -123,10 +123,10 @@ pub struct AnimalState {
     /// field is recorded so satiation and reserve routing use the same units.
     #[serde(default)]
     pub daily_food_consumed_g: f64,
-    /// Fractional carry for deterministic adult -> berried transfers.
+    /// Signed rounding carry for deterministic adult -> berried transfers.
     #[serde(default)]
     pub spawn_progress_accum: f64,
-    /// Fractional carry for deterministic clutch-resolution counts.
+    /// Signed rounding carry for deterministic clutch-resolution counts.
     #[serde(default)]
     pub hatch_success_carry: f64,
     /// Molt readiness index, in [0, 1].

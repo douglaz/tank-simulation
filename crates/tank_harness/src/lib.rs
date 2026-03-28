@@ -269,7 +269,10 @@ mod tests {
 
         let violations = Envelope::default().shrimp_count(6, 6).check(&snapshot);
 
-        assert!(violations.is_empty(), "unexpected violations: {violations:?}");
+        assert!(
+            violations.is_empty(),
+            "unexpected violations: {violations:?}"
+        );
     }
 }
 

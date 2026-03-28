@@ -68,12 +68,9 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
             snapshot.aeration_intensity
         )),
     ];
-    systems_lines.splice(
-        3..3,
-        ESTIMATED_TDS_SCOPE_LINES.into_iter().map(Line::from),
-    );
+    systems_lines.splice(3..3, ESTIMATED_TDS_SCOPE_LINES.into_iter().map(Line::from));
     let systems = Paragraph::new(systems_lines)
-    .block(Block::default().title("Hardware").borders(Borders::ALL));
+        .block(Block::default().title("Hardware").borders(Borders::ALL));
     frame.render_widget(systems, top[1]);
 
     let plant_summary = Paragraph::new(vec![

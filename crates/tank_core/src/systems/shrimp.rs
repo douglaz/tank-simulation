@@ -9,7 +9,7 @@ use crate::types::{
 const MG_N_PER_MEQ_AMMONIA: f64 = 14.007;
 const ROUTING_MASS_ASSERT_TOLERANCE_G: f64 = 1e-12;
 const DEATH_DETRITUS_FRACTION_TOLERANCE: f64 = 1e-9;
-const DETERMINISTIC_CARRY_MAX: f64 = 1.0 - 1e-12;
+const DETERMINISTIC_CARRY_LIMIT: f64 = 1.0;
 
 // ── Hourly ──────────────────────────────────────────────────────────────────
 
@@ -488,9 +488,9 @@ fn egg_development(state: &mut TankState) {
     let gh_d = chemistry.gh_d();
     let f_mineral = gh_mineral_factor(gh_d, params);
 
-    let hatch_rate = (params.hatch_success_base * f_condition * f_oxygen * f_temp * f_stability
-        * f_mineral)
-        .clamp(0.0, 1.0);
+    let hatch_rate =
+        (params.hatch_success_base * f_condition * f_oxygen * f_temp * f_stability * f_mineral)
+            .clamp(0.0, 1.0);
 
     // Condition-dependent clutch size
     let adult_condition = state.animal.adult.condition_index;
@@ -826,8 +826,9 @@ fn route_dead_shrimp_to_detritus(
 
 fn deterministic_transfer_count(available: u32, rate: f64, carry: &mut f64) -> u32 {
     let transfer_budget = f64::from(available) * rate.clamp(0.0, 1.0) + *carry;
-    let transferred = transfer_budget.floor().clamp(0.0, f64::from(available)) as u32;
-    *carry = (transfer_budget - f64::from(transferred)).clamp(0.0, DETERMINISTIC_CARRY_MAX);
+    let transferred = transfer_budget.round().clamp(0.0, f64::from(available)) as u32;
+    *carry = (transfer_budget - f64::from(transferred))
+        .clamp(-DETERMINISTIC_CARRY_LIMIT, DETERMINISTIC_CARRY_LIMIT);
     transferred
 }
 
@@ -841,14 +842,15 @@ fn fund_hatched_clutches(
         return 0;
     }
 
-    let reserve_per_clutch =
-        f64::from(effective_clutch_size) * JUVENILE_SHRIMP_BIOMASS_G * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+    let reserve_per_clutch = f64::from(effective_clutch_size)
+        * JUVENILE_SHRIMP_BIOMASS_G
+        * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
     if reserve_per_clutch <= f64::EPSILON {
         return requested_clutches;
     }
 
-    let affordable = ((state.animal.adult.reserve_g + f64::EPSILON) / reserve_per_clutch).floor()
-        as u32;
+    let affordable =
+        ((state.animal.adult.reserve_g + f64::EPSILON) / reserve_per_clutch).floor() as u32;
     let funded = requested_clutches.min(affordable);
     state.animal.adult.reserve_g =
         (state.animal.adult.reserve_g - f64::from(funded) * reserve_per_clutch).max(0.0);

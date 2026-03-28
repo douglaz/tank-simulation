@@ -15,8 +15,7 @@ const MOLAR_MASS_MAGNESIUM_G_PER_MOL: f64 = 24.305;
 /// Converts mg/L Ca2+ to mg/L as CaCO3 for GH reporting.
 const CALCIUM_AS_CACO3_FACTOR: f64 = MOLAR_MASS_CACO3_G_PER_MOL / MOLAR_MASS_CALCIUM_G_PER_MOL;
 /// Converts mg/L Mg2+ to mg/L as CaCO3 for GH reporting.
-const MAGNESIUM_AS_CACO3_FACTOR: f64 =
-    MOLAR_MASS_CACO3_G_PER_MOL / MOLAR_MASS_MAGNESIUM_G_PER_MOL;
+const MAGNESIUM_AS_CACO3_FACTOR: f64 = MOLAR_MASS_CACO3_G_PER_MOL / MOLAR_MASS_MAGNESIUM_G_PER_MOL;
 /// Empirical freshwater TDS-to-conductivity divisor for the current 7-ion proxy.
 ///
 /// This is an approximate ppm-to-uS/cm conversion used for display only; it is
