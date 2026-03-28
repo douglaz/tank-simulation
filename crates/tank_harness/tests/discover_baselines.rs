@@ -1,7 +1,7 @@
 //! Temporary discovery test: runs each scenario and prints snapshot values at checkpoints.
 //! Used to capture current v0.1 behavior for envelope design. Not a regression test.
 
-use tank_core::{PlayerAction, SimSeed, SimulationEngine};
+use tank_core::{PlayerAction, SimSeed};
 use tank_harness::HarnessRun;
 
 fn print_checkpoint(label: &str, run: &HarnessRun) {
