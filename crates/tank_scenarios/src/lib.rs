@@ -471,6 +471,7 @@ fn materialize_scenario(
         glass_thickness_mm: 5.0,
         open_top: true,
         lid_exchange_factor: 0.25,
+        hardscape_area_cm2: 0.0,
     };
 
     // Substrate layers
@@ -838,6 +839,7 @@ fn cycling_base_state(seed: SimSeed) -> TankState {
         glass_thickness_mm: 5.0,
         open_top: true,
         lid_exchange_factor: 0.25,
+        hardscape_area_cm2: 0.0,
     };
 
     let mut state = TankState::new(seed);

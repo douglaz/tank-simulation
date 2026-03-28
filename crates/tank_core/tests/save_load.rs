@@ -319,7 +319,7 @@ fn legacy_schema_v3_saves_seed_reserve_from_existing_shrimp_biomass() -> Result<
     let expected_reserve_g = shrimp_biomass_g(30, 20) * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
     assert_eq!(migrated.schema_version, SCHEMA_VERSION);
     assert!(
-        (migrated.state.animal.reserve_g - expected_reserve_g).abs() < 1e-12,
+        (migrated.state.animal.total_reserve_g() - expected_reserve_g).abs() < 1e-12,
         "legacy reserve should be reconstructed from serialized shrimp biomass"
     );
     assert_eq!(
@@ -358,11 +358,47 @@ fn legacy_schema_v3_saves_seed_reserve_from_existing_shrimp_biomass() -> Result<
 
 #[test]
 fn legacy_schema_v4_saves_migrate_trim_plants_to_trim_and_remove() -> Result<(), SimError> {
-    let state = TankState::new(SimSeed(110));
+    let mut legacy_state = TankState::new(SimSeed(110));
+    legacy_state.animal.berried_females_count = 1;
+    legacy_state.animal.molt_stress_index = 0.25;
+    legacy_state.animal.reproductive_readiness_index = 0.6;
+    legacy_state.animal.egg_progress_days = 4.0;
+
+    let mut state_json = serde_json::to_value(&legacy_state).expect("serialize legacy state");
+    let state_obj = state_json.as_object_mut().expect("state json object");
+    state_obj.remove("habitat_registry");
+    state_obj
+        .get_mut("geometry")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("geometry object")
+        .remove("hardscape_area_cm2");
+    state_obj
+        .get_mut("hardware")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("hardware object")
+        .get_mut("filter")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("filter object")
+        .remove("media_area_cm2");
+    state_obj.insert(
+        "animal".to_string(),
+        serde_json::json!({
+            "adults_count": 4,
+            "juveniles_count": 7,
+            "condition_index": 0.65,
+            "reserve_g": 1.2,
+            "maturation_accum": 0.35,
+            "berried_females_count": legacy_state.animal.berried_females_count,
+            "molt_stress_index": legacy_state.animal.molt_stress_index,
+            "reproductive_readiness_index": legacy_state.animal.reproductive_readiness_index,
+            "egg_progress_days": legacy_state.animal.egg_progress_days,
+        }),
+    );
+
     let json = serde_json::json!({
         "schema_version": 4,
         "app_version": APP_VERSION,
-        "state": state,
+        "state": state_json,
         "queued_actions": [
             { "TrimPlants": { "fraction": 0.3 } },
             { "Feed": { "grams": 1.0 } },
@@ -373,6 +409,19 @@ fn legacy_schema_v4_saves_migrate_trim_plants_to_trim_and_remove() -> Result<(),
 
     let migrated = SaveFile::from_json(&json)?;
     assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert_eq!(migrated.state.animal.adult.count, 4);
+    assert_eq!(migrated.state.animal.juvenile.count, 7);
+    assert_eq!(migrated.state.animal.sub_adult.count, 0);
+    assert_eq!(migrated.state.animal.berried_females_count, 1);
+    assert!(!migrated.state.habitat_registry.is_empty());
+    assert_eq!(
+        migrated.queued_actions,
+        vec![
+            PlayerAction::TrimPlantsAndRemove { fraction: 0.3 },
+            PlayerAction::Feed { grams: 1.0 },
+            PlayerAction::TrimPlantsAndRemove { fraction: 0.5 },
+        ]
+    );
 
     let engine = migrated.into_engine()?;
     let actions = engine.queued_actions();
@@ -570,7 +619,7 @@ fn migration_chain_applies_v2_to_current() -> Result<(), SimError> {
 #[test]
 fn malformed_v4_save_with_negative_reserve_is_rejected() -> Result<(), SimError> {
     let mut state = TankState::new(SimSeed(101));
-    state.animal.reserve_g = -0.01;
+    state.animal.adult.reserve_g = -0.01;
 
     let json = serde_json::json!({
         "schema_version": SCHEMA_VERSION,

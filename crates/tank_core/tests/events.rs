@@ -163,8 +163,8 @@ fn shrimp_berried_event_has_cause_codes() -> Result<(), tank_core::SimError> {
     state.hardware.light.intensity_index = 0.6;
     state.hardware.light.photoperiod_hours = 8.0;
 
-    state.animal.adults_count = 10;
-    state.animal.condition_index = 0.8;
+    state.animal.adult.count = 10;
+    state.animal.adult.condition_index = 0.8;
     state.animal.reproductive_readiness_index = 0.8;
     state.microbe.decomposer_biomass_g = 0.2;
     state.microbe.ammonia_oxidizer_biomass_g = 0.15;
@@ -211,14 +211,14 @@ fn egg_failure_event_has_cause_codes() -> Result<(), tank_core::SimError> {
     state.water.alkalinity_meq_total = 2.0 * vol;
     state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * vol;
 
-    state.animal.adults_count = 5;
+    state.animal.adult.count = 5;
     state.animal.berried_females_count = 3;
     state.animal.egg_progress_days = 20.0;
     state.animal.egg_cohorts = vec![EggCohort {
         count: 3,
         progress_days: 20.0,
     }];
-    state.animal.condition_index = 0.3;
+    state.animal.adult.condition_index = 0.3;
     state.hardware.aeration.enabled = false;
 
     let mut engine = Engine::from_parts(state, vec![]);
@@ -257,8 +257,8 @@ fn molt_stress_warning_has_cause_codes() -> Result<(), tank_core::SimError> {
     state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * vol;
     state.water.dissolved_oxygen_mg_total = 6.0 * vol;
 
-    state.animal.adults_count = 10;
-    state.animal.condition_index = 0.3;
+    state.animal.adult.count = 10;
+    state.animal.adult.condition_index = 0.3;
     state.animal.molt_stress_index = 0.5;
     state.hardware.aeration.enabled = true;
     state.hardware.aeration.intensity = 0.2;

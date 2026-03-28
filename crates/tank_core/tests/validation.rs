@@ -69,7 +69,7 @@ fn action_queuing() -> Result<(), tank_core::SimError> {
     engine.apply_action(PlayerAction::RemoveShrimp { count: 1 })?;
     engine.step_hours(1)?;
 
-    assert_eq!(engine.full_state().animal.adults_count, 1);
+    assert_eq!(engine.full_state().animal.adult.count, 1);
 
     Ok(())
 }
@@ -240,7 +240,7 @@ fn step_hours_rejects_sub_unity_death_biomass_fraction_without_export_path() {
 fn step_hours_read_only_validation_does_not_preserve_partial_clamps() {
     let mut state = tank_core::TankState::new(SimSeed(18));
     state.water.ph = 9.2;
-    state.animal.reserve_g = -0.01;
+    state.animal.adult.reserve_g = -0.01;
     let expected = state.clone();
 
     let mut engine = Engine::from_parts(state, vec![]);

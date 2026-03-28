@@ -320,6 +320,7 @@ impl StartupSelection {
             glass_thickness_mm: 5.0,
             open_top: true,
             lid_exchange_factor: 0.25,
+            hardscape_area_cm2: 0.0,
         }
     }
 

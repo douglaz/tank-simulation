@@ -54,6 +54,12 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
         layer.low_oxygen_tendency_index = layer.low_oxygen_tendency_index.clamp(0.0, 1.0);
         layer.grazing_surface_index = layer.grazing_surface_index.clamp(0.0, 1.0);
     }
+    for habitat in &mut state.habitat_registry {
+        habitat.colonizable_area_cm2 = habitat.colonizable_area_cm2.max(0.0);
+        habitat.flow_exposure = habitat.flow_exposure.clamp(0.0, 1.0);
+        habitat.oxygen_exposure = habitat.oxygen_exposure.clamp(0.0, 1.0);
+        habitat.light_exposure = habitat.light_exposure.clamp(0.0, 1.0);
+    }
 
     if state.event_log.len() > 200 {
         let keep_from = state.event_log.len() - 200;

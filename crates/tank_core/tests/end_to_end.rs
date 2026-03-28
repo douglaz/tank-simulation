@@ -99,8 +99,8 @@ fn print_status(label: &str, s: &TankSnapshot, engine: &Engine) {
         s.nitrate_mg_n_per_l,
         s.do_mg_l,
         s.gh_d,
-        st.animal.adults_count,
-        st.animal.juveniles_count,
+        st.animal.adult.count,
+        st.animal.juvenile.count,
         st.animal.berried_females_count,
         s.total_plant_biomass_g,
         s.suspended_algae_biomass_g + s.periphyton_biomass_g,
@@ -332,7 +332,7 @@ fn sad_no_water_changes() {
     println!("  Total dissolved N: {:.2} mg/L", total_dissolved_n);
 
     // In a neglected nano, shrimp should be stressed or dead
-    let alive = state.animal.adults_count + state.animal.juveniles_count;
+    let alive = state.animal.adult.count + state.animal.juvenile.count;
     println!("  Shrimp remaining: {alive}");
     // We don't assert all dead (some may survive), but conditions should be poor
 }
@@ -524,7 +524,7 @@ fn sad_overstocking_nano() {
     print_status("Day 37 (overstocked)", &s, &engine);
     assert_finite_snapshot(&s);
 
-    let alive = state.animal.adults_count + state.animal.juveniles_count;
+    let alive = state.animal.adult.count + state.animal.juvenile.count;
     println!("  Shrimp alive: {alive}/50 stocked");
 
     // With 50 shrimp in 10L and heavy feeding, conditions should be poor
@@ -542,7 +542,7 @@ fn sad_remove_all_shrimp() {
 
     feed_daily(&mut engine, 7, 0.03);
 
-    let count = engine.full_state().animal.adults_count;
+    let count = engine.full_state().animal.adult.count;
     if count > 0 {
         engine
             .apply_action(PlayerAction::RemoveShrimp { count })
@@ -557,7 +557,7 @@ fn sad_remove_all_shrimp() {
     print_status("Day 21 (no shrimp)", &s, &engine);
     assert_finite_snapshot(&s);
 
-    assert_eq!(state.animal.adults_count, 0, "all shrimp removed");
+    assert_eq!(state.animal.adult.count, 0, "all shrimp removed");
     assert!(s.ph > 4.0, "pH still valid");
 }
 
@@ -616,7 +616,7 @@ fn sad_total_neglect() {
     print_status("Day 67 (neglected)", &s, &engine);
     assert_finite_snapshot(&s);
 
-    let alive = state.animal.adults_count + state.animal.juveniles_count;
+    let alive = state.animal.adult.count + state.animal.juvenile.count;
     println!("  Shrimp alive after neglect: {alive}");
     println!("  Events: {}", state.event_log.len());
 }

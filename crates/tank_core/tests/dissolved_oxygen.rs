@@ -9,7 +9,7 @@ fn oxygen_test_state(seed: SimSeed) -> TankState {
     state.hardware.light.intensity_index = 1.0;
     state.hardware.aeration.enabled = false;
     state.hardware.aeration.intensity = 0.0;
-    state.animal.adults_count = 30;
+    state.animal.adult.count = 30;
     state.algae.periphyton_biomass_g = 3.0;
     state.plant_guilds[0].biomass_g = 18.0;
     state.plant_guilds[1].biomass_g = 10.0;
@@ -69,7 +69,7 @@ fn aeration_recovers_do_faster_than_passive_exchange() -> Result<(), tank_core::
     for plant in &mut base_state.plant_guilds {
         plant.biomass_g = 0.0;
     }
-    base_state.animal.adults_count = 0;
+    base_state.animal.adult.count = 0;
 
     let mut no_aeration = base_state.clone();
     no_aeration.hardware.aeration.enabled = false;
@@ -109,7 +109,7 @@ fn reaeration_converges_toward_saturation() -> Result<(), tank_core::SimError> {
     for plant in &mut state.plant_guilds {
         plant.biomass_g = 0.0;
     }
-    state.animal.adults_count = 0;
+    state.animal.adult.count = 0;
 
     let mut engine = Engine::from_parts(state, vec![]);
     engine.step_hours(24)?;
@@ -166,7 +166,7 @@ fn tracing_shows_do_system_positive_deltas_during_reaeration() -> Result<(), tan
     for plant in &mut state.plant_guilds {
         plant.biomass_g = 0.0;
     }
-    state.animal.adults_count = 0;
+    state.animal.adult.count = 0;
 
     let mut engine = Engine::from_parts(state, vec![]);
     engine.enable_tracing(SimTracer::new(Verbosity::Detail));

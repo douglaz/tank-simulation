@@ -43,8 +43,8 @@ fn shrimp_test_state(seed: SimSeed) -> TankState {
     state.hardware.light.intensity_index = 0.6;
     state.hardware.light.photoperiod_hours = 8.0;
 
-    state.animal.adults_count = 10;
-    state.animal.condition_index = 0.8;
+    state.animal.adult.count = 10;
+    state.animal.set_population_condition_index(0.8);
     state.animal.molt_stress_index = 0.1;
     state.animal.reproductive_readiness_index = 0.5;
 
@@ -117,7 +117,7 @@ fn hatch_produces_juveniles() {
     state.process_params.shrimp_stress_mortality_scale = 0.0;
     state.shrimp_params.base_spawn_rate = 0.0;
     state.shrimp_params.hatch_success_base = 1.0;
-    state.animal.condition_index = 1.0;
+    state.animal.set_population_condition_index(1.0);
     state.animal.molt_stress_index = 0.0;
     state.animal.reproductive_readiness_index = 1.0;
     state.stability_tracker.instability_index = 0.0;
@@ -127,7 +127,7 @@ fn hatch_produces_juveniles() {
         count: 1,
         progress_days: 20.0,
     }];
-    state.animal.reserve_g =
+    state.animal.adult.reserve_g =
         f64::from(25) * JUVENILE_SHRIMP_BIOMASS_G * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
 
     // Keep all hatch factors at 1.0 so this test exercises a deterministic
@@ -136,12 +136,12 @@ fn hatch_produces_juveniles() {
 
     let final_view = state.concentrations();
     assert!(
-        state.animal.juveniles_count == 25,
+        state.animal.juvenile.count == 25,
         "An ideal near-hatch clutch should deterministically produce 25 juveniles. \
          Adults: {}, Juveniles: {}, Reserve={:.3}, TAN={:.3} mg/L, NH3={:.4} mg/L, NO2={:.3} mg/L, DO={:.3} mg/L, GH={:.3} dGH, condition={:.3}, instability={:.3}, periphyton={:.3} g",
-        state.animal.adults_count,
-        state.animal.juveniles_count,
-        state.animal.reserve_g,
+        state.animal.adult.count,
+        state.animal.juvenile.count,
+        state.animal.adult.reserve_g,
         final_view.tan_mg_n_per_l(),
         compute_nh3_mg_n_per_l(
             final_view.tan_mg_n_per_l(),
@@ -151,12 +151,12 @@ fn hatch_produces_juveniles() {
         final_view.nitrite_mg_n_per_l(),
         final_view.do_mg_per_l(),
         final_view.gh_d(),
-        state.animal.condition_index,
+        state.animal.population_condition_index(),
         state.stability_tracker.instability_index,
         state.algae.periphyton_biomass_g
     );
     assert_eq!(state.animal.berried_females_count, 0);
-    assert_close(state.animal.reserve_g, 0.0, 1e-9);
+    assert_close(state.animal.adult.reserve_g, 0.0, 1e-9);
 }
 
 #[test]
@@ -173,22 +173,22 @@ fn reserve_funds_hatching_before_dissolved_pools() {
     state.water.dissolved_organic_nitrogen_mg_n_total = 0.0;
     state.water.dissolved_organic_carbon_mg_c_total = 0.0;
     state.water.dissolved_inorganic_carbon_mg_c_total = 0.0;
-    state.animal.adults_count = 1;
-    state.animal.juveniles_count = 0;
+    state.animal.adult.count = 1;
+    state.animal.juvenile.count = 0;
     state.animal.berried_females_count = 1;
     state.animal.egg_progress_days = 20.0;
     state.animal.egg_cohorts = vec![EggCohort {
         count: 1,
         progress_days: 20.0,
     }];
-    state.animal.reserve_g =
+    state.animal.adult.reserve_g =
         f64::from(25) * JUVENILE_SHRIMP_BIOMASS_G * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
 
     step_daily_shrimp(&mut state);
 
-    assert_eq!(state.animal.juveniles_count, 25);
+    assert_eq!(state.animal.juvenile.count, 25);
     assert_eq!(state.animal.berried_females_count, 0);
-    assert_close(state.animal.reserve_g, 0.0, 1e-9);
+    assert_close(state.animal.adult.reserve_g, 0.0, 1e-9);
     assert_close(state.water.ammonia_total_mg_n_total, 0.0, 1e-9);
     assert_close(state.water.dissolved_organic_nitrogen_mg_n_total, 0.0, 1e-9);
     assert_close(state.water.dissolved_organic_carbon_mg_c_total, 0.0, 1e-9);
@@ -205,15 +205,15 @@ fn dissolved_pools_do_not_fund_hatching_when_reserve_is_short() {
     state.process_params.shrimp_stress_mortality_scale = 0.0;
     state.shrimp_params.base_spawn_rate = 0.0;
     state.shrimp_params.hatch_success_base = 1.0;
-    state.animal.adults_count = 1;
-    state.animal.juveniles_count = 0;
+    state.animal.adult.count = 1;
+    state.animal.juvenile.count = 0;
     state.animal.berried_females_count = 1;
     state.animal.egg_progress_days = 20.0;
     state.animal.egg_cohorts = vec![EggCohort {
         count: 1,
         progress_days: 20.0,
     }];
-    state.animal.reserve_g = 0.0;
+    state.animal.adult.reserve_g = 0.0;
     state.water.ammonia_total_mg_n_total = 100.0;
     state.water.dissolved_organic_nitrogen_mg_n_total = 100.0;
     state.water.dissolved_organic_carbon_mg_c_total = 100.0;
@@ -221,9 +221,9 @@ fn dissolved_pools_do_not_fund_hatching_when_reserve_is_short() {
 
     step_daily_shrimp(&mut state);
 
-    assert_eq!(state.animal.juveniles_count, 0);
+    assert_eq!(state.animal.juvenile.count, 0);
     assert_eq!(state.animal.berried_females_count, 0);
-    assert_close(state.animal.reserve_g, 0.0, 1e-9);
+    assert_close(state.animal.adult.reserve_g, 0.0, 1e-9);
     assert_close(state.water.ammonia_total_mg_n_total, 100.0, 1e-9);
     assert_close(
         state.water.dissolved_organic_nitrogen_mg_n_total,
@@ -252,16 +252,16 @@ fn reserve_funds_juvenile_maturation_before_dissolved_pools() {
     state.water.dissolved_organic_nitrogen_mg_n_total = 0.0;
     state.water.dissolved_organic_carbon_mg_c_total = 0.0;
     state.water.dissolved_inorganic_carbon_mg_c_total = 0.0;
-    state.animal.adults_count = 0;
-    state.animal.juveniles_count = 1;
-    state.animal.reserve_g = (tank_core::ADULT_SHRIMP_BIOMASS_G - JUVENILE_SHRIMP_BIOMASS_G)
+    state.animal.adult.count = 0;
+    state.animal.juvenile.count = 1;
+    state.animal.adult.reserve_g = (tank_core::ADULT_SHRIMP_BIOMASS_G - JUVENILE_SHRIMP_BIOMASS_G)
         * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
 
     step_daily_shrimp(&mut state);
 
-    assert_eq!(state.animal.adults_count, 1);
-    assert_eq!(state.animal.juveniles_count, 0);
-    assert_close(state.animal.reserve_g, 0.0, 1e-9);
+    assert_eq!(state.animal.adult.count, 1);
+    assert_eq!(state.animal.juvenile.count, 0);
+    assert_close(state.animal.adult.reserve_g, 0.0, 1e-9);
     assert_close(state.water.ammonia_total_mg_n_total, 0.0, 1e-9);
     assert_close(state.water.dissolved_organic_nitrogen_mg_n_total, 0.0, 1e-9);
     assert_close(state.water.dissolved_organic_carbon_mg_c_total, 0.0, 1e-9);
@@ -278,9 +278,9 @@ fn dissolved_pools_do_not_fund_juvenile_maturation_when_reserve_is_short() {
     state.process_params.shrimp_base_mortality_per_day = 0.0;
     state.process_params.shrimp_stress_mortality_scale = 0.0;
     state.shrimp_params.base_spawn_rate = 0.0;
-    state.animal.adults_count = 0;
-    state.animal.juveniles_count = 1;
-    state.animal.reserve_g = 0.0;
+    state.animal.adult.count = 0;
+    state.animal.juvenile.count = 1;
+    state.animal.adult.reserve_g = 0.0;
     state.water.ammonia_total_mg_n_total = 100.0;
     state.water.dissolved_organic_nitrogen_mg_n_total = 100.0;
     state.water.dissolved_organic_carbon_mg_c_total = 100.0;
@@ -288,9 +288,9 @@ fn dissolved_pools_do_not_fund_juvenile_maturation_when_reserve_is_short() {
 
     step_daily_shrimp(&mut state);
 
-    assert_eq!(state.animal.adults_count, 0);
-    assert_eq!(state.animal.juveniles_count, 1);
-    assert_close(state.animal.reserve_g, 0.0, 1e-9);
+    assert_eq!(state.animal.adult.count, 0);
+    assert_eq!(state.animal.juvenile.count, 1);
+    assert_close(state.animal.adult.reserve_g, 0.0, 1e-9);
     assert_close(state.water.ammonia_total_mg_n_total, 100.0, 1e-9);
     assert_close(
         state.water.dissolved_organic_nitrogen_mg_n_total,
@@ -359,8 +359,8 @@ fn egg_failure_under_stress() -> Result<(), SimError> {
 #[test]
 fn mortality_under_combined_stress() -> Result<(), SimError> {
     let mut state = shrimp_test_state(SimSeed(7300));
-    state.animal.adults_count = 20;
-    state.animal.juveniles_count = 10;
+    state.animal.adult.count = 20;
+    state.animal.juvenile.count = 10;
 
     // Create combined low-DO + high-NH3 stress
     let vol = state.water_volume_l();
@@ -391,7 +391,7 @@ fn mortality_under_combined_stress() -> Result<(), SimError> {
 fn microfauna_suppression_under_heavy_grazing() -> Result<(), SimError> {
     // Tank with many shrimp should suppress microfauna
     let mut state = shrimp_test_state(SimSeed(7400));
-    state.animal.adults_count = 50; // Heavy stocking
+    state.animal.adult.count = 50; // Heavy stocking
     state.microfauna.population_index = 0.8; // Start with healthy microfauna
 
     let initial_pop = state.microfauna.population_index;
@@ -416,7 +416,7 @@ fn microfauna_suppression_under_heavy_grazing() -> Result<(), SimError> {
 #[test]
 fn shrimp_removal_validation() -> Result<(), SimError> {
     let mut state = shrimp_test_state(SimSeed(7500));
-    state.animal.adults_count = 5;
+    state.animal.adult.count = 5;
     state.animal.berried_females_count = 2;
 
     let mut engine = Engine::from_parts(state, vec![]);
@@ -429,7 +429,7 @@ fn shrimp_removal_validation() -> Result<(), SimError> {
     );
 
     // Verify state is unchanged after failed removal
-    assert_eq!(engine.full_state().animal.adults_count, 5);
+    assert_eq!(engine.full_state().animal.adult.count, 5);
     assert_eq!(engine.full_state().animal.berried_females_count, 2);
 
     // Remove valid amount
@@ -437,13 +437,13 @@ fn shrimp_removal_validation() -> Result<(), SimError> {
     engine.step_hours(1)?;
 
     let state = engine.full_state();
-    assert_eq!(state.animal.adults_count, 2);
+    assert_eq!(state.animal.adult.count, 2);
     // berried_females_count must be <= adults_count
     assert!(
-        state.animal.berried_females_count <= state.animal.adults_count,
+        state.animal.berried_females_count <= state.animal.adult.count,
         "berried_females ({}) must be <= adults ({})",
         state.animal.berried_females_count,
-        state.animal.adults_count
+        state.animal.adult.count
     );
 
     Ok(())
@@ -452,18 +452,18 @@ fn shrimp_removal_validation() -> Result<(), SimError> {
 #[test]
 fn shrimp_removal_preserves_juvenile_share_of_reserve() -> Result<(), SimError> {
     let mut state = shrimp_test_state(SimSeed(7_550));
-    state.animal.adults_count = 4;
-    state.animal.juveniles_count = 6;
-    state.animal.reserve_g = 10.0;
+    state.animal.adult.count = 4;
+    state.animal.juvenile.count = 6;
+    state.animal.adult.reserve_g = 10.0;
 
     let mut engine = Engine::from_parts(state, vec![]);
     engine.apply_action(PlayerAction::RemoveShrimp { count: 4 })?;
     engine.step_hours(1)?;
 
     let state = engine.full_state();
-    assert_eq!(state.animal.adults_count, 0);
-    assert_eq!(state.animal.juveniles_count, 6);
-    assert_close(state.animal.reserve_g, 6.0, 1e-9);
+    assert_eq!(state.animal.adult.count, 0);
+    assert_eq!(state.animal.juvenile.count, 6);
+    assert_close(state.animal.total_reserve_g(), 6.0, 1e-9);
 
     Ok(())
 }
@@ -471,7 +471,7 @@ fn shrimp_removal_preserves_juvenile_share_of_reserve() -> Result<(), SimError> 
 #[test]
 fn shrimp_removal_accounts_for_queued_actions() -> Result<(), SimError> {
     let mut state = shrimp_test_state(SimSeed(7600));
-    state.animal.adults_count = 5;
+    state.animal.adult.count = 5;
 
     let mut engine = Engine::from_parts(state, vec![]);
 
@@ -494,8 +494,8 @@ fn shrimp_removal_accounts_for_queued_actions() -> Result<(), SimError> {
 #[test]
 fn population_fields_never_negative() -> Result<(), SimError> {
     let mut state = shrimp_test_state(SimSeed(7700));
-    state.animal.adults_count = 3;
-    state.animal.juveniles_count = 2;
+    state.animal.adult.count = 3;
+    state.animal.juvenile.count = 2;
 
     // Very hostile environment
     let vol = state.water_volume_l();
@@ -511,13 +511,13 @@ fn population_fields_never_negative() -> Result<(), SimError> {
 
     let state = engine.full_state();
     // All population counts must be non-negative (u32 can't be negative, but check invariants)
-    assert!(state.animal.condition_index >= 0.0);
-    assert!(state.animal.condition_index <= 1.0);
+    assert!(state.animal.population_condition_index() >= 0.0);
+    assert!(state.animal.population_condition_index() <= 1.0);
     assert!(state.animal.molt_stress_index >= 0.0);
     assert!(state.animal.molt_stress_index <= 1.0);
     assert!(state.animal.reproductive_readiness_index >= 0.0);
     assert!(state.animal.reproductive_readiness_index <= 1.0);
-    assert!(state.animal.berried_females_count <= state.animal.adults_count);
+    assert!(state.animal.berried_females_count <= state.animal.adult.count);
 
     Ok(())
 }

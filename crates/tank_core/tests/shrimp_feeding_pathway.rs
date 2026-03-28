@@ -45,8 +45,8 @@ fn feeding_test_state() -> TankState {
     state.detritus.fine_detritus_g_total = 2.0;
 
     // Stock shrimp
-    state.animal.adults_count = 10;
-    state.animal.condition_index = 0.8;
+    state.animal.adult.count = 10;
+    state.animal.adult.condition_index = 0.8;
 
     // Disable all other biological processes to isolate feeding
     state.plant_guilds.clear();
@@ -131,9 +131,9 @@ fn feeding_generates_tan_and_dic_and_feces() -> Result<(), SimError> {
     );
     // Reserve should accumulate from retained share
     assert!(
-        after.animal.reserve_g > 0.0,
+        after.animal.adult.reserve_g > 0.0,
         "reserve should accumulate from feeding: got {}",
-        after.animal.reserve_g
+        after.animal.adult.reserve_g
     );
     Ok(())
 }
@@ -230,7 +230,7 @@ fn closed_system_shrimp_feeding_conserves_carbon() -> Result<(), SimError> {
 fn shrimp_mortality_transfers_reserve_to_detritus() -> Result<(), SimError> {
     let mut state = feeding_test_state();
     // Give shrimp a starting reserve
-    state.animal.reserve_g = 0.05;
+    state.animal.adult.reserve_g = 0.05;
 
     // Kill all shrimp by extreme stress
     // Lethal stress conditions
@@ -251,12 +251,12 @@ fn shrimp_mortality_transfers_reserve_to_detritus() -> Result<(), SimError> {
     let after = engine.full_state();
     // All shrimp should be dead
     assert_eq!(
-        after.animal.adults_count + after.animal.juveniles_count,
+        after.animal.adult.count + after.animal.juvenile.count,
         0,
         "all shrimp should be dead"
     );
     // Reserve should be drained (all shrimp dead → proportional transfer emptied it)
-    assert_close(after.animal.reserve_g, 0.0, 1e-9);
+    assert_close(after.animal.adult.reserve_g, 0.0, 1e-9);
     // N and C should still be conserved
     let n_after = after.total_nitrogen();
     let c_after = after.total_carbon();

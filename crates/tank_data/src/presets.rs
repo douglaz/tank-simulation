@@ -389,6 +389,14 @@ pub struct ProcessParamsPreset {
 }
 
 impl ProcessParamsPreset {
+    fn unknown_param_meta_keys(&self) -> Vec<&str> {
+        self.param_meta
+            .keys()
+            .filter(|name| self.param_value(name).is_none())
+            .map(String::as_str)
+            .collect()
+    }
+
     /// Look up a parameter value by name. Returns `None` for unknown names.
     pub fn param_value(&self, name: &str) -> Option<f64> {
         match name {
@@ -714,6 +722,14 @@ fn default_microfauna_shrimp_pressure_threshold() -> f64 {
 
 impl ProcessParamsPreset {
     pub fn validate(&self) -> Result<(), String> {
+        let unknown_param_meta_keys = self.unknown_param_meta_keys();
+        if !unknown_param_meta_keys.is_empty() {
+            return Err(format!(
+                "unknown param_meta entries: {}",
+                unknown_param_meta_keys.join(", ")
+            ));
+        }
+
         let fields: &[(&str, f64)] = &[
             (
                 "mineralization_rate_per_day",
@@ -1274,6 +1290,33 @@ k_wall_w_per_m2_k = 5.0
         assert!(display_full.contains("literature"));
         assert!(display_full.contains("EPA 2013"));
         assert!(display_full.contains("range [0.1, 5.0]"));
+        assert!(display_full.contains("notes: biofilter context"));
+    }
+
+    #[test]
+    fn test_unknown_param_meta_keys_are_rejected() -> Result<(), Box<dyn std::error::Error>> {
+        let toml_str = r#"
+id = "test"
+name = "Test"
+mineralization_rate_per_day = 0.15
+nitrification_vmax = 0.08
+reaeration_kla_base = 0.35
+aeration_kla_boost = 0.9
+background_bod_mg_o2_per_g_biomass_per_hour = 0.05
+plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
+respiration_dic_rate_mg_c_per_g_per_hour = 0.0
+photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0
+k_surface_w_per_m2_k = 10.0
+k_wall_w_per_m2_k = 5.0
+
+[param_meta.aob_k_tan_typo]
+unit = "mg N/L"
+"#;
+        let preset: ProcessParamsPreset = toml::from_str(toml_str)?;
+        let err = preset.validate().expect_err("unknown param_meta key should fail");
+        assert!(err.contains("unknown param_meta entries"));
+        assert!(err.contains("aob_k_tan_typo"));
+        Ok(())
     }
 
     // ---- Original tests ----

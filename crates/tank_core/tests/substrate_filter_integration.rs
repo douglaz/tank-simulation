@@ -146,8 +146,8 @@ fn substrate_grazing_divergence() -> Result<(), tank_core::SimError> {
     low_grazing.water.phosphate_mg_p_total = 0.6 * low_grazing.water_volume_l();
     low_grazing.algae.periphyton_biomass_g = 25.0;
     low_grazing.detritus.fine_detritus_g_total = 18.0;
-    low_grazing.animal.adults_count = 8;
-    low_grazing.animal.condition_index = 0.55;
+    low_grazing.animal.adult.count = 8;
+    low_grazing.animal.adult.condition_index = 0.55;
     low_grazing.animal.molt_stress_index = 0.1;
     low_grazing.animal.reproductive_readiness_index = 0.4;
     low_grazing.shrimp_params.base_spawn_rate = 0.0;
@@ -165,8 +165,8 @@ fn substrate_grazing_divergence() -> Result<(), tank_core::SimError> {
         high.step_hours(24)?;
     }
 
-    let low_reserve = low.full_state().animal.reserve_g;
-    let high_reserve = high.full_state().animal.reserve_g;
+    let low_reserve = low.full_state().animal.adult.reserve_g;
+    let high_reserve = high.full_state().animal.adult.reserve_g;
 
     // Higher grazing-surface substrate increases the amount of food shrimp can
     // actually route into retained biomass. Terminal condition is now heavily

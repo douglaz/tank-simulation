@@ -349,6 +349,12 @@ impl Engine {
             systems::microfauna::step_daily_microfauna(&mut engine.state);
         });
 
+        // Recompute habitat registry from updated geometry, hardware, and plant state.
+        self.maybe_record_stage(ctx, "system:habitat_registry", |engine, _stage_trace| {
+            engine.state.habitat_registry =
+                crate::types::habitat::compute_habitat_registry(&engine.state);
+        });
+
         // Update stability metrics before shrimp so that same-day chemistry
         // swings (water changes, temperature shifts) are reflected in the
         // instability_index that shrimp condition/mortality reads.

@@ -51,11 +51,11 @@ fn stocked_scenario(seed: SimSeed, ambient_temp_c: f64) -> TankState {
     state.hardware.light.photoperiod_hours = 10.0;
 
     // Moderate starting population
-    state.animal.adults_count = 10;
-    state.animal.condition_index = 0.8;
+    state.animal.adult.count = 10;
+    state.animal.adult.condition_index = 0.8;
     state.animal.molt_stress_index = 0.1;
     state.animal.reproductive_readiness_index = 0.8;
-    state.animal.reserve_g = 5.0;
+    state.animal.adult.reserve_g = 5.0;
 
     state.process_params = ProcessParams::default();
     state.process_params.aob_vmax_mg_n_per_g_per_hour = 10.0;

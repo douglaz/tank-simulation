@@ -766,7 +766,7 @@ fn test_closed_system_shrimp_reproduction_conserves_n_and_c() -> Result<(), SimE
     engine.step_hours(24 * 60)?;
 
     assert!(
-        engine.full_state().animal.juveniles_count > 0,
+        engine.full_state().animal.juvenile.count > 0,
         "expected deterministic hatching to occur in the reproducing shrimp fixture"
     );
     assert_close(engine.full_state().total_nitrogen(), initial_total_n, 1e-6);

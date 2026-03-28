@@ -50,8 +50,8 @@ fn active_budget_state(seed: SimSeed) -> TankState {
     state.microbe.comammox_biomass_g = 0.03;
     state.microfauna.population_index = 0.4;
     state.microfauna.grazing_pressure_index = 0.35;
-    state.animal.adults_count = 0;
-    state.animal.juveniles_count = 0;
+    state.animal.adult.count = 0;
+    state.animal.juvenile.count = 0;
     state.animal.berried_females_count = 0;
     state.substrate_layers[0].nutrient_store_mg_n_total = 22.0;
     state.substrate_layers[0].nutrient_store_mg_p_total = 6.0;
@@ -73,8 +73,8 @@ fn quiescent_budget_state(seed: SimSeed) -> TankState {
     state.microbe.comammox_biomass_g = 0.0;
     state.microfauna.population_index = 0.0;
     state.microfauna.grazing_pressure_index = 0.0;
-    state.animal.adults_count = 0;
-    state.animal.juveniles_count = 0;
+    state.animal.adult.count = 0;
+    state.animal.juvenile.count = 0;
     state.animal.berried_females_count = 0;
     state.detritus.particulate_organics_g_total = 0.0;
     state.detritus.fine_detritus_g_total = 0.0;

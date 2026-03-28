@@ -49,8 +49,8 @@ fn microfauna_test_state() -> TankState {
     state.microfauna.reserve_g = 0.0;
 
     // No shrimp, no plants, no algae growth, no microbes
-    state.animal.adults_count = 0;
-    state.animal.juveniles_count = 0;
+    state.animal.adult.count = 0;
+    state.animal.juvenile.count = 0;
     state.plant_guilds.clear();
     state.algae.suspended_biomass_g = 0.0;
     state.microbe.decomposer_biomass_g = 0.0;

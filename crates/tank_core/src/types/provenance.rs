@@ -37,6 +37,7 @@ impl fmt::Display for ConfidenceLevel {
 /// A minimal entry might carry only `unit`; a fully-documented entry carries
 /// everything.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ParamMeta {
     /// Physical unit string, e.g. `"mg N/L"`, `"per hour"`, `"W/(m²·K)"`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -83,6 +84,9 @@ impl fmt::Display for ParamMeta {
         if let Some([lo, hi]) = self.valid_range {
             // Use Debug formatting for floats to ensure trailing `.0`.
             parts.push(format!("range [{lo:?}, {hi:?}]"));
+        }
+        if let Some(ref notes) = self.notes {
+            parts.push(format!("notes: {notes}"));
         }
         write!(f, "{}", parts.join(" "))
     }
@@ -193,6 +197,7 @@ mod tests {
         assert!(display.contains("literature"));
         assert!(display.contains("EPA 2013"));
         assert!(display.contains("range [0.1, 5.0]"), "got: {display}");
+        assert!(display.contains("notes: test"), "got: {display}");
     }
 
     #[test]
@@ -256,5 +261,21 @@ mod tests {
         };
         let s = format_param("aob_k_tan_mg", 0.5, &meta);
         assert_eq!(s, "aob_k_tan_mg: 0.5 mg N/L [literature, EPA 2013]");
+    }
+
+    #[test]
+    fn test_format_param_includes_notes() {
+        let meta = ParamMeta {
+            unit: Some("mg N/L".into()),
+            source: Some("EPA 2013".into()),
+            confidence: Some(ConfidenceLevel::Literature),
+            valid_range: Some([0.1, 5.0]),
+            notes: Some("biofilter context".into()),
+        };
+        let s = format_param("aob_k_tan_mg", 0.5, &meta);
+        assert_eq!(
+            s,
+            "aob_k_tan_mg: 0.5 mg N/L [literature, EPA 2013] range [0.1, 5.0] notes: biofilter context"
+        );
     }
 }
