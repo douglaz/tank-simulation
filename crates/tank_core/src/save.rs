@@ -3,7 +3,10 @@ use serde_json::Value;
 
 use crate::{
     engine::{Engine, SimulationEngine},
-    types::{PlayerAction, SimError, StabilityTracker, TankState},
+    types::{
+        shrimp_biomass_g, PlayerAction, SimError, StabilityTracker, TankState,
+        LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
+    },
 };
 
 /// Current schema version. Bump this when the save format changes.
@@ -80,8 +83,9 @@ const MIGRATIONS: &[MigrationFn] = &[
     // volume (accounting for substrate displacement).
     migrate_v2_to_v3,
     // Index 1: schema 3 → 4
-    // Add shrimp feeding pathway parameters and animal.reserve_g.
-    // All new fields use #[serde(default)], so a no-op migration suffices.
+    // Add shrimp feeding pathway parameters and animal.reserve_g. Process
+    // parameters still default via serde, but reserve_g is seeded from the
+    // legacy shrimp population so upgraded colonies do not start at zero.
     migrate_v3_to_v4,
 ];
 
@@ -319,12 +323,22 @@ fn migrate_v2_to_v3(value: &mut Value) -> Result<(), SimError> {
     Ok(())
 }
 
-/// Schema 3 → 4: add shrimp feeding pathway parameters (assimilation efficiency,
-/// respiration/excretion/growth fractions, O2:C quotient) and `animal.reserve_g`.
-/// All new fields use `#[serde(default)]`, so deserialization fills them in
-/// automatically. No raw JSON transformation needed.
-fn migrate_v3_to_v4(_value: &mut Value) -> Result<(), SimError> {
-    // No-op: serde defaults handle all new fields.
+/// Schema 3 → 4: add shrimp feeding pathway parameters (assimilation
+/// efficiency, respiration/excretion/growth fractions, O2:C quotient) and
+/// `animal.reserve_g`. Process params still rely on `#[serde(default)]`, but
+/// reserve_g is derived from the legacy shrimp colony biomass so upgraded saves
+/// keep an inspectable starting reserve for reproduction/maturation work.
+fn migrate_v3_to_v4(value: &mut Value) -> Result<(), SimError> {
+    let adults_count = required_u32_at(value, 3, 4, "/state/animal/adults_count")?;
+    let juveniles_count = required_u32_at(value, 3, 4, "/state/animal/juveniles_count")?;
+    let reserve_g =
+        shrimp_biomass_g(adults_count, juveniles_count) * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+
+    let animal = required_object_mut_at(value, 3, 4, "/state/animal")?;
+    animal
+        .entry("reserve_g".to_string())
+        .or_insert_with(|| serde_json::json!(reserve_g));
+
     Ok(())
 }
 
@@ -437,6 +451,21 @@ fn required_positive_f64_at(
         ));
     }
     Ok(number)
+}
+
+fn required_u32_at(
+    value: &Value,
+    from: u32,
+    to: u32,
+    pointer: &'static str,
+) -> Result<u32, SimError> {
+    let number = value
+        .pointer(pointer)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| schema_migration_error(from, to, format!("expected u32 at {pointer}")))?;
+
+    u32::try_from(number)
+        .map_err(|_| schema_migration_error(from, to, format!("expected u32 at {pointer}")))
 }
 
 fn required_array_at<'a>(

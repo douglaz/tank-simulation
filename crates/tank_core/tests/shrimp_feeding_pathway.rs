@@ -93,6 +93,7 @@ fn default_fraction_sums_are_valid() {
 fn feeding_generates_tan_and_dic_and_feces() -> Result<(), SimError> {
     let state = feeding_test_state();
     let tan_before = state.water.ammonia_total_mg_n_total;
+    let alk_before = state.water.alkalinity_meq_total;
     let dic_before = state.water.dissolved_inorganic_carbon_mg_c_total;
     let detritus_before = state.detritus.fine_detritus_g_total;
 
@@ -106,6 +107,11 @@ fn feeding_generates_tan_and_dic_and_feces() -> Result<(), SimError> {
         after.water.ammonia_total_mg_n_total > tan_before,
         "TAN should increase from shrimp excretion/respiration: before={tan_before}, after={}",
         after.water.ammonia_total_mg_n_total
+    );
+    assert!(
+        after.water.alkalinity_meq_total > alk_before,
+        "alkalinity should increase alongside shrimp TAN release: before={alk_before}, after={}",
+        after.water.alkalinity_meq_total
     );
     // Feeding should generate DIC from respiration
     assert!(

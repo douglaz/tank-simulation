@@ -7,6 +7,7 @@ use crate::types::{
 };
 
 const JUVENILES_PER_CLUTCH: u32 = 25;
+const MG_N_PER_MEQ_AMMONIA: f64 = 14.007;
 
 // ── Hourly ──────────────────────────────────────────────────────────────────
 
@@ -210,6 +211,7 @@ fn route_consumed_food(state: &mut TankState, consumed_n_mg: f64, consumed_c_mg:
     // excretion goes to DOC. We still do not create separate urea or DON pools.
     let excreted_n_mg = assimilated_n_mg * excr_frac;
     state.water.ammonia_total_mg_n_total += excreted_n_mg;
+    state.water.alkalinity_meq_total += excreted_n_mg / MG_N_PER_MEQ_AMMONIA;
 
     // Excreted C goes to the canonical DOC pool.
     let excreted_c_mg = assimilated_c_mg * excr_frac;
@@ -241,6 +243,9 @@ fn route_consumed_food(state: &mut TankState, consumed_n_mg: f64, consumed_c_mg:
     let target_respired_n_mg = assimilated_n_mg * resp_frac;
     let respired_n_mg = target_respired_n_mg * respiration_scale;
     state.water.ammonia_total_mg_n_total += respired_n_mg;
+    // NH3/NH4+ release returns ~1 meq alkalinity per mol N, which offsets part
+    // of the concurrent DIC-driven pH suppression from respiration.
+    state.water.alkalinity_meq_total += respired_n_mg / MG_N_PER_MEQ_AMMONIA;
 
     // ── Retained: body reserve ──
     // Phase 1 only accumulates this retained share. Later reserve/condition
@@ -747,7 +752,7 @@ fn gh_mineral_factor(gh_d: f64, params: &ShrimpRuntimeParams) -> f64 {
 mod tests {
     use super::{
         refresh_carbonate_state, route_consumed_food, shrimp_feeding, step_daily_shrimp,
-        update_condition,
+        update_condition, MG_N_PER_MEQ_AMMONIA,
     };
     use crate::{algae_detrital_mass_g, SimSeed, TankState, WaterState};
 
@@ -826,6 +831,7 @@ mod tests {
         let mut state = TankState::new(SimSeed(10_002));
         state.water.dissolved_oxygen_mg_total = 10.0;
         state.water.ammonia_total_mg_n_total = 0.0;
+        state.water.alkalinity_meq_total = 0.0;
         state.water.dissolved_organic_carbon_mg_c_total = 0.0;
         state.water.dissolved_inorganic_carbon_mg_c_total = 0.0;
         state.animal.reserve_g = 0.0;
@@ -855,6 +861,12 @@ mod tests {
         assert_close(
             state.water.ammonia_total_mg_n_total,
             assimilated_n_mg * excr_frac + target_respired_n_mg * respiration_scale,
+            1e-12,
+        );
+        assert_close(
+            state.water.alkalinity_meq_total,
+            (assimilated_n_mg * excr_frac + target_respired_n_mg * respiration_scale)
+                / MG_N_PER_MEQ_AMMONIA,
             1e-12,
         );
         assert_close(
