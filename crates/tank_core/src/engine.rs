@@ -681,9 +681,10 @@ impl Engine {
             }
             PlayerAction::RemoveShrimp { count } => {
                 // Export proportional share of adult reserve with removed shrimp.
-                let total = self.state.animal.total_count();
-                if total > 0 && self.state.animal.adult.reserve_g > f64::EPSILON {
-                    let removed_frac = f64::from(count.min(total)) / f64::from(total);
+                let adults_before_removal = self.state.animal.adult.count;
+                if adults_before_removal > 0 && self.state.animal.adult.reserve_g > f64::EPSILON {
+                    let removed_frac = f64::from(count.min(adults_before_removal))
+                        / f64::from(adults_before_removal);
                     self.state.animal.adult.reserve_g -=
                         self.state.animal.adult.reserve_g * removed_frac;
                 }

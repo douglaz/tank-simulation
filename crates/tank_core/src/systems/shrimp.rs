@@ -126,14 +126,7 @@ pub fn update_stability_tracker(state: &mut TankState) {
 // ── Private helpers ─────────────────────────────────────────────────────────
 
 fn shrimp_feeding(state: &mut TankState) {
-    let adults = state.animal.adult.count as f64;
-    let sub_adults = state.animal.sub_adult.count as f64;
-    let juveniles = state.animal.juvenile.count as f64;
-
-    let adult_feeding = adults * ADULT_FEEDING_WEIGHT;
-    let sub_adult_feeding = sub_adults * SUB_ADULT_FEEDING_WEIGHT;
-    let juvenile_feeding = juveniles * JUVENILE_FEEDING_WEIGHT;
-    let total_feeding_units = adult_feeding + sub_adult_feeding + juvenile_feeding;
+    let total_feeding_units = state.animal.feeding_units();
 
     if total_feeding_units <= f64::EPSILON {
         state.animal.daily_food_consumed_g = 0.0;
@@ -179,16 +172,7 @@ fn shrimp_feeding(state: &mut TankState) {
         elemental_food_mass_g,
     );
 
-    // Distribute retained share proportionally to each stage's feeding weight.
-    route_consumed_food(
-        state,
-        consumed_n_mg,
-        consumed_c_mg,
-        adult_feeding,
-        sub_adult_feeding,
-        juvenile_feeding,
-        total_feeding_units,
-    );
+    route_consumed_food(state, consumed_n_mg, consumed_c_mg);
 }
 
 /// Routes consumed food through the consumer routing contract:
@@ -205,15 +189,7 @@ fn shrimp_feeding(state: &mut TankState) {
 /// - respired C -> dissolved_inorganic_carbon_mg_c_total (DIC)
 /// - respired -> O2 demand (dissolved_oxygen_mg_total)
 /// - retained -> per-stage reserve_g (organic matter grams, proportional to feeding weight)
-fn route_consumed_food(
-    state: &mut TankState,
-    consumed_n_mg: f64,
-    consumed_c_mg: f64,
-    adult_feeding: f64,
-    sub_adult_feeding: f64,
-    juvenile_feeding: f64,
-    total_feeding_units: f64,
-) {
+fn route_consumed_food(state: &mut TankState, consumed_n_mg: f64, consumed_c_mg: f64) {
     if consumed_n_mg <= f64::EPSILON && consumed_c_mg <= f64::EPSILON {
         return;
     }
@@ -272,13 +248,7 @@ fn route_consumed_food(
     let retained_c_mg = assimilated_c_mg * growth_frac + (target_respired_c_mg - respired_c_mg);
     let retained_mass_g = (retained_n_mg + retained_c_mg) / 1000.0;
 
-    // Distribute retained mass proportionally to each stage's feeding weight contribution.
-    if total_feeding_units > f64::EPSILON {
-        state.animal.adult.reserve_g += retained_mass_g * adult_feeding / total_feeding_units;
-        state.animal.sub_adult.reserve_g +=
-            retained_mass_g * sub_adult_feeding / total_feeding_units;
-        state.animal.juvenile.reserve_g += retained_mass_g * juvenile_feeding / total_feeding_units;
-    }
+    state.animal.add_reserve_by_feeding_units(retained_mass_g);
 }
 
 fn update_condition(state: &mut TankState) {
@@ -291,12 +261,7 @@ fn update_condition(state: &mut TankState) {
     let gh_d = chemistry.gh_d();
 
     // Compute population-level food factor using total feeding units.
-    let adults = state.animal.adult.count as f64;
-    let sub_adults = state.animal.sub_adult.count as f64;
-    let juveniles = state.animal.juvenile.count as f64;
-    let total_feeding_units = adults * ADULT_FEEDING_WEIGHT
-        + sub_adults * SUB_ADULT_FEEDING_WEIGHT
-        + juveniles * JUVENILE_FEEDING_WEIGHT;
+    let total_feeding_units = state.animal.feeding_units();
 
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let target_food_g = algae_detrital_mass_g(
@@ -848,40 +813,12 @@ fn route_dead_shrimp_to_detritus(
         state.shrimp_params.body_carbon_mg_per_g_wet_mass,
     );
 
-    // Transfer dead shrimp's share of each stage's reserve to detritus.
-    // Adult reserve
-    if adult_deaths > 0 && state.animal.adult.count > 0 {
-        let dead_fraction = f64::from(adult_deaths) / f64::from(state.animal.adult.count);
-        let reserve_transfer = state.animal.adult.reserve_g * dead_fraction;
-        state.animal.adult.reserve_g -= reserve_transfer;
-        state.detritus.fine_detritus_g_total += reserve_transfer * detritus_fraction;
-    } else if adult_deaths > 0 {
-        // All adults died: transfer entire reserve
-        state.detritus.fine_detritus_g_total += state.animal.adult.reserve_g * detritus_fraction;
-        state.animal.adult.reserve_g = 0.0;
-    }
-
-    // Sub-adult reserve
-    if sub_adult_deaths > 0 && state.animal.sub_adult.count > 0 {
-        let dead_fraction = f64::from(sub_adult_deaths) / f64::from(state.animal.sub_adult.count);
-        let reserve_transfer = state.animal.sub_adult.reserve_g * dead_fraction;
-        state.animal.sub_adult.reserve_g -= reserve_transfer;
-        state.detritus.fine_detritus_g_total += reserve_transfer * detritus_fraction;
-    } else if sub_adult_deaths > 0 {
-        state.detritus.fine_detritus_g_total +=
-            state.animal.sub_adult.reserve_g * detritus_fraction;
-        state.animal.sub_adult.reserve_g = 0.0;
-    }
-
-    // Juvenile reserve
-    if juv_deaths > 0 && state.animal.juvenile.count > 0 {
-        let dead_fraction = f64::from(juv_deaths) / f64::from(state.animal.juvenile.count);
-        let reserve_transfer = state.animal.juvenile.reserve_g * dead_fraction;
-        state.animal.juvenile.reserve_g -= reserve_transfer;
-        state.detritus.fine_detritus_g_total += reserve_transfer * detritus_fraction;
-    } else if juv_deaths > 0 {
-        state.detritus.fine_detritus_g_total += state.animal.juvenile.reserve_g * detritus_fraction;
-        state.animal.juvenile.reserve_g = 0.0;
+    let reserve_transfer_g =
+        state
+            .animal
+            .transfer_dead_reserve_g(adult_deaths, sub_adult_deaths, juv_deaths);
+    if reserve_transfer_g > f64::EPSILON {
+        state.detritus.fine_detritus_g_total += reserve_transfer_g * detritus_fraction;
     }
 }
 

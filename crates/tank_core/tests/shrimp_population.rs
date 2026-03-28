@@ -459,7 +459,7 @@ fn shrimp_removal_validation() -> Result<(), SimError> {
 }
 
 #[test]
-fn shrimp_removal_preserves_juvenile_share_of_reserve() -> Result<(), SimError> {
+fn shrimp_removal_exports_removed_adult_reserve() -> Result<(), SimError> {
     let mut state = shrimp_test_state(SimSeed(7_550));
     state.animal.adult.count = 4;
     state.animal.juvenile.count = 6;
@@ -472,7 +472,7 @@ fn shrimp_removal_preserves_juvenile_share_of_reserve() -> Result<(), SimError> 
     let state = engine.full_state();
     assert_eq!(state.animal.adult.count, 0);
     assert_eq!(state.animal.juvenile.count, 6);
-    assert_close(state.animal.total_reserve_g(), 6.0, 1e-9);
+    assert_close(state.animal.total_reserve_g(), 0.0, 1e-9);
 
     Ok(())
 }

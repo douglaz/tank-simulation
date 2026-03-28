@@ -44,6 +44,19 @@ pub fn co2_sat_mg_c_per_l(temperature_c: f64) -> f64 {
     co2_mol_per_l * 12_000.0
 }
 
+/// Volumetric gas-transfer coefficient K_LA for CO2 (h⁻¹).
+///
+/// Derived from the O2 K_LA by applying the Euler stability cap first (same
+/// cap the O2 reaeration path uses), then scaling by the square root of the
+/// diffusion-coefficient ratio `(D_CO2 / D_O2)^0.5 ≈ 0.91`.
+///
+/// Capping before scaling preserves the physical CO2/O2 ratio at all aeration
+/// levels.  Since 0.91 < 1.0 the result is always below the Euler limit.
+pub fn compute_co2_kla(state: &TankState) -> f64 {
+    let k_la_o2 = crate::systems::dissolved_oxygen::compute_o2_kla(state);
+    k_la_o2.min(1.0) * KLA_CO2_TO_O2_RATIO
+}
+
 // ---------------------------------------------------------------------------
 // Carbonate equilibrium constants
 // ---------------------------------------------------------------------------
@@ -563,8 +576,7 @@ fn hourly_chemistry_terms(state: &TankState, light_on: bool) -> Option<HourlyChe
     );
     let co2_current_mg_c_per_l = eq.co2_aq_mmol_per_l * 12.0;
     let co2_eq_mg_c_per_l = co2_sat_mg_c_per_l(state.water.temperature_c);
-    let k_la_o2 = crate::systems::dissolved_oxygen::compute_o2_kla(state);
-    let k_la_co2 = (k_la_o2 * KLA_CO2_TO_O2_RATIO).min(1.0);
+    let k_la_co2 = compute_co2_kla(state);
     let co2_exchange_dic_mg = k_la_co2 * (co2_eq_mg_c_per_l - co2_current_mg_c_per_l) * volume_l;
 
     Some(HourlyChemistryTerms {

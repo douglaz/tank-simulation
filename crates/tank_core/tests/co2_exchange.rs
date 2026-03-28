@@ -1,5 +1,5 @@
 use tank_core::{
-    systems::chemistry::{co2_sat_mg_c_per_l, solve_carbonate_equilibrium},
+    systems::chemistry::{co2_sat_mg_c_per_l, compute_co2_kla, solve_carbonate_equilibrium},
     systems::dissolved_oxygen::compute_o2_kla,
     Engine, SimSeed, SimulationEngine, TankGeometry, TankState,
 };
@@ -472,29 +472,46 @@ fn test_passive_exchange_strips_co2_slower() -> Result<(), tank_core::SimError> 
 
 #[test]
 fn test_co2_kla_proportional_to_o2_kla() {
+    // Exercise the actual compute_co2_kla() code path from chemistry.rs,
+    // not a manual multiplication, to verify the 0.91 ratio holds.
     let mut state = co2_test_state(SimSeed(7900));
     state.hardware.aeration.enabled = true;
     state.hardware.aeration.intensity = 0.5;
 
     let k_la_o2 = compute_o2_kla(&state);
-    let k_la_co2 = k_la_o2 * 0.91;
+    let k_la_co2 = compute_co2_kla(&state);
 
     assert!(k_la_o2 > 0.0, "O2 K_LA should be positive");
+    assert!(k_la_co2 > 0.0, "CO2 K_LA should be positive");
+
+    // At moderate aeration the raw O2 K_LA is below the Euler cap, so the
+    // ratio should be exactly 0.91.
+    let ratio_moderate = k_la_co2 / k_la_o2.min(1.0);
     assert!(
-        (k_la_co2 / k_la_o2 - 0.91).abs() < 1e-10,
-        "K_LA(CO2)/K_LA(O2) should equal 0.91"
+        (ratio_moderate - 0.91).abs() < 1e-10,
+        "K_LA(CO2) / capped_K_LA(O2) should equal 0.91, got {ratio_moderate}"
     );
 
-    // Changing aeration should change both proportionally.
+    // At high aeration the raw O2 K_LA exceeds 1.0, so capping matters.
+    // The physical ratio must still be preserved after capping.
     state.hardware.aeration.intensity = 1.0;
     let k_la_o2_high = compute_o2_kla(&state);
-    let k_la_co2_high = k_la_o2_high * 0.91;
+    let k_la_co2_high = compute_co2_kla(&state);
+    let capped_o2_high = k_la_o2_high.min(1.0);
 
-    assert!(k_la_o2_high > k_la_o2);
-    assert!(k_la_co2_high > k_la_co2);
     assert!(
-        ((k_la_co2_high / k_la_o2_high) - (k_la_co2 / k_la_o2)).abs() < 1e-10,
-        "ratio should be constant regardless of aeration intensity"
+        k_la_o2_high > 1.0,
+        "test setup: raw O2 K_LA at full aeration should exceed Euler cap"
+    );
+    assert!(
+        k_la_co2_high < capped_o2_high,
+        "CO2 K_LA ({k_la_co2_high}) should be strictly less than capped O2 K_LA ({capped_o2_high})"
+    );
+
+    let ratio_high = k_la_co2_high / capped_o2_high;
+    assert!(
+        (ratio_high - 0.91).abs() < 1e-10,
+        "ratio should be 0.91 even when raw O2 K_LA exceeds cap, got {ratio_high}"
     );
 }
 

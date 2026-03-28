@@ -438,7 +438,7 @@ impl AnimalState {
         self.adult.count + self.sub_adult.count + self.juvenile.count
     }
 
-    /// Feeding demand units used by legacy shrimp-routing logic.
+    /// Feeding demand units used by shrimp grazing and reserve routing.
     pub fn feeding_units(&self) -> f64 {
         f64::from(self.adult.count)
             + f64::from(self.sub_adult.count) * SUB_ADULT_FEEDING_WEIGHT
@@ -493,26 +493,6 @@ impl AnimalState {
         self.adult.reserve_g += reserve_g * adult_weight / total_weight;
         self.sub_adult.reserve_g += reserve_g * sub_adult_weight / total_weight;
         self.juvenile.reserve_g += reserve_g * juvenile_weight / total_weight;
-    }
-
-    pub fn try_spend_reserve_g(&mut self, reserve_g: f64) -> bool {
-        if reserve_g <= f64::EPSILON {
-            return true;
-        }
-
-        let total_reserve_g = self.total_reserve_g();
-        if total_reserve_g + f64::EPSILON < reserve_g {
-            return false;
-        }
-        if total_reserve_g <= f64::EPSILON {
-            return true;
-        }
-
-        let remaining_fraction = ((total_reserve_g - reserve_g) / total_reserve_g).clamp(0.0, 1.0);
-        self.adult.reserve_g *= remaining_fraction;
-        self.sub_adult.reserve_g *= remaining_fraction;
-        self.juvenile.reserve_g *= remaining_fraction;
-        true
     }
 
     pub fn transfer_dead_reserve_g(

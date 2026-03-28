@@ -284,27 +284,36 @@ fn is_animal_mass_budget_path(path: &str) -> bool {
     if !path.starts_with("animal.") {
         return false;
     }
-    // Stage-nested count fields: animal.adult.count, animal.sub_adult.count,
-    // animal.juvenile.count
-    if matches!(
-        path,
-        "animal.adult.count" | "animal.sub_adult.count" | "animal.juvenile.count"
-    ) {
+    if path == "animal.berried_females_count" {
+        return false;
+    }
+    // Stage-nested count fields follow the current cohort schema:
+    // animal.<stage>.count
+    if let Some(stage_name) = path
+        .strip_prefix("animal.")
+        .and_then(|rest| rest.strip_suffix(".count"))
+    {
+        if !stage_name.is_empty() && !stage_name.contains('.') && !stage_name.contains('[') {
+            return true;
+        }
+    }
+    // Flat count fields for future bookkeeping pools (for example
+    // animal.larvae_count) still count as mass-bearing by convention.
+    if path.ends_with("_count") {
         return true;
     }
-    // Flat count fields for future stages (e.g. animal.larvae_count), but
-    // berried_females_count is bookkeeping-only and excluded.
-    path.ends_with("_count") && path != "animal.berried_females_count"
+    false
 }
 
 /// Stage-nested reserve paths map to the aggregate `animal.reserve_g` budget
 /// component.  This helper identifies them so they can be collapsed during
 /// path normalisation.
 fn is_animal_reserve_path(path: &str) -> bool {
-    matches!(
-        path,
-        "animal.adult.reserve_g" | "animal.sub_adult.reserve_g" | "animal.juvenile.reserve_g"
-    )
+    path.strip_prefix("animal.")
+        .and_then(|rest| rest.strip_suffix(".reserve_g"))
+        .is_some_and(|stage_name| {
+            !stage_name.is_empty() && !stage_name.contains('.') && !stage_name.contains('[')
+        })
 }
 
 fn is_shared_budget_path(path: &str) -> bool {
@@ -445,8 +454,14 @@ fn test_budget_path_rules_catch_convention_based_future_fields() {
     assert!(is_carbon_budget_path("microbe.future_biomass_g"));
     assert!(is_nitrogen_budget_path("animal.larvae_count"));
     assert!(is_carbon_budget_path("animal.larvae_count"));
+    assert!(is_nitrogen_budget_path("animal.larvae.count"));
+    assert!(is_carbon_budget_path("animal.larvae.count"));
+    assert!(is_nitrogen_budget_path("animal.larvae.reserve_g"));
+    assert!(is_carbon_budget_path("animal.larvae.reserve_g"));
     assert!(!is_nitrogen_budget_path("animal.berried_females_count"));
     assert!(!is_carbon_budget_path("animal.berried_females_count"));
+    assert!(!is_nitrogen_budget_path("animal.egg_cohorts[*].count"));
+    assert!(!is_carbon_budget_path("animal.egg_cohorts[*].count"));
 }
 
 #[test]
