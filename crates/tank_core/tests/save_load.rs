@@ -301,15 +301,7 @@ fn legacy_schema_v3_saves_fill_defaulted_fields_via_noop_migration() -> Result<(
     Ok(())
 }
 
-#[test]
-fn malformed_legacy_schema_v2_save_reports_migration_failure() {
-    let mut state_json =
-        serde_json::to_value(TankState::new(SimSeed(104))).expect("serialize legacy state");
-    state_json
-        .as_object_mut()
-        .expect("state json object")
-        .remove("water");
-
+fn assert_schema_v2_migration_failure(state_json: serde_json::Value, expected_message: &str) {
     let json = serde_json::json!({
         "schema_version": 2,
         "app_version": APP_VERSION,
@@ -324,12 +316,58 @@ fn malformed_legacy_schema_v2_save_reports_migration_failure() {
             assert_eq!(from, 2);
             assert_eq!(to, 3);
             assert!(
-                message.contains("/state/water"),
-                "error should identify missing path: {message}"
+                message.contains(expected_message),
+                "error should mention `{expected_message}`: {message}"
             );
         }
         other => panic!("expected SchemaMigration, got: {other:?}"),
     }
+}
+
+#[test]
+fn malformed_legacy_schema_v2_save_reports_migration_failure() {
+    let mut state_json =
+        serde_json::to_value(TankState::new(SimSeed(104))).expect("serialize legacy state");
+    state_json
+        .as_object_mut()
+        .expect("state json object")
+        .remove("water");
+
+    assert_schema_v2_migration_failure(state_json, "/state/water");
+}
+
+#[test]
+fn malformed_legacy_schema_v2_negative_fill_height_reports_migration_failure() {
+    let mut state_json =
+        serde_json::to_value(TankState::new(SimSeed(105))).expect("serialize legacy state");
+    *state_json
+        .pointer_mut("/geometry/fill_height_cm")
+        .expect("fill height path") = serde_json::json!(-1.0);
+
+    assert_schema_v2_migration_failure(state_json, "/state/geometry/fill_height_cm");
+}
+
+#[test]
+fn malformed_legacy_schema_v2_negative_substrate_depth_reports_migration_failure() {
+    let mut state_json =
+        serde_json::to_value(TankState::new(SimSeed(106))).expect("serialize legacy state");
+    *state_json
+        .pointer_mut("/substrate_layers/0/depth_cm")
+        .expect("substrate depth path") = serde_json::json!(-0.5);
+
+    assert_schema_v2_migration_failure(state_json, "/state/substrate_layers/0/depth_cm");
+}
+
+#[test]
+fn malformed_legacy_schema_v2_substrate_depth_exceeds_fill_height_reports_migration_failure() {
+    let legacy_state = TankState::new(SimSeed(107));
+    let mut state_json = serde_json::to_value(&legacy_state).expect("serialize legacy state");
+    *state_json
+        .pointer_mut("/substrate_layers/0/depth_cm")
+        .expect("substrate depth path") =
+        serde_json::json!(legacy_state.geometry.fill_height_cm + 1.0);
+
+    assert_schema_v2_migration_failure(state_json, "exceeds fill height");
 }
 
 #[test]

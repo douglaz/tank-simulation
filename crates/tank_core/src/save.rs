@@ -211,10 +211,17 @@ impl SaveFile {
 /// This migration rescales every dissolved total by `net / gross`.
 fn migrate_v2_to_v3(value: &mut Value) -> Result<(), SimError> {
     // Compute gross and net volumes from geometry + substrate layers.
-    let length = required_f64_at(value, 2, 3, "/state/geometry/length_cm")?;
-    let width = required_f64_at(value, 2, 3, "/state/geometry/width_cm")?;
-    let fill_height = required_f64_at(value, 2, 3, "/state/geometry/fill_height_cm")?;
+    let length = required_positive_f64_at(value, 2, 3, "/state/geometry/length_cm")?;
+    let width = required_positive_f64_at(value, 2, 3, "/state/geometry/width_cm")?;
+    let fill_height = required_positive_f64_at(value, 2, 3, "/state/geometry/fill_height_cm")?;
     let gross_volume_l = length * width * fill_height / 1000.0;
+    if gross_volume_l <= f64::EPSILON {
+        return Err(schema_migration_error(
+            2,
+            3,
+            format!("legacy geometry yields non-positive gross water volume: {gross_volume_l} L"),
+        ));
+    }
 
     let substrate_layers = required_array_at(value, 2, 3, "/state/substrate_layers")?;
     let substrate_depth =
@@ -230,22 +237,45 @@ fn migrate_v2_to_v3(value: &mut Value) -> Result<(), SimError> {
                             2,
                             3,
                             format!(
-                            "expected finite number at /state/substrate_layers/{index}/depth_cm"
-                        ),
+                                "expected finite number at /state/substrate_layers/{index}/depth_cm"
+                            ),
                         )
                     })?;
-                Ok::<_, SimError>(sum + depth.max(0.0))
+                if depth < 0.0 {
+                    return Err(schema_migration_error(
+                        2,
+                        3,
+                        format!(
+                            "expected non-negative number at /state/substrate_layers/{index}/depth_cm, got {depth}"
+                        ),
+                    ));
+                }
+                Ok::<_, SimError>(sum + depth)
             })?;
 
-    let capped_depth = substrate_depth.clamp(0.0, fill_height.max(0.0));
-    let displacement_l = length * width * capped_depth / 1000.0;
-    let net_volume_l = (gross_volume_l - displacement_l).max(0.0);
+    if substrate_depth > fill_height + 1e-9 {
+        return Err(schema_migration_error(
+            2,
+            3,
+            format!(
+                "legacy substrate depth {substrate_depth} cm exceeds fill height {fill_height} cm"
+            ),
+        ));
+    }
 
-    let scale = if gross_volume_l > f64::EPSILON && gross_volume_l.is_finite() {
-        (net_volume_l / gross_volume_l).max(0.0)
-    } else {
-        0.0
-    };
+    let displacement_l = length * width * substrate_depth.min(fill_height) / 1000.0;
+    let net_volume_l = gross_volume_l - displacement_l;
+    if net_volume_l <= f64::EPSILON {
+        return Err(schema_migration_error(
+            2,
+            3,
+            format!(
+                "legacy geometry/substrate leaves non-positive net water volume: {net_volume_l} L"
+            ),
+        ));
+    }
+
+    let scale = net_volume_l / gross_volume_l;
 
     // Rescale every dissolved total field in the water object.
     let water = required_object_mut_at(value, 2, 3, "/state/water")?;
@@ -351,6 +381,23 @@ fn required_f64_at(
         .ok_or_else(|| {
             schema_migration_error(from, to, format!("expected finite number at {pointer}"))
         })
+}
+
+fn required_positive_f64_at(
+    value: &Value,
+    from: u32,
+    to: u32,
+    pointer: &'static str,
+) -> Result<f64, SimError> {
+    let number = required_f64_at(value, from, to, pointer)?;
+    if number <= 0.0 {
+        return Err(schema_migration_error(
+            from,
+            to,
+            format!("expected positive number at {pointer}, got {number}"),
+        ));
+    }
+    Ok(number)
 }
 
 fn required_array_at<'a>(

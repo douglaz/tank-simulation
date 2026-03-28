@@ -3,9 +3,58 @@ use crate::types::{SimError, TankState};
 const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
 
 pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
-    if state.water.dissolved_oxygen_mg_total.is_finite() {
-        state.water.dissolved_oxygen_mg_total = state.water.dissolved_oxygen_mg_total.max(0.0);
+    validate_invariants(state)?;
+
+    state.water.dissolved_oxygen_mg_total =
+        normalized_non_negative_if_finite(state.water.dissolved_oxygen_mg_total);
+    state.water.ph = state.water.ph.clamp(5.5, 8.5);
+    state.geometry.lid_exchange_factor = state.geometry.lid_exchange_factor.clamp(0.0, 1.0);
+    state.hardware.light.intensity_index = state.hardware.light.intensity_index.clamp(0.0, 1.0);
+    state.hardware.filter.cleanliness_index =
+        state.hardware.filter.cleanliness_index.clamp(0.0, 1.0);
+    state.hardware.aeration.intensity = state.hardware.aeration.intensity.clamp(0.0, 1.0);
+    state.filter_state.biofilter_maturity_index =
+        state.filter_state.biofilter_maturity_index.clamp(0.0, 1.0);
+    state.filter_state.clogging_index = state.filter_state.clogging_index.clamp(0.0, 1.0);
+    state.filter_state.seeded_biomass_index =
+        state.filter_state.seeded_biomass_index.clamp(0.0, 1.0);
+    state.algae.nuisance_index = state.algae.nuisance_index.clamp(0.0, 1.0);
+    state.microbe.maturity_index = state.microbe.maturity_index.clamp(0.0, 1.0);
+    state.microfauna.population_index = state.microfauna.population_index.clamp(0.0, 1.0);
+    state.microfauna.grazing_pressure_index =
+        state.microfauna.grazing_pressure_index.clamp(0.0, 1.0);
+    state.animal.condition_index = state.animal.condition_index.clamp(0.0, 1.0);
+    state.animal.molt_stress_index = state.animal.molt_stress_index.clamp(0.0, 1.0);
+    state.animal.reproductive_readiness_index =
+        state.animal.reproductive_readiness_index.clamp(0.0, 1.0);
+    state.animal.daily_food_consumed_g = state.animal.daily_food_consumed_g.max(0.0);
+    state.animal.clamp_berried_to_adults();
+    state.animal.egg_progress_days = state.animal.egg_progress_days.max(0.0);
+    state.animal.egg_cohorts.retain(|c| c.count > 0);
+    state.stability_tracker.instability_index =
+        state.stability_tracker.instability_index.clamp(0.0, 1.0);
+
+    for plant in &mut state.plant_guilds {
+        plant.health_index = plant.health_index.clamp(0.0, 1.0);
+        plant.crowding_index = plant.crowding_index.clamp(0.0, 1.0);
+        plant.habitat_index = plant.habitat_index.clamp(0.0, 1.0);
     }
+    for layer in &mut state.substrate_layers {
+        layer.cation_exchange_capacity_index = layer.cation_exchange_capacity_index.clamp(0.0, 1.0);
+        layer.detritus_trapping_index = layer.detritus_trapping_index.clamp(0.0, 1.0);
+        layer.low_oxygen_tendency_index = layer.low_oxygen_tendency_index.clamp(0.0, 1.0);
+        layer.grazing_surface_index = layer.grazing_surface_index.clamp(0.0, 1.0);
+    }
+
+    if state.event_log.len() > 200 {
+        let keep_from = state.event_log.len() - 200;
+        state.event_log.drain(0..keep_from);
+    }
+
+    Ok(())
+}
+
+fn validate_invariants(state: &TankState) -> Result<(), SimError> {
     check_non_negative(
         "ammonia_total_mg_n_total",
         state.water.ammonia_total_mg_n_total,
@@ -15,7 +64,7 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
     check_non_negative("phosphate_mg_p_total", state.water.phosphate_mg_p_total)?;
     check_non_negative(
         "dissolved_oxygen_mg_total",
-        state.water.dissolved_oxygen_mg_total,
+        normalized_non_negative_if_finite(state.water.dissolved_oxygen_mg_total),
     )?;
     check_non_negative(
         "dissolved_inorganic_carbon_mg_c_total",
@@ -92,7 +141,6 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
             value: state.water.ph,
         });
     }
-    state.water.ph = state.water.ph.clamp(5.5, 8.5);
 
     // Geometry: reject non-positive dimensions and impossible fill levels
     check_positive("geometry.length_cm", state.geometry.length_cm)?;
@@ -105,47 +153,7 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
             value: state.geometry.fill_height_cm,
         });
     }
-
-    state.geometry.lid_exchange_factor = state.geometry.lid_exchange_factor.clamp(0.0, 1.0);
-    state.hardware.light.intensity_index = state.hardware.light.intensity_index.clamp(0.0, 1.0);
-    state.hardware.filter.cleanliness_index =
-        state.hardware.filter.cleanliness_index.clamp(0.0, 1.0);
-    state.hardware.aeration.intensity = state.hardware.aeration.intensity.clamp(0.0, 1.0);
-    state.filter_state.biofilter_maturity_index =
-        state.filter_state.biofilter_maturity_index.clamp(0.0, 1.0);
-    state.filter_state.clogging_index = state.filter_state.clogging_index.clamp(0.0, 1.0);
-    state.filter_state.seeded_biomass_index =
-        state.filter_state.seeded_biomass_index.clamp(0.0, 1.0);
-    state.algae.nuisance_index = state.algae.nuisance_index.clamp(0.0, 1.0);
-    state.microbe.maturity_index = state.microbe.maturity_index.clamp(0.0, 1.0);
-    state.microfauna.population_index = state.microfauna.population_index.clamp(0.0, 1.0);
-    state.microfauna.grazing_pressure_index =
-        state.microfauna.grazing_pressure_index.clamp(0.0, 1.0);
-    state.animal.condition_index = state.animal.condition_index.clamp(0.0, 1.0);
-    state.animal.molt_stress_index = state.animal.molt_stress_index.clamp(0.0, 1.0);
-    state.animal.reproductive_readiness_index =
-        state.animal.reproductive_readiness_index.clamp(0.0, 1.0);
-    state.animal.daily_food_consumed_g = state.animal.daily_food_consumed_g.max(0.0);
     check_non_negative("animal.reserve_g", state.animal.reserve_g)?;
-    // Shrimp population invariants: berried <= adults, no negative egg progress
-    state.animal.clamp_berried_to_adults();
-    state.animal.egg_progress_days = state.animal.egg_progress_days.max(0.0);
-    // Remove any empty cohorts
-    state.animal.egg_cohorts.retain(|c| c.count > 0);
-    state.stability_tracker.instability_index =
-        state.stability_tracker.instability_index.clamp(0.0, 1.0);
-
-    for plant in &mut state.plant_guilds {
-        plant.health_index = plant.health_index.clamp(0.0, 1.0);
-        plant.crowding_index = plant.crowding_index.clamp(0.0, 1.0);
-        plant.habitat_index = plant.habitat_index.clamp(0.0, 1.0);
-    }
-    for layer in &mut state.substrate_layers {
-        layer.cation_exchange_capacity_index = layer.cation_exchange_capacity_index.clamp(0.0, 1.0);
-        layer.detritus_trapping_index = layer.detritus_trapping_index.clamp(0.0, 1.0);
-        layer.low_oxygen_tendency_index = layer.low_oxygen_tendency_index.clamp(0.0, 1.0);
-        layer.grazing_surface_index = layer.grazing_surface_index.clamp(0.0, 1.0);
-    }
 
     // Process parameters: reject negative coefficients that would produce
     // nonsensical physics (negative heat transfer, negative reaeration, etc.).
@@ -209,12 +217,15 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
             + pp.shrimp_growth_fraction_of_assimilated,
     )?;
 
-    if state.event_log.len() > 200 {
-        let keep_from = state.event_log.len() - 200;
-        state.event_log.drain(0..keep_from);
-    }
-
     Ok(())
+}
+
+fn normalized_non_negative_if_finite(value: f64) -> f64 {
+    if value.is_finite() {
+        value.max(0.0)
+    } else {
+        value
+    }
 }
 
 fn check_non_negative(field: &'static str, value: f64) -> Result<(), SimError> {
