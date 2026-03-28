@@ -1,4 +1,4 @@
-use tank_core::SimSeed;
+use tank_core::{compute_habitat_registry, SimSeed};
 
 #[test]
 fn nano_cycle_materializes_correctly() {
@@ -111,6 +111,14 @@ fn deterministic_materialization() {
         state_a, state_b,
         "Same seed + scenario must produce identical state"
     );
+}
+
+#[test]
+fn materialized_state_keeps_habitat_registry_current() {
+    let state = tank_scenarios::seeded_state(SimSeed(120), "medium_planted")
+        .expect("scenario should materialize");
+
+    assert_eq!(state.habitat_registry, compute_habitat_registry(&state));
 }
 
 #[test]

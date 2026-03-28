@@ -111,7 +111,8 @@ impl Engine {
         }
     }
 
-    pub fn from_parts(state: TankState, queued_actions: Vec<PlayerAction>) -> Self {
+    pub fn from_parts(mut state: TankState, queued_actions: Vec<PlayerAction>) -> Self {
+        state.refresh_habitat_registry();
         Self {
             state,
             queued_actions: queued_actions.into(),
@@ -349,10 +350,10 @@ impl Engine {
             systems::microfauna::step_daily_microfauna(&mut engine.state);
         });
 
-        // Recompute habitat registry from updated geometry, hardware, and plant state.
+        // Refresh plant-driven habitat surfaces before downstream daily systems
+        // read the serialized registry.
         self.maybe_record_stage(ctx, "system:habitat_registry", |engine, _stage_trace| {
-            engine.state.habitat_registry =
-                crate::types::habitat::compute_habitat_registry(&engine.state);
+            engine.state.refresh_habitat_registry();
         });
 
         // Update stability metrics before shrimp so that same-day chemistry
@@ -370,6 +371,13 @@ impl Engine {
             "system:daily_filter_clogging",
             |engine, _stage_trace| {
                 systems::nitrogen_cycle::update_daily_filter_clogging(&mut engine.state);
+            },
+        );
+        self.maybe_record_stage(
+            ctx,
+            "system:habitat_registry_finalize",
+            |engine, _stage_trace| {
+                engine.state.refresh_habitat_registry();
             },
         );
 
@@ -547,7 +555,7 @@ impl Engine {
         action: PlayerAction,
         tracking_budget: bool,
     ) -> Option<BudgetDelta> {
-        match action {
+        let delta = match action {
             PlayerAction::Feed { grams } => {
                 self.state.detritus.particulate_organics_g_total += grams;
                 self.push_event(
@@ -714,7 +722,10 @@ impl Engine {
                 self.state.hardware.aeration.intensity = intensity;
                 None
             }
-        }
+        };
+
+        self.state.refresh_habitat_registry();
+        delta
     }
 
     fn push_event(

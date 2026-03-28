@@ -2,6 +2,7 @@ use ratatui::{
     prelude::*,
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
+use tank_core::TankSnapshot;
 
 use super::ESTIMATED_TDS_SCOPE_LINES;
 use crate::TuiApp;
@@ -41,36 +42,13 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
     .block(Block::default().title("Water column").borders(Borders::ALL));
     frame.render_widget(chemistry, top[0]);
 
-    let mut systems_lines = vec![
-        Line::from(format!(
-            "Volume {:.1} L  DIC {:.2} mg C/L",
-            snapshot.water_volume_l, snapshot.dissolved_inorganic_carbon_mg_c_per_l
-        )),
-        Line::from(format!(
-            "GH (Ca+Mg) {:.1} d  KH (alkalinity) {:.1} d",
-            snapshot.gh_d, snapshot.kh_d
-        )),
-        Line::from(format!(
-            "7-ion TDS {:.0} mg/L  Cond {:.0} uS/cm",
-            snapshot.estimated_tds_7_ion_mg_per_l, snapshot.estimated_conductivity_us_cm
-        )),
-        Line::from(format!(
-            "Light {} @ {:.2} for {:.1}h",
-            on_off(snapshot.light_enabled),
-            snapshot.light_intensity_index,
-            snapshot.photoperiod_hours
-        )),
-        Line::from(format!(
-            "Heater {} @ {:.1} C  Aeration {} @ {:.2}",
-            on_off(snapshot.heater_enabled),
-            snapshot.heater_setpoint_c,
-            on_off(snapshot.aeration_enabled),
-            snapshot.aeration_intensity
-        )),
-    ];
-    systems_lines.splice(3..3, ESTIMATED_TDS_SCOPE_LINES.into_iter().map(Line::from));
-    let systems = Paragraph::new(systems_lines)
-        .block(Block::default().title("Hardware").borders(Borders::ALL));
+    let systems = Paragraph::new(
+        systems_text(snapshot)
+            .into_iter()
+            .map(Line::from)
+            .collect::<Vec<_>>(),
+    )
+    .block(Block::default().title("Hardware").borders(Borders::ALL));
     frame.render_widget(systems, top[1]);
 
     let plant_summary = Paragraph::new(vec![
@@ -137,5 +115,57 @@ fn on_off(enabled: bool) -> &'static str {
         "on"
     } else {
         "off"
+    }
+}
+
+fn systems_text(snapshot: &TankSnapshot) -> Vec<String> {
+    let mut lines = vec![
+        format!(
+            "Volume {:.1} L  DIC {:.2} mg C/L",
+            snapshot.water_volume_l, snapshot.dissolved_inorganic_carbon_mg_c_per_l
+        ),
+        format!(
+            "GH (Ca+Mg) {:.1} d  KH (alkalinity) {:.1} d",
+            snapshot.gh_d, snapshot.kh_d
+        ),
+        format!(
+            "Est. TDS (7-ion) {:.0} mg/L  Est. cond {:.0} uS/cm",
+            snapshot.estimated_tds_7_ion_mg_per_l, snapshot.estimated_conductivity_us_cm
+        ),
+        format!(
+            "Light {} @ {:.2} for {:.1}h",
+            on_off(snapshot.light_enabled),
+            snapshot.light_intensity_index,
+            snapshot.photoperiod_hours
+        ),
+        format!(
+            "Heater {} @ {:.1} C  Aeration {} @ {:.2}",
+            on_off(snapshot.heater_enabled),
+            snapshot.heater_setpoint_c,
+            on_off(snapshot.aeration_enabled),
+            snapshot.aeration_intensity
+        ),
+    ];
+    lines.splice(
+        3..3,
+        ESTIMATED_TDS_SCOPE_LINES.into_iter().map(str::to_string),
+    );
+    lines
+}
+
+#[cfg(test)]
+mod tests {
+    use tank_core::{rng::SimSeed, TankState};
+
+    use super::systems_text;
+
+    #[test]
+    fn overview_labels_tds_and_conductivity_as_estimates() {
+        let snapshot = tank_core::TankSnapshot::from_state(&TankState::new(SimSeed(912)));
+        let summary = &systems_text(&snapshot)[2];
+
+        assert!(summary.contains("Est. TDS (7-ion)"));
+        assert!(summary.contains("Est. cond"));
+        assert!(!summary.contains("7-ion TDS"));
     }
 }

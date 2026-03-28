@@ -1,6 +1,21 @@
 use anyhow::{bail, Context};
 use reqwest::blocking::Client;
+use serde_json::{Map, Value};
 use tank_core::{PlayerAction, SaveFile, TankSnapshot};
+
+const LEGACY_SNAPSHOT_CHEMISTRY_FIELDS: [(&str, &str); 8] = [
+    ("tan_mg_l", "tan_mg_n_per_l"),
+    ("nh3_mg_l", "nh3_mg_n_per_l"),
+    ("nitrite_mg_l", "nitrite_mg_n_per_l"),
+    ("nitrate_mg_l", "nitrate_mg_n_per_l"),
+    ("phosphate_mg_l", "phosphate_mg_p_per_l"),
+    (
+        "dissolved_inorganic_carbon_mg_l",
+        "dissolved_inorganic_carbon_mg_c_per_l",
+    ),
+    ("tds_mg_l", "estimated_tds_7_ion_mg_per_l"),
+    ("conductivity_us_cm", "estimated_conductivity_us_cm"),
+];
 
 #[derive(Debug, Clone)]
 pub struct ApiClient {
@@ -32,7 +47,8 @@ impl ApiClient {
             .send()
             .context("GET /snapshot failed")?;
         check_status(&resp)?;
-        resp.json().context("failed to parse snapshot")
+        let body: Value = resp.json().context("failed to parse snapshot JSON")?;
+        parse_snapshot_value(body)
     }
 
     pub fn step_hours(&self, hours: u32) -> anyhow::Result<TankSnapshot> {
@@ -43,7 +59,8 @@ impl ApiClient {
             .send()
             .context("POST /time/step failed")?;
         check_status(&resp)?;
-        resp.json().context("failed to parse step response")
+        let body: Value = resp.json().context("failed to parse step response JSON")?;
+        parse_snapshot_value(body)
     }
 
     pub fn apply_action(&self, action: &PlayerAction) -> anyhow::Result<()> {
@@ -75,8 +92,8 @@ impl ApiClient {
             .send()
             .context("POST /load failed")?;
         check_status(&resp)?;
-        let body: LoadResponse = resp.json().context("failed to parse load response")?;
-        Ok(body.snapshot)
+        let body: Value = resp.json().context("failed to parse load response JSON")?;
+        parse_load_response(body)
     }
 
     pub fn get_source_water_ids(&self) -> anyhow::Result<Vec<String>> {
@@ -90,15 +107,90 @@ impl ApiClient {
     }
 }
 
-#[derive(serde::Deserialize)]
-struct LoadResponse {
-    snapshot: TankSnapshot,
-}
-
 fn check_status(resp: &reqwest::blocking::Response) -> anyhow::Result<()> {
     if resp.status().is_success() {
         return Ok(());
     }
     let status = resp.status();
     bail!("HTTP {status}")
+}
+
+fn parse_load_response(mut value: Value) -> anyhow::Result<TankSnapshot> {
+    let snapshot = value
+        .as_object_mut()
+        .and_then(|object| object.get_mut("snapshot"))
+        .context("load response missing snapshot")?;
+    normalize_snapshot_value(snapshot);
+    serde_json::from_value(snapshot.clone()).context("failed to deserialize load snapshot")
+}
+
+fn parse_snapshot_value(mut value: Value) -> anyhow::Result<TankSnapshot> {
+    normalize_snapshot_value(&mut value);
+    serde_json::from_value(value).context("failed to deserialize snapshot")
+}
+
+fn normalize_snapshot_value(value: &mut Value) {
+    if let Some(object) = value.as_object_mut() {
+        normalize_snapshot_object(object);
+    }
+}
+
+fn normalize_snapshot_object(object: &mut Map<String, Value>) {
+    for (legacy, canonical) in LEGACY_SNAPSHOT_CHEMISTRY_FIELDS {
+        if object.contains_key(canonical) {
+            continue;
+        }
+        if let Some(legacy_value) = object.get(legacy).cloned() {
+            object.insert(canonical.to_string(), legacy_value);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+    use tank_core::{rng::SimSeed, TankState};
+
+    use super::{parse_snapshot_value, LEGACY_SNAPSHOT_CHEMISTRY_FIELDS};
+
+    fn legacy_snapshot_value() -> serde_json::Value {
+        let snapshot = tank_core::TankSnapshot::from_state(&TankState::new(SimSeed(777)));
+        let mut value = serde_json::to_value(&snapshot).expect("snapshot should serialize");
+        let object = value
+            .as_object_mut()
+            .expect("serialized snapshot should be an object");
+        for (legacy, canonical) in LEGACY_SNAPSHOT_CHEMISTRY_FIELDS {
+            let canonical_value = object
+                .remove(canonical)
+                .expect("compatibility test expects canonical chemistry field");
+            object.insert(legacy.to_string(), canonical_value);
+        }
+        value
+    }
+
+    #[test]
+    fn parses_legacy_snapshot_chemistry_field_names() {
+        let expected = tank_core::TankSnapshot::from_state(&TankState::new(SimSeed(777)));
+        let value = legacy_snapshot_value();
+
+        let parsed = parse_snapshot_value(value).expect("legacy snapshot should deserialize");
+
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn keeps_canonical_snapshot_fields_when_legacy_aliases_are_also_present() {
+        let expected = tank_core::TankSnapshot::from_state(&TankState::new(SimSeed(888)));
+        let mut value = serde_json::to_value(&expected).expect("snapshot should serialize");
+        let object = value
+            .as_object_mut()
+            .expect("serialized snapshot should be an object");
+        for (legacy, _canonical) in LEGACY_SNAPSHOT_CHEMISTRY_FIELDS {
+            object.insert(legacy.to_string(), json!(-999.0));
+        }
+
+        let parsed = parse_snapshot_value(value).expect("canonical snapshot should deserialize");
+
+        assert_eq!(parsed, expected);
+    }
 }

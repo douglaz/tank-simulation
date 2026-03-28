@@ -123,7 +123,8 @@ pub struct SaveFile {
 }
 
 impl SaveFile {
-    pub fn new(state: TankState, queued_actions: Vec<PlayerAction>) -> Self {
+    pub fn new(mut state: TankState, queued_actions: Vec<PlayerAction>) -> Self {
+        state.refresh_habitat_registry();
         Self {
             schema_version: SCHEMA_VERSION,
             app_version: APP_VERSION.to_string(),
@@ -203,11 +204,10 @@ impl SaveFile {
             carbonate_cache_normalized,
         );
 
-        // Ensure the habitat registry is populated for saves that predate it.
-        if save.state.habitat_registry.is_empty() {
-            save.state.habitat_registry =
-                crate::types::habitat::compute_habitat_registry(&save.state);
-        }
+        // Treat habitat registry as derived serialized state: always rebuild it
+        // on load so stale saves and migrated payloads re-enter the engine with
+        // current geometry-driven values.
+        save.state.refresh_habitat_registry();
 
         Ok(save)
     }

@@ -547,6 +547,7 @@ fn materialize_scenario(
     // Seed stability tracker baselines from actual water state to prevent
     // false chemistry-swing detection on the first update.
     state.reseed_stability_tracker();
+    state.refresh_habitat_registry();
 
     Ok(state)
 }
@@ -654,6 +655,7 @@ fn apply_startup_overrides(
     // Reseed stability baselines so that overridden water chemistry is not
     // treated as a "swing" on the first daily update.
     state.reseed_stability_tracker();
+    state.refresh_habitat_registry();
 
     Ok(())
 }
@@ -827,6 +829,8 @@ pub fn cycling_fixture_pair(seed: SimSeed) -> (TankState, TankState) {
         clogging_index: 0.0,
         seeded_biomass_index: 0.0,
     };
+    seeded.refresh_habitat_registry();
+    unseeded.refresh_habitat_registry();
 
     (seeded, unseeded)
 }
@@ -872,6 +876,7 @@ fn cycling_base_state(seed: SimSeed) -> TankState {
     state
         .stability_tracker
         .seed_from_water(&state.water, volume_l);
+    state.refresh_habitat_registry();
 
     state
 }

@@ -1,4 +1,4 @@
-use tank_core::SimSeed;
+use tank_core::{compute_habitat_registry, SimSeed};
 use tank_scenarios::{
     load_named_scenario, seeded_state_with_full_overrides, ScenarioGeometryOverrides,
     StartupHeaterPreset, StartupLightPreset, StartupOverrides, StartupPlantSelection,
@@ -92,4 +92,29 @@ fn substrate_override_rebuilds_water_from_scenario_source_when_initial_volume_is
         (state.water.alkalinity_meq_total - profile.alkalinity_meq_per_l * volume_l).abs() < 0.001
     );
     assert!((state.water.calcium_mg_total - profile.calcium_mg_per_l * volume_l).abs() < 0.001);
+}
+
+#[test]
+fn startup_overrides_keep_habitat_registry_current() {
+    let state = seeded_state_with_full_overrides(
+        SimSeed(504),
+        "medium_planted",
+        StartupOverrides {
+            geometry: ScenarioGeometryOverrides {
+                size_scale: 1.2,
+                fill_ratio: 0.85,
+            },
+            substrate_preset: Some(StartupSubstratePreset::ActivePlantedCap),
+            plant_selection: Some(StartupPlantSelection::MixedPlanted),
+            filter_enabled: Some(true),
+            light_preset: Some(StartupLightPreset::Hours10),
+            heater_preset: Some(StartupHeaterPreset::Celsius25),
+            aeration_enabled: Some(true),
+            source_water_profile_id: Some("hard_shrimp".to_string()),
+            initial_adult_shrimp_count: Some(12),
+        },
+    )
+    .expect("startup overrides should materialize");
+
+    assert_eq!(state.habitat_registry, compute_habitat_registry(&state));
 }
