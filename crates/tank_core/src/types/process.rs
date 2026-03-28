@@ -146,14 +146,17 @@ pub struct ProcessParams {
     pub algae_max_growth_rate_per_day: f64,
     pub periphyton_max_growth_rate_per_day: f64,
     pub algae_respiration_fraction_per_day: f64,
-    /// Legacy compatibility name for the algae water-column N half-saturation.
-    /// Runtime code normalizes this total-style value onto a 20 L reference
-    /// tank so the effective limitation stays concentration-based.
-    pub algae_half_saturation_n_mg_total: f64,
-    /// Legacy compatibility name for the algae water-column P half-saturation.
-    /// Runtime code normalizes this total-style value onto a 20 L reference
-    /// tank so the effective limitation stays concentration-based.
-    pub algae_half_saturation_p_mg_total: f64,
+    /// Monod half-saturation constant for dissolved inorganic nitrogen
+    /// (TAN + NO3⁻) limitation of algae growth, in mg N / L.
+    /// Algae growth reaches half its nutrient-unlimited rate at this
+    /// concentration.  Typical freshwater range: 0.05–0.5 mg N/L.
+    #[serde(alias = "algae_half_saturation_n_mg_total")]
+    pub algae_half_saturation_n_mg_n_per_l: f64,
+    /// Monod half-saturation constant for dissolved phosphorus (PO₄³⁻)
+    /// limitation of algae growth, in mg P / L.
+    /// Typical freshwater range: 0.005–0.05 mg P/L.
+    #[serde(alias = "algae_half_saturation_p_mg_total")]
+    pub algae_half_saturation_p_mg_p_per_l: f64,
     pub algae_light_half_saturation: f64,
     pub algae_temp_optimum_c: f64,
     pub algae_temp_sigma_c: f64,
