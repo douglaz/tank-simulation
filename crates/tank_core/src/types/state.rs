@@ -46,8 +46,9 @@ pub struct TankState {
     /// Tracks recent chemistry swings for shrimp stress.
     #[serde(default)]
     pub stability_tracker: StabilityTracker,
-    /// Habitat registry: colonizable areas and exposure modifiers for each
-    /// ecological zone. Recomputed daily from geometry, hardware, and plant state.
+    /// Derived serialized habitat registry: colonizable areas and exposure
+    /// modifiers for each ecological zone. Refresh whenever geometry,
+    /// hardware, substrate, filter state, or plant state changes.
     #[serde(default)]
     pub habitat_registry: Vec<HabitatEntry>,
 }
@@ -101,7 +102,7 @@ impl TankState {
         // Seed stability baseline from the freshly built water state so the
         // first daily update does not register a false chemistry swing.
         state.reseed_stability_tracker();
-        state.habitat_registry = super::habitat::compute_habitat_registry(&state);
+        state.refresh_habitat_registry();
         state
     }
 
@@ -138,7 +139,7 @@ impl TankState {
             .water
             .rescale_totals_for_volume(old_volume_l, volume_l);
         state.reseed_stability_tracker();
-        state.habitat_registry = super::habitat::compute_habitat_registry(&state);
+        state.refresh_habitat_registry();
         state
     }
 
@@ -211,6 +212,11 @@ impl TankState {
         let volume_l = self.water_volume_l();
         self.stability_tracker
             .seed_from_water(&self.water, volume_l);
+    }
+
+    pub fn refresh_habitat_registry(&mut self) {
+        let registry = super::habitat::compute_habitat_registry(self);
+        self.habitat_registry = registry;
     }
 
     pub fn concentrations(&self) -> ConcentrationView<'_> {
