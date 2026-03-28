@@ -9,6 +9,37 @@ use crate::{
 
 const ALGAE_P_MG_PER_G_GROWTH: f64 = 5.0;
 
+/// Daily algae growth step for both suspended (planktonic) and periphyton
+/// (surface-attached) pools.
+///
+/// # Interactions modelled
+///
+/// Growth is the product of independent limitation factors (Monod kinetics
+/// with Liebig's Law of the Minimum for nutrients):
+///
+/// - **Light**: combined photoperiod duration and hardware intensity through
+///   a half-saturation curve.  Plants compete for the same light via a
+///   shading term that reduces available light as crowding increases.
+/// - **Nutrients (N, P)**: dissolved inorganic nitrogen (TAN + NO₃⁻) and
+///   phosphorus (PO₄³⁻) each produce a Monod limitation factor; the
+///   minimum of the two applies (Liebig's Law).  All half-saturation
+///   constants are expressed in mg-element / L (concentration-based).
+/// - **Temperature**: a Gaussian response centred on an optimum, with a
+///   configurable sigma controlling the breadth of the thermal window.
+/// - **Carbon**: DIC availability caps realised growth after gross growth
+///   is computed (post-hoc nutrient cap), ensuring carbon mass balance.
+///
+/// # Intentionally abstracted (acceptable for Phase 1)
+///
+/// - Planktonic and periphyton algae share the same nutrient/light/temperature
+///   limitation factors.  Phase 3 (tanksim-6e5.5.3) will split them with
+///   habitat-specific light exposure and nutrient access.
+/// - P cycling is not fully closed; the model over-indexes on N limitation.
+///   This is acceptable until the P cycle is closed in a later phase.
+/// - Light attenuation by depth and turbidity is not yet modelled; it will
+///   be added in tanksim-6e5.5.5.
+/// - CO₂/DIC interaction with photosynthesis and pH is deferred to
+///   tanksim-6e5.4.4.
 pub fn step_daily_algae(state: &mut TankState) {
     let concentrations = state.concentrations();
     let volume_l = concentrations.volume_l();
@@ -19,13 +50,17 @@ pub fn step_daily_algae(state: &mut TankState) {
     let tan_mg_n_per_l = concentrations.tan_mg_n_per_l();
     let nitrate_mg_n_per_l = concentrations.nitrate_mg_n_per_l();
     let phosphate_mg_p_per_l = concentrations.phosphate_mg_p_per_l();
-    let algae_half_saturation_n_mg_n_per_l =
-        legacy_total_param_to_mg_per_l(state.process_params.algae_half_saturation_n_mg_total);
-    let algae_half_saturation_p_mg_p_per_l =
-        legacy_total_param_to_mg_per_l(state.process_params.algae_half_saturation_p_mg_total);
 
     let previous_nuisance_index = state.algae.nuisance_index;
+
+    // --- Light limitation ---
+    // Combines photoperiod fraction and hardware intensity via half-saturation
+    // kinetics.  Plant shading reduces available light proportional to average
+    // crowding (up to 70% reduction, floored at 20% of full light).
     let light_factor = algae_light_factor(state);
+
+    // --- Temperature limitation ---
+    // Gaussian response: growth peaks at the optimum and decays symmetrically.
     let temp_factor = gaussian_response(
         state.water.temperature_c,
         state.process_params.algae_temp_optimum_c,
@@ -40,13 +75,18 @@ pub fn step_daily_algae(state: &mut TankState) {
             / state.plant_guilds.len().max(1) as f64
             * 0.7)
         .clamp(0.2, 1.0);
+
+    // --- Nutrient limitation (concentration-based Monod kinetics) ---
+    // Dissolved inorganic nitrogen = TAN + NO₃⁻ (both in mg N / L).
+    // Phosphorus = dissolved PO₄³⁻ (mg P / L).
+    // Liebig's Law: the more limiting nutrient sets the factor.
     let nutrient_factor = half_saturation(
         tan_mg_n_per_l + nitrate_mg_n_per_l,
-        algae_half_saturation_n_mg_n_per_l,
+        state.process_params.algae_half_saturation_n_mg_n_per_l,
     )
     .min(half_saturation(
         phosphate_mg_p_per_l,
-        algae_half_saturation_p_mg_p_per_l,
+        state.process_params.algae_half_saturation_p_mg_p_per_l,
     ));
     let microfauna_grazing = (state.microfauna.population_index
         * (0.3 + 0.7 * state.microfauna.grazing_pressure_index))
@@ -225,6 +265,19 @@ pub fn step_daily_algae(state: &mut TankState) {
     resolve_carbonate_state(&mut state.water, volume_l);
 }
 
+/// Compute the effective light limitation factor for algae growth.
+///
+/// Combines two dimensionless drivers into a single [0, 1] factor:
+/// 1. **Photoperiod**: hours of light per day normalised to a 9-hour
+///    reference (longer days → more growth, capped at 1.0).
+/// 2. **Intensity**: hardware light intensity index (0–1) passed through
+///    Monod half-saturation kinetics.
+///
+/// The product of photoperiod fraction and intensity index is the effective
+/// light dose; a half-saturation curve then converts it to a limitation
+/// factor.  This is a simplification—real algae integrate PAR over the
+/// water column, which depends on depth and turbidity.  Depth/turbidity
+/// attenuation will be added in tanksim-6e5.5.5.
 fn algae_light_factor(state: &TankState) -> f64 {
     if !state.hardware.light.enabled {
         return 0.0;

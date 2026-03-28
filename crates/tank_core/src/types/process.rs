@@ -125,18 +125,19 @@ pub struct ProcessParams {
     pub plant_senescence_fraction_per_day: f64,
     pub plant_health_recovery_per_day: f64,
     pub plant_health_decline_per_day: f64,
-    /// Legacy compatibility name for the water-column N half-saturation.
-    /// Runtime code normalizes this total-style value onto a 20 L reference
-    /// tank so the effective limitation stays concentration-based.
-    pub plant_half_saturation_n_mg_total: f64,
-    /// Legacy compatibility name for the water-column P half-saturation.
-    /// Runtime code normalizes this total-style value onto a 20 L reference
-    /// tank so the effective limitation stays concentration-based.
-    pub plant_half_saturation_p_mg_total: f64,
-    /// Legacy compatibility name for the DIC half-saturation.
-    /// Runtime code normalizes this total-style value onto a 20 L reference
-    /// tank so the effective limitation stays concentration-based.
-    pub plant_half_saturation_c_mg_total: f64,
+    /// Water-column nitrogen half-saturation constant (mg N / L).
+    /// Monod-style: limitation = [N] / ([N] + Ks).
+    pub plant_half_saturation_n_mg_n_per_l: f64,
+    /// Water-column phosphorus half-saturation constant (mg P / L).
+    pub plant_half_saturation_p_mg_p_per_l: f64,
+    /// DIC half-saturation constant (mg C / L).
+    pub plant_half_saturation_c_mg_c_per_l: f64,
+    /// Substrate nitrogen half-saturation constant (mg N / m²).
+    /// Rooted plants access substrate N via root uptake; this Ks applies
+    /// to the areal nutrient density rather than volumetric concentration.
+    pub plant_half_saturation_n_substrate_mg_n_per_m2: f64,
+    /// Substrate phosphorus half-saturation constant (mg P / m²).
+    pub plant_half_saturation_p_substrate_mg_p_per_m2: f64,
     pub plant_light_half_saturation: f64,
     pub plant_temp_optimum_c: f64,
     pub plant_temp_sigma_c: f64,
@@ -301,9 +302,11 @@ impl Default for ProcessParams {
             plant_senescence_fraction_per_day: 0.005,
             plant_health_recovery_per_day: 0.03,
             plant_health_decline_per_day: 0.08,
-            plant_half_saturation_n_mg_total: 8.0,
-            plant_half_saturation_p_mg_total: 1.2,
-            plant_half_saturation_c_mg_total: 20.0,
+            plant_half_saturation_n_mg_n_per_l: 0.4,
+            plant_half_saturation_p_mg_p_per_l: 0.06,
+            plant_half_saturation_c_mg_c_per_l: 1.0,
+            plant_half_saturation_n_substrate_mg_n_per_m2: 80.0,
+            plant_half_saturation_p_substrate_mg_p_per_m2: 12.0,
             plant_light_half_saturation: 0.45,
             plant_temp_optimum_c: 25.0,
             plant_temp_sigma_c: 7.0,

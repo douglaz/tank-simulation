@@ -240,6 +240,7 @@ impl TankState {
         }
         let footprint_area_cm2 = self.geometry.footprint_area_cm2();
         for layer in &mut self.substrate_layers {
+            layer.colonizable_area_factor = layer.resolved_colonizable_area_factor();
             layer.colonizable_area_cm2 = layer.derived_colonizable_area_cm2(footprint_area_cm2);
         }
         let registry = super::habitat::compute_habitat_registry(self);

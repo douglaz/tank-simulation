@@ -423,6 +423,7 @@ fn update_reproductive_readiness(state: &mut TankState) {
 
 fn spawning(state: &mut TankState) {
     if state.animal.adult.count == 0 {
+        state.animal.spawn_progress_accum = 0.0;
         return;
     }
 
@@ -431,6 +432,7 @@ fn spawning(state: &mut TankState) {
         .max(0.0) as u32;
 
     if eligible == 0 {
+        state.animal.spawn_progress_accum = 0.0;
         return;
     }
 
@@ -471,6 +473,7 @@ fn egg_development(state: &mut TankState) {
                 progress_days: state.animal.egg_progress_days,
             });
         } else {
+            state.animal.hatch_success_carry = 0.0;
             return;
         }
     }

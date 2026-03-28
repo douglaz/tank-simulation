@@ -622,11 +622,15 @@ pub struct ProcessParamsPreset {
     #[serde(default = "default_plant_health_decline")]
     pub plant_health_decline_per_day: f64,
     #[serde(default = "default_plant_half_sat_n")]
-    pub plant_half_saturation_n_mg_total: f64,
+    pub plant_half_saturation_n_mg_n_per_l: f64,
     #[serde(default = "default_plant_half_sat_p")]
-    pub plant_half_saturation_p_mg_total: f64,
+    pub plant_half_saturation_p_mg_p_per_l: f64,
     #[serde(default = "default_plant_half_sat_c")]
-    pub plant_half_saturation_c_mg_total: f64,
+    pub plant_half_saturation_c_mg_c_per_l: f64,
+    #[serde(default = "default_plant_half_sat_n_substrate")]
+    pub plant_half_saturation_n_substrate_mg_n_per_m2: f64,
+    #[serde(default = "default_plant_half_sat_p_substrate")]
+    pub plant_half_saturation_p_substrate_mg_p_per_m2: f64,
     #[serde(default = "default_plant_light_half_sat")]
     pub plant_light_half_saturation: f64,
     #[serde(default = "default_plant_temp_optimum")]
@@ -826,13 +830,19 @@ fn default_plant_health_decline() -> f64 {
     0.08
 }
 fn default_plant_half_sat_n() -> f64 {
-    8.0
+    0.4
 }
 fn default_plant_half_sat_p() -> f64 {
-    1.2
+    0.06
 }
 fn default_plant_half_sat_c() -> f64 {
-    20.0
+    1.0
+}
+fn default_plant_half_sat_n_substrate() -> f64 {
+    80.0
+}
+fn default_plant_half_sat_p_substrate() -> f64 {
+    12.0
 }
 fn default_plant_light_half_sat() -> f64 {
     0.45

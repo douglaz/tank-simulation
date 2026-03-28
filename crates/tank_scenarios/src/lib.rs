@@ -751,9 +751,11 @@ fn build_substrate_layers(
             nutrient_store_mg_p_total: sub_preset.nutrient_charge_mg_p_total,
             cation_exchange_capacity_index: sub_preset.cation_exchange_capacity_index,
             detritus_trapping_index: sub_preset.detritus_trapping_index,
+            colonizable_area_factor: sub_preset.colonizable_area_factor,
             colonizable_area_cm2: SubstrateLayerState {
                 kind,
                 depth_cm: sub_preset.depth_cm,
+                colonizable_area_factor: sub_preset.colonizable_area_factor,
                 ..SubstrateLayerState::default()
             }
             .derived_colonizable_area_cm2(footprint),

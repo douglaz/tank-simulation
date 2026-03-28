@@ -1,24 +1,38 @@
 use crate::systems::chemistry::resolve_carbonate_state;
 use crate::types::{
-    legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2, plant_carbon_mg,
-    plant_nitrogen_mg, PlantGuild, TankState, PLANT_N_MG_PER_G_BIOMASS,
+    plant_carbon_mg, plant_nitrogen_mg, PlantGuild, TankState, PLANT_N_MG_PER_G_BIOMASS,
 };
 
 const PLANT_P_MG_PER_G_GROWTH: f64 = 4.0;
 
+/// Advance plant growth for one daily tick.
+///
+/// ## Nutrient source assumptions
+///
+/// Water-column feeders (e.g. Rotala, floating plants) obtain N and P
+/// entirely from the dissolved water column.  Rooted plants
+/// (e.g. Echinodorus, Cryptocoryne) access both water-column and
+/// substrate pools; the split is controlled by per-guild
+/// `water_column_uptake_bias` / `substrate_uptake_bias` weights.
+///
+/// Half-saturation constants are concentration-based:
+///   - Water-column Ks: mg nutrient / L  (volumetric)
+///   - Substrate Ks:    mg nutrient / m²  (areal density)
+///
+/// Phase 3 (E4) will add substrate-zone differentiation with explicit
+/// oxic/suboxic layers and root-zone redox coupling.
 pub fn step_daily_plants(state: &mut TankState) {
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let dic_mg_c_per_l = state.concentrations().dic_mg_c_per_l();
-    let plant_half_saturation_n_mg_n_per_l =
-        legacy_total_param_to_mg_per_l(state.process_params.plant_half_saturation_n_mg_total);
-    let plant_half_saturation_p_mg_p_per_l =
-        legacy_total_param_to_mg_per_l(state.process_params.plant_half_saturation_p_mg_total);
-    let plant_half_saturation_c_mg_c_per_l =
-        legacy_total_param_to_mg_per_l(state.process_params.plant_half_saturation_c_mg_total);
-    let plant_half_saturation_n_mg_n_per_m2 =
-        legacy_total_param_to_mg_per_m2(state.process_params.plant_half_saturation_n_mg_total);
-    let plant_half_saturation_p_mg_p_per_m2 =
-        legacy_total_param_to_mg_per_m2(state.process_params.plant_half_saturation_p_mg_total);
+
+    // Concentration-based half-saturation constants — used directly,
+    // no legacy total-to-concentration conversion needed.
+    let ks_n_per_l = state.process_params.plant_half_saturation_n_mg_n_per_l;
+    let ks_p_per_l = state.process_params.plant_half_saturation_p_mg_p_per_l;
+    let ks_c_per_l = state.process_params.plant_half_saturation_c_mg_c_per_l;
+    let ks_n_per_m2 = state.process_params.plant_half_saturation_n_substrate_mg_n_per_m2;
+    let ks_p_per_m2 = state.process_params.plant_half_saturation_p_substrate_mg_p_per_m2;
+
     let crowding_index = state.derived_plant_crowding_index();
     let f_light = plant_light_factor(state);
     let f_temp = gaussian_response(
@@ -26,7 +40,7 @@ pub fn step_daily_plants(state: &mut TankState) {
         state.process_params.plant_temp_optimum_c,
         state.process_params.plant_temp_sigma_c,
     );
-    let f_c = half_saturation(dic_mg_c_per_l, plant_half_saturation_c_mg_c_per_l);
+    let f_c = half_saturation(dic_mg_c_per_l, ks_c_per_l);
 
     for index in 0..state.plant_guilds.len() {
         let guild = state.plant_guilds[index].guild;
@@ -54,14 +68,13 @@ pub fn step_daily_plants(state: &mut TankState) {
         let bias_sum = (water_bias + substrate_bias).max(f64::MIN_POSITIVE);
         let w_norm = water_bias / bias_sum;
         let s_norm = substrate_bias / bias_sum;
-        let water_n_factor = half_saturation(
-            tan_mg_n_per_l + nitrate_mg_n_per_l,
-            plant_half_saturation_n_mg_n_per_l,
-        );
-        let water_p_factor =
-            half_saturation(phosphate_mg_p_per_l, plant_half_saturation_p_mg_p_per_l);
-        let substrate_n_factor = half_saturation(substrate_n, plant_half_saturation_n_mg_n_per_m2);
-        let substrate_p_factor = half_saturation(substrate_p, plant_half_saturation_p_mg_p_per_m2);
+        // Water-column limitation uses volumetric concentration (mg/L).
+        let water_n_factor =
+            half_saturation(tan_mg_n_per_l + nitrate_mg_n_per_l, ks_n_per_l);
+        let water_p_factor = half_saturation(phosphate_mg_p_per_l, ks_p_per_l);
+        // Substrate limitation uses areal density (mg/m²).
+        let substrate_n_factor = half_saturation(substrate_n, ks_n_per_m2);
+        let substrate_p_factor = half_saturation(substrate_p, ks_p_per_m2);
         let f_n = weighted_limitation_factor(water_n_factor, substrate_n_factor, w_norm, s_norm);
         let f_p = weighted_limitation_factor(water_p_factor, substrate_p_factor, w_norm, s_norm);
         let nutrient_limitation = f_n.min(f_p).min(f_c);
