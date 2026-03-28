@@ -3,7 +3,7 @@ use crate::types::{
     algae_carbon_mg, algae_nitrogen_mg, detritus_carbon_mg, detritus_nitrogen_mg,
     live_biomass_carbon_mg, live_biomass_detrital_mass_g, live_biomass_nitrogen_mg, EggCohort,
     EventCause, EventKind, EventSeverity, ShrimpRuntimeParams, TankState, ADULT_SHRIMP_BIOMASS_G,
-    JUVENILE_SHRIMP_BIOMASS_G,
+    JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
 };
 
 const JUVENILES_PER_CLUTCH: u32 = 25;
@@ -440,7 +440,7 @@ fn egg_development(state: &mut TankState) {
 
             for _ in 0..cohort.count {
                 if state.rng.next_f64() < p_hatch {
-                    if fund_hatched_clutch_from_water(state) {
+                    if fund_hatched_clutch_biomass(state) {
                         total_successful += 1;
                     } else {
                         total_resource_limited += 1;
@@ -527,7 +527,7 @@ fn juvenile_recruitment(state: &mut TankState) {
     let growth_biomass_g = (ADULT_SHRIMP_BIOMASS_G - JUVENILE_SHRIMP_BIOMASS_G).max(0.0);
     let mut funded_maturing = 0u32;
     for _ in 0..candidate_maturing {
-        if fund_live_shrimp_biomass_from_water(state, growth_biomass_g) {
+        if fund_live_shrimp_biomass(state, growth_biomass_g) {
             funded_maturing += 1;
         } else {
             break;
@@ -607,8 +607,8 @@ fn route_dead_shrimp_to_detritus(state: &mut TankState, adult_deaths: u32, juv_d
     }
 }
 
-fn fund_hatched_clutch_from_water(state: &mut TankState) -> bool {
-    fund_live_shrimp_biomass_from_water(
+fn fund_hatched_clutch_biomass(state: &mut TankState) -> bool {
+    fund_live_shrimp_biomass(
         state,
         f64::from(JUVENILES_PER_CLUTCH) * JUVENILE_SHRIMP_BIOMASS_G,
     )
@@ -623,14 +623,23 @@ fn withdraw_from_preferred_pools(preferred: &mut f64, fallback: &mut f64, amount
     }
 }
 
-fn fund_live_shrimp_biomass_from_water(state: &mut TankState, biomass_g: f64) -> bool {
+fn fund_live_shrimp_biomass(state: &mut TankState, biomass_g: f64) -> bool {
     if biomass_g <= f64::EPSILON {
         return true;
     }
 
+    let required_reserve_g = biomass_g * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+    let reserve_to_spend_g = state.animal.reserve_g.min(required_reserve_g);
+    let reserve_shortfall_g = required_reserve_g - reserve_to_spend_g;
+    if reserve_shortfall_g <= f64::EPSILON {
+        state.animal.reserve_g -= reserve_to_spend_g;
+        return true;
+    }
+
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
-    let required_nitrogen_mg = live_biomass_nitrogen_mg(biomass_g, n_to_c_ratio);
-    let required_carbon_mg = live_biomass_carbon_mg(biomass_g, n_to_c_ratio);
+    let water_biomass_equivalent_g = reserve_shortfall_g / LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+    let required_nitrogen_mg = live_biomass_nitrogen_mg(water_biomass_equivalent_g, n_to_c_ratio);
+    let required_carbon_mg = live_biomass_carbon_mg(water_biomass_equivalent_g, n_to_c_ratio);
     let available_nitrogen_mg =
         state.water.dissolved_organic_nitrogen_mg_n_total + state.water.ammonia_total_mg_n_total;
     let available_carbon_mg = state.water.dissolved_organic_carbon_mg_c_total
@@ -641,6 +650,8 @@ fn fund_live_shrimp_biomass_from_water(state: &mut TankState, biomass_g: f64) ->
     {
         return false;
     }
+
+    state.animal.reserve_g -= reserve_to_spend_g;
 
     withdraw_from_preferred_pools(
         &mut state.water.dissolved_organic_nitrogen_mg_n_total,
