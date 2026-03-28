@@ -1,8 +1,4 @@
 use crate::systems::chemistry::{compute_nh3_mg_n_per_l, resolve_carbonate_state};
-#[cfg(test)]
-use crate::types::biology::{
-    ADULT_FEEDING_WEIGHT, JUVENILE_FEEDING_WEIGHT, SUB_ADULT_FEEDING_WEIGHT,
-};
 use crate::types::{
     algae_carbon_mg, algae_detrital_mass_g, algae_nitrogen_mg, detritus_carbon_mg,
     detritus_nitrogen_mg, shrimp_body_detrital_mass_g, EggCohort, EventCause, EventKind,
@@ -1008,9 +1004,7 @@ mod tests {
         let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
         let grazing_access_factor =
             0.5 + (0.5 * state.avg_substrate_index(|layer| layer.grazing_surface_index));
-        let total_feeding_units = state.animal.adult.count as f64 * ADULT_FEEDING_WEIGHT
-            + state.animal.sub_adult.count as f64 * SUB_ADULT_FEEDING_WEIGHT
-            + state.animal.juvenile.count as f64 * JUVENILE_FEEDING_WEIGHT;
+        let total_feeding_units = state.animal.feeding_units();
         let expected_periphyton_biomass_removed = total_feeding_units
             * state
                 .process_params
@@ -1045,9 +1039,7 @@ mod tests {
         }
 
         let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
-        let total_feeding_units = state.animal.adult.count as f64 * ADULT_FEEDING_WEIGHT
-            + state.animal.sub_adult.count as f64 * SUB_ADULT_FEEDING_WEIGHT
-            + state.animal.juvenile.count as f64 * JUVENILE_FEEDING_WEIGHT;
+        let total_feeding_units = state.animal.feeding_units();
         let max_daily_intake_route_g = algae_detrital_mass_g(
             total_feeding_units
                 * state
