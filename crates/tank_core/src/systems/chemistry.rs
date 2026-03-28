@@ -28,6 +28,8 @@ pub const CARBONATE_PH_MAX: f64 = 8.5;
 
 const DIAGNOSTIC_PH_MIN: f64 = 4.0;
 const DIAGNOSTIC_PH_MAX: f64 = 10.0;
+const NEGLIGIBLE_DIC_MOL_PER_L: f64 = 1e-12;
+const NEGLIGIBLE_ALK_EQ_PER_L: f64 = 1e-9;
 
 /// Molar mass of HCO3- in mg/mmol, used to project solved bicarbonate
 /// back to the cached `bicarbonate_mg_total` field.
@@ -51,6 +53,7 @@ pub struct CarbonateEquilibrium {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum CarbonateSolveStatus {
     Stable,
+    ZeroDicBufferedLimit,
     NonFiniteNeutralFallback,
 }
 
@@ -65,6 +68,13 @@ impl CarbonateSolveOutcome {
         Self {
             equilibrium,
             status: CarbonateSolveStatus::Stable,
+        }
+    }
+
+    fn zero_dic_buffered_limit(equilibrium: CarbonateEquilibrium) -> Self {
+        Self {
+            equilibrium,
+            status: CarbonateSolveStatus::ZeroDicBufferedLimit,
         }
     }
 
@@ -209,7 +219,7 @@ fn fallback_high_buffer(
 }
 
 fn fallback_zero_dic(alk_eq_per_l: f64, temperature_c: f64) -> CarbonateSolveOutcome {
-    if alk_eq_per_l <= 1e-9 {
+    if alk_eq_per_l <= NEGLIGIBLE_ALK_EQ_PER_L {
         return CarbonateSolveOutcome::stable(NEUTRAL_FALLBACK);
     }
 
@@ -222,7 +232,7 @@ fn fallback_zero_dic(alk_eq_per_l: f64, temperature_c: f64) -> CarbonateSolveOut
         CARBONATE_PH_MAX,
     );
 
-    CarbonateSolveOutcome::stable(CarbonateEquilibrium {
+    CarbonateSolveOutcome::zero_dic_buffered_limit(CarbonateEquilibrium {
         ph: CARBONATE_PH_MAX,
         ..NEUTRAL_FALLBACK
     })
@@ -281,7 +291,7 @@ fn solve_carbonate_equilibrium_outcome(
     let dic = dic_mg_c_total / 12_000.0 / volume_l;
     let alk = alkalinity_meq_total / 1_000.0 / volume_l;
 
-    if dic <= 1e-12 {
+    if dic <= NEGLIGIBLE_DIC_MOL_PER_L {
         return fallback_zero_dic(alk, temperature_c);
     }
 
@@ -290,7 +300,7 @@ fn solve_carbonate_equilibrium_outcome(
 
     // Negligible alkalinity: treat the water as carbonic-acid dominated so
     // gameplay surfaces an acid crash instead of snapping back to neutral pH.
-    if alk <= 1e-9 {
+    if alk <= NEGLIGIBLE_ALK_EQ_PER_L {
         return fallback_acid_dominated(dic, alk, temperature_c, ka1, ka2, "low_alkalinity");
     }
 
@@ -382,8 +392,12 @@ pub fn preview_source_water_carbonate_equilibrium(
         .equilibrium
 }
 
-/// Validates that a source-water profile resolves to a carbonate pH inside the
-/// calibrated interior gameplay range rather than on the clamp boundary.
+/// Validates that a source-water profile resolves inside the calibrated
+/// freshwater source-water envelope.
+///
+/// Clamp-boundary results are rejected so shipped and custom source waters stay
+/// away from acid-crash and high-buffer fallback cases, except for the
+/// deliberate zero-DIC-with-buffer alkaline limit at `CARBONATE_PH_MAX`.
 pub fn validate_source_water_carbonate_profile(
     dic_mg_c_per_l: f64,
     alkalinity_meq_per_l: f64,
@@ -403,8 +417,10 @@ pub fn validate_source_water_carbonate_profile(
     }
 
     let eq = outcome.equilibrium;
+    let allow_zero_dic_buffered_limit =
+        matches!(outcome.status, CarbonateSolveStatus::ZeroDicBufferedLimit);
 
-    if eq.ph <= CARBONATE_PH_MIN || eq.ph >= CARBONATE_PH_MAX {
+    if eq.ph <= CARBONATE_PH_MIN || (eq.ph >= CARBONATE_PH_MAX && !allow_zero_dic_buffered_limit) {
         Err(SourceWaterCarbonateValidationError::OutOfRangePh(eq.ph))
     } else {
         Ok(eq)

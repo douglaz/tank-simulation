@@ -106,6 +106,17 @@ fn source_water_validation_rejects_nonfinite_neutral_fallback() {
 }
 
 #[test]
+fn source_water_validation_accepts_zero_dic_buffered_limit_case() {
+    let eq = validate_source_water_carbonate_profile(0.0, 2.0, 25.0)
+        .expect("zero-DIC buffered source water should remain valid at the alkaline ceiling");
+
+    assert_eq!(eq.ph, 8.5);
+    assert_eq!(eq.co2_aq_mmol_per_l, 0.0);
+    assert_eq!(eq.hco3_mmol_per_l, 0.0);
+    assert_eq!(eq.co3_mmol_per_l, 0.0);
+}
+
+#[test]
 fn dic_changes_do_not_directly_shift_alkalinity() -> Result<(), tank_core::SimError> {
     let mut lit = Engine::from_parts(chemistry_state(SimSeed(4_050), 12), vec![]);
     let mut dark = Engine::from_parts(chemistry_state(SimSeed(4_051), 0), vec![]);

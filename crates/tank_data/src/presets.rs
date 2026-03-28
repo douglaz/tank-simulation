@@ -81,7 +81,7 @@ impl SourceWaterPreset {
         .map_err(|err| match err {
             SourceWaterCarbonateValidationError::OutOfRangePh(ph) => {
                 format!(
-                    "carbonate-derived pH {:.3} falls outside the calibrated interior range ({}, {}) for dic_mg_c_per_l={} and alkalinity_meq_per_l={}",
+                    "carbonate-derived pH {:.3} falls outside the calibrated source-water envelope or lands on an unsupported clamp boundary ({}, {}) for dic_mg_c_per_l={} and alkalinity_meq_per_l={}",
                     ph,
                     CARBONATE_PH_MIN,
                     CARBONATE_PH_MAX,
@@ -939,6 +939,17 @@ mod tests {
 
         let err = preset.validate().expect_err("preset should be rejected");
         assert!(err.contains("non-finite neutral fallback"));
+    }
+
+    #[test]
+    fn source_water_preset_accepts_zero_dic_buffered_limit_case() {
+        let mut preset = source_preset(include_str!("../data/source_water/moderate.toml"));
+        preset.dic_mg_c_per_l = 0.0;
+        preset.alkalinity_meq_per_l = 2.0;
+
+        preset
+            .validate()
+            .expect("zero-DIC buffered source water should remain valid at the alkaline ceiling");
     }
 
     #[test]
