@@ -293,6 +293,7 @@ fn test_co2_exchange_independent_of_tank_volume() -> Result<(), tank_core::SimEr
 #[test]
 fn test_high_co2_from_respiration_drives_offgassing() -> Result<(), tank_core::SimError> {
     // Tank with active respiration that produces CO2 in the dark.
+    // Zero K_LA so atmospheric exchange doesn't overwhelm the respiration signal.
     let mut state = TankState::new(SimSeed(7500));
     let volume_l = state.water_volume_l();
     state.water.temperature_c = 25.0;
@@ -301,6 +302,9 @@ fn test_high_co2_from_respiration_drives_offgassing() -> Result<(), tank_core::S
     state.hardware.light.enabled = true;
     state.hardware.light.photoperiod_hours = 0.0; // always dark
     state.hardware.aeration.enabled = false;
+    state.process_params.reaeration_kla_base = 0.0;
+    state.process_params.aeration_kla_boost = 0.0;
+    state.hardware.filter.flow_lph = 0.0;
     state.plant_guilds[0].biomass_g = 15.0;
     state.plant_guilds[1].biomass_g = 10.0;
     state.animal.adults_count = 20;
