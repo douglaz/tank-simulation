@@ -64,6 +64,38 @@ struct TickContext {
     trace: Option<TickTraceBuilder>,
 }
 
+struct StageTrace {
+    enabled: bool,
+    notes: Vec<String>,
+}
+
+impl StageTrace {
+    fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            notes: Vec::new(),
+        }
+    }
+
+    fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn note(&mut self, note: impl Into<String>) {
+        if self.enabled {
+            self.notes.push(note.into());
+        }
+    }
+
+    fn into_notes(self) -> Vec<String> {
+        if self.enabled {
+            self.notes
+        } else {
+            Vec::new()
+        }
+    }
+}
+
 impl Engine {
     pub fn new(seed: SimSeed) -> Self {
         Self {
@@ -130,6 +162,7 @@ impl Engine {
             trace: self
                 .tracer
                 .as_ref()
+                .filter(|tracer| tracer.verbosity() > Verbosity::Off)
                 .map(|tracer| tracer.begin_tick(&self.state)),
         };
 
@@ -162,12 +195,14 @@ impl Engine {
             self.maybe_record_stage_with_explicit_budget(
                 &mut ctx,
                 label,
-                move |engine, tracking| ((), engine.process_action(action, tracking)),
+                move |engine, _stage_trace, tracking| {
+                    ((), engine.process_action(action, tracking))
+                },
             );
         }
 
         // Step 4: update water temperature from ambient and heater
-        self.maybe_record_stage(&mut ctx, "system:temperature", |engine| {
+        self.maybe_record_stage(&mut ctx, "system:temperature", |engine, _stage_trace| {
             systems::temperature::step_temperature(&mut engine.state);
         });
 
@@ -183,7 +218,7 @@ impl Engine {
         // This runs between light-state resolution and chemistry/DO/event phases.
         // Nitrification O2 consumption and alkalinity depletion are handled
         // internally by the nitrogen cycle system.
-        self.maybe_record_stage(&mut ctx, "system:nitrogen_cycle", |engine| {
+        self.maybe_record_stage(&mut ctx, "system:nitrogen_cycle", |engine, _stage_trace| {
             let _ = systems::nitrogen_cycle::step_nitrogen_cycle(&mut engine.state);
         });
 
@@ -191,7 +226,10 @@ impl Engine {
         self.maybe_record_stage_with_explicit_budget(
             &mut ctx,
             "system:chemistry",
-            move |engine, tracking| {
+            move |engine, stage_trace, tracking| {
+                let ph_before = engine.state.water.ph;
+                let dic_before = engine.state.water.dissolved_inorganic_carbon_mg_c_total;
+                let alkalinity_before = engine.state.water.alkalinity_meq_total;
                 let delta = if tracking {
                     Some(systems::chemistry::step_hourly_chemistry_with_budget(
                         &mut engine.state,
@@ -201,6 +239,23 @@ impl Engine {
                     systems::chemistry::step_hourly_chemistry(&mut engine.state, light_on);
                     None
                 };
+                if stage_trace.is_enabled() {
+                    stage_trace.note(format!("chemistry.light_on={light_on}"));
+                    stage_trace.note(format!("chemistry.ph.before={ph_before:.6}"));
+                    stage_trace.note(format!("chemistry.ph.after={:.6}", engine.state.water.ph));
+                    stage_trace.note(format!("chemistry.dic_mg_c.before={dic_before:.6}"));
+                    stage_trace.note(format!(
+                        "chemistry.dic_mg_c.after={:.6}",
+                        engine.state.water.dissolved_inorganic_carbon_mg_c_total
+                    ));
+                    stage_trace.note(format!(
+                        "chemistry.alkalinity_meq.before={alkalinity_before:.6}"
+                    ));
+                    stage_trace.note(format!(
+                        "chemistry.alkalinity_meq.after={:.6}",
+                        engine.state.water.alkalinity_meq_total
+                    ));
+                }
                 ((), delta)
             },
         );
@@ -210,7 +265,11 @@ impl Engine {
         self.maybe_record_stage_with_explicit_budget(
             &mut ctx,
             "system:dissolved_oxygen",
-            move |engine, tracking| {
+            move |engine, stage_trace, tracking| {
+                let oxygen_before = engine.state.water.dissolved_oxygen_mg_total;
+                let oxygen_kla = stage_trace
+                    .is_enabled()
+                    .then(|| systems::dissolved_oxygen::compute_o2_kla(&engine.state));
                 let delta = if tracking {
                     Some(
                         systems::dissolved_oxygen::step_dissolved_oxygen_with_budget(
@@ -222,17 +281,26 @@ impl Engine {
                     systems::dissolved_oxygen::step_dissolved_oxygen(&mut engine.state, light_on);
                     None
                 };
+                if let Some(oxygen_kla) = oxygen_kla {
+                    stage_trace.note(format!("dissolved_oxygen.light_on={light_on}"));
+                    stage_trace.note(format!("dissolved_oxygen.kla={oxygen_kla:.6}"));
+                    stage_trace.note(format!("dissolved_oxygen.do_mg.before={oxygen_before:.6}"));
+                    stage_trace.note(format!(
+                        "dissolved_oxygen.do_mg.after={:.6}",
+                        engine.state.water.dissolved_oxygen_mg_total
+                    ));
+                }
                 ((), delta)
             },
         );
 
         // Step 12: hourly shrimp stress accumulation.
-        self.maybe_record_stage(&mut ctx, "system:shrimp_stress", |engine| {
+        self.maybe_record_stage(&mut ctx, "system:shrimp_stress", |engine, _stage_trace| {
             systems::shrimp::step_hourly_shrimp_stress(&mut engine.state);
         });
 
         // Step 13: emit threshold-based chemistry warnings.
-        self.maybe_record_stage(&mut ctx, "system:hourly_events", |engine| {
+        self.maybe_record_stage(&mut ctx, "system:hourly_events", |engine, _stage_trace| {
             systems::events::emit_hourly_threshold_events(&mut engine.state);
         });
 
@@ -243,7 +311,7 @@ impl Engine {
             self.run_daily_update(&mut ctx);
         }
 
-        self.maybe_record_stage(&mut ctx, "system:invariants", |engine| {
+        self.maybe_record_stage(&mut ctx, "system:invariants", |engine, _stage_trace| {
             enforce_invariants(&mut engine.state)
         })?;
 
@@ -264,57 +332,79 @@ impl Engine {
 
     fn run_daily_update(&mut self, ctx: &mut TickContext) {
         // Daily pipeline: plants → algae → microfauna → stability → shrimp → biofilter
-        self.maybe_record_stage(ctx, "system:daily_plants", |engine| {
+        self.maybe_record_stage(ctx, "system:daily_plants", |engine, _stage_trace| {
             systems::plant_growth::step_daily_plants(&mut engine.state);
         });
-        self.maybe_record_stage(ctx, "system:daily_algae", |engine| {
+        self.maybe_record_stage(ctx, "system:daily_algae", |engine, _stage_trace| {
             systems::algae_growth::step_daily_algae(&mut engine.state);
         });
-        self.maybe_record_stage(ctx, "system:daily_microfauna", |engine| {
+        self.maybe_record_stage(ctx, "system:daily_microfauna", |engine, _stage_trace| {
             systems::microfauna::step_daily_microfauna(&mut engine.state);
         });
 
         // Update stability metrics before shrimp so that same-day chemistry
         // swings (water changes, temperature shifts) are reflected in the
         // instability_index that shrimp condition/mortality reads.
-        self.maybe_record_stage(ctx, "system:stability_tracker", |engine| {
+        self.maybe_record_stage(ctx, "system:stability_tracker", |engine, _stage_trace| {
             systems::shrimp::update_stability_tracker(&mut engine.state);
         });
 
-        self.maybe_record_stage(ctx, "system:daily_shrimp", |engine| {
+        self.maybe_record_stage(ctx, "system:daily_shrimp", |engine, _stage_trace| {
             systems::shrimp::step_daily_shrimp(&mut engine.state);
         });
-        self.maybe_record_stage(ctx, "system:daily_filter_clogging", |engine| {
+        self.maybe_record_stage(ctx, "system:daily_filter_clogging", |engine, _stage_trace| {
             systems::nitrogen_cycle::update_daily_filter_clogging(&mut engine.state);
         });
 
         // Biofilter maturity summary update
         let maturity_delta =
-            self.maybe_record_stage(ctx, "system:daily_biofilter_maturity", |engine| {
-                systems::nitrogen_cycle::update_daily_biofilter_maturity(&mut engine.state)
+            self.maybe_record_stage(ctx, "system:daily_biofilter_maturity", |engine, stage_trace| {
+                let maturity_before = engine.state.filter_state.biofilter_maturity_index;
+                let total_nitrifier_g = engine.state.microbe.ammonia_oxidizer_biomass_g
+                    + engine.state.microbe.nitrite_oxidizer_biomass_g
+                    + engine.state.microbe.comammox_biomass_g;
+                let maturity_delta =
+                    systems::nitrogen_cycle::update_daily_biofilter_maturity(&mut engine.state);
+                let biofilm_maturity_increase_emitted = maturity_delta > 0.005;
+                if biofilm_maturity_increase_emitted {
+                    engine.push_event(
+                        EventSeverity::Info,
+                        EventKind::BiofilmMaturityIncrease,
+                        vec![EventCause::BiofilterImmature],
+                        format!(
+                            "Biofilter maturity increased to {:.3}",
+                            engine.state.filter_state.biofilter_maturity_index
+                        ),
+                    );
+                }
+                let current_maturity = engine.state.filter_state.biofilter_maturity_index;
+                let cycle_progressing_emitted =
+                    maturity_delta > 0.001 && current_maturity < 0.9;
+                if cycle_progressing_emitted {
+                    systems::events::emit_once_per_day_pub(
+                        &mut engine.state,
+                        EventSeverity::Info,
+                        EventKind::CycleProgressing,
+                        vec![EventCause::BiofilterImmature],
+                        format!("Nitrogen cycle progressing, maturity {current_maturity:.3}"),
+                    );
+                }
+                if stage_trace.is_enabled() {
+                    stage_trace.note(format!("biofilter_maturity.before={maturity_before:.6}"));
+                    stage_trace
+                        .note(format!("biofilter_maturity.total_nitrifier_g={total_nitrifier_g:.6}"));
+                    stage_trace.note(format!("biofilter_maturity.delta={maturity_delta:.6}"));
+                    stage_trace.note(format!("biofilter_maturity.after={current_maturity:.6}"));
+                    stage_trace.note(format!(
+                        "biofilter_maturity.emitted.biofilm_maturity_increase={biofilm_maturity_increase_emitted}"
+                    ));
+                    stage_trace.note(format!(
+                        "biofilter_maturity.emitted.cycle_progressing={cycle_progressing_emitted}"
+                    ));
+                }
+                maturity_delta
             });
-        if maturity_delta > 0.005 {
-            self.push_event(
-                EventSeverity::Info,
-                EventKind::BiofilmMaturityIncrease,
-                vec![EventCause::BiofilterImmature],
-                format!(
-                    "Biofilter maturity increased to {:.3}",
-                    self.state.filter_state.biofilter_maturity_index
-                ),
-            );
-        }
-        // Emit CycleProgressing when maturity is actively growing
-        let current_maturity = self.state.filter_state.biofilter_maturity_index;
-        if maturity_delta > 0.001 && current_maturity < 0.9 {
-            systems::events::emit_once_per_day_pub(
-                &mut self.state,
-                EventSeverity::Info,
-                EventKind::CycleProgressing,
-                vec![EventCause::BiofilterImmature],
-                format!("Nitrogen cycle progressing, maturity {current_maturity:.3}"),
-            );
-        }
+        let _ = maturity_delta;
     }
 
     fn maybe_record_stage<F, R>(
@@ -324,7 +414,7 @@ impl Engine {
         stage: F,
     ) -> R
     where
-        F: FnOnce(&mut Self) -> R,
+        F: FnOnce(&mut Self, &mut StageTrace) -> R,
     {
         let budget_before = ctx
             .budget
@@ -336,8 +426,12 @@ impl Engine {
             .filter(|t| t.verbosity >= Verbosity::Detail)
             .map(|_| PoolSnapshot::capture(&self.state));
         let event_count_before = ctx.trace.as_ref().map(|_| self.state.event_log.len());
+        let mut stage_trace = StageTrace::new(matches!(
+            ctx.trace.as_ref(),
+            Some(trace) if trace.verbosity >= Verbosity::Trace
+        ));
 
-        let result = stage(self);
+        let result = stage(self, &mut stage_trace);
 
         if let (Some(tick), Some(before)) = (ctx.budget.as_mut(), budget_before) {
             let after = BudgetSnapshot::from_state(&self.state);
@@ -345,6 +439,7 @@ impl Engine {
             tick.record_stage(label, before.totals, after.totals, delta);
         }
 
+        let notes = stage_trace.into_notes();
         if let Some(trace) = ctx.trace.as_mut() {
             let pool_deltas = if let Some(before) = trace_before {
                 let after = PoolSnapshot::capture(&self.state);
@@ -358,7 +453,7 @@ impl Engine {
             trace.entries.push(SystemTraceEntry {
                 system: label.to_owned(),
                 pool_deltas,
-                notes: Vec::new(),
+                notes,
                 events_generated,
             });
         }
@@ -373,7 +468,7 @@ impl Engine {
         stage: F,
     ) -> R
     where
-        F: FnOnce(&mut Self, bool) -> (R, Option<BudgetDelta>),
+        F: FnOnce(&mut Self, &mut StageTrace, bool) -> (R, Option<BudgetDelta>),
     {
         let budget_before = ctx
             .budget
@@ -385,8 +480,12 @@ impl Engine {
             .filter(|t| t.verbosity >= Verbosity::Detail)
             .map(|_| PoolSnapshot::capture(&self.state));
         let event_count_before = ctx.trace.as_ref().map(|_| self.state.event_log.len());
+        let mut stage_trace = StageTrace::new(matches!(
+            ctx.trace.as_ref(),
+            Some(trace) if trace.verbosity >= Verbosity::Trace
+        ));
 
-        let (result, explicit_delta) = stage(self, ctx.budget.is_some());
+        let (result, explicit_delta) = stage(self, &mut stage_trace, ctx.budget.is_some());
 
         if let (Some(tick), Some(before)) = (ctx.budget.as_mut(), budget_before) {
             let after = BudgetSnapshot::from_state(&self.state);
@@ -395,6 +494,7 @@ impl Engine {
             tick.record_stage(label, before.totals, after.totals, delta);
         }
 
+        let notes = stage_trace.into_notes();
         if let Some(trace) = ctx.trace.as_mut() {
             let pool_deltas = if let Some(before) = trace_before {
                 let after = PoolSnapshot::capture(&self.state);
@@ -408,7 +508,7 @@ impl Engine {
             trace.entries.push(SystemTraceEntry {
                 system: label.to_owned(),
                 pool_deltas,
-                notes: Vec::new(),
+                notes,
                 events_generated,
             });
         }
