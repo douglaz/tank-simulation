@@ -281,9 +281,30 @@ fn collect_numeric_paths(value: &Value, prefix: &str, paths: &mut BTreeSet<Strin
 }
 
 fn is_animal_mass_budget_path(path: &str) -> bool {
-    path.starts_with("animal.")
-        && path.ends_with("_count")
-        && path != "animal.berried_females_count"
+    if !path.starts_with("animal.") {
+        return false;
+    }
+    // Stage-nested count fields: animal.adult.count, animal.sub_adult.count,
+    // animal.juvenile.count
+    if matches!(
+        path,
+        "animal.adult.count" | "animal.sub_adult.count" | "animal.juvenile.count"
+    ) {
+        return true;
+    }
+    // Flat count fields for future stages (e.g. animal.larvae_count), but
+    // berried_females_count is bookkeeping-only and excluded.
+    path.ends_with("_count") && path != "animal.berried_females_count"
+}
+
+/// Stage-nested reserve paths map to the aggregate `animal.reserve_g` budget
+/// component.  This helper identifies them so they can be collapsed during
+/// path normalisation.
+fn is_animal_reserve_path(path: &str) -> bool {
+    matches!(
+        path,
+        "animal.adult.reserve_g" | "animal.sub_adult.reserve_g" | "animal.juvenile.reserve_g"
+    )
 }
 
 fn is_shared_budget_path(path: &str) -> bool {
@@ -291,8 +312,19 @@ fn is_shared_budget_path(path: &str) -> bool {
         || path.ends_with("particulate_organics_g_total")
         || path.ends_with("fine_detritus_g_total")
         || path == "animal.reserve_g"
+        || is_animal_reserve_path(path)
         || path == "microfauna.reserve_g"
         || is_animal_mass_budget_path(path)
+}
+
+/// Collapse per-stage reserve paths into the aggregate `animal.reserve_g`
+/// label used by the budget component arrays.
+fn normalize_budget_path(path: &str) -> String {
+    if is_animal_reserve_path(path) {
+        "animal.reserve_g".to_string()
+    } else {
+        path.to_string()
+    }
 }
 
 fn is_nitrogen_budget_path(path: &str) -> bool {
@@ -380,12 +412,12 @@ fn test_budget_component_labels_cover_all_element_bearing_fields() {
     let nitrogen_paths: BTreeSet<_> = numeric_paths
         .iter()
         .filter(|path| is_nitrogen_budget_path(path))
-        .cloned()
+        .map(|path| normalize_budget_path(path))
         .collect();
     let carbon_paths: BTreeSet<_> = numeric_paths
         .iter()
         .filter(|path| is_carbon_budget_path(path))
-        .cloned()
+        .map(|path| normalize_budget_path(path))
         .collect();
     let nitrogen_labels: BTreeSet<_> = nitrogen_budget_components(&state)
         .into_iter()
