@@ -1,7 +1,6 @@
 use tank_core::{
-    compute_habitat_registry, find_habitat, HabitatEntry, HabitatKind, PlantGuild,
-    PlantGuildState, SimSeed, SubstrateKind, SubstrateLayerState, TankGeometry, TankState,
-    WaterState,
+    compute_habitat_registry, find_habitat, HabitatEntry, HabitatKind, PlantGuild, PlantGuildState,
+    SimSeed, SubstrateKind, SubstrateLayerState, TankGeometry, TankState, WaterState,
 };
 
 // ---------------------------------------------------------------------------
@@ -58,7 +57,11 @@ fn habitat_entry_serialization_round_trip() -> Result<(), Box<dyn std::error::Er
 fn full_registry_serialization_round_trip() -> Result<(), Box<dyn std::error::Error>> {
     let state = default_state();
     let registry = &state.habitat_registry;
-    assert_eq!(registry.len(), 5, "registry should have one entry per HabitatKind");
+    assert_eq!(
+        registry.len(),
+        5,
+        "registry should have one entry per HabitatKind"
+    );
 
     let json = serde_json::to_string(registry)?;
     let deserialized: Vec<HabitatEntry> = serde_json::from_str(&json)?;
@@ -347,8 +350,6 @@ fn plant_crowding_reduces_light_exposure() -> Result<(), Box<dyn std::error::Err
     for p in &mut sparse.plant_guilds {
         p.crowding_index = 0.0;
     }
-    let sparse_reg = compute_habitat_registry(&sparse);
-
     let mut dense = default_state();
     for p in &mut dense.plant_guilds {
         p.crowding_index = 0.9;
@@ -410,7 +411,8 @@ fn substrate_deep_oxygen_capped() -> Result<(), Box<dyn std::error::Error>> {
 
 #[test]
 fn all_modifiers_bounded_under_extreme_inputs() -> Result<(), Box<dyn std::error::Error>> {
-    let scenarios: Vec<(&str, Box<dyn Fn(&mut TankState)>)> = vec![
+    type Scenario = (&'static str, Box<dyn Fn(&mut TankState)>);
+    let scenarios: Vec<Scenario> = vec![
         (
             "max_everything",
             Box::new(|s: &mut TankState| {
@@ -575,7 +577,8 @@ fn find_habitat_returns_none_for_missing() -> Result<(), Box<dyn std::error::Err
 // ---------------------------------------------------------------------------
 
 #[test]
-fn larger_tank_produces_larger_wall_and_substrate_areas() -> Result<(), Box<dyn std::error::Error>> {
+fn larger_tank_produces_larger_wall_and_substrate_areas() -> Result<(), Box<dyn std::error::Error>>
+{
     let small = default_state(); // 40×25 cm
     let small_reg = compute_habitat_registry(&small);
 
