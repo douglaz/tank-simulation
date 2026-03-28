@@ -151,10 +151,10 @@ mod tests {
     use serde_json::json;
     use tank_core::{rng::SimSeed, TankState};
 
-    use super::{parse_snapshot_value, LEGACY_SNAPSHOT_CHEMISTRY_FIELDS};
+    use super::{parse_load_response, parse_snapshot_value, LEGACY_SNAPSHOT_CHEMISTRY_FIELDS};
 
-    fn legacy_snapshot_value() -> serde_json::Value {
-        let snapshot = tank_core::TankSnapshot::from_state(&TankState::new(SimSeed(777)));
+    fn legacy_snapshot_value(seed: SimSeed) -> serde_json::Value {
+        let snapshot = tank_core::TankSnapshot::from_state(&TankState::new(seed));
         let mut value = serde_json::to_value(&snapshot).expect("snapshot should serialize");
         let object = value
             .as_object_mut()
@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn parses_legacy_snapshot_chemistry_field_names() {
         let expected = tank_core::TankSnapshot::from_state(&TankState::new(SimSeed(777)));
-        let value = legacy_snapshot_value();
+        let value = legacy_snapshot_value(SimSeed(777));
 
         let parsed = parse_snapshot_value(value).expect("legacy snapshot should deserialize");
 
@@ -190,6 +190,16 @@ mod tests {
         }
 
         let parsed = parse_snapshot_value(value).expect("canonical snapshot should deserialize");
+
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn parses_load_response_with_legacy_snapshot_chemistry_field_names() {
+        let expected = tank_core::TankSnapshot::from_state(&TankState::new(SimSeed(999)));
+        let body = json!({ "snapshot": legacy_snapshot_value(SimSeed(999)) });
+
+        let parsed = parse_load_response(body).expect("legacy load response should deserialize");
 
         assert_eq!(parsed, expected);
     }
