@@ -12,18 +12,18 @@ pub async fn get_snapshot(State(state): State<AppState>) -> Json<tank_core::Tank
 #[derive(Serialize)]
 pub struct ChemistrySnapshot {
     pub ph: f64,
-    pub tan_mg_l: f64,
-    pub nh3_mg_l: f64,
-    pub nitrite_mg_l: f64,
-    pub nitrate_mg_l: f64,
-    pub phosphate_mg_l: f64,
-    pub dissolved_inorganic_carbon_mg_l: f64,
+    pub tan_mg_n_per_l: f64,
+    pub nh3_mg_n_per_l: f64,
+    pub nitrite_mg_n_per_l: f64,
+    pub nitrate_mg_n_per_l: f64,
+    pub phosphate_mg_p_per_l: f64,
+    pub dissolved_inorganic_carbon_mg_c_per_l: f64,
     pub do_mg_l: f64,
     pub do_sat_mg_l: f64,
     pub gh_d: f64,
     pub kh_d: f64,
-    pub tds_mg_l: f64,
-    pub conductivity_us_cm: f64,
+    pub estimated_tds_7_ion_mg_per_l: f64,
+    pub estimated_conductivity_us_cm: f64,
 }
 
 pub async fn get_chemistry(State(state): State<AppState>) -> Json<ChemistrySnapshot> {
@@ -31,18 +31,18 @@ pub async fn get_chemistry(State(state): State<AppState>) -> Json<ChemistrySnaps
     let s = engine.snapshot();
     Json(ChemistrySnapshot {
         ph: s.ph,
-        tan_mg_l: s.tan_mg_l,
-        nh3_mg_l: s.nh3_mg_l,
-        nitrite_mg_l: s.nitrite_mg_l,
-        nitrate_mg_l: s.nitrate_mg_l,
-        phosphate_mg_l: s.phosphate_mg_l,
-        dissolved_inorganic_carbon_mg_l: s.dissolved_inorganic_carbon_mg_l,
+        tan_mg_n_per_l: s.tan_mg_n_per_l,
+        nh3_mg_n_per_l: s.nh3_mg_n_per_l,
+        nitrite_mg_n_per_l: s.nitrite_mg_n_per_l,
+        nitrate_mg_n_per_l: s.nitrate_mg_n_per_l,
+        phosphate_mg_p_per_l: s.phosphate_mg_p_per_l,
+        dissolved_inorganic_carbon_mg_c_per_l: s.dissolved_inorganic_carbon_mg_c_per_l,
         do_mg_l: s.do_mg_l,
         do_sat_mg_l: s.do_sat_mg_l,
         gh_d: s.gh_d,
         kh_d: s.kh_d,
-        tds_mg_l: s.tds_mg_l,
-        conductivity_us_cm: s.conductivity_us_cm,
+        estimated_tds_7_ion_mg_per_l: s.estimated_tds_7_ion_mg_per_l,
+        estimated_conductivity_us_cm: s.estimated_conductivity_us_cm,
     })
 }
 

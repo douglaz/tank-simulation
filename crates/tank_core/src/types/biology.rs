@@ -59,18 +59,48 @@ pub struct MicrofaunaState {
     pub reserve_g: f64,
 }
 
+/// Per-stage cohort with its own count, reserve, condition, and maturation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StageCohort {
+    pub count: u32,
+    /// Assimilated organic reserve (grams of organic matter) for this stage.
+    #[serde(default)]
+    pub reserve_g: f64,
+    /// Condition index for this stage, in [0, 1].
+    #[serde(default = "default_condition_index")]
+    pub condition_index: f64,
+    /// Fractional maturation accumulator for stage promotion.
+    #[serde(default)]
+    pub maturation_accum: f64,
+}
+
+fn default_condition_index() -> f64 {
+    0.8
+}
+
+impl Default for StageCohort {
+    fn default() -> Self {
+        Self {
+            count: 0,
+            reserve_g: 0.0,
+            condition_index: 0.8,
+            maturation_accum: 0.0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AnimalState {
-    /// Top-level animal count fields with the `_count` suffix are treated as
-    /// implicit biomass-bearing pools by the canonical N/C budget helpers.
-    pub adults_count: u32,
-    /// Top-level animal count fields with the `_count` suffix are treated as
-    /// implicit biomass-bearing pools by the canonical N/C budget helpers.
-    pub juveniles_count: u32,
+    /// Adult stage cohort.
+    pub adult: StageCohort,
+    /// Sub-adult stage cohort (intermediate between juvenile and adult).
+    #[serde(default)]
+    pub sub_adult: StageCohort,
+    /// Juvenile stage cohort.
+    pub juvenile: StageCohort,
     /// Subset bookkeeping only: these shrimp are already included in
-    /// `adults_count` and therefore do not represent an extra biomass pool.
+    /// `adult.count` and therefore do not represent an extra biomass pool.
     pub berried_females_count: u32,
-    pub condition_index: f64,
     pub molt_stress_index: f64,
     pub reproductive_readiness_index: f64,
     pub egg_progress_days: f64,
@@ -93,16 +123,26 @@ pub struct AnimalState {
     /// field is recorded so satiation and reserve routing use the same units.
     #[serde(default)]
     pub daily_food_consumed_g: f64,
-    /// Fractional maturation accumulator for juvenile → adult promotion.
+    /// Molt readiness index, in [0, 1].
     #[serde(default)]
-    pub maturation_accum: f64,
-    /// Assimilated organic reserve (grams of organic matter).
-    /// Tracks the retained share of feeding that has not yet been used for
-    /// growth/reproduction. Carries both N and C at the feed_n_to_c_ratio.
-    /// This pool is the explicit "retained" destination in the consumer
-    /// routing contract (see docs/ROUTING.md).
+    pub molt_readiness: f64,
+    /// Failed molt accumulator, in [0, 1].
     #[serde(default)]
-    pub reserve_g: f64,
+    pub failed_molt_accum: f64,
+    /// Days since the last population-wide molt event.
+    #[serde(default = "default_inter_molt_timer_days")]
+    pub inter_molt_timer_days: f64,
+    /// Whether the most recent molt cycle succeeded.
+    #[serde(default = "default_last_molt_success")]
+    pub last_molt_success: bool,
+}
+
+fn default_inter_molt_timer_days() -> f64 {
+    14.0
+}
+
+fn default_last_molt_success() -> bool {
+    true
 }
 
 pub const DEFAULT_SHRIMP_BODY_NITROGEN_MG_PER_G_WET_MASS: f64 = 27.586206896551722;
@@ -137,6 +177,33 @@ pub struct ShrimpRuntimeParams {
     /// releases derived implicitly from the generic detrital `feed_n_to_c_ratio`.
     #[serde(default = "default_shrimp_body_carbon_mg_per_g_wet_mass")]
     pub body_carbon_mg_per_g_wet_mass: f64,
+    /// Base days for juvenile -> sub-adult transition at optimal conditions.
+    #[serde(default = "default_juvenile_to_subadult_days")]
+    pub juvenile_to_subadult_days: f64,
+    /// Base days for sub-adult -> adult transition at optimal conditions.
+    #[serde(default = "default_subadult_to_adult_days")]
+    pub subadult_to_adult_days: f64,
+    /// Minimum condition for juvenile maturation to proceed.
+    #[serde(default = "default_juvenile_maturation_condition_threshold")]
+    pub juvenile_maturation_condition_threshold: f64,
+    /// Minimum condition for sub-adult maturation to proceed.
+    #[serde(default = "default_subadult_maturation_condition_threshold")]
+    pub subadult_maturation_condition_threshold: f64,
+    /// Base inter-molt period at optimal conditions (days).
+    #[serde(default = "default_base_molt_interval_days")]
+    pub base_molt_interval_days: f64,
+    /// Additional daily mortality fraction per unit of failed_molt_accum.
+    #[serde(default = "default_failed_molt_mortality_scale")]
+    pub failed_molt_mortality_scale: f64,
+    /// Stress sensitivity multiplier for sub-adult mortality.
+    #[serde(default = "default_sub_adult_sensitivity")]
+    pub sub_adult_sensitivity: f64,
+    /// Base juveniles per clutch at good condition.
+    #[serde(default = "default_base_clutch_size")]
+    pub base_clutch_size: u32,
+    /// Condition below which clutch size is zero.
+    #[serde(default = "default_min_clutch_condition")]
+    pub min_clutch_condition: f64,
 }
 
 /// Tracks recent chemistry swings for shrimp stress calculations.
@@ -205,10 +272,10 @@ impl Default for MicrofaunaState {
 impl Default for AnimalState {
     fn default() -> Self {
         Self {
-            adults_count: 0,
-            juveniles_count: 0,
+            adult: StageCohort::default(),
+            sub_adult: StageCohort::default(),
+            juvenile: StageCohort::default(),
             berried_females_count: 0,
-            condition_index: 0.8,
             molt_stress_index: 0.1,
             reproductive_readiness_index: 0.4,
             egg_progress_days: 0.0,
@@ -219,8 +286,10 @@ impl Default for AnimalState {
             hourly_heat_stress_accum: 0.0,
             hourly_instability_stress_accum: 0.0,
             daily_food_consumed_g: 0.0,
-            maturation_accum: 0.0,
-            reserve_g: 0.0,
+            molt_readiness: 0.0,
+            failed_molt_accum: 0.0,
+            inter_molt_timer_days: 14.0,
+            last_molt_success: true,
         }
     }
 }
@@ -240,6 +309,17 @@ impl Default for ShrimpRuntimeParams {
             high_temp_repro_penalty_full_c: 33.0,
             body_nitrogen_mg_per_g_wet_mass: default_shrimp_body_nitrogen_mg_per_g_wet_mass(),
             body_carbon_mg_per_g_wet_mass: default_shrimp_body_carbon_mg_per_g_wet_mass(),
+            juvenile_to_subadult_days: default_juvenile_to_subadult_days(),
+            subadult_to_adult_days: default_subadult_to_adult_days(),
+            juvenile_maturation_condition_threshold:
+                default_juvenile_maturation_condition_threshold(),
+            subadult_maturation_condition_threshold:
+                default_subadult_maturation_condition_threshold(),
+            base_molt_interval_days: default_base_molt_interval_days(),
+            failed_molt_mortality_scale: default_failed_molt_mortality_scale(),
+            sub_adult_sensitivity: default_sub_adult_sensitivity(),
+            base_clutch_size: default_base_clutch_size(),
+            min_clutch_condition: default_min_clutch_condition(),
         }
     }
 }
@@ -250,6 +330,42 @@ fn default_shrimp_body_nitrogen_mg_per_g_wet_mass() -> f64 {
 
 fn default_shrimp_body_carbon_mg_per_g_wet_mass() -> f64 {
     DEFAULT_SHRIMP_BODY_CARBON_MG_PER_G_WET_MASS
+}
+
+fn default_juvenile_to_subadult_days() -> f64 {
+    30.0
+}
+
+fn default_subadult_to_adult_days() -> f64 {
+    20.0
+}
+
+fn default_juvenile_maturation_condition_threshold() -> f64 {
+    0.3
+}
+
+fn default_subadult_maturation_condition_threshold() -> f64 {
+    0.4
+}
+
+fn default_base_molt_interval_days() -> f64 {
+    28.0
+}
+
+fn default_failed_molt_mortality_scale() -> f64 {
+    0.15
+}
+
+fn default_sub_adult_sensitivity() -> f64 {
+    1.2
+}
+
+fn default_base_clutch_size() -> u32 {
+    25
+}
+
+fn default_min_clutch_condition() -> f64 {
+    0.3
 }
 
 impl Default for StabilityTracker {
@@ -305,17 +421,42 @@ impl PlantGuildState {
 impl AnimalState {
     pub fn with_adults(adults_count: u32) -> Self {
         Self {
-            adults_count,
+            adult: StageCohort {
+                count: adults_count,
+                ..StageCohort::default()
+            },
             ..Self::default()
         }
     }
 
-    /// Ensures `berried_females_count <= adults_count` by trimming
+    /// Total shrimp across all stages.
+    pub fn total_count(&self) -> u32 {
+        self.adult.count + self.sub_adult.count + self.juvenile.count
+    }
+
+    /// Total organic reserve across all stages (grams).
+    pub fn total_reserve_g(&self) -> f64 {
+        self.adult.reserve_g + self.sub_adult.reserve_g + self.juvenile.reserve_g
+    }
+
+    /// Population-weighted condition index across all stages.
+    pub fn population_condition_index(&self) -> f64 {
+        let total = self.total_count();
+        if total == 0 {
+            return 0.0;
+        }
+        let weighted = f64::from(self.adult.count) * self.adult.condition_index
+            + f64::from(self.sub_adult.count) * self.sub_adult.condition_index
+            + f64::from(self.juvenile.count) * self.juvenile.condition_index;
+        weighted / f64::from(total)
+    }
+
+    /// Ensures `berried_females_count <= adult.count` by trimming
     /// excess from the newest egg cohorts first.
     pub fn clamp_berried_to_adults(&mut self) {
-        if self.berried_females_count > self.adults_count {
-            let excess = self.berried_females_count - self.adults_count;
-            self.berried_females_count = self.adults_count;
+        if self.berried_females_count > self.adult.count {
+            let excess = self.berried_females_count - self.adult.count;
+            self.berried_females_count = self.adult.count;
             trim_egg_cohorts(&mut self.egg_cohorts, excess);
         }
     }

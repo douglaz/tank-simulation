@@ -77,9 +77,9 @@ fn weekly_maintenance(engine: &mut Engine, days: u32, feed_g: f64, wc_percent: f
 fn assert_finite_snapshot(s: &TankSnapshot) {
     assert!(s.ph.is_finite(), "pH NaN/Inf");
     assert!(s.water_temp_c.is_finite(), "temp NaN/Inf");
-    assert!(s.tan_mg_l.is_finite(), "TAN NaN/Inf");
-    assert!(s.nitrite_mg_l.is_finite(), "NO2 NaN/Inf");
-    assert!(s.nitrate_mg_l.is_finite(), "NO3 NaN/Inf");
+    assert!(s.tan_mg_n_per_l.is_finite(), "TAN NaN/Inf");
+    assert!(s.nitrite_mg_n_per_l.is_finite(), "NO2 NaN/Inf");
+    assert!(s.nitrate_mg_n_per_l.is_finite(), "NO3 NaN/Inf");
     assert!(s.do_mg_l.is_finite(), "DO NaN/Inf");
     assert!(s.gh_d.is_finite(), "GH NaN/Inf");
     assert!(s.kh_d.is_finite(), "KH NaN/Inf");
@@ -94,9 +94,9 @@ fn print_status(label: &str, s: &TankSnapshot, engine: &Engine) {
          shrimp {}/{}/{} | plants {:.2}g | algae {:.3}g | biofilter {:.3}",
         s.water_temp_c,
         s.ph,
-        s.tan_mg_l,
-        s.nitrite_mg_l,
-        s.nitrate_mg_l,
+        s.tan_mg_n_per_l,
+        s.nitrite_mg_n_per_l,
+        s.nitrate_mg_n_per_l,
         s.do_mg_l,
         s.gh_d,
         st.animal.adults_count,
@@ -301,7 +301,7 @@ fn happy_determinism_full_journey() {
 
     assert_eq!(s1.ph, s2.ph, "pH must be deterministic");
     assert_eq!(s1.water_temp_c, s2.water_temp_c, "temp deterministic");
-    assert_eq!(s1.tan_mg_l, s2.tan_mg_l, "TAN deterministic");
+    assert_eq!(s1.tan_mg_n_per_l, s2.tan_mg_n_per_l, "TAN deterministic");
     assert_eq!(s1.do_mg_l, s2.do_mg_l, "DO deterministic");
     assert_eq!(
         s1.adult_shrimp_count, s2.adult_shrimp_count,
@@ -328,7 +328,7 @@ fn sad_no_water_changes() {
     assert_finite_snapshot(&s);
 
     // TAN or nitrate should be elevated from no dilution
-    let total_dissolved_n = s.tan_mg_l + s.nitrite_mg_l + s.nitrate_mg_l;
+    let total_dissolved_n = s.tan_mg_n_per_l + s.nitrite_mg_n_per_l + s.nitrate_mg_n_per_l;
     println!("  Total dissolved N: {:.2} mg/L", total_dissolved_n);
 
     // In a neglected nano, shrimp should be stressed or dead
@@ -359,10 +359,10 @@ fn sad_massive_overfeeding() {
 
     // Ammonia should spike from decomposing food
     assert!(
-        s_after.tan_mg_l > s_before.tan_mg_l,
+        s_after.tan_mg_n_per_l > s_before.tan_mg_n_per_l,
         "TAN should spike after overfeeding: {:.3} -> {:.3}",
-        s_before.tan_mg_l,
-        s_after.tan_mg_l
+        s_before.tan_mg_n_per_l,
+        s_after.tan_mg_n_per_l
     );
 
     // Detritus should accumulate
@@ -486,13 +486,13 @@ fn sad_filter_off_ammonia_rises() {
 
     // The no-filter run should have equal or worse TAN (less processing)
     // or lower biofilter maturity.
-    let filtered_better = s_filtered.tan_mg_l <= s_no_filter.tan_mg_l
+    let filtered_better = s_filtered.tan_mg_n_per_l <= s_no_filter.tan_mg_n_per_l
         || s_filtered.biofilter_maturity_index >= s_no_filter.biofilter_maturity_index;
     assert!(
         filtered_better,
         "filter should help: TAN {:.3} vs {:.3}, maturity {:.4} vs {:.4}",
-        s_filtered.tan_mg_l,
-        s_no_filter.tan_mg_l,
+        s_filtered.tan_mg_n_per_l,
+        s_no_filter.tan_mg_n_per_l,
         s_filtered.biofilter_maturity_index,
         s_no_filter.biofilter_maturity_index,
     );
@@ -529,7 +529,7 @@ fn sad_overstocking_nano() {
 
     // With 50 shrimp in 10L and heavy feeding, conditions should be poor
     // Ammonia should be elevated
-    assert!(s.tan_mg_l > 0.5, "TAN should be elevated from overstocking");
+    assert!(s.tan_mg_n_per_l > 0.5, "TAN should be elevated from overstocking");
 }
 
 /// User removes all shrimp — ecosystem should still function, just without fauna.

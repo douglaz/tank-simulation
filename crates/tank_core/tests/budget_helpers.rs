@@ -246,7 +246,7 @@ fn trim_plants_is_closed_system_via_helpers() -> Result<(), SimError> {
     state.plant_guilds[1].biomass_g = 3.5;
     let mut engine = Engine::from_parts(state, vec![]);
 
-    engine.apply_action(PlayerAction::TrimPlants { fraction: 0.25 })?;
+    engine.apply_action(PlayerAction::TrimPlantsAndRemove { fraction: 0.25 })?;
     let result = step_and_inspect(&mut engine, 1)?;
 
     // Trim plants is closed-system: N and C should be conserved
@@ -279,7 +279,7 @@ fn step_and_inspect_returns_snapshot() -> Result<(), SimError> {
 
     assert!(result.snapshot.ph.is_finite());
     assert!(result.snapshot.water_temp_c.is_finite());
-    assert!(result.snapshot.tan_mg_l.is_finite());
+    assert!(result.snapshot.tan_mg_n_per_l.is_finite());
 
     Ok(())
 }

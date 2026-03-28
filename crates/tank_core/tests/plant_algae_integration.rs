@@ -205,7 +205,7 @@ fn trim_plants_routes_mass_to_detritus() -> Result<(), tank_core::SimError> {
     }];
 
     let mut engine = Engine::from_parts(state, vec![]);
-    engine.apply_action(PlayerAction::TrimPlants { fraction: 0.25 })?;
+    engine.apply_action(PlayerAction::TrimPlantsAndRemove { fraction: 0.25 })?;
     engine.step_hours(1)?;
 
     let state = engine.full_state();

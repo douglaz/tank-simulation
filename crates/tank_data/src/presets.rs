@@ -1,11 +1,15 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use tank_core::systems::chemistry::{
     validate_source_water_carbonate_profile, SourceWaterCarbonateValidationError, CARBONATE_PH_MAX,
     CARBONATE_PH_MIN,
 };
+use tank_core::types::provenance::{ParamMeta, RangeWarning};
 
 const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
 
+/// Preset-level provenance metadata (describes the preset file as a whole).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Provenance {
     pub source_title: Option<String>,
@@ -377,6 +381,125 @@ pub struct ProcessParamsPreset {
     pub microfauna_shrimp_pressure_threshold: f64,
 
     pub provenance: Option<Provenance>,
+
+    /// Per-parameter provenance metadata keyed by parameter name.
+    /// Missing entries mean no provenance has been attached yet.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub param_meta: BTreeMap<String, ParamMeta>,
+}
+
+impl ProcessParamsPreset {
+    /// Look up a parameter value by name. Returns `None` for unknown names.
+    pub fn param_value(&self, name: &str) -> Option<f64> {
+        match name {
+            "mineralization_rate_per_day" => Some(self.mineralization_rate_per_day),
+            "nitrification_vmax" => Some(self.nitrification_vmax),
+            "reaeration_kla_base" => Some(self.reaeration_kla_base),
+            "aeration_kla_boost" => Some(self.aeration_kla_boost),
+            "background_bod_mg_o2_per_g_biomass_per_hour" => {
+                Some(self.background_bod_mg_o2_per_g_biomass_per_hour)
+            }
+            "plant_photosynthesis_o2_mg_per_g_per_hour" => {
+                Some(self.plant_photosynthesis_o2_mg_per_g_per_hour)
+            }
+            "respiration_dic_rate_mg_c_per_g_per_hour" => {
+                Some(self.respiration_dic_rate_mg_c_per_g_per_hour)
+            }
+            "photosynthesis_dic_rate_mg_c_per_g_per_hour" => {
+                Some(self.photosynthesis_dic_rate_mg_c_per_g_per_hour)
+            }
+            "k_surface_w_per_m2_k" => Some(self.k_surface_w_per_m2_k),
+            "k_wall_w_per_m2_k" => Some(self.k_wall_w_per_m2_k),
+            "feed_leach_rate_per_hour" => Some(self.feed_leach_rate_per_hour),
+            "fine_detritus_dissolution_rate_per_hour" => {
+                Some(self.fine_detritus_dissolution_rate_per_hour)
+            }
+            "feed_n_to_c_ratio" => Some(self.feed_n_to_c_ratio),
+            "decomposer_vmax_per_hour" => Some(self.decomposer_vmax_per_hour),
+            "decomposer_k_doc_mg" => Some(self.decomposer_k_doc_mg),
+            "decomposer_k_do_mg" => Some(self.decomposer_k_do_mg),
+            "decomposer_growth_yield" => Some(self.decomposer_growth_yield),
+            "decomposer_decay_rate_per_hour" => Some(self.decomposer_decay_rate_per_hour),
+            "aob_vmax_mg_n_per_g_per_hour" => Some(self.aob_vmax_mg_n_per_g_per_hour),
+            "aob_k_tan_mg" => Some(self.aob_k_tan_mg),
+            "aob_k_do_mg" => Some(self.aob_k_do_mg),
+            "aob_growth_yield" => Some(self.aob_growth_yield),
+            "aob_decay_rate_per_hour" => Some(self.aob_decay_rate_per_hour),
+            "nob_vmax_mg_n_per_g_per_hour" => Some(self.nob_vmax_mg_n_per_g_per_hour),
+            "nob_k_nitrite_mg" => Some(self.nob_k_nitrite_mg),
+            "nob_k_do_mg" => Some(self.nob_k_do_mg),
+            "nob_growth_yield" => Some(self.nob_growth_yield),
+            "nob_decay_rate_per_hour" => Some(self.nob_decay_rate_per_hour),
+            "comammox_vmax_fraction" => Some(self.comammox_vmax_fraction),
+            "comammox_k_tan_mg" => Some(self.comammox_k_tan_mg),
+            "comammox_k_do_mg" => Some(self.comammox_k_do_mg),
+            "comammox_growth_yield" => Some(self.comammox_growth_yield),
+            "comammox_decay_rate_per_hour" => Some(self.comammox_decay_rate_per_hour),
+            "o2_per_mg_n_nitrified" => Some(self.o2_per_mg_n_nitrified),
+            "alkalinity_meq_per_mg_n_nitrified" => Some(self.alkalinity_meq_per_mg_n_nitrified),
+            "plant_max_growth_rate_fast_stem_per_day" => {
+                Some(self.plant_max_growth_rate_fast_stem_per_day)
+            }
+            "plant_max_growth_rate_root_rosette_per_day" => {
+                Some(self.plant_max_growth_rate_root_rosette_per_day)
+            }
+            "plant_respiration_fraction_per_day" => Some(self.plant_respiration_fraction_per_day),
+            "plant_senescence_fraction_per_day" => Some(self.plant_senescence_fraction_per_day),
+            "plant_health_recovery_per_day" => Some(self.plant_health_recovery_per_day),
+            "plant_health_decline_per_day" => Some(self.plant_health_decline_per_day),
+            "plant_half_saturation_n_mg_total" => Some(self.plant_half_saturation_n_mg_total),
+            "plant_half_saturation_p_mg_total" => Some(self.plant_half_saturation_p_mg_total),
+            "plant_half_saturation_c_mg_total" => Some(self.plant_half_saturation_c_mg_total),
+            "plant_light_half_saturation" => Some(self.plant_light_half_saturation),
+            "plant_temp_optimum_c" => Some(self.plant_temp_optimum_c),
+            "plant_temp_sigma_c" => Some(self.plant_temp_sigma_c),
+            "plant_crowding_biomass_g_per_m2" => Some(self.plant_crowding_biomass_g_per_m2),
+            "algae_max_growth_rate_per_day" => Some(self.algae_max_growth_rate_per_day),
+            "periphyton_max_growth_rate_per_day" => Some(self.periphyton_max_growth_rate_per_day),
+            "algae_respiration_fraction_per_day" => Some(self.algae_respiration_fraction_per_day),
+            "algae_half_saturation_n_mg_total" => Some(self.algae_half_saturation_n_mg_total),
+            "algae_half_saturation_p_mg_total" => Some(self.algae_half_saturation_p_mg_total),
+            "algae_light_half_saturation" => Some(self.algae_light_half_saturation),
+            "algae_temp_optimum_c" => Some(self.algae_temp_optimum_c),
+            "algae_temp_sigma_c" => Some(self.algae_temp_sigma_c),
+            "periphyton_capacity_g_per_m2" => Some(self.periphyton_capacity_g_per_m2),
+            "algae_bloom_threshold_g_per_l" => Some(self.algae_bloom_threshold_g_per_l),
+            "algae_nuisance_biomass_g_per_m2" => Some(self.algae_nuisance_biomass_g_per_m2),
+            "shrimp_base_mortality_per_day" => Some(self.shrimp_base_mortality_per_day),
+            "shrimp_stress_mortality_scale" => Some(self.shrimp_stress_mortality_scale),
+            "shrimp_juvenile_maturation_days" => Some(self.shrimp_juvenile_maturation_days),
+            "shrimp_periphyton_grazing_g_per_shrimp_per_day" => {
+                Some(self.shrimp_periphyton_grazing_g_per_shrimp_per_day)
+            }
+            "shrimp_condition_smoothing" => Some(self.shrimp_condition_smoothing),
+            "shrimp_assimilation_efficiency" => Some(self.shrimp_assimilation_efficiency),
+            "shrimp_respiration_fraction_of_assimilated" => {
+                Some(self.shrimp_respiration_fraction_of_assimilated)
+            }
+            "shrimp_excretion_fraction_of_assimilated" => {
+                Some(self.shrimp_excretion_fraction_of_assimilated)
+            }
+            "shrimp_growth_fraction_of_assimilated" => {
+                Some(self.shrimp_growth_fraction_of_assimilated)
+            }
+            "shrimp_o2_per_mg_c_respired" => Some(self.shrimp_o2_per_mg_c_respired),
+            "microfauna_mineralization_boost" => Some(self.microfauna_mineralization_boost),
+            "microfauna_periphyton_consumption" => Some(self.microfauna_periphyton_consumption),
+            "microfauna_population_smoothing" => Some(self.microfauna_population_smoothing),
+            "microfauna_shrimp_pressure_threshold" => {
+                Some(self.microfauna_shrimp_pressure_threshold)
+            }
+            _ => None,
+        }
+    }
+
+    /// Check all param_meta entries with valid_range against current values.
+    /// Returns warnings for out-of-range values (never errors).
+    pub fn check_ranges(&self) -> Vec<RangeWarning> {
+        tank_core::types::provenance::check_all_ranges(&self.param_meta, &|name| {
+            self.param_value(name)
+        })
+    }
 }
 
 fn default_feed_leach_rate() -> f64 {
@@ -894,6 +1017,9 @@ pub struct ScenarioPreset {
 #[cfg(test)]
 mod tests {
     use super::{ProcessParamsPreset, SourceWaterPreset};
+    use tank_core::types::provenance::{
+        check_param_range, format_param, ConfidenceLevel, ParamMeta,
+    };
 
     fn default_process_preset() -> ProcessParamsPreset {
         toml::from_str(include_str!("../data/process/default.toml"))
@@ -903,6 +1029,254 @@ mod tests {
     fn source_preset(contents: &str) -> SourceWaterPreset {
         toml::from_str(contents).expect("source preset should parse")
     }
+
+    // ---- Provenance acceptance-criteria tests ----
+
+    /// AC 1: A parameter with full provenance metadata serializes and
+    /// deserializes correctly via TOML.
+    #[test]
+    fn test_provenance_schema_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+        let toml_str = r#"
+id = "test"
+name = "Test"
+mineralization_rate_per_day = 0.15
+nitrification_vmax = 0.08
+reaeration_kla_base = 0.35
+aeration_kla_boost = 0.9
+background_bod_mg_o2_per_g_biomass_per_hour = 0.05
+plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
+respiration_dic_rate_mg_c_per_g_per_hour = 0.0
+photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0
+k_surface_w_per_m2_k = 10.0
+k_wall_w_per_m2_k = 5.0
+
+[param_meta.aob_k_tan_mg]
+unit = "mg N/L"
+source = "EPA 2013 ammonia criteria"
+confidence = "literature"
+valid_range = [0.1, 5.0]
+notes = "K_s for AOB in biofilter context; may differ for free-living AOB"
+"#;
+        let preset: ProcessParamsPreset = toml::from_str(toml_str)?;
+        let meta = preset
+            .param_meta
+            .get("aob_k_tan_mg")
+            .expect("metadata should exist");
+        assert_eq!(meta.unit.as_deref(), Some("mg N/L"));
+        assert_eq!(meta.source.as_deref(), Some("EPA 2013 ammonia criteria"));
+        assert_eq!(meta.confidence, Some(ConfidenceLevel::Literature));
+        assert_eq!(meta.valid_range, Some([0.1, 5.0]));
+        assert!(meta.notes.as_ref().unwrap().contains("AOB"));
+
+        // Round-trip: serialize back to TOML and re-parse.
+        let serialized = toml::to_string(&preset)?;
+        let roundtrip: ProcessParamsPreset = toml::from_str(&serialized)?;
+        assert_eq!(
+            roundtrip.param_meta.get("aob_k_tan_mg"),
+            preset.param_meta.get("aob_k_tan_mg")
+        );
+        Ok(())
+    }
+
+    /// AC 2: Provenance fields are all optional. A parameter with just
+    /// value + unit loads fine.
+    #[test]
+    fn test_provenance_optional_fields() -> Result<(), Box<dyn std::error::Error>> {
+        let toml_str = r#"
+id = "test"
+name = "Test"
+mineralization_rate_per_day = 0.15
+nitrification_vmax = 0.08
+reaeration_kla_base = 0.35
+aeration_kla_boost = 0.9
+background_bod_mg_o2_per_g_biomass_per_hour = 0.05
+plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
+respiration_dic_rate_mg_c_per_g_per_hour = 0.0
+photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0
+k_surface_w_per_m2_k = 10.0
+k_wall_w_per_m2_k = 5.0
+
+[param_meta.k_surface_w_per_m2_k]
+unit = "W/(m²·K)"
+"#;
+        let preset: ProcessParamsPreset = toml::from_str(toml_str)?;
+        let meta = preset
+            .param_meta
+            .get("k_surface_w_per_m2_k")
+            .expect("metadata should exist");
+        assert_eq!(meta.unit.as_deref(), Some("W/(m²·K)"));
+        assert_eq!(meta.source, None);
+        assert_eq!(meta.confidence, None);
+        assert_eq!(meta.valid_range, None);
+        assert_eq!(meta.notes, None);
+        Ok(())
+    }
+
+    /// AC 3: Confidence levels are validated on load. Unknown confidence → error.
+    #[test]
+    fn test_confidence_levels_enum() -> Result<(), Box<dyn std::error::Error>> {
+        // Valid levels all parse.
+        for level in ["literature", "expert", "heuristic", "placeholder"] {
+            let toml_str = format!(
+                r#"
+id = "test"
+name = "Test"
+mineralization_rate_per_day = 0.15
+nitrification_vmax = 0.08
+reaeration_kla_base = 0.35
+aeration_kla_boost = 0.9
+background_bod_mg_o2_per_g_biomass_per_hour = 0.05
+plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
+respiration_dic_rate_mg_c_per_g_per_hour = 0.0
+photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0
+k_surface_w_per_m2_k = 10.0
+k_wall_w_per_m2_k = 5.0
+
+[param_meta.aob_k_tan_mg]
+confidence = "{level}"
+"#
+            );
+            let result: Result<ProcessParamsPreset, _> = toml::from_str(&toml_str);
+            assert!(
+                result.is_ok(),
+                "confidence level '{level}' should parse, got: {:?}",
+                result.err()
+            );
+        }
+
+        // Unknown level → error.
+        let bad_toml = r#"
+id = "test"
+name = "Test"
+mineralization_rate_per_day = 0.15
+nitrification_vmax = 0.08
+reaeration_kla_base = 0.35
+aeration_kla_boost = 0.9
+background_bod_mg_o2_per_g_biomass_per_hour = 0.05
+plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
+respiration_dic_rate_mg_c_per_g_per_hour = 0.0
+photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0
+k_surface_w_per_m2_k = 10.0
+k_wall_w_per_m2_k = 5.0
+
+[param_meta.aob_k_tan_mg]
+confidence = "medium"
+"#;
+        let result: Result<ProcessParamsPreset, _> = toml::from_str(bad_toml);
+        assert!(result.is_err(), "unknown confidence 'medium' should fail");
+        Ok(())
+    }
+
+    /// AC 4: valid_range specified and value outside → warning (not error).
+    #[test]
+    fn test_valid_range_enforcement() -> Result<(), Box<dyn std::error::Error>> {
+        let toml_str = r#"
+id = "test"
+name = "Test"
+mineralization_rate_per_day = 0.15
+nitrification_vmax = 0.08
+reaeration_kla_base = 0.35
+aeration_kla_boost = 0.9
+background_bod_mg_o2_per_g_biomass_per_hour = 0.05
+plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
+respiration_dic_rate_mg_c_per_g_per_hour = 0.0
+photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0
+k_surface_w_per_m2_k = 10.0
+k_wall_w_per_m2_k = 5.0
+aob_k_tan_mg = 10.0
+
+[param_meta.aob_k_tan_mg]
+unit = "mg N/L"
+valid_range = [0.1, 5.0]
+"#;
+        let preset: ProcessParamsPreset = toml::from_str(toml_str)?;
+
+        // Validation should still succeed (range check is a warning path).
+        preset.validate().expect("validate should pass");
+
+        // But range check should produce a warning.
+        let warnings = preset.check_ranges();
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].param_name, "aob_k_tan_mg");
+        assert_eq!(warnings[0].value, 10.0);
+        assert_eq!(warnings[0].range, [0.1, 5.0]);
+
+        // In-range value → no warning.
+        let meta = ParamMeta {
+            unit: None,
+            source: None,
+            confidence: None,
+            valid_range: Some([0.1, 5.0]),
+            notes: None,
+        };
+        assert!(check_param_range("aob_k_tan_mg", 0.5, &meta).is_none());
+        Ok(())
+    }
+
+    /// AC 5: Existing TOML data files WITHOUT provenance metadata still load.
+    #[test]
+    fn test_backward_compatible_loading() -> Result<(), Box<dyn std::error::Error>> {
+        // The shipped default.toml has no param_meta section.
+        let preset = default_process_preset();
+        assert!(
+            preset.param_meta.is_empty(),
+            "legacy file should load with empty param_meta"
+        );
+        preset
+            .validate()
+            .expect("legacy file should still validate");
+
+        // Also verify a minimal TOML with only required fields.
+        let minimal = r#"
+id = "minimal"
+name = "Minimal"
+mineralization_rate_per_day = 0.15
+nitrification_vmax = 0.08
+reaeration_kla_base = 0.35
+aeration_kla_boost = 0.9
+background_bod_mg_o2_per_g_biomass_per_hour = 0.05
+plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
+respiration_dic_rate_mg_c_per_g_per_hour = 0.0
+photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0
+k_surface_w_per_m2_k = 10.0
+k_wall_w_per_m2_k = 5.0
+"#;
+        let preset: ProcessParamsPreset = toml::from_str(minimal)?;
+        assert!(preset.param_meta.is_empty());
+        assert!(preset.provenance.is_none());
+        Ok(())
+    }
+
+    /// AC 6: Provenance metadata can be formatted for developer display.
+    #[test]
+    fn test_provenance_display() {
+        let meta = ParamMeta {
+            unit: Some("mg N/L".into()),
+            source: Some("EPA 2013".into()),
+            confidence: Some(ConfidenceLevel::Literature),
+            valid_range: None,
+            notes: None,
+        };
+        let display = format_param("K_s_aob", 0.5, &meta);
+        assert_eq!(display, "K_s_aob: 0.5 mg N/L [literature, EPA 2013]");
+
+        // With all fields.
+        let meta_full = ParamMeta {
+            unit: Some("mg N/L".into()),
+            source: Some("EPA 2013".into()),
+            confidence: Some(ConfidenceLevel::Literature),
+            valid_range: Some([0.1, 5.0]),
+            notes: Some("biofilter context".into()),
+        };
+        let display_full = format_param("K_s_aob", 0.5, &meta_full);
+        assert!(display_full.contains("K_s_aob: 0.5"));
+        assert!(display_full.contains("mg N/L"));
+        assert!(display_full.contains("literature"));
+        assert!(display_full.contains("EPA 2013"));
+        assert!(display_full.contains("range [0.1, 5.0]"));
+    }
+
+    // ---- Original tests ----
 
     #[test]
     fn process_preset_rejects_degenerate_shrimp_assimilation_efficiency() {

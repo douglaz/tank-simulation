@@ -589,13 +589,13 @@ fn test_plant_loss_routing_is_clamped_to_available_biomass_and_stays_particulate
 }
 
 #[test]
-fn test_trim_plants_preserves_n_and_c_when_routed_to_detritus() -> Result<(), SimError> {
+fn test_trim_plants_and_leave_cuttings_preserves_n_and_c() -> Result<(), SimError> {
     let state = trim_plants_budget_state(SimSeed(9_010));
     let initial_total_n = state.total_nitrogen();
     let initial_total_c = state.total_carbon();
     let mut engine = Engine::from_parts(state, vec![]);
     engine.enable_budget_tracking();
-    engine.apply_action(PlayerAction::TrimPlants { fraction: 0.25 })?;
+    engine.apply_action(PlayerAction::TrimPlantsAndLeaveCuttings { fraction: 0.25 })?;
 
     engine.step_hours(1)?;
 
@@ -606,14 +606,66 @@ fn test_trim_plants_preserves_n_and_c_when_routed_to_detritus() -> Result<(), Si
     let trim_entry = ledger.ticks[0]
         .entries
         .iter()
-        .find(|entry| entry.label == "action:trim_plants")
-        .expect("trim plants entry should be recorded");
+        .find(|entry| entry.label == "action:trim_plants_and_leave_cuttings")
+        .expect("trim plants and leave cuttings entry should be recorded");
     assert!(trim_entry.delta.nitrogen.in_mg > 0.0);
     assert!(trim_entry.delta.nitrogen.out_mg > 0.0);
     assert!(trim_entry.delta.carbon.in_mg > 0.0);
     assert!(trim_entry.delta.carbon.out_mg > 0.0);
     assert_close(trim_entry.delta.nitrogen.net_mg(), 0.0, 1e-6);
     assert_close(trim_entry.delta.carbon.net_mg(), 0.0, 1e-6);
+
+    Ok(())
+}
+
+#[test]
+fn test_trim_plants_and_remove_exports_n_and_c() -> Result<(), SimError> {
+    let state = trim_plants_budget_state(SimSeed(9_010));
+    let initial_total_n = state.total_nitrogen();
+    let initial_total_c = state.total_carbon();
+    let fraction = 0.25;
+    let trimmed_biomass_g: f64 = state
+        .plant_guilds
+        .iter()
+        .map(|plant| plant.biomass_g * fraction)
+        .sum();
+    let ratio = state.process_params.feed_n_to_c_ratio;
+    let expected_exported_n_mg = tank_core::plant_nitrogen_mg(trimmed_biomass_g);
+    let expected_exported_c_mg = tank_core::plant_carbon_mg(trimmed_biomass_g, ratio);
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_budget_tracking();
+    engine.apply_action(PlayerAction::TrimPlantsAndRemove { fraction })?;
+
+    engine.step_hours(1)?;
+
+    // Total N and C should decrease by exactly the exported biomass amount.
+    assert_close(
+        engine.full_state().total_nitrogen(),
+        initial_total_n - expected_exported_n_mg,
+        1e-6,
+    );
+    assert_close(
+        engine.full_state().total_carbon(),
+        initial_total_c - expected_exported_c_mg,
+        1e-6,
+    );
+
+    // Budget entry should show the export as a net negative (out > in).
+    let ledger = engine.budget_ledger().expect("budget tracking enabled");
+    let trim_entry = ledger.ticks[0]
+        .entries
+        .iter()
+        .find(|entry| entry.label == "action:trim_plants_and_remove")
+        .expect("trim plants and remove entry should be recorded");
+    assert!(
+        trim_entry.delta.nitrogen.net_mg() < 0.0,
+        "nitrogen should show net export"
+    );
+    assert!(
+        trim_entry.delta.carbon.net_mg() < 0.0,
+        "carbon should show net export"
+    );
 
     Ok(())
 }

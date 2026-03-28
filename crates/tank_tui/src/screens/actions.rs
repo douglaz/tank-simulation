@@ -10,7 +10,8 @@ use crate::TuiApp;
 pub enum ActionKind {
     Feed,
     WaterChangePercent,
-    TrimPlants,
+    TrimPlantsAndRemove,
+    TrimPlantsAndLeaveCuttings,
     SiphonDetritus,
     CleanFilter,
     AddShrimp,
@@ -23,10 +24,11 @@ pub enum ActionKind {
 }
 
 impl ActionKind {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 13] = [
         Self::Feed,
         Self::WaterChangePercent,
-        Self::TrimPlants,
+        Self::TrimPlantsAndRemove,
+        Self::TrimPlantsAndLeaveCuttings,
         Self::SiphonDetritus,
         Self::CleanFilter,
         Self::AddShrimp,
@@ -42,7 +44,8 @@ impl ActionKind {
         match self {
             Self::Feed => "Feed",
             Self::WaterChangePercent => "Water change",
-            Self::TrimPlants => "Trim plants",
+            Self::TrimPlantsAndRemove => "Trim & remove",
+            Self::TrimPlantsAndLeaveCuttings => "Trim & leave",
             Self::SiphonDetritus => "Siphon detritus",
             Self::CleanFilter => "Clean filter",
             Self::AddShrimp => "Add shrimp",
@@ -71,7 +74,8 @@ pub struct ActionFormState {
     feed_grams: String,
     water_change_percent: String,
     water_change_source_index: usize,
-    trim_fraction: String,
+    trim_remove_fraction: String,
+    trim_leave_fraction: String,
     siphon_fraction: String,
     clean_filter_intensity: String,
     add_shrimp_count: String,
@@ -108,7 +112,8 @@ impl ActionFormState {
             feed_grams: "0.20".to_string(),
             water_change_percent: "25.0".to_string(),
             water_change_source_index: 1.min(source_water_ids.len().saturating_sub(1)),
-            trim_fraction: "0.25".to_string(),
+            trim_remove_fraction: "0.25".to_string(),
+            trim_leave_fraction: "0.25".to_string(),
             siphon_fraction: "0.30".to_string(),
             clean_filter_intensity: "0.50".to_string(),
             add_shrimp_count: "5".to_string(),
@@ -171,10 +176,15 @@ impl ActionFormState {
                     hint: "[ / ] cycle source profile",
                 },
             ],
-            ActionKind::TrimPlants => vec![ActionFieldView {
+            ActionKind::TrimPlantsAndRemove => vec![ActionFieldView {
                 label: "fraction".to_string(),
-                value: self.trim_fraction.clone(),
-                hint: "0.0 to 1.0",
+                value: self.trim_remove_fraction.clone(),
+                hint: "0.0 to 1.0 (exported)",
+            }],
+            ActionKind::TrimPlantsAndLeaveCuttings => vec![ActionFieldView {
+                label: "fraction".to_string(),
+                value: self.trim_leave_fraction.clone(),
+                hint: "0.0 to 1.0 (to detritus)",
             }],
             ActionKind::SiphonDetritus => vec![ActionFieldView {
                 label: "fraction".to_string(),
@@ -336,8 +346,11 @@ impl ActionFormState {
                     .cloned()
                     .unwrap_or_default(),
             },
-            ActionKind::TrimPlants => PlayerAction::TrimPlants {
-                fraction: parse_f64("fraction", &self.trim_fraction)?,
+            ActionKind::TrimPlantsAndRemove => PlayerAction::TrimPlantsAndRemove {
+                fraction: parse_f64("fraction", &self.trim_remove_fraction)?,
+            },
+            ActionKind::TrimPlantsAndLeaveCuttings => PlayerAction::TrimPlantsAndLeaveCuttings {
+                fraction: parse_f64("fraction", &self.trim_leave_fraction)?,
             },
             ActionKind::SiphonDetritus => PlayerAction::SiphonDetritus {
                 fraction: parse_f64("fraction", &self.siphon_fraction)?,
@@ -396,7 +409,8 @@ impl ActionFormState {
         let buffer = match (self.selected_action(), self.selected_field) {
             (ActionKind::Feed, 0) => &mut self.feed_grams,
             (ActionKind::WaterChangePercent, 0) => &mut self.water_change_percent,
-            (ActionKind::TrimPlants, 0) => &mut self.trim_fraction,
+            (ActionKind::TrimPlantsAndRemove, 0) => &mut self.trim_remove_fraction,
+            (ActionKind::TrimPlantsAndLeaveCuttings, 0) => &mut self.trim_leave_fraction,
             (ActionKind::SiphonDetritus, 0) => &mut self.siphon_fraction,
             (ActionKind::CleanFilter, 0) => &mut self.clean_filter_intensity,
             (ActionKind::AddShrimp, 0) => &mut self.add_shrimp_count,

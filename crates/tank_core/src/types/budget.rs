@@ -7,6 +7,8 @@ use super::{
 
 /// Average wet mass of one adult shrimp (grams).
 pub const ADULT_SHRIMP_BIOMASS_G: f64 = 0.12;
+/// Average wet mass of one sub-adult shrimp (grams).
+pub const SUB_ADULT_SHRIMP_BIOMASS_G: f64 = 0.08;
 /// Average wet mass of one juvenile shrimp (grams).
 pub const JUVENILE_SHRIMP_BIOMASS_G: f64 = 0.05;
 
@@ -468,8 +470,9 @@ pub fn live_biomass_detrital_mass_g(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
         / 1000.0
 }
 
-pub fn shrimp_biomass_g(adults_count: u32, juveniles_count: u32) -> f64 {
+pub fn shrimp_biomass_g(adults_count: u32, sub_adult_count: u32, juveniles_count: u32) -> f64 {
     (f64::from(adults_count) * ADULT_SHRIMP_BIOMASS_G)
+        + (f64::from(sub_adult_count) * SUB_ADULT_SHRIMP_BIOMASS_G)
         + (f64::from(juveniles_count) * JUVENILE_SHRIMP_BIOMASS_G)
 }
 

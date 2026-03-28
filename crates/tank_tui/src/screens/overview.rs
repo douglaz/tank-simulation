@@ -29,12 +29,12 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
             snapshot.ph, snapshot.do_mg_l, snapshot.do_sat_mg_l
         )),
         Line::from(format!(
-            "TAN {:.3}  NH3 {:.4} mg/L",
-            snapshot.tan_mg_l, snapshot.nh3_mg_l
+            "TAN {:.3}  NH3-N {:.4} mg N/L",
+            snapshot.tan_mg_n_per_l, snapshot.nh3_mg_n_per_l
         )),
         Line::from(format!(
-            "NO2 {:.3}  NO3 {:.3} mg/L",
-            snapshot.nitrite_mg_l, snapshot.nitrate_mg_l
+            "NO2 {:.3}  NO3 {:.3} mg N/L",
+            snapshot.nitrite_mg_n_per_l, snapshot.nitrate_mg_n_per_l
         )),
     ])
     .block(Block::default().title("Water column").borders(Borders::ALL));
@@ -42,12 +42,12 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
 
     let systems = Paragraph::new(vec![
         Line::from(format!(
-            "Volume {:.1} L  DIC {:.2} mg/L",
-            snapshot.water_volume_l, snapshot.dissolved_inorganic_carbon_mg_l
+            "Volume {:.1} L  DIC {:.2} mg C/L",
+            snapshot.water_volume_l, snapshot.dissolved_inorganic_carbon_mg_c_per_l
         )),
         Line::from(format!(
-            "GH {:.2} d  KH {:.2} d  TDS {:.1}",
-            snapshot.gh_d, snapshot.kh_d, snapshot.tds_mg_l
+            "GH {:.1} d  KH {:.1} d  Est.TDS {:.0}",
+            snapshot.gh_d, snapshot.kh_d, snapshot.estimated_tds_7_ion_mg_per_l
         )),
         Line::from(format!(
             "Light {} @ {:.2} for {:.1}h",

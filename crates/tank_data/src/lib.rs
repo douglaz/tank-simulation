@@ -7,6 +7,10 @@ pub use presets::{
     PlantPreset, ProcessParamsPreset, Provenance, ScenarioPreset, ShrimpPreset, SourceWaterPreset,
     SubstratePreset,
 };
+// Re-export core provenance types for convenience.
+pub use tank_core::types::provenance::{
+    check_all_ranges, check_param_range, format_param, ConfidenceLevel, ParamMeta, RangeWarning,
+};
 
 #[derive(Debug, Error)]
 pub enum PresetError {

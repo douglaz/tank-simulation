@@ -44,6 +44,7 @@ pub enum EventCause {
     ChemistryInstability,
     Starvation,
     PoorCondition,
+    PlantTrimming,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

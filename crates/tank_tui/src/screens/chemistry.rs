@@ -20,14 +20,14 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
 
     let dissolved = Paragraph::new(vec![
         Line::from(format!("pH {:.3}", snapshot.ph)),
-        Line::from(format!("TAN {:.4} mg/L", snapshot.tan_mg_l)),
-        Line::from(format!("NH3 {:.5} mg/L", snapshot.nh3_mg_l)),
-        Line::from(format!("Nitrite {:.4} mg/L", snapshot.nitrite_mg_l)),
-        Line::from(format!("Nitrate {:.4} mg/L", snapshot.nitrate_mg_l)),
-        Line::from(format!("Phosphate {:.4} mg/L", snapshot.phosphate_mg_l)),
+        Line::from(format!("TAN {:.3} mg N/L", snapshot.tan_mg_n_per_l)),
+        Line::from(format!("Free NH3-N {:.5} mg NH3-N/L", snapshot.nh3_mg_n_per_l)),
+        Line::from(format!("Nitrite {:.3} mg N/L", snapshot.nitrite_mg_n_per_l)),
+        Line::from(format!("Nitrate {:.3} mg N/L", snapshot.nitrate_mg_n_per_l)),
+        Line::from(format!("Phosphate {:.3} mg P/L", snapshot.phosphate_mg_p_per_l)),
         Line::from(format!(
-            "DIC {:.4} mg/L",
-            snapshot.dissolved_inorganic_carbon_mg_l
+            "DIC {:.3} mg C/L",
+            snapshot.dissolved_inorganic_carbon_mg_c_per_l
         )),
     ])
     .block(
@@ -42,12 +42,12 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
             "DO {:.3}/{:.3} mg/L",
             snapshot.do_mg_l, snapshot.do_sat_mg_l
         )),
-        Line::from(format!("GH {:.3} d", snapshot.gh_d)),
-        Line::from(format!("KH {:.3} d", snapshot.kh_d)),
-        Line::from(format!("TDS {:.2} mg/L", snapshot.tds_mg_l)),
+        Line::from(format!("GH (Ca+Mg) {:.1} d", snapshot.gh_d)),
+        Line::from(format!("KH (alkalinity) {:.1} d", snapshot.kh_d)),
+        Line::from(format!("Est. TDS (7-ion) {:.0} mg/L", snapshot.estimated_tds_7_ion_mg_per_l)),
         Line::from(format!(
-            "Conductivity {:.2} uS/cm",
-            snapshot.conductivity_us_cm
+            "Est. conductivity {:.0} uS/cm",
+            snapshot.estimated_conductivity_us_cm
         )),
         Line::from(format!("Temp {:.2} C", snapshot.water_temp_c)),
     ])
@@ -69,9 +69,9 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
     render_trend(
         frame,
         bottom[1],
-        "TAN trend",
-        snapshot.tan_mg_l,
-        app.history_values(|item| item.tan_mg_l),
+        "TAN trend (mg N/L)",
+        snapshot.tan_mg_n_per_l,
+        app.history_values(|item| item.tan_mg_n_per_l),
         Color::Yellow,
     );
     render_trend(

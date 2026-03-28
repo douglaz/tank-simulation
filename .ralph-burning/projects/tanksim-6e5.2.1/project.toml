@@ -1,7 +1,0 @@
-id = "tanksim-6e5.2.1"
-name = "Unit taxonomy and display policy"
-flow = "docs_change"
-prompt_reference = "prompt.md"
-prompt_hash = "dfdec3837638b596"
-created_at = "2026-03-27T15:02:32.060514288Z"
-status_summary = "created"

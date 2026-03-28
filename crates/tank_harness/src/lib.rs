@@ -67,9 +67,9 @@ pub struct Checkpoint {
 pub struct Envelope {
     pub ph_bounds: Option<(f64, f64)>,
     pub temperature_c_bounds: Option<(f64, f64)>,
-    pub tan_mg_l_bounds: Option<(f64, f64)>,
-    pub nitrite_mg_l_bounds: Option<(f64, f64)>,
-    pub nitrate_mg_l_bounds: Option<(f64, f64)>,
+    pub tan_mg_n_per_l_bounds: Option<(f64, f64)>,
+    pub nitrite_mg_n_per_l_bounds: Option<(f64, f64)>,
+    pub nitrate_mg_n_per_l_bounds: Option<(f64, f64)>,
     pub do_mg_l_bounds: Option<(f64, f64)>,
     pub shrimp_count_bounds: Option<(u32, u32)>,
     pub plant_biomass_g_bounds: Option<(f64, f64)>,
@@ -86,18 +86,18 @@ impl Envelope {
         self
     }
 
-    pub fn tan_mg_l(mut self, min: f64, max: f64) -> Self {
-        self.tan_mg_l_bounds = Some((min, max));
+    pub fn tan_mg_n_per_l(mut self, min: f64, max: f64) -> Self {
+        self.tan_mg_n_per_l_bounds = Some((min, max));
         self
     }
 
-    pub fn nitrite_mg_l(mut self, min: f64, max: f64) -> Self {
-        self.nitrite_mg_l_bounds = Some((min, max));
+    pub fn nitrite_mg_n_per_l(mut self, min: f64, max: f64) -> Self {
+        self.nitrite_mg_n_per_l_bounds = Some((min, max));
         self
     }
 
-    pub fn nitrate_mg_l(mut self, min: f64, max: f64) -> Self {
-        self.nitrate_mg_l_bounds = Some((min, max));
+    pub fn nitrate_mg_n_per_l(mut self, min: f64, max: f64) -> Self {
+        self.nitrate_mg_n_per_l_bounds = Some((min, max));
         self
     }
 
@@ -141,27 +141,27 @@ impl Envelope {
                 ));
             }
         }
-        if let Some((min, max)) = self.tan_mg_l_bounds {
-            if snap.tan_mg_l < min || snap.tan_mg_l > max {
+        if let Some((min, max)) = self.tan_mg_n_per_l_bounds {
+            if snap.tan_mg_n_per_l < min || snap.tan_mg_n_per_l > max {
                 violations.push(format!(
-                    "TAN {:.4} mg/L outside [{:.3}, {:.3}]",
-                    snap.tan_mg_l, min, max
+                    "TAN {:.4} mg N/L outside [{:.3}, {:.3}]",
+                    snap.tan_mg_n_per_l, min, max
                 ));
             }
         }
-        if let Some((min, max)) = self.nitrite_mg_l_bounds {
-            if snap.nitrite_mg_l < min || snap.nitrite_mg_l > max {
+        if let Some((min, max)) = self.nitrite_mg_n_per_l_bounds {
+            if snap.nitrite_mg_n_per_l < min || snap.nitrite_mg_n_per_l > max {
                 violations.push(format!(
-                    "NO2 {:.4} mg/L outside [{:.3}, {:.3}]",
-                    snap.nitrite_mg_l, min, max
+                    "NO2 {:.4} mg N/L outside [{:.3}, {:.3}]",
+                    snap.nitrite_mg_n_per_l, min, max
                 ));
             }
         }
-        if let Some((min, max)) = self.nitrate_mg_l_bounds {
-            if snap.nitrate_mg_l < min || snap.nitrate_mg_l > max {
+        if let Some((min, max)) = self.nitrate_mg_n_per_l_bounds {
+            if snap.nitrate_mg_n_per_l < min || snap.nitrate_mg_n_per_l > max {
                 violations.push(format!(
-                    "NO3 {:.4} mg/L outside [{:.3}, {:.3}]",
-                    snap.nitrate_mg_l, min, max
+                    "NO3 {:.4} mg N/L outside [{:.3}, {:.3}]",
+                    snap.nitrate_mg_n_per_l, min, max
                 ));
             }
         }

@@ -1,7 +1,0 @@
-id = "tanksim-6e5.4.3"
-name = "CO2 gas exchange"
-flow = "quick_dev"
-prompt_reference = "prompt.md"
-prompt_hash = "0bee02f77dd8aaf9"
-created_at = "2026-03-28T02:34:58.406817218Z"
-status_summary = "created"

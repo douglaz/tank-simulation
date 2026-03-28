@@ -28,10 +28,14 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
     state.microfauna.population_index = state.microfauna.population_index.clamp(0.0, 1.0);
     state.microfauna.grazing_pressure_index =
         state.microfauna.grazing_pressure_index.clamp(0.0, 1.0);
-    state.animal.condition_index = state.animal.condition_index.clamp(0.0, 1.0);
+    state.animal.adult.condition_index = state.animal.adult.condition_index.clamp(0.0, 1.0);
+    state.animal.sub_adult.condition_index = state.animal.sub_adult.condition_index.clamp(0.0, 1.0);
+    state.animal.juvenile.condition_index = state.animal.juvenile.condition_index.clamp(0.0, 1.0);
     state.animal.molt_stress_index = state.animal.molt_stress_index.clamp(0.0, 1.0);
     state.animal.reproductive_readiness_index =
         state.animal.reproductive_readiness_index.clamp(0.0, 1.0);
+    state.animal.molt_readiness = state.animal.molt_readiness.clamp(0.0, 1.0);
+    state.animal.failed_molt_accum = state.animal.failed_molt_accum.clamp(0.0, 1.0);
     state.animal.daily_food_consumed_g = state.animal.daily_food_consumed_g.max(0.0);
     state.animal.clamp_berried_to_adults();
     state.animal.egg_progress_days = state.animal.egg_progress_days.max(0.0);

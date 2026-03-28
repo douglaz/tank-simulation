@@ -43,8 +43,8 @@ fn nano_neglect_artifacts_on_violation() -> Result<(), Box<dyn std::error::Error
     // This envelope is intentionally strict — we expect violations after neglect
     let strict_envelope = Envelope::default()
         .ph(6.5, 7.5)
-        .tan_mg_l(0.0, 0.5)
-        .nitrite_mg_l(0.0, 0.5)
+        .tan_mg_n_per_l(0.0, 0.5)
+        .nitrite_mg_n_per_l(0.0, 0.5)
         .do_min(5.0);
 
     run.assert_envelope("post_neglect", &strict_envelope);

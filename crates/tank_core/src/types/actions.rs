@@ -10,7 +10,10 @@ pub enum PlayerAction {
         percent: f64,
         source_profile_id: String,
     },
-    TrimPlants {
+    TrimPlantsAndRemove {
+        fraction: f64,
+    },
+    TrimPlantsAndLeaveCuttings {
         fraction: f64,
     },
     SiphonDetritus {
@@ -115,7 +118,8 @@ impl PlayerAction {
                     Ok(())
                 }
             }
-            Self::TrimPlants { fraction }
+            Self::TrimPlantsAndRemove { fraction }
+            | Self::TrimPlantsAndLeaveCuttings { fraction }
             | Self::SiphonDetritus { fraction }
             | Self::CleanFilter {
                 intensity: fraction,
@@ -148,7 +152,8 @@ impl PlayerAction {
 
 fn field_name(action: &PlayerAction) -> &'static str {
     match action {
-        PlayerAction::TrimPlants { .. } => "fraction",
+        PlayerAction::TrimPlantsAndRemove { .. }
+        | PlayerAction::TrimPlantsAndLeaveCuttings { .. } => "fraction",
         PlayerAction::SiphonDetritus { .. } => "fraction",
         PlayerAction::CleanFilter { .. } => "intensity",
         _ => "value",

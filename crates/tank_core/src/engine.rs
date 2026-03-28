@@ -591,7 +591,27 @@ impl Engine {
                     None
                 }
             }
-            PlayerAction::TrimPlants { fraction } => {
+            PlayerAction::TrimPlantsAndRemove { fraction } => {
+                let mut trimmed_biomass_g = 0.0;
+                for plant in &mut self.state.plant_guilds {
+                    let trimmed = plant.biomass_g * fraction;
+                    plant.biomass_g -= trimmed;
+                    trimmed_biomass_g += trimmed;
+                }
+                self.push_event(
+                    EventSeverity::Info,
+                    EventKind::CycleProgressing,
+                    vec![EventCause::PlantTrimming],
+                    format!(
+                        "Plants trimmed ({fraction:.0}%), clippings removed from tank ({trimmed_biomass_g:.3} g exported)",
+                        fraction = fraction * 100.0,
+                    ),
+                );
+                // Biomass exits the system — snapshot delta captures the loss;
+                // the budget guard recognises this label as open-system.
+                None
+            }
+            PlayerAction::TrimPlantsAndLeaveCuttings { fraction } => {
                 let mut trimmed_biomass_g = 0.0;
                 for plant in &mut self.state.plant_guilds {
                     let trimmed = plant.biomass_g * fraction;
@@ -603,6 +623,15 @@ impl Engine {
                         trimmed_biomass_g,
                         self.state.process_params.feed_n_to_c_ratio,
                     );
+                self.push_event(
+                    EventSeverity::Info,
+                    EventKind::CycleProgressing,
+                    vec![EventCause::PlantTrimming],
+                    format!(
+                        "Plants trimmed ({fraction:.0}%), cuttings left in tank ({trimmed_biomass_g:.3} g to detritus)",
+                        fraction = fraction * 100.0,
+                    ),
+                );
                 None
             }
             PlayerAction::SiphonDetritus { fraction } => {
@@ -754,7 +783,8 @@ fn action_budget_label(action: &PlayerAction) -> &'static str {
     match action {
         PlayerAction::Feed { .. } => "action:feed",
         PlayerAction::WaterChangePercent { .. } => "action:water_change",
-        PlayerAction::TrimPlants { .. } => "action:trim_plants",
+        PlayerAction::TrimPlantsAndRemove { .. } => "action:trim_plants_and_remove",
+        PlayerAction::TrimPlantsAndLeaveCuttings { .. } => "action:trim_plants_and_leave_cuttings",
         PlayerAction::SiphonDetritus { .. } => "action:siphon_detritus",
         PlayerAction::CleanFilter { .. } => "action:clean_filter",
         PlayerAction::AddShrimp { .. } => "action:add_shrimp",
@@ -866,6 +896,7 @@ fn is_open_system_action_label(label: &str) -> bool {
             | "action:siphon_detritus"
             | "action:add_shrimp"
             | "action:remove_shrimp"
+            | "action:trim_plants_and_remove"
     )
 }
 

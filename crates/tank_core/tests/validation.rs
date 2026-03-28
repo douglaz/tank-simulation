@@ -22,10 +22,17 @@ fn action_validation() {
         })
     );
     assert_eq!(
-        engine.apply_action(PlayerAction::TrimPlants { fraction: 1.1 }),
+        engine.apply_action(PlayerAction::TrimPlantsAndRemove { fraction: 1.1 }),
         Err(SimError::FractionOutOfRange {
             field: "fraction",
             value: 1.1,
+        })
+    );
+    assert_eq!(
+        engine.apply_action(PlayerAction::TrimPlantsAndLeaveCuttings { fraction: -0.1 }),
+        Err(SimError::FractionOutOfRange {
+            field: "fraction",
+            value: -0.1,
         })
     );
     assert_eq!(

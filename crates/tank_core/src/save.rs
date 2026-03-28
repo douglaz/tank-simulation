@@ -13,7 +13,7 @@ use crate::{
 ///
 /// When you bump from N to N+1, you **must** also append a migration function
 /// to [`MIGRATIONS`]. See the migration contract below.
-pub const SCHEMA_VERSION: u32 = 4;
+pub const SCHEMA_VERSION: u32 = 5;
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Oldest schema version that the migration chain can handle.
@@ -88,6 +88,12 @@ const MIGRATIONS: &[MigrationFn] = &[
     // from the serialized shrimp population so migrated colonies keep the
     // retained biomass needed for post-load growth/reproduction transitions.
     migrate_v3_to_v4,
+    // Index 2: schema 4 → 5
+    // Transform the flat AnimalState fields (adults_count, juveniles_count,
+    // condition_index, reserve_g, maturation_accum) into nested StageCohort
+    // structs (juvenile, sub_adult, adult) with proportional reserve
+    // distribution. Adds new molt lifecycle fields with sensible defaults.
+    migrate_v4_to_v5,
 ];
 
 // Compile-time check: MIGRATIONS length must equal SCHEMA_VERSION - MIN_SUPPORTED_SCHEMA.
@@ -369,6 +375,182 @@ fn migrate_v3_to_v4(value: &mut Value) -> Result<(), SimError> {
     let reserve_g =
         shrimp_biomass_g(adults_count, juveniles_count) * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
     animal.insert("reserve_g".to_string(), serde_json::json!(reserve_g));
+
+    Ok(())
+}
+
+/// Schema 4 → 5: transform flat AnimalState fields into nested StageCohort
+/// structs. The old `adults_count`, `juveniles_count`, `condition_index`,
+/// `reserve_g`, and `maturation_accum` fields are replaced by nested
+/// `juvenile`, `sub_adult`, and `adult` objects. Reserve is distributed
+/// proportional to biomass. New molt lifecycle fields get sensible defaults.
+fn migrate_v4_to_v5(value: &mut Value) -> Result<(), SimError> {
+    // --- Stage-structured shrimp model migration ---
+    //
+    // Scoped block so the mutable borrow of `/state/animal` is released
+    // before the queued-actions migration borrows `value` again.
+    {
+        let animal = required_object_mut_at(value, 4, 5, "/state/animal")?;
+
+        // If already migrated (has nested "juvenile" key), skip animal transform.
+        if !animal.contains_key("juvenile") {
+            // --- Read old flat fields ---
+
+            let adults_count = animal
+                .get("adults_count")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| {
+                    schema_migration_error(4, 5, "expected u32 at /state/animal/adults_count")
+                })
+                .and_then(|count| {
+                    u32::try_from(count).map_err(|_| {
+                        schema_migration_error(
+                            4,
+                            5,
+                            format!(
+                                "value at /state/animal/adults_count exceeds u32 range: {count}"
+                            ),
+                        )
+                    })
+                })?;
+
+            let juveniles_count = animal
+                .get("juveniles_count")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| {
+                    schema_migration_error(4, 5, "expected u32 at /state/animal/juveniles_count")
+                })
+                .and_then(|count| {
+                    u32::try_from(count).map_err(|_| {
+                        schema_migration_error(
+                            4,
+                            5,
+                            format!(
+                                "value at /state/animal/juveniles_count exceeds u32 range: {count}"
+                            ),
+                        )
+                    })
+                })?;
+
+            let condition_index = animal
+                .get("condition_index")
+                .and_then(Value::as_f64)
+                .ok_or_else(|| {
+                    schema_migration_error(
+                        4,
+                        5,
+                        "expected finite number at /state/animal/condition_index",
+                    )
+                })?;
+
+            let reserve_g = animal
+                .get("reserve_g")
+                .and_then(Value::as_f64)
+                .ok_or_else(|| {
+                    schema_migration_error(
+                        4,
+                        5,
+                        "expected finite number at /state/animal/reserve_g",
+                    )
+                })?;
+
+            let maturation_accum = animal
+                .get("maturation_accum")
+                .and_then(Value::as_f64)
+                .ok_or_else(|| {
+                    schema_migration_error(
+                        4,
+                        5,
+                        "expected finite number at /state/animal/maturation_accum",
+                    )
+                })?;
+
+            // --- Compute proportional reserve distribution ---
+
+            const ADULT_BIOMASS_G: f64 = 0.12; // ADULT_SHRIMP_BIOMASS_G
+            const JUVENILE_BIOMASS_G: f64 = 0.05; // JUVENILE_SHRIMP_BIOMASS_G
+
+            let adult_biomass = f64::from(adults_count) * ADULT_BIOMASS_G;
+            let juvenile_biomass = f64::from(juveniles_count) * JUVENILE_BIOMASS_G;
+            let total_biomass = adult_biomass + juvenile_biomass;
+
+            let adult_reserve = if total_biomass > 0.0 {
+                reserve_g * adult_biomass / total_biomass
+            } else {
+                reserve_g
+            };
+            let juvenile_reserve = reserve_g - adult_reserve;
+
+            // --- Build nested stage cohort objects ---
+
+            let juvenile_obj = serde_json::json!({
+                "count": juveniles_count,
+                "reserve_g": juvenile_reserve,
+                "condition_index": condition_index,
+                "maturation_accum": maturation_accum,
+            });
+
+            let sub_adult_obj = serde_json::json!({
+                "count": 0,
+                "reserve_g": 0.0,
+                "condition_index": condition_index,
+                "maturation_accum": 0.0,
+            });
+
+            let adult_obj = serde_json::json!({
+                "count": adults_count,
+                "reserve_g": adult_reserve,
+                "condition_index": condition_index,
+                "maturation_accum": 0.0,
+            });
+
+            // --- Remove old flat fields ---
+
+            animal.remove("adults_count");
+            animal.remove("juveniles_count");
+            animal.remove("condition_index");
+            animal.remove("reserve_g");
+            animal.remove("maturation_accum");
+
+            // --- Insert new nested fields and molt lifecycle defaults ---
+
+            animal.insert("juvenile".to_string(), juvenile_obj);
+            animal.insert("sub_adult".to_string(), sub_adult_obj);
+            animal.insert("adult".to_string(), adult_obj);
+
+            // New molt lifecycle fields with sensible defaults.
+            if !animal.contains_key("molt_readiness") {
+                animal.insert("molt_readiness".to_string(), serde_json::json!(0.5));
+            }
+            if !animal.contains_key("inter_molt_timer_days") {
+                animal.insert(
+                    "inter_molt_timer_days".to_string(),
+                    serde_json::json!(14.0),
+                );
+            }
+            if !animal.contains_key("last_molt_success") {
+                animal.insert("last_molt_success".to_string(), serde_json::json!(true));
+            }
+            if !animal.contains_key("failed_molt_accum") {
+                animal.insert("failed_molt_accum".to_string(), serde_json::json!(0.0));
+            }
+        }
+    }
+
+    // --- Migrate queued actions: rename TrimPlants → TrimPlantsAndRemove ---
+
+    if let Some(actions) = value
+        .get_mut("queued_actions")
+        .and_then(Value::as_array_mut)
+    {
+        for action in actions.iter_mut() {
+            if let Some(obj) = action.as_object_mut() {
+                if let Some(inner) = obj.remove("TrimPlants") {
+                    obj.insert("TrimPlantsAndRemove".to_string(), inner);
+                }
+            }
+        }
+    }
 
     Ok(())
 }
