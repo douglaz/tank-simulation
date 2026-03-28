@@ -693,7 +693,7 @@ fn malformed_v4_save_with_negative_reserve_is_rejected() -> Result<(), SimError>
     assert_eq!(
         err,
         SimError::InvariantViolation {
-            field: "animal.total_reserve_g",
+            field: "animal.adult.reserve_g",
             value: -0.01,
         }
     );

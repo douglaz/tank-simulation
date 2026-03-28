@@ -46,8 +46,16 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
             snapshot.water_volume_l, snapshot.dissolved_inorganic_carbon_mg_c_per_l
         )),
         Line::from(format!(
-            "GH {:.1} d  KH {:.1} d  Est.TDS {:.0}",
-            snapshot.gh_d, snapshot.kh_d, snapshot.estimated_tds_7_ion_mg_per_l
+            "GH (Ca+Mg) {:.1} d  KH (alkalinity) {:.1} d",
+            snapshot.gh_d, snapshot.kh_d
+        )),
+        Line::from(format!(
+            "Est. TDS (7-ion) {:.0} mg/L",
+            snapshot.estimated_tds_7_ion_mg_per_l
+        )),
+        Line::from(format!(
+            "Est. cond {:.0} uS/cm",
+            snapshot.estimated_conductivity_us_cm
         )),
         Line::from(format!(
             "Light {} @ {:.2} for {:.1}h",

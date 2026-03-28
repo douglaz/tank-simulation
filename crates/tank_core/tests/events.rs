@@ -43,6 +43,35 @@ fn threshold_events_emit_with_cause_codes() -> Result<(), tank_core::SimError> {
 }
 
 #[test]
+fn threshold_event_summaries_use_explicit_chemistry_units() -> Result<(), tank_core::SimError> {
+    let mut engine = Engine::from_parts(threshold_state(SimSeed(5050)), vec![]);
+    engine.step_hours(1)?;
+
+    let events = &engine.full_state().event_log;
+    let ammonia = events
+        .iter()
+        .find(|event| event.kind == EventKind::AmmoniaWarning)
+        .expect("expected ammonia warning");
+    let nitrite = events
+        .iter()
+        .find(|event| event.kind == EventKind::NitriteWarning)
+        .expect("expected nitrite warning");
+
+    assert!(
+        ammonia.summary.contains("NH3-N") && ammonia.summary.contains("mg NH3-N/L"),
+        "ammonia summary should spell out the NH3-N basis: {}",
+        ammonia.summary
+    );
+    assert!(
+        nitrite.summary.contains("Nitrite-N") && nitrite.summary.contains("mg N/L"),
+        "nitrite summary should spell out the N basis: {}",
+        nitrite.summary
+    );
+
+    Ok(())
+}
+
+#[test]
 fn threshold_events_are_deduplicated_per_day() -> Result<(), tank_core::SimError> {
     let mut engine = Engine::from_parts(threshold_state(SimSeed(5100)), vec![]);
 

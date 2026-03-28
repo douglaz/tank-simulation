@@ -249,7 +249,7 @@ fn step_hours_read_only_validation_does_not_preserve_partial_clamps() {
     assert_eq!(
         result,
         Err(SimError::InvariantViolation {
-            field: "animal.reserve_g",
+            field: "animal.adult.reserve_g",
             value: -0.01,
         })
     );

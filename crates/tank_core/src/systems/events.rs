@@ -21,7 +21,7 @@ pub fn emit_hourly_threshold_events(state: &mut TankState) {
             EventSeverity::Warning,
             EventKind::AmmoniaWarning,
             vec![EventCause::HighAmmonia],
-            format!("Free ammonia reached {nh3_mg_l:.3} mg/L"),
+            format!("Free ammonia (NH3-N) reached {nh3_mg_l:.3} mg NH3-N/L"),
         );
     }
     if nitrite_mg_l >= 0.5 {
@@ -30,7 +30,7 @@ pub fn emit_hourly_threshold_events(state: &mut TankState) {
             EventSeverity::Warning,
             EventKind::NitriteWarning,
             vec![EventCause::HighNitrite],
-            format!("Nitrite reached {nitrite_mg_l:.2} mg/L"),
+            format!("Nitrite-N reached {nitrite_mg_l:.2} mg N/L"),
         );
     }
     if do_mg_l < 4.0 {

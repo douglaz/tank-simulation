@@ -1,9 +1,9 @@
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
 use serde_json::Value;
-use tank_core::{Engine, SaveFile, SimulationEngine, TankSnapshot};
+use tank_core::{Engine, SaveFile, SimulationEngine};
 
-use crate::{error::ApiError, state::AppState};
+use crate::{error::ApiError, handlers::snapshot::snapshot_response_json, state::AppState};
 
 pub async fn get_save(State(state): State<AppState>) -> Json<SaveFile> {
     let engine = state.engine.lock().unwrap();
@@ -13,7 +13,7 @@ pub async fn get_save(State(state): State<AppState>) -> Json<SaveFile> {
 #[derive(Serialize)]
 pub struct LoadResponse {
     pub status: &'static str,
-    pub snapshot: TankSnapshot,
+    pub snapshot: Value,
 }
 
 pub async fn post_load(
@@ -23,14 +23,14 @@ pub async fn post_load(
     let save = SaveFile::from_value(payload).map_err(ApiError::from)?;
 
     let engine: Engine = save.into_engine().map_err(ApiError::from)?;
-    let snapshot: TankSnapshot = engine.snapshot();
+    let snapshot = engine.snapshot();
     *state.engine.lock().unwrap() = engine;
 
     Ok((
         StatusCode::OK,
         Json(LoadResponse {
             status: "loaded",
-            snapshot,
+            snapshot: snapshot_response_json(&snapshot),
         }),
     ))
 }

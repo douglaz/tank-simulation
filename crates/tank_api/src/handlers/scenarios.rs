@@ -2,10 +2,11 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
-use tank_core::{Engine, SimSeed, SimulationEngine, TankSnapshot};
+use serde_json::Value;
+use tank_core::{Engine, SimSeed, SimulationEngine};
 use tank_scenarios::seeded_state_with_full_overrides;
 
-use crate::{error::ApiError, state::AppState};
+use crate::{error::ApiError, handlers::snapshot::snapshot_response_json, state::AppState};
 
 #[derive(Serialize)]
 pub struct ScenarioInfo {
@@ -40,7 +41,7 @@ pub struct LoadScenarioRequest {
 #[derive(Serialize)]
 pub struct LoadScenarioResponse {
     pub status: &'static str,
-    pub snapshot: TankSnapshot,
+    pub snapshot: Value,
 }
 
 pub async fn load_scenario(
@@ -68,7 +69,7 @@ pub async fn load_scenario(
         StatusCode::OK,
         Json(LoadScenarioResponse {
             status: "loaded",
-            snapshot,
+            snapshot: snapshot_response_json(&snapshot),
         }),
     ))
 }
