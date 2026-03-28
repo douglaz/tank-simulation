@@ -125,6 +125,24 @@ pub fn update_stability_tracker(state: &mut TankState) {
 
 // ── Private helpers ─────────────────────────────────────────────────────────
 
+fn shrimp_grazing_access_factor(state: &TankState) -> f64 {
+    0.5 + (0.5 * state.avg_substrate_index(|layer| layer.grazing_surface_index))
+}
+
+fn shrimp_target_food_route_g(state: &TankState) -> f64 {
+    let total_feeding_units = state.animal.feeding_units();
+    if total_feeding_units <= f64::EPSILON {
+        return 0.0;
+    }
+
+    let food_demand_biomass_g = total_feeding_units
+        * state
+            .process_params
+            .shrimp_periphyton_grazing_g_per_shrimp_per_day
+        * shrimp_grazing_access_factor(state);
+    algae_detrital_mass_g(food_demand_biomass_g, state.process_params.feed_n_to_c_ratio)
+}
+
 fn shrimp_feeding(state: &mut TankState) {
     let total_feeding_units = state.animal.feeding_units();
 
@@ -136,8 +154,7 @@ fn shrimp_feeding(state: &mut TankState) {
     let rate = state
         .process_params
         .shrimp_periphyton_grazing_g_per_shrimp_per_day;
-    let grazing_access_factor =
-        0.5 + (0.5 * state.avg_substrate_index(|layer| layer.grazing_surface_index));
+    let grazing_access_factor = shrimp_grazing_access_factor(state);
     let food_demand_biomass_g = total_feeding_units * rate * grazing_access_factor;
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let food_demand_route_g = algae_detrital_mass_g(food_demand_biomass_g, n_to_c_ratio);
@@ -260,17 +277,9 @@ fn update_condition(state: &mut TankState) {
     let temp = state.water.temperature_c;
     let gh_d = chemistry.gh_d();
 
-    // Compute population-level food factor using total feeding units.
-    let total_feeding_units = state.animal.feeding_units();
-
-    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
-    let target_food_g = algae_detrital_mass_g(
-        total_feeding_units
-            * state
-                .process_params
-                .shrimp_periphyton_grazing_g_per_shrimp_per_day,
-        n_to_c_ratio,
-    );
+    // Compute population-level food factor using the same access-adjusted
+    // routing target as shrimp_feeding().
+    let target_food_g = shrimp_target_food_route_g(state);
     let food_factor = if target_food_g > f64::EPSILON {
         let satiation = (state.animal.daily_food_consumed_g / target_food_g).clamp(0.0, 1.0);
         0.4 + (0.6 * satiation)
@@ -989,7 +998,8 @@ fn gh_mineral_factor(gh_d: f64, params: &ShrimpRuntimeParams) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        refresh_carbonate_state, route_consumed_food, shrimp_feeding, step_daily_shrimp,
+        refresh_carbonate_state, route_consumed_food, shrimp_feeding,
+        shrimp_grazing_access_factor, shrimp_target_food_route_g, step_daily_shrimp,
         update_condition, MG_N_PER_MEQ_AMMONIA,
     };
     use crate::{algae_detrital_mass_g, SimSeed, TankState, WaterState};
@@ -1046,8 +1056,7 @@ mod tests {
         state.animal.adult.count = 10;
 
         let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
-        let grazing_access_factor =
-            0.5 + (0.5 * state.avg_substrate_index(|layer| layer.grazing_surface_index));
+        let grazing_access_factor = shrimp_grazing_access_factor(&state);
         let total_feeding_units = state.animal.feeding_units();
         let expected_periphyton_biomass_removed = total_feeding_units
             * state
@@ -1083,14 +1092,7 @@ mod tests {
         }
 
         let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
-        let total_feeding_units = state.animal.feeding_units();
-        let max_daily_intake_route_g = algae_detrital_mass_g(
-            total_feeding_units
-                * state
-                    .process_params
-                    .shrimp_periphyton_grazing_g_per_shrimp_per_day,
-            n_to_c_ratio,
-        );
+        let max_daily_intake_route_g = shrimp_target_food_route_g(&state);
 
         shrimp_feeding(&mut state);
 
@@ -1110,6 +1112,43 @@ mod tests {
             periphyton_consumed_route_g + detritus_consumed_route_g,
             1e-9,
         );
+    }
+
+    #[test]
+    fn update_condition_treats_full_accessible_ration_as_satiated() {
+        let mut state = TankState::new(SimSeed(10_004));
+        state.geometry.length_cm = 40.0;
+        state.geometry.width_cm = 30.0;
+        state.geometry.height_cm = 35.0;
+        state.geometry.fill_height_cm = 30.0;
+        state.water = WaterState::default_for_volume_l(state.water_volume_l());
+        state.water.temperature_c = 24.0;
+        state.environment.ambient_temp_c = 24.0;
+        state.algae.periphyton_biomass_g = 5.0;
+        state.animal.adult.count = 10;
+        state.animal.adult.condition_index = 0.0;
+        state.process_params.shrimp_condition_smoothing = 1.0;
+        for layer in &mut state.substrate_layers {
+            layer.grazing_surface_index = 0.0;
+        }
+
+        let volume_l = state.water_volume_l();
+        state.water.dissolved_oxygen_mg_total = 8.0 * volume_l;
+        state.water.calcium_mg_total = 40.0 * volume_l;
+        state.water.magnesium_mg_total = 10.0 * volume_l;
+        refresh_carbonate_state(&mut state);
+        state.reseed_stability_tracker();
+
+        shrimp_feeding(&mut state);
+        assert_close(
+            state.animal.daily_food_consumed_g,
+            shrimp_target_food_route_g(&state),
+            1e-12,
+        );
+
+        update_condition(&mut state);
+
+        assert_close(state.animal.adult.condition_index, 1.0, 1e-12);
     }
 
     #[test]

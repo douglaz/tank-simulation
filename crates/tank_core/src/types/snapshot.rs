@@ -93,6 +93,7 @@ struct TankSnapshotRepr {
     nitrate_mg_n_per_l: f64,
     phosphate_mg_p_per_l: f64,
     dissolved_inorganic_carbon_mg_c_per_l: f64,
+    #[serde(default)]
     co2_aq_mmol_per_l: f64,
     do_mg_l: f64,
     do_sat_mg_l: f64,
@@ -109,8 +110,10 @@ struct TankSnapshotRepr {
     aeration_enabled: bool,
     aeration_intensity: f64,
     filter_cleanliness_index: f64,
-    total_shrimp_count: u32,
+    #[serde(default)]
+    total_shrimp_count: Option<u32>,
     adult_shrimp_count: u32,
+    #[serde(default)]
     sub_adult_count: u32,
     juveniles_count: u32,
     berried_females_count: u32,
@@ -170,7 +173,12 @@ impl From<TankSnapshotRepr> for TankSnapshot {
             aeration_enabled: value.aeration_enabled,
             aeration_intensity: value.aeration_intensity,
             filter_cleanliness_index: value.filter_cleanliness_index,
-            total_shrimp_count: value.total_shrimp_count,
+            total_shrimp_count: value.total_shrimp_count.unwrap_or_else(|| {
+                value
+                    .adult_shrimp_count
+                    .saturating_add(value.sub_adult_count)
+                    .saturating_add(value.juveniles_count)
+            }),
             adult_shrimp_count: value.adult_shrimp_count,
             sub_adult_count: value.sub_adult_count,
             juveniles_count: value.juveniles_count,
@@ -474,6 +482,38 @@ mod tests {
 
         let parsed: TankSnapshot =
             serde_json::from_value(value).expect("legacy snapshot should deserialize");
+
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn snapshot_deserializes_pre_stage_payloads_without_stage_totals() {
+        let expected = TankSnapshot::from_state(&TankState::new(SimSeed(778)));
+        let mut value = canonical_snapshot_value(SimSeed(778));
+        let object = value
+            .as_object_mut()
+            .expect("serialized snapshot should be an object");
+        object.remove("total_shrimp_count");
+        object.remove("sub_adult_count");
+
+        let parsed: TankSnapshot =
+            serde_json::from_value(value).expect("legacy stage payload should deserialize");
+
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn snapshot_deserializes_payloads_missing_co2_field() {
+        let mut expected = TankSnapshot::from_state(&TankState::new(SimSeed(779)));
+        let mut value = canonical_snapshot_value(SimSeed(779));
+        value
+            .as_object_mut()
+            .expect("serialized snapshot should be an object")
+            .remove("co2_aq_mmol_per_l");
+        expected.co2_aq_mmol_per_l = 0.0;
+
+        let parsed: TankSnapshot =
+            serde_json::from_value(value).expect("legacy snapshot without CO2 should deserialize");
 
         assert_eq!(parsed, expected);
     }

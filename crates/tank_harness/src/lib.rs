@@ -821,12 +821,17 @@ mod tests {
     #[test]
     fn envelope_reports_non_finite_values() {
         let mut state = TankState::new(SimSeed(8_003));
-        state.water.ph = f64::NAN;
+        state.water.temperature_c = f64::NAN;
         let snapshot = TankSnapshot::from_state(&state);
 
-        let violations = Envelope::default().ph(6.0, 8.0).check(&snapshot);
+        let violations = Envelope::default()
+            .temperature_c(20.0, 30.0)
+            .check(&snapshot);
 
-        assert_eq!(violations, vec!["pH is NaN (expected [6.000, 8.000])"]);
+        assert_eq!(
+            violations,
+            vec!["temperature is NaN (expected [20.000, 30.000])"]
+        );
     }
 
     #[test]

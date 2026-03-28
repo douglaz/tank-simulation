@@ -696,7 +696,11 @@ impl Engine {
                 None
             }
             PlayerAction::AddShrimp { count } => {
-                self.state.animal.adult.count = self.state.animal.adult.count.saturating_add(count);
+                self.state.animal.adult.receive_entrants(
+                    count,
+                    0.0,
+                    crate::types::biology::DEFAULT_STAGE_CONDITION_INDEX,
+                );
                 None
             }
             PlayerAction::RemoveShrimp { count } => {

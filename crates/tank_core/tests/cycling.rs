@@ -385,6 +385,9 @@ fn aob_growth_reserves_tan_for_assimilation_when_tan_would_otherwise_hit_zero() 
     state.microbe.ammonia_oxidizer_biomass_g = 0.1;
     state.microbe.nitrite_oxidizer_biomass_g = 0.0;
     state.microbe.comammox_biomass_g = 0.0;
+    // Use a very low K_s so the Monod factor is ~1 at 0.8 mg TAN,
+    // ensuring full consumption in one tick to exercise the bookkeeping path.
+    state.process_params.aob_k_tan_mg_n_per_l = 0.01;
     state.water.ammonia_total_mg_n_total = 0.8;
     let aob_before = state.microbe.ammonia_oxidizer_biomass_g;
 
@@ -432,6 +435,9 @@ fn comammox_growth_reserves_tan_for_assimilation_when_tan_would_otherwise_hit_ze
     state.microbe.ammonia_oxidizer_biomass_g = 0.0;
     state.microbe.nitrite_oxidizer_biomass_g = 0.0;
     state.microbe.comammox_biomass_g = 0.1;
+    // Use a very low K_s so the Monod factor is ~1 at 0.8 mg TAN,
+    // ensuring full consumption in one tick to exercise the bookkeeping path.
+    state.process_params.comammox_k_tan_mg_n_per_l = 0.01;
     state.water.ammonia_total_mg_n_total = 0.8;
     let comammox_before = state.microbe.comammox_biomass_g;
 
@@ -878,10 +884,7 @@ fn concentration_kinetics_volume_independent_extreme_scales() {
         (
             "DO-AOB",
             monod(do_conc, pp.aob_k_do_mg_per_l.max(0.01)),
-            monod(
-                huge.water.do_mg_per_l(hv),
-                pp.aob_k_do_mg_per_l.max(0.01),
-            ),
+            monod(huge.water.do_mg_per_l(hv), pp.aob_k_do_mg_per_l.max(0.01)),
         ),
         (
             "DO-decomp",

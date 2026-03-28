@@ -77,6 +77,27 @@ fn action_queuing() -> Result<(), tank_core::SimError> {
 }
 
 #[test]
+fn add_shrimp_reseeds_empty_adult_stage() -> Result<(), tank_core::SimError> {
+    let mut state = tank_core::TankState::new(SimSeed(15));
+    state.animal.adult.count = 0;
+    state.animal.adult.reserve_g = 1.25;
+    state.animal.adult.condition_index = 0.1;
+    state.animal.adult.maturation_accum = 4.0;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.apply_action(PlayerAction::AddShrimp { count: 2 })?;
+    engine.step_hours(1)?;
+
+    let adult = &engine.full_state().animal.adult;
+    assert_eq!(adult.count, 2);
+    assert_eq!(adult.reserve_g, 0.0);
+    assert_eq!(adult.condition_index, 0.8);
+    assert_eq!(adult.maturation_accum, 0.0);
+
+    Ok(())
+}
+
+#[test]
 fn apply_action_rejects_bad_source_profile() {
     let mut engine = Engine::new(SimSeed(13));
 

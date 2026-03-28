@@ -547,7 +547,7 @@ fn warm_room_baseline_envelope() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Stock shrimp at day 30
-    run.apply_action(PlayerAction::AddShrimp { count: 8 })?;
+    run.apply_action(PlayerAction::AddShrimp { count: 4 })?;
     run.step_hours(1)?;
 
     run.assert_envelope(
@@ -906,7 +906,7 @@ fn shrimp_husbandry_fixture_reaches_reproduction_window() -> Result<(), Box<dyn 
             .biofilter_maturity(0.02, 0.15),
     );
 
-    run.apply_action(PlayerAction::AddShrimp { count: 8 })?;
+    run.apply_action(PlayerAction::AddShrimp { count: 4 })?;
     run.step_hours(1)?;
 
     run.assert_envelope(
