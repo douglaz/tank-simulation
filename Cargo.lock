@@ -1414,6 +1414,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tank_core",
+ "tank_data",
  "tank_scenarios",
 ]
 

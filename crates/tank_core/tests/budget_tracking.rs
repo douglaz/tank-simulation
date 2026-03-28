@@ -291,6 +291,7 @@ fn is_shared_budget_path(path: &str) -> bool {
         || path.ends_with("particulate_organics_g_total")
         || path.ends_with("fine_detritus_g_total")
         || path == "animal.reserve_g"
+        || path == "microfauna.reserve_g"
         || is_animal_mass_budget_path(path)
 }
 
@@ -331,6 +332,7 @@ fn test_total_n_helper_sums_all_pools() {
             state.animal.juveniles_count,
         )
         + manual_organic_nitrogen_mg(state.animal.reserve_g, ratio)
+        + manual_organic_nitrogen_mg(state.microfauna.reserve_g, ratio)
         + manual_organic_nitrogen_mg(state.detritus.particulate_organics_g_total, ratio)
         + manual_organic_nitrogen_mg(state.detritus.fine_detritus_g_total, ratio);
 
@@ -358,6 +360,7 @@ fn test_total_c_helper_sums_all_pools() {
             state.animal.juveniles_count,
         )
         + manual_organic_carbon_mg(state.animal.reserve_g, ratio)
+        + manual_organic_carbon_mg(state.microfauna.reserve_g, ratio)
         + manual_organic_carbon_mg(state.detritus.particulate_organics_g_total, ratio)
         + manual_organic_carbon_mg(state.detritus.fine_detritus_g_total, ratio);
 

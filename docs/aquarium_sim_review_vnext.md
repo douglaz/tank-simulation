@@ -129,9 +129,12 @@ In real maintenance, trimming usually exports most biomass from the system.
 - periphyton and decomposer pools per habitat
 
 ### v0.5 — Better shrimp ecology
+
+The prescriptive state-model contract for the stage-structured shrimp redesign now lives in [shrimp_state_contract.md](shrimp_state_contract.md).
+
 - explicit ingestion -> assimilation -> excretion -> feces
-- age/stage and size structure
-- mineral budget for molt success
+- age/stage and size structure (juvenile / sub-adult / adult per the state contract)
+- mineral budget for molt success (extension point defined in the state contract)
 - egg success affected by temperature, instability, condition, and maybe osmotic stress
 - stocking density and sex-ratio effects
 

@@ -69,7 +69,7 @@ Required destinations:
 - `feces` always route to `fine_detritus_g_total`
 - `dissolved_excretion` routes elemental N to `ammonia_total_mg_n_total` and elemental C to `dissolved_organic_carbon_mg_c_total`
 - `respiration` contributes oxygen demand and adds to `dissolved_inorganic_carbon_mg_c_total`
-- `retained` stays in the organism state as biomass, reserve, or another explicit retained store
+- `retained` stays in the organism state as biomass, reserve, or another explicit retained store. For shrimp, the retained share routes to the consuming life stage's reserve pool per the stage-structured model in [shrimp_state_contract.md](shrimp_state_contract.md).
 
 Recommended parameter names for future implementation beads:
 

@@ -436,6 +436,11 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
         microfauna_periphyton_consumption: preset.microfauna_periphyton_consumption,
         microfauna_population_smoothing: preset.microfauna_population_smoothing,
         microfauna_shrimp_pressure_threshold: preset.microfauna_shrimp_pressure_threshold,
+
+        microfauna_assimilation_efficiency: 0.50,
+        microfauna_respiration_fraction_of_assimilated: 0.70,
+        microfauna_excretion_fraction_of_assimilated: 0.10,
+        microfauna_growth_fraction_of_assimilated: 0.20,
     }
 }
 

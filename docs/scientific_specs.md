@@ -192,12 +192,12 @@ That is also where denitrification belongs: not “everywhere nitrate sometimes 
 
 ### v0.5 — shrimp realism
 
-Only after the chemistry and ecology core is stable.
+Only after the chemistry and ecology core is stable. The prescriptive state-model contract for the stage-structured shrimp redesign now lives in [shrimp_state_contract.md](shrimp_state_contract.md).
 
 Build goals:
 
-* stage / size structure,
-* mineral budget for molt success,
+* stage / size structure (juvenile, sub-adult, adult with per-stage reserve and condition — see [shrimp_state_contract.md](shrimp_state_contract.md)),
+* mineral budget for molt success (extension point defined in the state contract),
 * density and sex-ratio effects,
 * osmotic stress hooks,
 * chloride-modulated nitrite hazard,
