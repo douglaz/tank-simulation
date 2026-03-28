@@ -1,4 +1,3 @@
-use tank_core::systems::water_change::apply_water_change;
 use tank_core::{
     Engine, PlayerAction, SimError, SimSeed, SimulationEngine, SourceWaterProfile, TankState,
 };
@@ -12,22 +11,72 @@ fn state_with_ro_like(seed: SimSeed) -> TankState {
     state
 }
 
+fn isolated_water_change_state(seed: SimSeed) -> TankState {
+    let mut state = state_with_ro_like(seed);
+
+    state.environment.ambient_temp_c = state.water.temperature_c;
+    state.hardware.light.enabled = false;
+    state.hardware.aeration.enabled = false;
+    state.hardware.aeration.intensity = 0.0;
+    state.hardware.filter.enabled = false;
+    state.hardware.filter.flow_lph = 0.0;
+    state.process_params.reaeration_kla_base = 0.0;
+    state.process_params.aeration_kla_boost = 0.0;
+    state
+        .process_params
+        .background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
+    state.process_params.fine_detritus_dissolution_rate_per_hour = 0.0;
+    state.process_params.feed_leach_rate_per_hour = 0.0;
+
+    state.plant_guilds.clear();
+    state.algae.suspended_biomass_g = 0.0;
+    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.nuisance_index = 0.0;
+    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.ammonia_oxidizer_biomass_g = 0.0;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.0;
+    state.microbe.comammox_biomass_g = 0.0;
+    state.microfauna.population_index = 0.0;
+    state.microfauna.grazing_pressure_index = 0.0;
+    state.animal.adults_count = 0;
+    state.animal.juveniles_count = 0;
+    state.animal.berried_females_count = 0;
+    state.detritus.particulate_organics_g_total = 0.0;
+    state.detritus.fine_detritus_g_total = 0.0;
+    state.detritus.dissolved_feed_residue_g_total = 0.0;
+    for layer in &mut state.substrate_layers {
+        layer.nutrient_store_mg_n_total = 0.0;
+        layer.nutrient_store_mg_p_total = 0.0;
+    }
+
+    state.water.ammonia_total_mg_n_total = 8.0;
+    state.water.nitrite_mg_n_total = 3.0;
+    state.water.nitrate_mg_n_total = 18.0;
+    state.water.phosphate_mg_p_total = 7.0;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 240.0;
+    state.water.dissolved_organic_carbon_mg_c_total = 16.0;
+    state.water.dissolved_organic_nitrogen_mg_n_total = 5.0;
+
+    state.reseed_stability_tracker();
+    state
+}
+
 #[test]
 fn water_change_50_percent_ro_like_halves_dissolved_totals() -> Result<(), tank_core::SimError> {
-    let mut state = state_with_ro_like(SimSeed(100));
-    let source = state
-        .source_water_catalog
-        .get("ro_like")
-        .cloned()
-        .expect("ro_like source profile should exist");
-
-    // Record pre-change totals, then apply the water-change action directly so
-    // later hourly systems (for example atmospheric CO2 exchange) cannot
-    // perturb the expected 50/50 mixing ratios.
+    let state = isolated_water_change_state(SimSeed(100));
     let before = state.water.clone();
-    apply_water_change(&mut state, 50.0, &source);
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.apply_action(PlayerAction::WaterChangePercent {
+        percent: 50.0,
+        source_profile_id: "ro_like".to_string(),
+    })?;
+    engine.step_hours(1)?;
+    assert!(
+        engine.queued_actions().is_empty(),
+        "queued water-change action should be drained during the tick"
+    );
 
-    let after = &state.water;
+    let after = &engine.full_state().water;
 
     // Each dissolved total should be reduced by 50% ± 0.5%
     let tolerance = 0.005; // 0.5%

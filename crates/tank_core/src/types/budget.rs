@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use super::TankState;
+use super::{
+    TankState, DEFAULT_SHRIMP_BODY_CARBON_MG_PER_G_WET_MASS,
+    DEFAULT_SHRIMP_BODY_NITROGEN_MG_PER_G_WET_MASS,
+};
 
 /// Average wet mass of one adult shrimp (grams).
 pub const ADULT_SHRIMP_BIOMASS_G: f64 = 0.12;
@@ -12,27 +15,17 @@ pub const PLANT_N_MG_PER_G_BIOMASS: f64 = 28.0;
 /// Algae nitrogen content: mg N per gram wet biomass.
 pub const ALGAE_N_MG_PER_G_BIOMASS: f64 = 35.0;
 
-/// Fraction of animal/microbe wet mass that is metabolizable organic matter.
-/// Used for shrimp and microbial biomass N/C accounting.
-///
-/// Shrimp body composition (derived at default `feed_n_to_c_ratio` = 0.16):
-///   - N content: ~2.8% of wet mass (literature: 2–3% N by wet mass)
-///   - C content: ~17.2% of wet mass (model simplification where organic = N + C)
-///
-/// The effective N and C fractions are:
-///   N fraction = ORGANIC_FRACTION × n_to_c_ratio / (1 + n_to_c_ratio)
-///   C fraction = ORGANIC_FRACTION / (1 + n_to_c_ratio)
+/// Fraction of wet mass that is metabolizable organic matter for generic
+/// live-biomass bookkeeping. Shrimp body biomass now uses species-specific
+/// composition fields from `ShrimpRuntimeParams`; this constant still governs
+/// reserve funding and generic microbe biomass accounting.
 pub const LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G: f64 = 0.20;
 
-/// Shrimp body N content: mg N per gram wet mass at default N:C ratio.
-/// = LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G × 1000 × 0.16 / 1.16 ≈ 27.6 mg/g.
-/// Literature: freshwater shrimp ≈ 20–30 mg N per gram wet mass.
-pub const SHRIMP_N_MG_PER_G_WET_MASS: f64 =
-    LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G * 1000.0 * 0.16 / 1.16;
+/// Default shrimp body N content: mg N per gram wet mass.
+pub const SHRIMP_N_MG_PER_G_WET_MASS: f64 = DEFAULT_SHRIMP_BODY_NITROGEN_MG_PER_G_WET_MASS;
 
-/// Shrimp body C content: mg C per gram wet mass at default N:C ratio.
-/// = LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G × 1000 / 1.16 ≈ 172.4 mg/g.
-pub const SHRIMP_C_MG_PER_G_WET_MASS: f64 = LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G * 1000.0 / 1.16;
+/// Default shrimp body C content: mg C per gram wet mass.
+pub const SHRIMP_C_MG_PER_G_WET_MASS: f64 = DEFAULT_SHRIMP_BODY_CARBON_MG_PER_G_WET_MASS;
 
 const DEFAULT_N_TO_C_RATIO: f64 = 0.16;
 
@@ -60,6 +53,13 @@ impl ElementBudget {
     pub fn net_mg(&self) -> f64 {
         self.in_mg - self.out_mg
     }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum BudgetRecordingKind {
+    #[default]
+    Snapshot,
+    Explicit,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
@@ -96,10 +96,15 @@ pub struct BudgetTotals {
 
 impl BudgetTotals {
     pub fn from_state(state: &TankState) -> Self {
+        let dissolved_oxygen_mg_total = state.water.dissolved_oxygen_mg_total;
+        debug_assert!(
+            dissolved_oxygen_mg_total >= -f64::EPSILON,
+            "negative dissolved oxygen should not reach budget totals: {dissolved_oxygen_mg_total}"
+        );
         Self {
             nitrogen_mg: total_nitrogen_mg(state),
             carbon_mg: total_carbon_mg(state),
-            oxygen_mg: state.water.dissolved_oxygen_mg_total.max(0.0),
+            oxygen_mg: dissolved_oxygen_mg_total.max(0.0),
         }
     }
 }
@@ -131,6 +136,8 @@ impl BudgetSnapshot {
 pub struct BudgetEntry {
     pub label: String,
     pub delta: BudgetDelta,
+    #[serde(default)]
+    pub recording_kind: BudgetRecordingKind,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -164,6 +171,7 @@ impl TickBudgetRecord {
         before: BudgetTotals,
         after: BudgetTotals,
         delta: BudgetDelta,
+        recording_kind: BudgetRecordingKind,
     ) {
         debug_assert!(delta_net_matches_totals(delta, before, after));
         self.after = after;
@@ -171,6 +179,7 @@ impl TickBudgetRecord {
         self.entries.push(BudgetEntry {
             label: label.to_owned(),
             delta,
+            recording_kind,
         });
     }
 }
@@ -264,11 +273,19 @@ pub fn nitrogen_budget_components(state: &TankState) -> [BudgetComponent; 17] {
         },
         BudgetComponent {
             label: "animal.adults_count",
-            amount_mg: shrimp_nitrogen_mg(state.animal.adults_count, 0, n_to_c_ratio),
+            amount_mg: shrimp_nitrogen_mg(
+                state.animal.adults_count,
+                0,
+                state.shrimp_params.body_nitrogen_mg_per_g_wet_mass,
+            ),
         },
         BudgetComponent {
             label: "animal.juveniles_count",
-            amount_mg: shrimp_nitrogen_mg(0, state.animal.juveniles_count, n_to_c_ratio),
+            amount_mg: shrimp_nitrogen_mg(
+                0,
+                state.animal.juveniles_count,
+                state.shrimp_params.body_nitrogen_mg_per_g_wet_mass,
+            ),
         },
         BudgetComponent {
             label: "animal.reserve_g",
@@ -349,11 +366,19 @@ pub fn carbon_budget_components(state: &TankState) -> [BudgetComponent; 14] {
         },
         BudgetComponent {
             label: "animal.adults_count",
-            amount_mg: shrimp_carbon_mg(state.animal.adults_count, 0, n_to_c_ratio),
+            amount_mg: shrimp_carbon_mg(
+                state.animal.adults_count,
+                0,
+                state.shrimp_params.body_carbon_mg_per_g_wet_mass,
+            ),
         },
         BudgetComponent {
             label: "animal.juveniles_count",
-            amount_mg: shrimp_carbon_mg(0, state.animal.juveniles_count, n_to_c_ratio),
+            amount_mg: shrimp_carbon_mg(
+                0,
+                state.animal.juveniles_count,
+                state.shrimp_params.body_carbon_mg_per_g_wet_mass,
+            ),
         },
         BudgetComponent {
             label: "animal.reserve_g",
@@ -440,17 +465,55 @@ pub fn shrimp_biomass_g(adults_count: u32, juveniles_count: u32) -> f64 {
         + (f64::from(juveniles_count) * JUVENILE_SHRIMP_BIOMASS_G)
 }
 
-pub fn shrimp_nitrogen_mg(adults_count: u32, juveniles_count: u32, n_to_c_ratio: f64) -> f64 {
-    live_biomass_nitrogen_mg(
+pub fn shrimp_body_nitrogen_mg(biomass_g: f64, body_nitrogen_mg_per_g_wet_mass: f64) -> f64 {
+    biomass_g.max(0.0)
+        * sanitize_body_composition_mg_per_g(
+            body_nitrogen_mg_per_g_wet_mass,
+            SHRIMP_N_MG_PER_G_WET_MASS,
+        )
+}
+
+pub fn shrimp_body_carbon_mg(biomass_g: f64, body_carbon_mg_per_g_wet_mass: f64) -> f64 {
+    biomass_g.max(0.0)
+        * sanitize_body_composition_mg_per_g(
+            body_carbon_mg_per_g_wet_mass,
+            SHRIMP_C_MG_PER_G_WET_MASS,
+        )
+}
+
+pub fn shrimp_body_detrital_mass_g(
+    biomass_g: f64,
+    body_nitrogen_mg_per_g_wet_mass: f64,
+    body_carbon_mg_per_g_wet_mass: f64,
+) -> f64 {
+    if biomass_g <= f64::EPSILON {
+        return 0.0;
+    }
+
+    (shrimp_body_nitrogen_mg(biomass_g, body_nitrogen_mg_per_g_wet_mass)
+        + shrimp_body_carbon_mg(biomass_g, body_carbon_mg_per_g_wet_mass))
+        / 1000.0
+}
+
+pub fn shrimp_nitrogen_mg(
+    adults_count: u32,
+    juveniles_count: u32,
+    body_nitrogen_mg_per_g_wet_mass: f64,
+) -> f64 {
+    shrimp_body_nitrogen_mg(
         shrimp_biomass_g(adults_count, juveniles_count),
-        n_to_c_ratio,
+        body_nitrogen_mg_per_g_wet_mass,
     )
 }
 
-pub fn shrimp_carbon_mg(adults_count: u32, juveniles_count: u32, n_to_c_ratio: f64) -> f64 {
-    live_biomass_carbon_mg(
+pub fn shrimp_carbon_mg(
+    adults_count: u32,
+    juveniles_count: u32,
+    body_carbon_mg_per_g_wet_mass: f64,
+) -> f64 {
+    shrimp_body_carbon_mg(
         shrimp_biomass_g(adults_count, juveniles_count),
-        n_to_c_ratio,
+        body_carbon_mg_per_g_wet_mass,
     )
 }
 
@@ -481,6 +544,14 @@ fn sanitize_n_to_c_ratio(n_to_c_ratio: f64) -> f64 {
         n_to_c_ratio
     } else {
         DEFAULT_N_TO_C_RATIO
+    }
+}
+
+fn sanitize_body_composition_mg_per_g(value: f64, fallback: f64) -> f64 {
+    if value.is_finite() && value > f64::EPSILON {
+        value
+    } else {
+        fallback
     }
 }
 

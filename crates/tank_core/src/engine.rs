@@ -7,8 +7,8 @@ use crate::{
     tracing::{PoolSnapshot, SimTracer, SystemTraceEntry, TickTraceBuilder, Verbosity},
     types::{
         live_biomass_carbon_mg, live_biomass_nitrogen_mg, BudgetDelta, BudgetEntry, BudgetLedger,
-        BudgetSnapshot, ElementBudget, EventCause, EventKind, EventSeverity, PlayerAction,
-        SimError, SimEvent, TankSnapshot, TankState, TickBudgetRecord,
+        BudgetRecordingKind, BudgetSnapshot, ElementBudget, EventCause, EventKind, EventSeverity,
+        PlayerAction, SimError, SimEvent, TankSnapshot, TankState, TickBudgetRecord,
     },
 };
 
@@ -436,7 +436,13 @@ impl Engine {
         if let (Some(tick), Some(before)) = (ctx.budget.as_mut(), budget_before) {
             let after = BudgetSnapshot::from_state(&self.state);
             let delta = BudgetDelta::from_snapshots(&before, &after);
-            tick.record_stage(label, before.totals, after.totals, delta);
+            tick.record_stage(
+                label,
+                before.totals,
+                after.totals,
+                delta,
+                BudgetRecordingKind::Snapshot,
+            );
         }
 
         let notes = stage_trace.into_notes();
@@ -489,9 +495,14 @@ impl Engine {
 
         if let (Some(tick), Some(before)) = (ctx.budget.as_mut(), budget_before) {
             let after = BudgetSnapshot::from_state(&self.state);
+            let recording_kind = if explicit_delta.is_some() {
+                BudgetRecordingKind::Explicit
+            } else {
+                BudgetRecordingKind::Snapshot
+            };
             let delta =
                 explicit_delta.unwrap_or_else(|| BudgetDelta::from_snapshots(&before, &after));
-            tick.record_stage(label, before.totals, after.totals, delta);
+            tick.record_stage(label, before.totals, after.totals, delta, recording_kind);
         }
 
         let notes = stage_trace.into_notes();
@@ -858,7 +869,15 @@ fn element_budget_has_flux(budget: ElementBudget) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{BudgetEntry, BudgetTotals};
+    use crate::types::{BudgetEntry, BudgetRecordingKind, BudgetTotals};
+
+    fn synthetic_entry(label: &str, delta: BudgetDelta) -> BudgetEntry {
+        BudgetEntry {
+            label: label.to_owned(),
+            delta,
+            recording_kind: BudgetRecordingKind::Snapshot,
+        }
+    }
 
     fn synthetic_tick(entries: Vec<BudgetEntry>) -> TickBudgetRecord {
         synthetic_tick_with_net_delta(entries, BudgetDelta::default())
@@ -882,26 +901,11 @@ mod tests {
     #[test]
     fn no_op_open_system_actions_do_not_disable_the_budget_guard() {
         let tick = synthetic_tick(vec![
-            BudgetEntry {
-                label: "action:feed".to_owned(),
-                delta: BudgetDelta::default(),
-            },
-            BudgetEntry {
-                label: "action:water_change".to_owned(),
-                delta: BudgetDelta::default(),
-            },
-            BudgetEntry {
-                label: "action:siphon_detritus".to_owned(),
-                delta: BudgetDelta::default(),
-            },
-            BudgetEntry {
-                label: "action:add_shrimp".to_owned(),
-                delta: BudgetDelta::default(),
-            },
-            BudgetEntry {
-                label: "action:remove_shrimp".to_owned(),
-                delta: BudgetDelta::default(),
-            },
+            synthetic_entry("action:feed", BudgetDelta::default()),
+            synthetic_entry("action:water_change", BudgetDelta::default()),
+            synthetic_entry("action:siphon_detritus", BudgetDelta::default()),
+            synthetic_entry("action:add_shrimp", BudgetDelta::default()),
+            synthetic_entry("action:remove_shrimp", BudgetDelta::default()),
         ]);
 
         assert!(tick_has_closed_system_nitrogen(&tick));
@@ -910,16 +914,16 @@ mod tests {
 
     #[test]
     fn carbon_guard_uses_carbon_flux_for_open_system_actions() {
-        let tick = synthetic_tick(vec![BudgetEntry {
-            label: "action:water_change".to_owned(),
-            delta: BudgetDelta {
+        let tick = synthetic_tick(vec![synthetic_entry(
+            "action:water_change",
+            BudgetDelta {
                 carbon: ElementBudget {
                     in_mg: 0.0,
                     out_mg: 8.0,
                 },
                 ..BudgetDelta::default()
             },
-        }]);
+        )]);
 
         assert!(tick_has_closed_system_nitrogen(&tick));
         assert!(!tick_has_closed_system_carbon(&tick));
@@ -927,9 +931,9 @@ mod tests {
 
     #[test]
     fn clean_filter_is_treated_as_closed_when_it_only_reroutes_internal_mass() {
-        let tick = synthetic_tick(vec![BudgetEntry {
-            label: "action:clean_filter".to_owned(),
-            delta: BudgetDelta {
+        let tick = synthetic_tick(vec![synthetic_entry(
+            "action:clean_filter",
+            BudgetDelta {
                 nitrogen: ElementBudget {
                     in_mg: 2.0,
                     out_mg: 2.0,
@@ -940,7 +944,7 @@ mod tests {
                 },
                 ..BudgetDelta::default()
             },
-        }]);
+        )]);
 
         assert!(tick_has_closed_system_nitrogen(&tick));
         assert!(tick_has_closed_system_carbon(&tick));
@@ -949,16 +953,16 @@ mod tests {
     #[test]
     fn chemistry_flux_does_not_open_the_carbon_guard() {
         let tick = synthetic_tick_with_net_delta(
-            vec![BudgetEntry {
-                label: "system:chemistry".to_owned(),
-                delta: BudgetDelta {
+            vec![synthetic_entry(
+                "system:chemistry",
+                BudgetDelta {
                     carbon: ElementBudget {
                         in_mg: 5.0,
                         out_mg: 3.0,
                     },
                     ..BudgetDelta::default()
                 },
-            }],
+            )],
             BudgetDelta {
                 carbon: ElementBudget {
                     in_mg: 5.0,
@@ -976,26 +980,26 @@ mod tests {
     fn chemistry_flux_is_subtracted_before_carbon_budget_guard_checks_other_leaks() {
         let tick = synthetic_tick_with_net_delta(
             vec![
-                BudgetEntry {
-                    label: "system:chemistry".to_owned(),
-                    delta: BudgetDelta {
+                synthetic_entry(
+                    "system:chemistry",
+                    BudgetDelta {
                         carbon: ElementBudget {
                             in_mg: 5.0,
                             out_mg: 3.0,
                         },
                         ..BudgetDelta::default()
                     },
-                },
-                BudgetEntry {
-                    label: "system:daily_plants".to_owned(),
-                    delta: BudgetDelta {
+                ),
+                synthetic_entry(
+                    "system:daily_plants",
+                    BudgetDelta {
                         carbon: ElementBudget {
                             in_mg: 0.0,
                             out_mg: 4.0,
                         },
                         ..BudgetDelta::default()
                     },
-                },
+                ),
             ],
             BudgetDelta {
                 carbon: ElementBudget {
@@ -1025,26 +1029,26 @@ mod tests {
     fn open_action_flux_is_subtracted_before_nitrogen_budget_guard_checks_other_leaks() {
         let tick = synthetic_tick_with_net_delta(
             vec![
-                BudgetEntry {
-                    label: "action:feed".to_owned(),
-                    delta: BudgetDelta {
+                synthetic_entry(
+                    "action:feed",
+                    BudgetDelta {
                         nitrogen: ElementBudget {
                             in_mg: 10.0,
                             out_mg: 0.0,
                         },
                         ..BudgetDelta::default()
                     },
-                },
-                BudgetEntry {
-                    label: "system:daily_plants".to_owned(),
-                    delta: BudgetDelta {
+                ),
+                synthetic_entry(
+                    "system:daily_plants",
+                    BudgetDelta {
                         nitrogen: ElementBudget {
                             in_mg: 0.0,
                             out_mg: 3.0,
                         },
                         ..BudgetDelta::default()
                     },
-                },
+                ),
             ],
             BudgetDelta {
                 nitrogen: ElementBudget {
@@ -1074,26 +1078,26 @@ mod tests {
     fn open_action_flux_is_subtracted_before_carbon_budget_guard_checks_other_leaks() {
         let tick = synthetic_tick_with_net_delta(
             vec![
-                BudgetEntry {
-                    label: "action:water_change".to_owned(),
-                    delta: BudgetDelta {
+                synthetic_entry(
+                    "action:water_change",
+                    BudgetDelta {
                         carbon: ElementBudget {
                             in_mg: 0.0,
                             out_mg: 8.0,
                         },
                         ..BudgetDelta::default()
                     },
-                },
-                BudgetEntry {
-                    label: "system:daily_algae".to_owned(),
-                    delta: BudgetDelta {
+                ),
+                synthetic_entry(
+                    "system:daily_algae",
+                    BudgetDelta {
                         carbon: ElementBudget {
                             in_mg: 0.0,
                             out_mg: 4.0,
                         },
                         ..BudgetDelta::default()
                     },
-                },
+                ),
             ],
             BudgetDelta {
                 carbon: ElementBudget {

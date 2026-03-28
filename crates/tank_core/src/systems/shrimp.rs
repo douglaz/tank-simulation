@@ -1,7 +1,7 @@
 use crate::systems::chemistry::{compute_nh3_mg_l, resolve_carbonate_state};
 use crate::types::{
     algae_carbon_mg, algae_detrital_mass_g, algae_nitrogen_mg, detritus_carbon_mg,
-    detritus_nitrogen_mg, live_biomass_detrital_mass_g, EggCohort, EventCause, EventKind,
+    detritus_nitrogen_mg, shrimp_body_detrital_mass_g, EggCohort, EventCause, EventKind,
     EventSeverity, ShrimpRuntimeParams, TankState, ADULT_SHRIMP_BIOMASS_G,
     JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
 };
@@ -641,9 +641,10 @@ fn route_dead_shrimp_to_detritus(state: &mut TankState, adult_deaths: u32, juv_d
     // in-tank as detritus until an explicit export path exists.
     let dead_biomass_g = (f64::from(adult_deaths) * ADULT_SHRIMP_BIOMASS_G)
         + (f64::from(juv_deaths) * JUVENILE_SHRIMP_BIOMASS_G);
-    state.detritus.fine_detritus_g_total += live_biomass_detrital_mass_g(
+    state.detritus.fine_detritus_g_total += shrimp_body_detrital_mass_g(
         dead_biomass_g * detritus_fraction,
-        state.process_params.feed_n_to_c_ratio,
+        state.shrimp_params.body_nitrogen_mg_per_g_wet_mass,
+        state.shrimp_params.body_carbon_mg_per_g_wet_mass,
     );
 
     // Proportionally transfer dead shrimp's share of the reserve pool to detritus.

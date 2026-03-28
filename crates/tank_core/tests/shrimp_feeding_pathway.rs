@@ -7,6 +7,7 @@ use tank_core::systems::chemistry::solve_carbonate_equilibrium;
 ///   fecal_fraction = 1.0 - assimilation_efficiency
 ///   respiration_fraction + excretion_fraction + growth_fraction = 1.0
 use tank_core::{
+    budget_helpers::{assert_c_conserved, assert_n_conserved, step_and_inspect},
     Engine, ProcessParams, SimError, SimSeed, SimulationEngine, TankState, WaterState,
 };
 
@@ -204,34 +205,24 @@ fn daily_shrimp_refreshes_cached_carbonate_state() -> Result<(), SimError> {
 
 #[test]
 fn closed_system_shrimp_feeding_conserves_nitrogen() -> Result<(), SimError> {
-    let state = feeding_test_state();
-    let n_before = state.total_nitrogen();
-
-    let mut engine = Engine::from_parts(state, vec![]);
-    engine.enable_budget_tracking();
+    let mut engine = Engine::from_parts(feeding_test_state(), vec![]);
     // Run 7 days to accumulate feeding effects
-    engine.step_hours(24 * 7)?;
+    let result = step_and_inspect(&mut engine, 24 * 7)?;
 
-    let n_after = engine.full_state().total_nitrogen();
     // Nitrogen must be conserved: consumed periphyton/detritus N should
     // reappear as TAN + fecal detritus N + reserve N (no external inputs/outputs).
-    assert_close(n_after, n_before, 0.01);
+    assert_n_conserved(&result.budget, 0.01);
     Ok(())
 }
 
 #[test]
 fn closed_system_shrimp_feeding_conserves_carbon() -> Result<(), SimError> {
-    let state = feeding_test_state();
-    let c_before = state.total_carbon();
+    let mut engine = Engine::from_parts(feeding_test_state(), vec![]);
+    let result = step_and_inspect(&mut engine, 24 * 7)?;
 
-    let mut engine = Engine::from_parts(state, vec![]);
-    engine.enable_budget_tracking();
-    engine.step_hours(24 * 7)?;
-
-    let c_after = engine.full_state().total_carbon();
     // Carbon must be conserved: consumed periphyton/detritus C should
     // reappear as DIC + DOC + fecal detritus C + reserve C.
-    assert_close(c_after, c_before, 0.01);
+    assert_c_conserved(&result.budget, 0.01);
     Ok(())
 }
 

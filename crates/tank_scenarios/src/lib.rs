@@ -513,6 +513,7 @@ fn materialize_scenario(
         juvenile_sensitivity: shrimp_preset.juvenile_sensitivity,
         high_temp_repro_penalty_start_c: shrimp_preset.high_temp_repro_penalty_start_c,
         high_temp_repro_penalty_full_c: shrimp_preset.high_temp_repro_penalty_full_c,
+        ..ShrimpRuntimeParams::default()
     };
 
     // Environment

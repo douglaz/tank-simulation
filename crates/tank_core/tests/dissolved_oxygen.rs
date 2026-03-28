@@ -125,6 +125,30 @@ fn reaeration_converges_toward_saturation() -> Result<(), tank_core::SimError> {
     Ok(())
 }
 
+#[test]
+fn dissolved_oxygen_budget_preserves_gross_in_and_out_terms() {
+    let mut state = oxygen_test_state(SimSeed(3_250));
+    state.environment.hour_of_day = 12;
+    state.hardware.aeration.enabled = true;
+    state.hardware.aeration.intensity = 1.0;
+    state.water.dissolved_oxygen_mg_total = 4.0 * state.water_volume_l();
+
+    let oxygen_before = state.water.dissolved_oxygen_mg_total;
+    let delta =
+        tank_core::systems::dissolved_oxygen::step_dissolved_oxygen_with_budget(&mut state, true);
+
+    assert!(
+        delta.oxygen.in_mg > 0.0 && delta.oxygen.out_mg > 0.0,
+        "dissolved_oxygen budget should keep gross O2 in/out terms when reaeration/photosynthesis and respiration coincide: {:?}",
+        delta.oxygen
+    );
+    assert!(
+        ((state.water.dissolved_oxygen_mg_total - oxygen_before) - delta.oxygen.net_mg()).abs()
+            <= 1e-6,
+        "recorded gross O2 budget should reconcile to the observed inventory delta"
+    );
+}
+
 /// Retrofitted test: uses tracing output to verify that the dissolved_oxygen
 /// system produces positive DO deltas during reaeration from zero.
 #[test]

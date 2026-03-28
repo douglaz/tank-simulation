@@ -34,13 +34,29 @@
 //!
 //! Set `TANK_BUDGET_DEBUG=1` to print per-tick budget summaries to stderr
 //! without modifying test code or assertions. The output identifies the system
-//! responsible for the largest budget movement per element per tick.
+//! responsible for the largest budget movement per element per tick. If a run
+//! fails after recording some ticks, those completed ticks are still printed
+//! before the error is returned.
+//!
+//! # Runtime opt-out
+//!
+//! Budget tracking is runtime-gated by `Engine`'s internal
+//! `Option<BudgetLedger>`. When that ledger is `None` (the default, or after
+//! `Engine::disable_budget_tracking()`), the engine skips budget snapshot work
+//! and does not allocate tick records. [`step_and_inspect`] opts into tracking
+//! only for the inspected run.
+
+use std::{
+    cell::Cell,
+    ffi::OsString,
+    sync::{Mutex, MutexGuard, OnceLock},
+};
 
 use crate::{
     engine::Engine,
     types::{
-        BudgetDelta, BudgetLedger, BudgetTotals, ElementBudget, SimError, TankSnapshot,
-        TickBudgetRecord,
+        BudgetDelta, BudgetLedger, BudgetRecordingKind, BudgetTotals, ElementBudget, SimError,
+        TankSnapshot, TickBudgetRecord,
     },
     SimulationEngine,
 };
@@ -75,6 +91,75 @@ pub struct BudgetInspector {
     pub ledger: BudgetLedger,
     pub before_totals: BudgetTotals,
     pub after_totals: BudgetTotals,
+}
+
+thread_local! {
+    static BUDGET_DEBUG_LOCK_DEPTH: Cell<u32> = const { Cell::new(0) };
+}
+
+struct BudgetDebugLockGuard {
+    _lock: Option<MutexGuard<'static, ()>>,
+}
+
+impl BudgetDebugLockGuard {
+    fn acquire() -> Self {
+        if BUDGET_DEBUG_LOCK_DEPTH.with(|depth| depth.get() > 0) {
+            BUDGET_DEBUG_LOCK_DEPTH.with(|depth| depth.set(depth.get() + 1));
+            return Self { _lock: None };
+        }
+
+        let lock = budget_debug_lock()
+            .lock()
+            .expect("budget debug env lock poisoned");
+        BUDGET_DEBUG_LOCK_DEPTH.with(|depth| depth.set(1));
+        Self { _lock: Some(lock) }
+    }
+}
+
+impl Drop for BudgetDebugLockGuard {
+    fn drop(&mut self) {
+        BUDGET_DEBUG_LOCK_DEPTH.with(|depth| depth.set(depth.get().saturating_sub(1)));
+    }
+}
+
+struct BudgetDebugEnvRestore {
+    previous: Option<OsString>,
+}
+
+impl Drop for BudgetDebugEnvRestore {
+    fn drop(&mut self) {
+        match &self.previous {
+            Some(value) => std::env::set_var("TANK_BUDGET_DEBUG", value),
+            None => std::env::remove_var("TANK_BUDGET_DEBUG"),
+        }
+    }
+}
+
+fn budget_debug_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
+fn with_budget_debug_lock<T>(f: impl FnOnce() -> T) -> T {
+    let _guard = BudgetDebugLockGuard::acquire();
+    f()
+}
+
+/// Temporarily sets `TANK_BUDGET_DEBUG` while holding the same global lock that
+/// [`step_and_inspect`] uses before reading the env var. This keeps debug-path
+/// tests isolated even under the default parallel test harness.
+pub fn with_budget_debug_env<T>(enabled: bool, f: impl FnOnce() -> T) -> T {
+    with_budget_debug_lock(|| {
+        let _restore = BudgetDebugEnvRestore {
+            previous: std::env::var_os("TANK_BUDGET_DEBUG"),
+        };
+        if enabled {
+            std::env::set_var("TANK_BUDGET_DEBUG", "1");
+        } else {
+            std::env::remove_var("TANK_BUDGET_DEBUG");
+        }
+        f()
+    })
 }
 
 impl BudgetInspector {
@@ -136,7 +221,7 @@ impl BudgetInspector {
     pub fn largest_mover(&self, element: Element) -> Option<SystemElementDelta> {
         self.system_deltas(element)
             .into_iter()
-            .max_by(|a, b| a.net_mg.abs().partial_cmp(&b.net_mg.abs()).unwrap())
+            .max_by(|a, b| abs_cmp(a.net_mg, b.net_mg))
     }
 
     /// Access the underlying tick records directly.
@@ -173,27 +258,32 @@ impl BudgetInspector {
 /// both the final state snapshot and a [`BudgetInspector`] covering those ticks.
 ///
 /// Budget tracking is enabled before stepping and left enabled afterward so
-/// callers can continue inspecting if needed.
+/// callers can continue inspecting if needed. When `TANK_BUDGET_DEBUG=1`,
+/// completed ticks are printed even if stepping fails partway through.
 pub fn step_and_inspect(engine: &mut Engine, hours: u32) -> Result<InspectionResult, SimError> {
-    engine.enable_budget_tracking();
-    let before_totals = engine.full_state().budget_totals();
-    let tick_offset = engine.budget_ledger().map_or(0, |l| l.ticks.len());
+    with_budget_debug_lock(|| {
+        engine.enable_budget_tracking();
+        let before_totals = engine.full_state().budget_totals();
+        let tick_offset = engine.budget_ledger().map_or(0, |l| l.ticks.len());
 
-    engine.step_hours(hours)?;
+        if let Err(err) = engine.step_hours(hours) {
+            maybe_print_debug(recorded_ticks_since(engine, tick_offset));
+            return Err(err);
+        }
 
-    let after_totals = engine.full_state().budget_totals();
-    let ledger = engine.budget_ledger().expect("budget tracking was enabled");
-    let new_ticks = ledger.ticks[tick_offset..].to_vec();
+        let after_totals = engine.full_state().budget_totals();
+        let new_ticks = recorded_ticks_since(engine, tick_offset).to_vec();
 
-    maybe_print_debug(&new_ticks);
+        maybe_print_debug(&new_ticks);
 
-    Ok(InspectionResult {
-        snapshot: engine.snapshot(),
-        budget: BudgetInspector {
-            ledger: BudgetLedger { ticks: new_ticks },
-            before_totals,
-            after_totals,
-        },
+        Ok(InspectionResult {
+            snapshot: engine.snapshot(),
+            budget: BudgetInspector {
+                ledger: BudgetLedger { ticks: new_ticks },
+                before_totals,
+                after_totals,
+            },
+        })
     })
 }
 
@@ -222,12 +312,30 @@ pub fn assert_c_conserved(budget: &BudgetInspector, tolerance_mg: f64) {
 ///
 /// Unlike [`assert_budget_balanced`], this does not require oxygen inventory
 /// to stay flat. It checks that the recorded gross O2 inputs and outputs across
-/// each tick reconcile to the observed inventory delta, which is the useful
-/// contract for aerated/open systems.
+/// each tick reconcile to the observed inventory delta, and it rejects
+/// oxygen-moving stages that are expected to preserve explicit gross
+/// bookkeeping but were only recorded from snapshot deltas.
 pub fn assert_o2_balanced(budget: &BudgetInspector, tolerance_mg: f64) {
     let gross = budget.gross_flow(Element::Oxygen);
     let net = budget.net_delta(Element::Oxygen);
     let accounting_error = net - gross.net_mg();
+    let missing_explicit_stage =
+        budget
+            .ledger
+            .ticks
+            .iter()
+            .enumerate()
+            .find_map(|(index, tick)| {
+                tick.entries.iter().find_map(|entry| {
+                    let oxygen = entry.delta.oxygen;
+                    let has_flux =
+                        oxygen.in_mg.abs() > tolerance_mg || oxygen.out_mg.abs() > tolerance_mg;
+                    (has_flux
+                        && oxygen_stage_requires_explicit_budget(entry.label.as_str())
+                        && entry.recording_kind != BudgetRecordingKind::Explicit)
+                        .then_some((index, tick, entry))
+                })
+            });
     let worst_tick = budget
         .ledger
         .ticks
@@ -239,9 +347,10 @@ pub fn assert_o2_balanced(budget: &BudgetInspector, tolerance_mg: f64) {
             let error = observed - gross.net_mg();
             (index, error, gross, tick)
         })
-        .max_by(|(_, a, _, _), (_, b, _, _)| a.abs().partial_cmp(&b.abs()).unwrap());
+        .max_by(|(_, a, _, _), (_, b, _, _)| abs_cmp(*a, *b));
 
     if accounting_error.abs() <= tolerance_mg
+        && missing_explicit_stage.is_none()
         && worst_tick
             .as_ref()
             .is_none_or(|(_, error, _, _)| error.abs() <= tolerance_mg)
@@ -256,6 +365,14 @@ pub fn assert_o2_balanced(budget: &BudgetInspector, tolerance_mg: f64) {
         gross.in_mg,
         gross.out_mg
     );
+    if let Some((index, tick, entry)) = missing_explicit_stage {
+        let oxygen = entry.delta.oxygen;
+        msg.push_str(&format!(
+            "  missing explicit gross O2 accounting: tick {index} (day {}, hour {}) {} \
+             recorded via {:?} with in={:.9} out={:.9}\n",
+            tick.day, tick.hour, entry.label, entry.recording_kind, oxygen.in_mg, oxygen.out_mg
+        ));
+    }
     if let Some((index, error, gross, tick)) = worst_tick {
         msg.push_str(&format!(
             "  worst tick: index {index} (day {}, hour {}) error {error:+.9} mg, \
@@ -302,7 +419,7 @@ pub fn assert_budget_balanced(budget: &BudgetInspector, element: Element, tolera
     let worst_tick = per_tick
         .iter()
         .enumerate()
-        .max_by(|(_, a), (_, b)| a.abs().partial_cmp(&b.abs()).unwrap());
+        .max_by(|(_, a), (_, b)| abs_cmp(**a, **b));
     let element_name = match element {
         Element::Nitrogen => "nitrogen",
         Element::Carbon => "carbon",
@@ -447,13 +564,24 @@ fn largest_mover_in_tick(tick: &TickBudgetRecord, element: Element) -> Option<(S
             let net = select_element(&e.delta, element).net_mg();
             (e.label.clone(), net)
         })
-        .max_by(|a, b| a.1.abs().partial_cmp(&b.1.abs()).unwrap())
+        .max_by(|a, b| abs_cmp(a.1, b.1))
         .filter(|(_, net)| net.abs() > 1e-12)
 }
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+fn recorded_ticks_since(engine: &Engine, tick_offset: usize) -> &[TickBudgetRecord] {
+    let ledger = engine.budget_ledger().expect("budget tracking was enabled");
+    &ledger.ticks[tick_offset..]
+}
+
+fn abs_cmp(left: f64, right: f64) -> std::cmp::Ordering {
+    left.abs()
+        .partial_cmp(&right.abs())
+        .unwrap_or(std::cmp::Ordering::Equal)
+}
 
 fn tick_gross_flow(tick: &TickBudgetRecord, element: Element) -> ElementBudget {
     tick.entries
@@ -475,4 +603,8 @@ fn select_element(delta: &BudgetDelta, element: Element) -> ElementBudget {
         Element::Carbon => delta.carbon,
         Element::Oxygen => delta.oxygen,
     }
+}
+
+fn oxygen_stage_requires_explicit_budget(label: &str) -> bool {
+    matches!(label, "system:dissolved_oxygen" | "action:water_change")
 }

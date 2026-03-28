@@ -100,9 +100,13 @@ pub struct AnimalState {
     pub reserve_g: f64,
 }
 
+pub const DEFAULT_SHRIMP_BODY_NITROGEN_MG_PER_G_WET_MASS: f64 = 27.586206896551722;
+pub const DEFAULT_SHRIMP_BODY_CARBON_MG_PER_G_WET_MASS: f64 = 172.41379310344828;
+
 /// Species-specific shrimp parameters materialized from ShrimpPreset.
 /// Stored in TankState for deterministic save/load.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct ShrimpRuntimeParams {
     pub optimal_temp_min_c: f64,
     pub optimal_temp_max_c: f64,
@@ -114,6 +118,20 @@ pub struct ShrimpRuntimeParams {
     pub juvenile_sensitivity: f64,
     pub high_temp_repro_penalty_start_c: f64,
     pub high_temp_repro_penalty_full_c: f64,
+    /// Species/body-composition nitrogen content used for mortality routing and
+    /// closed-system shrimp biomass accounting.
+    ///
+    /// Default preserves the phase-1 tracked wet-mass composition that earlier
+    /// releases derived implicitly from the generic detrital `feed_n_to_c_ratio`.
+    #[serde(default = "default_shrimp_body_nitrogen_mg_per_g_wet_mass")]
+    pub body_nitrogen_mg_per_g_wet_mass: f64,
+    /// Species/body-composition carbon content used for mortality routing and
+    /// closed-system shrimp biomass accounting.
+    ///
+    /// Default preserves the phase-1 tracked wet-mass composition that earlier
+    /// releases derived implicitly from the generic detrital `feed_n_to_c_ratio`.
+    #[serde(default = "default_shrimp_body_carbon_mg_per_g_wet_mass")]
+    pub body_carbon_mg_per_g_wet_mass: f64,
 }
 
 /// Tracks recent chemistry swings for shrimp stress calculations.
@@ -214,8 +232,18 @@ impl Default for ShrimpRuntimeParams {
             juvenile_sensitivity: 1.5,
             high_temp_repro_penalty_start_c: 28.0,
             high_temp_repro_penalty_full_c: 33.0,
+            body_nitrogen_mg_per_g_wet_mass: default_shrimp_body_nitrogen_mg_per_g_wet_mass(),
+            body_carbon_mg_per_g_wet_mass: default_shrimp_body_carbon_mg_per_g_wet_mass(),
         }
     }
+}
+
+fn default_shrimp_body_nitrogen_mg_per_g_wet_mass() -> f64 {
+    DEFAULT_SHRIMP_BODY_NITROGEN_MG_PER_G_WET_MASS
+}
+
+fn default_shrimp_body_carbon_mg_per_g_wet_mass() -> f64 {
+    DEFAULT_SHRIMP_BODY_CARBON_MG_PER_G_WET_MASS
 }
 
 impl Default for StabilityTracker {

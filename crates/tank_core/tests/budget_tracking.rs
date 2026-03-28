@@ -245,6 +245,16 @@ fn manual_shrimp_biomass_g(adults_count: u32, juveniles_count: u32) -> f64 {
     f64::from(adults_count) * 0.12 + f64::from(juveniles_count) * 0.05
 }
 
+fn manual_shrimp_nitrogen_mg(state: &TankState, adults_count: u32, juveniles_count: u32) -> f64 {
+    manual_shrimp_biomass_g(adults_count, juveniles_count)
+        * state.shrimp_params.body_nitrogen_mg_per_g_wet_mass
+}
+
+fn manual_shrimp_carbon_mg(state: &TankState, adults_count: u32, juveniles_count: u32) -> f64 {
+    manual_shrimp_biomass_g(adults_count, juveniles_count)
+        * state.shrimp_params.body_carbon_mg_per_g_wet_mass
+}
+
 fn collect_numeric_paths(value: &Value, prefix: &str, paths: &mut BTreeSet<String>) {
     match value {
         Value::Object(map) => {
@@ -315,9 +325,10 @@ fn test_total_n_helper_sums_all_pools() {
         + state.algae.suspended_biomass_g * 35.0
         + state.algae.periphyton_biomass_g * 35.0
         + manual_live_biomass_nitrogen_mg(microbe_biomass_g, ratio)
-        + manual_live_biomass_nitrogen_mg(
-            manual_shrimp_biomass_g(state.animal.adults_count, state.animal.juveniles_count),
-            ratio,
+        + manual_shrimp_nitrogen_mg(
+            &state,
+            state.animal.adults_count,
+            state.animal.juveniles_count,
         )
         + manual_organic_nitrogen_mg(state.animal.reserve_g, ratio)
         + manual_organic_nitrogen_mg(state.detritus.particulate_organics_g_total, ratio)
@@ -341,9 +352,10 @@ fn test_total_c_helper_sums_all_pools() {
         + (state.algae.suspended_biomass_g * 35.0 / ratio)
         + (state.algae.periphyton_biomass_g * 35.0 / ratio)
         + manual_live_biomass_carbon_mg(microbe_biomass_g, ratio)
-        + manual_live_biomass_carbon_mg(
-            manual_shrimp_biomass_g(state.animal.adults_count, state.animal.juveniles_count),
-            ratio,
+        + manual_shrimp_carbon_mg(
+            &state,
+            state.animal.adults_count,
+            state.animal.juveniles_count,
         )
         + manual_organic_carbon_mg(state.animal.reserve_g, ratio)
         + manual_organic_carbon_mg(state.detritus.particulate_organics_g_total, ratio)
@@ -1165,18 +1177,31 @@ fn test_shrimp_death_detritus_amount_matches_expected_body_mass() {
     assert!(dead_count > 0, "expected some shrimp deaths");
 
     // Expected detritus from dead bodies (no reserve contribution since reserve_g = 0)
-    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let dead_biomass_g = f64::from(dead_count) * ADULT_SHRIMP_BIOMASS_G;
-    let expected_detritus_n_mg = tank_core::live_biomass_nitrogen_mg(dead_biomass_g, n_to_c_ratio);
-    let expected_detritus_c_mg = tank_core::live_biomass_carbon_mg(dead_biomass_g, n_to_c_ratio);
+    let expected_detritus_n_mg = tank_core::shrimp_body_nitrogen_mg(
+        dead_biomass_g,
+        state.shrimp_params.body_nitrogen_mg_per_g_wet_mass,
+    );
+    let expected_detritus_c_mg = tank_core::shrimp_body_carbon_mg(
+        dead_biomass_g,
+        state.shrimp_params.body_carbon_mg_per_g_wet_mass,
+    );
+    let expected_detritus_g = tank_core::shrimp_body_detrital_mass_g(
+        dead_biomass_g,
+        state.shrimp_params.body_nitrogen_mg_per_g_wet_mass,
+        state.shrimp_params.body_carbon_mg_per_g_wet_mass,
+    );
 
-    // Detritus should contain exactly the dead shrimp body mass (converted to detrital form)
-    let detritus_n_mg =
-        tank_core::detritus_nitrogen_mg(state.detritus.fine_detritus_g_total, n_to_c_ratio);
-    let detritus_c_mg =
-        tank_core::detritus_carbon_mg(state.detritus.fine_detritus_g_total, n_to_c_ratio);
-    assert_close(detritus_n_mg, expected_detritus_n_mg, 1e-9);
-    assert_close(detritus_c_mg, expected_detritus_c_mg, 1e-9);
+    assert_close(
+        state.detritus.fine_detritus_g_total,
+        expected_detritus_g,
+        1e-9,
+    );
+    assert_close(
+        state.detritus.fine_detritus_g_total * 1000.0,
+        expected_detritus_n_mg + expected_detritus_c_mg,
+        1e-9,
+    );
 
     // Total N and C must still be conserved
     assert_close(state.total_nitrogen(), initial_total_n, 1e-6);
@@ -1232,6 +1257,8 @@ fn test_high_mortality_200_hours_conserves_n_c_and_accumulates_detritus() -> Res
     state.microbe.ammonia_oxidizer_biomass_g = 0.3;
     state.microbe.nitrite_oxidizer_biomass_g = 0.2;
     state.microbe.comammox_biomass_g = 0.1;
+    state.microfauna.population_index = 0.0;
+    state.microfauna.grazing_pressure_index = 0.0;
     state.filter_state.biofilter_maturity_index = 0.6;
 
     state.hardware.light.enabled = true;
@@ -1245,6 +1272,7 @@ fn test_high_mortality_200_hours_conserves_n_c_and_accumulates_detritus() -> Res
     // carbon conservation assertions.
     state.process_params.reaeration_kla_base = 0.0;
     state.process_params.aeration_kla_boost = 0.0;
+    state.process_params.fine_detritus_dissolution_rate_per_hour = 0.0;
     state.hardware.filter.flow_lph = 0.0;
     // Elevated base mortality for this stress scenario
     state.process_params.shrimp_base_mortality_per_day = 0.01;
@@ -1259,13 +1287,25 @@ fn test_high_mortality_200_hours_conserves_n_c_and_accumulates_detritus() -> Res
     let initial_total_n = state.total_nitrogen();
     let initial_total_c = state.total_carbon();
     let initial_population = state.animal.adults_count + state.animal.juveniles_count;
+    let initial_total_particulate_detritus =
+        state.detritus.particulate_organics_g_total + state.detritus.fine_detritus_g_total;
 
     let mut engine = Engine::from_parts(state, vec![]);
+    let mut max_total_particulate_detritus = initial_total_particulate_detritus;
 
-    // Run 200 hours, checking conservation every 25-hour block
-    for hour_block in 0..8 {
-        engine.step_hours(25)?;
+    // Run 200 hours, checking detrital buildup hourly and conservation every 25 hours.
+    for hour in 1..=200 {
+        engine.step_hours(1)?;
         let s = engine.full_state();
+        let total_particulate_detritus =
+            s.detritus.particulate_organics_g_total + s.detritus.fine_detritus_g_total;
+        max_total_particulate_detritus =
+            max_total_particulate_detritus.max(total_particulate_detritus);
+
+        if hour % 25 != 0 {
+            continue;
+        }
+
         let current_n = s.total_nitrogen();
         let current_c = s.total_carbon();
 
@@ -1274,13 +1314,13 @@ fn test_high_mortality_200_hours_conserves_n_c_and_accumulates_detritus() -> Res
         assert!(
             (current_n - initial_total_n).abs() < 0.5,
             "N conservation violated at hour {}: initial={initial_total_n:.4}, current={current_n:.4}, drift={:.4}",
-            (hour_block + 1) * 25,
+            hour,
             (current_n - initial_total_n).abs()
         );
         assert!(
             (current_c - initial_total_c).abs() < 0.5,
             "C conservation violated at hour {}: initial={initial_total_c:.4}, current={current_c:.4}, drift={:.4}",
-            (hour_block + 1) * 25,
+            hour,
             (current_c - initial_total_c).abs()
         );
     }
@@ -1294,10 +1334,10 @@ fn test_high_mortality_200_hours_conserves_n_c_and_accumulates_detritus() -> Res
         "expected population decline: initial={initial_population}, final={final_population}"
     );
 
-    // N/C conservation (verified at each checkpoint above) combined with population
-    // decline proves dead shrimp mass was routed to in-tank pools. With active
-    // decomposers, dead biomass may already have moved through fine_detritus into
-    // dissolved organics, TAN, and DIC — all tracked by the budget system.
+    assert!(
+        max_total_particulate_detritus > initial_total_particulate_detritus,
+        "expected carcass routing to increase particulate detritus at some checkpoint: initial={initial_total_particulate_detritus}, max={max_total_particulate_detritus}"
+    );
 
     Ok(())
 }

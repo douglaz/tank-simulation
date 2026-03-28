@@ -1,18 +1,17 @@
 //! Tests for the budget_helpers module: step_and_inspect, assertion API, debug output,
 //! and per-system inspection.
 
-use std::{
-    ffi::OsString,
-    sync::{Mutex, MutexGuard, OnceLock},
-};
+use std::panic::catch_unwind;
 
 use tank_core::{
     budget_helpers::{
         assert_budget_balanced, assert_c_conserved, assert_n_conserved, assert_o2_balanced,
-        assert_per_tick_balanced, step_and_inspect, Element,
+        assert_per_tick_balanced, step_and_inspect, with_budget_debug_env, BudgetInspector,
+        Element,
     },
+    BudgetDelta, BudgetEntry, BudgetLedger, BudgetRecordingKind, BudgetTotals, ElementBudget,
     Engine, PlantGuildState, PlayerAction, ProcessParams, SimError, SimSeed, SimulationEngine,
-    SourceWaterProfile, SubstrateLayerState, TankState,
+    SourceWaterProfile, SubstrateLayerState, TankState, TickBudgetRecord,
 };
 
 // ---------------------------------------------------------------------------
@@ -93,39 +92,6 @@ fn quiescent_budget_state(seed: SimSeed) -> TankState {
     state.water.dissolved_organic_carbon_mg_c_total = 16.0;
     state.reseed_stability_tracker();
     state
-}
-
-fn budget_debug_env_lock() -> &'static Mutex<()> {
-    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    LOCK.get_or_init(|| Mutex::new(()))
-}
-
-struct BudgetDebugEnvGuard {
-    _lock: MutexGuard<'static, ()>,
-    previous: Option<OsString>,
-}
-
-impl BudgetDebugEnvGuard {
-    fn enable() -> Self {
-        let lock = budget_debug_env_lock()
-            .lock()
-            .expect("budget debug env lock poisoned");
-        let previous = std::env::var_os("TANK_BUDGET_DEBUG");
-        std::env::set_var("TANK_BUDGET_DEBUG", "1");
-        Self {
-            _lock: lock,
-            previous,
-        }
-    }
-}
-
-impl Drop for BudgetDebugEnvGuard {
-    fn drop(&mut self) {
-        match &self.previous {
-            Some(value) => std::env::set_var("TANK_BUDGET_DEBUG", value),
-            None => std::env::remove_var("TANK_BUDGET_DEBUG"),
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -374,11 +340,82 @@ fn o2_balance_check_with_aeration() -> Result<(), SimError> {
     );
     let do_delta = do_delta.unwrap();
     assert!(
-        do_delta.in_mg > 0.0 || do_delta.out_mg > 0.0,
-        "dissolved_oxygen should have exchange: {do_delta:?}"
+        do_delta.in_mg > 0.0 && do_delta.out_mg > 0.0,
+        "dissolved_oxygen should preserve gross O2 bookkeeping in this fixture: {do_delta:?}"
+    );
+    let do_entry = result.budget.ticks()[0]
+        .entries
+        .iter()
+        .find(|entry| entry.label == "system:dissolved_oxygen")
+        .expect("dissolved_oxygen entry should be present in tick ledger");
+    assert_eq!(
+        do_entry.recording_kind,
+        BudgetRecordingKind::Explicit,
+        "dissolved_oxygen should not fall back to snapshot-only oxygen accounting"
     );
 
     Ok(())
+}
+
+#[test]
+fn o2_balance_check_rejects_snapshot_only_bidirectional_stage_accounting() {
+    let budget = BudgetInspector {
+        ledger: BudgetLedger {
+            ticks: vec![TickBudgetRecord {
+                tick_index: 0,
+                day: 0,
+                hour: 12,
+                before: BudgetTotals {
+                    oxygen_mg: 40.0,
+                    ..BudgetTotals::default()
+                },
+                after: BudgetTotals {
+                    oxygen_mg: 45.0,
+                    ..BudgetTotals::default()
+                },
+                net_delta: BudgetDelta {
+                    oxygen: ElementBudget {
+                        in_mg: 5.0,
+                        out_mg: 0.0,
+                    },
+                    ..BudgetDelta::default()
+                },
+                entries: vec![BudgetEntry {
+                    label: "system:dissolved_oxygen".to_string(),
+                    delta: BudgetDelta {
+                        oxygen: ElementBudget {
+                            in_mg: 5.0,
+                            out_mg: 0.0,
+                        },
+                        ..BudgetDelta::default()
+                    },
+                    recording_kind: BudgetRecordingKind::Snapshot,
+                }],
+            }],
+        },
+        before_totals: BudgetTotals {
+            oxygen_mg: 40.0,
+            ..BudgetTotals::default()
+        },
+        after_totals: BudgetTotals {
+            oxygen_mg: 45.0,
+            ..BudgetTotals::default()
+        },
+    };
+
+    let panic = catch_unwind(|| assert_o2_balanced(&budget, 1e-6))
+        .expect_err("snapshot-only dissolved_oxygen accounting should be rejected");
+    let message = if let Some(message) = panic.downcast_ref::<String>() {
+        message.as_str()
+    } else if let Some(message) = panic.downcast_ref::<&str>() {
+        message
+    } else {
+        panic!("unexpected panic payload type");
+    };
+    assert!(
+        message.contains("missing explicit gross O2 accounting"),
+        "panic should explain the explicit O2 bookkeeping requirement: {message}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -387,12 +424,15 @@ fn o2_balance_check_with_aeration() -> Result<(), SimError> {
 
 #[test]
 fn debug_output_env_path_does_not_panic() -> Result<(), SimError> {
-    let _debug_env = BudgetDebugEnvGuard::enable();
-    let state = quiescent_budget_state(SimSeed(9_059));
-    let mut engine = Engine::from_parts(state, vec![]);
+    with_budget_debug_env(true, || -> Result<(), SimError> {
+        let state = quiescent_budget_state(SimSeed(9_059));
+        let mut engine = Engine::from_parts(state, vec![]);
 
-    let result = step_and_inspect(&mut engine, 1)?;
-    assert_eq!(result.budget.ticks().len(), 1);
+        let result = step_and_inspect(&mut engine, 1)?;
+        assert_eq!(result.budget.ticks().len(), 1);
+
+        Ok(())
+    })?;
 
     Ok(())
 }
