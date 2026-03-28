@@ -33,8 +33,8 @@ fn active_state(seed: SimSeed) -> TankState {
     state.microbe.ammonia_oxidizer_biomass_g = 0.08;
     state.microbe.nitrite_oxidizer_biomass_g = 0.07;
     state.microbe.comammox_biomass_g = 0.03;
-    state.animal.adults_count = 0;
-    state.animal.juveniles_count = 0;
+    state.animal.adult.count = 0;
+    state.animal.juvenile.count = 0;
     state.animal.berried_females_count = 0;
     state.reseed_stability_tracker();
     state
@@ -284,8 +284,8 @@ fn daily_systems_appear_on_day_boundary_ticks() -> Result<(), tank_core::SimErro
 fn detail_tracing_surfaces_daily_shrimp_internal_state_deltas() -> Result<(), tank_core::SimError> {
     let mut state = active_state(SimSeed(650));
     state.environment.hour_of_day = 23;
-    state.animal.adults_count = 12;
-    state.animal.condition_index = 0.55;
+    state.animal.adult.count = 12;
+    state.animal.adult.condition_index = 0.55;
     state.animal.reproductive_readiness_index = 0.2;
     let mut engine = Engine::from_parts(state, vec![]);
     engine.enable_tracing(SimTracer::new(Verbosity::Detail));

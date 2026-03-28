@@ -60,8 +60,8 @@ fn known_budget_state() -> TankState {
     state.microbe.ammonia_oxidizer_biomass_g = 0.2;
     state.microbe.nitrite_oxidizer_biomass_g = 0.15;
     state.microbe.comammox_biomass_g = 0.05;
-    state.animal.adults_count = 10;
-    state.animal.juveniles_count = 14;
+    state.animal.adult.count = 10;
+    state.animal.juvenile.count = 14;
     state.detritus.particulate_organics_g_total = 1.8;
     state.detritus.fine_detritus_g_total = 0.9;
     state.detritus.dissolved_feed_residue_g_total = 1.1;
@@ -89,8 +89,8 @@ fn active_budget_state(seed: SimSeed) -> TankState {
     state.microbe.comammox_biomass_g = 0.03;
     state.microfauna.population_index = 0.4;
     state.microfauna.grazing_pressure_index = 0.35;
-    state.animal.adults_count = 0;
-    state.animal.juveniles_count = 0;
+    state.animal.adult.count = 0;
+    state.animal.juvenile.count = 0;
     state.animal.berried_females_count = 0;
     state.substrate_layers[0].nutrient_store_mg_n_total = 22.0;
     state.substrate_layers[0].nutrient_store_mg_p_total = 6.0;
@@ -112,8 +112,8 @@ fn quiescent_budget_state(seed: SimSeed) -> TankState {
     state.microbe.comammox_biomass_g = 0.0;
     state.microfauna.population_index = 0.0;
     state.microfauna.grazing_pressure_index = 0.0;
-    state.animal.adults_count = 0;
-    state.animal.juveniles_count = 0;
+    state.animal.adult.count = 0;
+    state.animal.juvenile.count = 0;
     state.animal.berried_females_count = 0;
     state.detritus.particulate_organics_g_total = 0.0;
     state.detritus.fine_detritus_g_total = 0.0;
@@ -170,8 +170,8 @@ fn siphon_detritus_budget_state(seed: SimSeed) -> TankState {
 
 fn shrimp_mortality_budget_state(seed: SimSeed) -> TankState {
     let mut state = quiescent_budget_state(seed);
-    state.animal.adults_count = 5;
-    state.animal.condition_index = 0.0;
+    state.animal.adult.count = 5;
+    state.animal.adult.condition_index = 0.0;
     state.animal.molt_stress_index = 1.0;
     state.process_params.shrimp_base_mortality_per_day = 0.5;
     state.process_params.shrimp_stress_mortality_scale = 0.0;
@@ -204,11 +204,11 @@ fn shrimp_reproduction_budget_state(seed: SimSeed) -> TankState {
     state.microbe.nitrite_oxidizer_biomass_g = 1.2;
     state.microbe.comammox_biomass_g = 0.4;
     state.filter_state.biofilter_maturity_index = 1.0;
-    state.animal.adults_count = 10;
-    state.animal.condition_index = 0.95;
+    state.animal.adult.count = 10;
+    state.animal.adult.condition_index = 0.95;
     state.animal.molt_stress_index = 0.02;
     state.animal.reproductive_readiness_index = 0.95;
-    state.animal.reserve_g = 2.0;
+    state.animal.adult.reserve_g = 2.0;
     state.process_params.aob_vmax_mg_n_per_g_per_hour = 5.0;
     state.process_params.nob_vmax_mg_n_per_g_per_hour = 8.0;
     state.process_params.comammox_vmax_fraction = 0.8;
@@ -328,10 +328,10 @@ fn test_total_n_helper_sums_all_pools() {
         + manual_live_biomass_nitrogen_mg(microbe_biomass_g, ratio)
         + manual_shrimp_nitrogen_mg(
             &state,
-            state.animal.adults_count,
-            state.animal.juveniles_count,
+            state.animal.adult.count,
+            state.animal.juvenile.count,
         )
-        + manual_organic_nitrogen_mg(state.animal.reserve_g, ratio)
+        + manual_organic_nitrogen_mg(state.animal.adult.reserve_g, ratio)
         + manual_organic_nitrogen_mg(state.microfauna.reserve_g, ratio)
         + manual_organic_nitrogen_mg(state.detritus.particulate_organics_g_total, ratio)
         + manual_organic_nitrogen_mg(state.detritus.fine_detritus_g_total, ratio);
@@ -356,10 +356,10 @@ fn test_total_c_helper_sums_all_pools() {
         + manual_live_biomass_carbon_mg(microbe_biomass_g, ratio)
         + manual_shrimp_carbon_mg(
             &state,
-            state.animal.adults_count,
-            state.animal.juveniles_count,
+            state.animal.adult.count,
+            state.animal.juvenile.count,
         )
-        + manual_organic_carbon_mg(state.animal.reserve_g, ratio)
+        + manual_organic_carbon_mg(state.animal.adult.reserve_g, ratio)
         + manual_organic_carbon_mg(state.microfauna.reserve_g, ratio)
         + manual_organic_carbon_mg(state.detritus.particulate_organics_g_total, ratio)
         + manual_organic_carbon_mg(state.detritus.fine_detritus_g_total, ratio);
@@ -737,7 +737,7 @@ fn test_closed_system_shrimp_mortality_conserves_n_and_c() -> Result<(), SimErro
     engine.step_hours(72)?;
 
     assert!(
-        engine.full_state().animal.adults_count < 5,
+        engine.full_state().animal.adult.count < 5,
         "expected deterministic shrimp mortality to occur"
     );
     assert_close(engine.full_state().total_nitrogen(), initial_total_n, 1e-6);
@@ -1098,9 +1098,9 @@ fn high_mortality_shrimp_state(seed: SimSeed) -> TankState {
     state.detritus.fine_detritus_g_total = 2.0;
 
     // Stock shrimp: adults and juveniles
-    state.animal.adults_count = 20;
-    state.animal.juveniles_count = 15;
-    state.animal.condition_index = 0.3; // poor condition → high mortality
+    state.animal.adult.count = 20;
+    state.animal.juvenile.count = 15;
+    state.animal.adult.condition_index = 0.3; // poor condition → high mortality
     state.animal.molt_stress_index = 0.8; // high molt stress
 
     // Crank up stress accumulators to force high mortality
@@ -1137,8 +1137,8 @@ fn high_mortality_shrimp_state(seed: SimSeed) -> TankState {
 #[test]
 fn test_shrimp_death_routes_body_mass_to_detritus_and_conserves_n_c() {
     let mut state = high_mortality_shrimp_state(SimSeed(7_100));
-    let initial_adults = state.animal.adults_count;
-    let initial_juveniles = state.animal.juveniles_count;
+    let initial_adults = state.animal.adult.count;
+    let initial_juveniles = state.animal.juvenile.count;
     let initial_total_n = state.total_nitrogen();
     let initial_total_c = state.total_carbon();
     let initial_fine_detritus = state.detritus.fine_detritus_g_total;
@@ -1149,7 +1149,7 @@ fn test_shrimp_death_routes_body_mass_to_detritus_and_conserves_n_c() {
     step_daily_shrimp(&mut state);
 
     // Some shrimp should have died given the high stress
-    let total_after = state.animal.adults_count + state.animal.juveniles_count;
+    let total_after = state.animal.adult.count + state.animal.juvenile.count;
     assert!(
         total_after < initial_adults + initial_juveniles,
         "expected some deaths: before={}, after={total_after}",
@@ -1193,10 +1193,10 @@ fn test_shrimp_death_detritus_amount_matches_expected_body_mass() {
     state.detritus.fine_detritus_g_total = 0.0;
 
     // 10 adults, no juveniles, no reserve (simplifies accounting)
-    state.animal.adults_count = 10;
-    state.animal.juveniles_count = 0;
-    state.animal.reserve_g = 0.0;
-    state.animal.condition_index = 0.8;
+    state.animal.adult.count = 10;
+    state.animal.juvenile.count = 0;
+    state.animal.adult.reserve_g = 0.0;
+    state.animal.adult.condition_index = 0.8;
     state.animal.molt_stress_index = 0.1;
 
     // Force guaranteed death: set base mortality to 1.0 (every shrimp dies)
@@ -1228,7 +1228,7 @@ fn test_shrimp_death_detritus_amount_matches_expected_body_mass() {
     step_daily_shrimp(&mut state);
 
     // All 10 adults should be dead (base mortality capped at 0.5, so up to 5 die per day)
-    let dead_count = 10 - state.animal.adults_count;
+    let dead_count = 10 - state.animal.adult.count;
     assert!(dead_count > 0, "expected some shrimp deaths");
 
     // Expected detritus from dead bodies (no reserve contribution since reserve_g = 0)
@@ -1300,9 +1300,9 @@ fn test_high_mortality_200_hours_conserves_n_c_and_accumulates_detritus() -> Res
     state.detritus.particulate_organics_g_total = 0.5;
 
     // Large population under stress
-    state.animal.adults_count = 30;
-    state.animal.juveniles_count = 20;
-    state.animal.condition_index = 0.5;
+    state.animal.adult.count = 30;
+    state.animal.juvenile.count = 20;
+    state.animal.adult.condition_index = 0.5;
     state.animal.molt_stress_index = 0.3;
 
     // Disable plants to simplify (they have their own conservation tests)
@@ -1341,7 +1341,7 @@ fn test_high_mortality_200_hours_conserves_n_c_and_accumulates_detritus() -> Res
 
     let initial_total_n = state.total_nitrogen();
     let initial_total_c = state.total_carbon();
-    let initial_population = state.animal.adults_count + state.animal.juveniles_count;
+    let initial_population = state.animal.adult.count + state.animal.juvenile.count;
     let initial_total_particulate_detritus =
         state.detritus.particulate_organics_g_total + state.detritus.fine_detritus_g_total;
 
@@ -1381,7 +1381,7 @@ fn test_high_mortality_200_hours_conserves_n_c_and_accumulates_detritus() -> Res
     }
 
     let final_state = engine.full_state();
-    let final_population = final_state.animal.adults_count + final_state.animal.juveniles_count;
+    let final_population = final_state.animal.adult.count + final_state.animal.juvenile.count;
 
     // Population should have declined under high-stress conditions
     assert!(
@@ -1437,8 +1437,8 @@ fn test_weekly_trim_and_remove_exports_nutrients_over_500_hours() -> Result<(), 
         },
     ];
 
-    state.animal.adults_count = 5;
-    state.animal.juveniles_count = 0;
+    state.animal.adult.count = 5;
+    state.animal.juvenile.count = 0;
     state.animal.berried_females_count = 0;
     state.algae.periphyton_biomass_g = 1.0;
     state.algae.suspended_biomass_g = 0.2;

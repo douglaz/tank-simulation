@@ -307,7 +307,7 @@ fn test_high_co2_from_respiration_drives_offgassing() -> Result<(), tank_core::S
     state.hardware.filter.flow_lph = 0.0;
     state.plant_guilds[0].biomass_g = 15.0;
     state.plant_guilds[1].biomass_g = 10.0;
-    state.animal.adults_count = 20;
+    state.animal.adult.count = 20;
     state
         .process_params
         .respiration_dic_rate_mg_c_per_g_per_hour = 0.15;
@@ -367,7 +367,7 @@ fn test_aerated_vs_nonaerated_co2_levels() -> Result<(), tank_core::SimError> {
         state.hardware.aeration.intensity = if aerated { 1.0 } else { 0.0 };
         state.plant_guilds[0].biomass_g = 12.0;
         state.plant_guilds[1].biomass_g = 8.0;
-        state.animal.adults_count = 15;
+        state.animal.adult.count = 15;
         state
             .process_params
             .respiration_dic_rate_mg_c_per_g_per_hour = 0.10;

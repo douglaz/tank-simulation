@@ -145,6 +145,9 @@ fn default_last_molt_success() -> bool {
     true
 }
 
+const SUB_ADULT_FEEDING_WEIGHT: f64 = 0.65;
+const JUVENILE_FEEDING_WEIGHT: f64 = 0.3;
+
 pub const DEFAULT_SHRIMP_BODY_NITROGEN_MG_PER_G_WET_MASS: f64 = 27.586206896551722;
 pub const DEFAULT_SHRIMP_BODY_CARBON_MG_PER_G_WET_MASS: f64 = 172.41379310344828;
 
@@ -434,6 +437,13 @@ impl AnimalState {
         self.adult.count + self.sub_adult.count + self.juvenile.count
     }
 
+    /// Feeding demand units used by legacy shrimp-routing logic.
+    pub fn feeding_units(&self) -> f64 {
+        f64::from(self.adult.count)
+            + f64::from(self.sub_adult.count) * SUB_ADULT_FEEDING_WEIGHT
+            + f64::from(self.juvenile.count) * JUVENILE_FEEDING_WEIGHT
+    }
+
     /// Total organic reserve across all stages (grams).
     pub fn total_reserve_g(&self) -> f64 {
         self.adult.reserve_g + self.sub_adult.reserve_g + self.juvenile.reserve_g
@@ -449,6 +459,80 @@ impl AnimalState {
             + f64::from(self.sub_adult.count) * self.sub_adult.condition_index
             + f64::from(self.juvenile.count) * self.juvenile.condition_index;
         weighted / f64::from(total)
+    }
+
+    pub fn set_population_condition_index(&mut self, value: f64) {
+        let clamped = value.clamp(0.0, 1.0);
+        self.adult.condition_index = clamped;
+        self.sub_adult.condition_index = clamped;
+        self.juvenile.condition_index = clamped;
+    }
+
+    pub fn total_maturation_accum(&self) -> f64 {
+        self.sub_adult.maturation_accum + self.juvenile.maturation_accum
+    }
+
+    /// Adds retained reserve back into the stage pools using the same weights
+    /// that the legacy feeding model used for daily food demand.
+    pub fn add_reserve_by_feeding_units(&mut self, reserve_g: f64) {
+        if reserve_g <= f64::EPSILON {
+            return;
+        }
+
+        let adult_weight = f64::from(self.adult.count);
+        let sub_adult_weight = f64::from(self.sub_adult.count) * SUB_ADULT_FEEDING_WEIGHT;
+        let juvenile_weight = f64::from(self.juvenile.count) * JUVENILE_FEEDING_WEIGHT;
+        let total_weight = adult_weight + sub_adult_weight + juvenile_weight;
+
+        if total_weight <= f64::EPSILON {
+            self.adult.reserve_g += reserve_g;
+            return;
+        }
+
+        self.adult.reserve_g += reserve_g * adult_weight / total_weight;
+        self.sub_adult.reserve_g += reserve_g * sub_adult_weight / total_weight;
+        self.juvenile.reserve_g += reserve_g * juvenile_weight / total_weight;
+    }
+
+    pub fn try_spend_reserve_g(&mut self, reserve_g: f64) -> bool {
+        if reserve_g <= f64::EPSILON {
+            return true;
+        }
+
+        let total_reserve_g = self.total_reserve_g();
+        if total_reserve_g + f64::EPSILON < reserve_g {
+            return false;
+        }
+        if total_reserve_g <= f64::EPSILON {
+            return true;
+        }
+
+        let remaining_fraction = ((total_reserve_g - reserve_g) / total_reserve_g).clamp(0.0, 1.0);
+        self.adult.reserve_g *= remaining_fraction;
+        self.sub_adult.reserve_g *= remaining_fraction;
+        self.juvenile.reserve_g *= remaining_fraction;
+        true
+    }
+
+    pub fn transfer_dead_reserve_g(
+        &mut self,
+        adult_deaths: u32,
+        sub_adult_deaths: u32,
+        juvenile_deaths: u32,
+    ) -> f64 {
+        let adult_fraction = reserve_fraction(self.adult.count, adult_deaths);
+        let sub_adult_fraction = reserve_fraction(self.sub_adult.count, sub_adult_deaths);
+        let juvenile_fraction = reserve_fraction(self.juvenile.count, juvenile_deaths);
+
+        let adult_transfer = self.adult.reserve_g * adult_fraction;
+        let sub_adult_transfer = self.sub_adult.reserve_g * sub_adult_fraction;
+        let juvenile_transfer = self.juvenile.reserve_g * juvenile_fraction;
+
+        self.adult.reserve_g -= adult_transfer;
+        self.sub_adult.reserve_g -= sub_adult_transfer;
+        self.juvenile.reserve_g -= juvenile_transfer;
+
+        adult_transfer + sub_adult_transfer + juvenile_transfer
     }
 
     /// Ensures `berried_females_count <= adult.count` by trimming
@@ -468,6 +552,14 @@ impl AnimalState {
             .iter()
             .map(|c| c.progress_days)
             .fold(0.0_f64, f64::max);
+    }
+}
+
+fn reserve_fraction(total_count: u32, dead_count: u32) -> f64 {
+    if total_count == 0 {
+        0.0
+    } else {
+        (f64::from(dead_count) / f64::from(total_count)).clamp(0.0, 1.0)
     }
 }
 
