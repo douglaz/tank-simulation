@@ -169,9 +169,6 @@ impl SaveFile {
             set_schema_version(&mut value, v + 1)?;
         }
 
-        // Stamp the migrated version so deserialization sees the current schema.
-        set_schema_version(&mut value, SCHEMA_VERSION)?;
-
         // Detect whether the stability tracker was serialized before we
         // deserialize (it may be absent in old saves that predate the field).
         let stability_tracker_present = has_serialized_stability_tracker(&value);
