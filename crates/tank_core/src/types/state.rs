@@ -227,17 +227,6 @@ impl TankState {
             self.plant_guilds.iter().map(|plant| plant.biomass_g).sum();
         (total_plant_biomass_g
             / (surface_area_m2 * self.process_params.plant_crowding_biomass_g_per_m2.max(1.0)))
-=======
-    pub fn derived_plant_crowding_index(&self) -> f64 {
-        let surface_area_m2 = self.geometry.footprint_area_m2().max(f64::MIN_POSITIVE);
-        let total_plant_biomass_g: f64 = self.plant_guilds.iter().map(|plant| plant.biomass_g).sum();
-        (total_plant_biomass_g
-            / (surface_area_m2
-                * self
-                    .process_params
-                    .plant_crowding_biomass_g_per_m2
-                    .max(1.0)))
->>>>>>> Stashed changes
         .clamp(0.0, 1.0)
     }
 

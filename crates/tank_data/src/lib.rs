@@ -108,28 +108,14 @@ pub fn load_shrimp_with_diagnostics(id: &str) -> Result<(ShrimpPreset, Vec<Strin
 pub fn load_process_params_with_diagnostics(
     id: &str,
 ) -> Result<(ProcessParamsPreset, Vec<String>), PresetError> {
-    let Some((_, raw)) = PROCESS_PRESETS.iter().find(|(entry_id, _)| *entry_id == id) else {
-        return Err(PresetError::UnknownPreset {
-            category: "process",
-            id: id.to_string(),
-        });
-    };
-
-    let preset = parse_process_params_preset(raw).map_err(|error| PresetError::Parse {
-        category: "process",
-        id: id.to_string(),
-        message: error.to_string(),
-    })?;
-
-    ProcessParamsPreset::validate(&preset).map_err(|message| PresetError::Validation {
-        category: "process",
-        id: id.to_string(),
-        message,
-    })?;
-
-    let diagnostics =
-        format_range_diagnostics("process", id, &ProcessParamsPreset::check_ranges(&preset));
-    Ok((preset, diagnostics))
+    load_parsed_validated_with_range_diagnostics(
+        "process",
+        id,
+        PROCESS_PRESETS,
+        parse_process_params_preset,
+        ProcessParamsPreset::validate,
+        ProcessParamsPreset::check_ranges,
+    )
 }
 
 pub fn load_scenario(id: &str) -> Result<ScenarioPreset, PresetError> {
@@ -199,7 +185,43 @@ where
     V: Fn(&T) -> Result<(), String>,
     W: Fn(&T) -> Vec<RangeWarning>,
 {
-    let preset: T = load_from_registry(category, id, registry)?;
+    load_parsed_validated_with_range_diagnostics(
+        category,
+        id,
+        registry,
+        |raw| toml::from_str(raw),
+        validate,
+        check_ranges,
+    )
+}
+
+fn load_parsed_validated_with_range_diagnostics<T, P, E, V, W>(
+    category: &'static str,
+    id: &str,
+    registry: &[(&str, &str)],
+    parse: P,
+    validate: V,
+    check_ranges: W,
+) -> Result<(T, Vec<String>), PresetError>
+where
+    P: Fn(&str) -> Result<T, E>,
+    E: std::fmt::Display,
+    V: Fn(&T) -> Result<(), String>,
+    W: Fn(&T) -> Vec<RangeWarning>,
+{
+    let Some((_, raw)) = registry.iter().find(|(entry_id, _)| *entry_id == id) else {
+        return Err(PresetError::UnknownPreset {
+            category,
+            id: id.to_string(),
+        });
+    };
+
+    let preset = parse(raw).map_err(|error| PresetError::Parse {
+        category,
+        id: id.to_string(),
+        message: error.to_string(),
+    })?;
+
     validate(&preset).map_err(|message| PresetError::Validation {
         category,
         id: id.to_string(),
@@ -351,6 +373,49 @@ valid_range = [0.1, 5.0]
             "diagnostic should include the valid range bounds: {}",
             diagnostics[0]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn process_loader_migrates_legacy_kinetic_keys_before_range_checks() -> Result<(), PresetError>
+    {
+        let registry = &[(
+            "legacy",
+            r#"
+id = "legacy"
+name = "Legacy"
+mineralization_rate_per_day = 0.15
+nitrification_vmax = 0.08
+reaeration_kla_base = 0.35
+aeration_kla_boost = 0.9
+background_bod_mg_o2_per_g_biomass_per_hour = 0.05
+plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
+respiration_dic_rate_mg_c_per_g_per_hour = 0.08
+photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.12
+k_surface_w_per_m2_k = 10.0
+k_wall_w_per_m2_k = 5.0
+aob_k_tan_mg = 200.0
+
+[param_meta.aob_k_tan_mg]
+unit = "mg N/L"
+valid_range = [0.1, 5.0]
+"#,
+        )];
+
+        let (preset, diagnostics) = load_parsed_validated_with_range_diagnostics(
+            "process",
+            "legacy",
+            registry,
+            parse_process_params_preset,
+            ProcessParamsPreset::validate,
+            ProcessParamsPreset::check_ranges,
+        )?;
+
+        assert_eq!(preset.aob_k_tan_mg_n_per_l, 10.0);
+        assert!(preset.param_meta.contains_key("aob_k_tan_mg_n_per_l"));
+        assert!(!preset.param_meta.contains_key("aob_k_tan_mg"));
+        assert_eq!(diagnostics.len(), 1);
+        assert!(diagnostics[0].contains("parameter `aob_k_tan_mg_n_per_l` value 10"));
         Ok(())
     }
 

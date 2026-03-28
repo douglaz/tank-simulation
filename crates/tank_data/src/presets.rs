@@ -1355,8 +1355,9 @@ fn move_legacy_process_param_meta_key(
         .or_insert(legacy_value);
 }
 
-/// All half-saturation parameters are now natively concentration-based;
-/// no legacy normalization is needed for provenance display.
+/// Legacy process `_mg` / `_mg_total` keys are normalized onto canonical
+/// concentration fields during preset parsing, so provenance display only
+/// needs to surface the already-normalized canonical values.
 fn normalize_process_param_for_provenance(_name: &str, value: f64, _unit: Option<&str>) -> f64 {
     value
 }
