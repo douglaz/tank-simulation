@@ -4,6 +4,7 @@ use crate::types::{
 };
 
 const FEED_P_TO_N_MASS_RATIO: f64 = 0.10;
+const SMALL_NEGATIVE_ROUNDING_TOLERANCE_MG: f64 = 1e-9;
 
 /// Result of one hourly nitrogen cycle step, carrying coupling values
 /// that downstream systems (DO, chemistry) need.
@@ -36,6 +37,14 @@ fn safe_rate(v: f64) -> f64 {
     } else {
         0.0
     }
+}
+
+fn clamp_post_growth_residual_mg(value_mg: f64, pool: &'static str) -> f64 {
+    debug_assert!(
+        value_mg >= -SMALL_NEGATIVE_ROUNDING_TOLERANCE_MG,
+        "{pool} residual underflowed past floating-point tolerance: {value_mg} mg"
+    );
+    value_mg.max(0.0)
 }
 
 /// Runs the full nitrogen-cycle phase for one hourly tick.
@@ -128,10 +137,14 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
         doc_consumed_mg,
         n_to_c,
     );
-    state.water.ammonia_total_mg_n_total +=
-        (don_consumed_mg - live_biomass_nitrogen_mg(decomp_growth, n_to_c)).max(0.0);
-    state.water.dissolved_inorganic_carbon_mg_c_total +=
-        (doc_consumed_mg - live_biomass_carbon_mg(decomp_growth, n_to_c)).max(0.0);
+    state.water.ammonia_total_mg_n_total += clamp_post_growth_residual_mg(
+        don_consumed_mg - live_biomass_nitrogen_mg(decomp_growth, n_to_c),
+        "decomposer DON remineralization",
+    );
+    state.water.dissolved_inorganic_carbon_mg_c_total += clamp_post_growth_residual_mg(
+        doc_consumed_mg - live_biomass_carbon_mg(decomp_growth, n_to_c),
+        "decomposer DOC remineralization",
+    );
     let decomp_decay = safe_rate(pp.decomposer_decay_rate_per_hour) * decomposer_biomass;
     route_live_biomass_to_dissolved_organics(state, decomp_decay, n_to_c);
     state.microbe.decomposer_biomass_g =
