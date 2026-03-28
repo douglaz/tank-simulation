@@ -95,7 +95,7 @@ fn nano_neglect_artifacts_on_violation() -> Result<(), Box<dyn std::error::Error
     assert_eq!(meta["seed"], 77);
     assert_eq!(meta["scenario_id"], "nano_cycle");
     assert!(
-        meta["assertion_failures"].as_array().unwrap().len() > 0,
+        !meta["assertion_failures"].as_array().unwrap().is_empty(),
         "metadata should record assertion failures"
     );
 

@@ -310,28 +310,6 @@ impl From<tank_data::PresetError> for HarnessError {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::Envelope;
-    use tank_core::{SimSeed, TankSnapshot, TankState};
-
-    #[test]
-    fn shrimp_envelope_uses_total_population_count() {
-        let mut state = TankState::new(SimSeed(8_001));
-        state.animal.adult.count = 2;
-        state.animal.sub_adult.count = 3;
-        state.animal.juvenile.count = 1;
-        let snapshot = TankSnapshot::from_state(&state);
-
-        let violations = Envelope::default().shrimp_count(6, 6).check(&snapshot);
-
-        assert!(
-            violations.is_empty(),
-            "unexpected violations: {violations:?}"
-        );
-    }
-}
-
 // ---------------------------------------------------------------------------
 // HarnessRun
 // ---------------------------------------------------------------------------
@@ -628,4 +606,30 @@ fn is_verbose() -> bool {
 fn write_json(path: &std::path::Path, value: &impl serde::Serialize) {
     let json = serde_json::to_string_pretty(value).expect("failed to serialize artifact");
     std::fs::write(path, json).expect("failed to write artifact");
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::Envelope;
+    use tank_core::{SimSeed, TankSnapshot, TankState};
+
+    #[test]
+    fn shrimp_envelope_uses_total_population_count() {
+        let mut state = TankState::new(SimSeed(8_001));
+        state.animal.adult.count = 2;
+        state.animal.sub_adult.count = 3;
+        state.animal.juvenile.count = 1;
+        let snapshot = TankSnapshot::from_state(&state);
+
+        let violations = Envelope::default().shrimp_count(6, 6).check(&snapshot);
+
+        assert!(
+            violations.is_empty(),
+            "unexpected violations: {violations:?}"
+        );
+    }
 }
