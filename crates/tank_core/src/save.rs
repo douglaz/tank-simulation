@@ -278,7 +278,10 @@ fn migrate_v2_to_v3(value: &mut Value) -> Result<(), SimError> {
 
     let scale = net_volume_l / gross_volume_l;
 
-    // Rescale every dissolved total field in the water object.
+    // Rescale every canonical dissolved total field in the water object.
+    // `bicarbonate_mg_total` is solver-derived in the current carbonate
+    // contract and is reprojected by `normalize_loaded_carbonate_state()`
+    // after migrations complete, so it is intentionally excluded here.
     let water = required_object_mut_at(value, 2, 3, "/state/water")?;
 
     let dissolved_fields = [
@@ -295,7 +298,6 @@ fn migrate_v2_to_v3(value: &mut Value) -> Result<(), SimError> {
         "magnesium_mg_total",
         "sodium_mg_total",
         "potassium_mg_total",
-        "bicarbonate_mg_total",
         "chloride_mg_total",
         "sulfate_mg_total",
     ];

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::SimError;
+use crate::systems::chemistry::validate_source_water_carbonate_profile;
 
 /// Runtime source-water profile with explicit per-liter chemistry.
 /// Stored in `TankState.source_water_catalog` for deterministic continuation.
@@ -60,6 +61,17 @@ impl SourceWaterProfile {
                 id: profile_id.to_string(),
                 field: "temperature_c",
                 value: self.temperature_c,
+            });
+        }
+        if let Err(ph) = validate_source_water_carbonate_profile(
+            self.dic_mg_c_per_l,
+            self.alkalinity_meq_per_l,
+            self.temperature_c,
+        ) {
+            return Err(SimError::InvalidSourceProfile {
+                id: profile_id.to_string(),
+                field: "carbonate_derived_ph",
+                value: ph,
             });
         }
         Ok(())

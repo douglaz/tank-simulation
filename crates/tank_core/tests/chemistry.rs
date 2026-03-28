@@ -250,6 +250,15 @@ fn solver_edge_case_zero_volume() {
 #[test]
 fn solver_edge_case_zero_dic() {
     let eq = solve_carbonate_equilibrium(0.0, 30.0, 25.0, 20.0);
+    assert_eq!(eq.ph, 8.5);
+    assert_eq!(eq.co2_aq_mmol_per_l, 0.0);
+    assert_eq!(eq.hco3_mmol_per_l, 0.0);
+    assert_eq!(eq.co3_mmol_per_l, 0.0);
+}
+
+#[test]
+fn solver_edge_case_zero_dic_and_zero_alkalinity_stays_neutral() {
+    let eq = solve_carbonate_equilibrium(0.0, 0.0, 25.0, 20.0);
     assert_eq!(eq.ph, 7.0);
     assert_eq!(eq.co2_aq_mmol_per_l, 0.0);
 }
@@ -259,8 +268,10 @@ fn solver_edge_case_zero_alkalinity() {
     let eq = solve_carbonate_equilibrium(400.0, 0.0, 25.0, 20.0);
     assert_eq!(eq.ph, 5.5);
     let dic_mmol = 20.0 / 12.0;
-    assert!((eq.co2_aq_mmol_per_l - dic_mmol).abs() < 0.001);
-    assert_eq!(eq.hco3_mmol_per_l, 0.0);
+    let species_sum = eq.co2_aq_mmol_per_l + eq.hco3_mmol_per_l + eq.co3_mmol_per_l;
+    assert!((species_sum - dic_mmol).abs() < 0.001);
+    assert!(eq.co2_aq_mmol_per_l > eq.hco3_mmol_per_l);
+    assert!(eq.hco3_mmol_per_l > 0.0);
 }
 
 #[test]

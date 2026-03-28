@@ -108,10 +108,10 @@ Implementation requirements:
 ### Edge-case handling
 
 - If `volume_l <= f64::EPSILON`, return a neutral fallback (`pH 7.0`) and zero speciation outputs.
-- If `dic_mol_per_l <= 1e-12`, return zero carbonate species and `pH 7.0`.
-- If `alk_eq_per_l <= 1e-9` or the quadratic does not yield a valid positive root, emit a structured diagnostic and use a fallback path that treats all DIC as `CO2(aq)` with `pH 7.0`.
+- If `dic_mol_per_l <= 1e-12`, return zero carbonate species. Use `pH 7.0` only for truly unbuffered water; if alkalinity remains positive, hold the alkaline ceiling (`pH 8.5`) so the zero-DIC limit stays consistent with the live solver.
+- If `alk_eq_per_l <= 1e-9` or the quadratic does not yield a valid positive root, emit a structured diagnostic and use an acid-dominated fallback path. Compute the fallback `pH` from the carbonic-acid quadratic, clamp it to storage bounds, and reproject `CO2(aq)`, `HCO3-`, and `CO3--` at that fallback `pH` so reported species stay thermodynamically self-consistent.
 
-That fallback is intentionally explicit. It is a stability guard for unbuffered edge cases such as the current `ro_like` preset, not a claim that the first-pass model captures atmospheric CO2 equilibrium.
+Those fallbacks are intentionally explicit. They are stability guards for aquarium edge cases such as `ro_like` or temporarily DIC-starved water, not a claim that the first-pass model captures atmospheric CO2 equilibrium or full alkalinity chemistry.
 
 ### Cached field projection
 

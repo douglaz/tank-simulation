@@ -866,7 +866,8 @@ fn cycling_base_state(seed: SimSeed) -> TankState {
 
 #[cfg(test)]
 mod tests {
-    use super::process_preset_to_params;
+    use super::{process_preset_to_params, source_water_to_profile};
+    use tank_core::WaterState;
 
     #[test]
     fn process_preset_mapping_carries_shrimp_routing_fields() {
@@ -885,5 +886,37 @@ mod tests {
         assert_eq!(params.shrimp_excretion_fraction_of_assimilated, 0.13);
         assert_eq!(params.shrimp_growth_fraction_of_assimilated, 0.25);
         assert_eq!(params.shrimp_o2_per_mg_c_respired, 2.91);
+    }
+
+    #[test]
+    fn shipped_source_water_profiles_materialize_distinct_initial_ph() {
+        let volume_l = 20.0;
+        let soft = source_water_to_profile(
+            &tank_data::load_source_water("soft_acidic").expect("soft preset should load"),
+        );
+        let moderate = source_water_to_profile(
+            &tank_data::load_source_water("moderate").expect("moderate preset should load"),
+        );
+        let hard = source_water_to_profile(
+            &tank_data::load_source_water("hard_shrimp").expect("hard preset should load"),
+        );
+        let ro = source_water_to_profile(
+            &tank_data::load_source_water("ro_like").expect("ro preset should load"),
+        );
+
+        let soft_water = WaterState::from_source_profile_for_volume_l(&soft, volume_l);
+        let moderate_water = WaterState::from_source_profile_for_volume_l(&moderate, volume_l);
+        let hard_water = WaterState::from_source_profile_for_volume_l(&hard, volume_l);
+        let ro_water = WaterState::from_source_profile_for_volume_l(&ro, volume_l);
+
+        assert!(soft_water.ph < moderate_water.ph);
+        assert!(moderate_water.ph < hard_water.ph);
+        assert!(
+            hard_water.ph - soft_water.ph >= 0.3,
+            "expected at least 0.3 pH spread, got soft={:.3}, hard={:.3}",
+            soft_water.ph,
+            hard_water.ph
+        );
+        assert_eq!(ro_water.ph, 7.0);
     }
 }

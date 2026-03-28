@@ -5,6 +5,6 @@ edition = "2021"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+tank_core = { path = "../tank_core" }
 thiserror = "1"
 toml = "0.8"
-

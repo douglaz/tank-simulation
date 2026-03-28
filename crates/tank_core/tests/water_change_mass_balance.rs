@@ -330,3 +330,34 @@ fn invalid_resolved_profile_negative_chemistry_returns_error() -> Result<(), Sim
 
     Ok(())
 }
+
+#[test]
+fn invalid_resolved_profile_out_of_calibrated_carbonate_range_returns_error() -> Result<(), SimError>
+{
+    let mut state = TankState::new(SimSeed(850));
+    let mut bad_profile = SourceWaterProfile::zero();
+    bad_profile.dic_mg_c_per_l = 24.0;
+    bad_profile.alkalinity_meq_per_l = 0.0;
+    state
+        .source_water_catalog
+        .insert("acid_only".to_string(), bad_profile);
+
+    let mut engine = Engine::from_parts(state, vec![]);
+
+    assert!(
+        matches!(
+            engine.apply_action(PlayerAction::WaterChangePercent {
+                percent: 25.0,
+                source_profile_id: "acid_only".to_string(),
+            }),
+            Err(SimError::InvalidSourceProfile {
+                field: "carbonate_derived_ph",
+                ..
+            })
+        ),
+        "Expected InvalidSourceProfile error for carbonate-derived pH during apply_action"
+    );
+    assert!(engine.queued_actions().is_empty());
+
+    Ok(())
+}
