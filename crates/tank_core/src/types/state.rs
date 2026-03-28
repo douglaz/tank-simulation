@@ -56,18 +56,11 @@ pub struct TankState {
 impl TankState {
     pub fn new(seed: SimSeed) -> Self {
         let geometry = TankGeometry::default();
-<<<<<<< Updated upstream
         let default_substrate = SubstrateLayerState::default();
         let substrate_layers = vec![SubstrateLayerState {
             colonizable_area_cm2: default_substrate
                 .derived_colonizable_area_cm2(geometry.footprint_area_cm2()),
             ..default_substrate
-=======
-        let substrate_layers = vec![SubstrateLayerState {
-            colonizable_area_cm2: SubstrateLayerState::default()
-                .derived_colonizable_area_cm2(geometry.footprint_area_cm2()),
-            ..SubstrateLayerState::default()
->>>>>>> Stashed changes
         }];
         let water = WaterState::default_for_volume_l(
             geometry.water_volume_l_with_substrate_depth(
