@@ -1,5 +1,5 @@
 use crate::systems::chemistry::{CARBONATE_PH_MAX, CARBONATE_PH_MIN};
-use crate::types::{SimError, TankState};
+use crate::types::{ShrimpRuntimeParams, SimError, TankState};
 
 const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
 
@@ -248,6 +248,102 @@ fn validate_invariants_inner(state: &TankState) -> Result<(), SimError> {
             + pp.shrimp_excretion_fraction_of_assimilated
             + pp.shrimp_growth_fraction_of_assimilated,
     )?;
+    validate_shrimp_runtime_params(&state.shrimp_params)?;
+
+    Ok(())
+}
+
+fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), SimError> {
+    check_positive(
+        "shrimp_params.optimal_temp_min_c",
+        params.optimal_temp_min_c,
+    )?;
+    check_positive(
+        "shrimp_params.optimal_temp_max_c",
+        params.optimal_temp_max_c,
+    )?;
+    check_strictly_increasing(
+        params.optimal_temp_min_c,
+        "shrimp_params.optimal_temp_max_c",
+        params.optimal_temp_max_c,
+    )?;
+    check_non_negative("shrimp_params.gh_min_d", params.gh_min_d)?;
+    check_non_negative("shrimp_params.gh_max_d", params.gh_max_d)?;
+    check_strictly_increasing(params.gh_min_d, "shrimp_params.gh_max_d", params.gh_max_d)?;
+    check_unit_interval("shrimp_params.base_spawn_rate", params.base_spawn_rate)?;
+    if params.egg_duration_days == 0 {
+        return Err(SimError::InvariantViolation {
+            field: "shrimp_params.egg_duration_days",
+            value: 0.0,
+        });
+    }
+    check_unit_interval(
+        "shrimp_params.hatch_success_base",
+        params.hatch_success_base,
+    )?;
+    check_non_negative(
+        "shrimp_params.juvenile_sensitivity",
+        params.juvenile_sensitivity,
+    )?;
+    check_positive(
+        "shrimp_params.high_temp_repro_penalty_start_c",
+        params.high_temp_repro_penalty_start_c,
+    )?;
+    check_positive(
+        "shrimp_params.high_temp_repro_penalty_full_c",
+        params.high_temp_repro_penalty_full_c,
+    )?;
+    check_strictly_increasing(
+        params.high_temp_repro_penalty_start_c,
+        "shrimp_params.high_temp_repro_penalty_full_c",
+        params.high_temp_repro_penalty_full_c,
+    )?;
+    check_positive(
+        "shrimp_params.body_nitrogen_mg_per_g_wet_mass",
+        params.body_nitrogen_mg_per_g_wet_mass,
+    )?;
+    check_positive(
+        "shrimp_params.body_carbon_mg_per_g_wet_mass",
+        params.body_carbon_mg_per_g_wet_mass,
+    )?;
+    check_positive(
+        "shrimp_params.juvenile_to_subadult_days",
+        params.juvenile_to_subadult_days,
+    )?;
+    check_positive(
+        "shrimp_params.subadult_to_adult_days",
+        params.subadult_to_adult_days,
+    )?;
+    check_unit_interval(
+        "shrimp_params.juvenile_maturation_condition_threshold",
+        params.juvenile_maturation_condition_threshold,
+    )?;
+    check_unit_interval(
+        "shrimp_params.subadult_maturation_condition_threshold",
+        params.subadult_maturation_condition_threshold,
+    )?;
+    check_positive(
+        "shrimp_params.base_molt_interval_days",
+        params.base_molt_interval_days,
+    )?;
+    check_non_negative(
+        "shrimp_params.failed_molt_mortality_scale",
+        params.failed_molt_mortality_scale,
+    )?;
+    check_non_negative(
+        "shrimp_params.sub_adult_sensitivity",
+        params.sub_adult_sensitivity,
+    )?;
+    if params.base_clutch_size == 0 {
+        return Err(SimError::InvariantViolation {
+            field: "shrimp_params.base_clutch_size",
+            value: 0.0,
+        });
+    }
+    check_unit_interval(
+        "shrimp_params.min_clutch_condition",
+        params.min_clutch_condition,
+    )?;
 
     Ok(())
 }
@@ -295,6 +391,21 @@ fn check_open_unit_interval(field: &'static str, value: f64) -> Result<(), SimEr
 fn check_sum_close_to_one(field: &'static str, value: f64) -> Result<(), SimError> {
     if !value.is_finite() || (value - 1.0).abs() > SHRIMP_ROUTE_SUM_TOLERANCE {
         Err(SimError::InvariantViolation { field, value })
+    } else {
+        Ok(())
+    }
+}
+
+fn check_strictly_increasing(
+    lower_value: f64,
+    upper_field: &'static str,
+    upper_value: f64,
+) -> Result<(), SimError> {
+    if lower_value >= upper_value {
+        Err(SimError::InvariantViolation {
+            field: upper_field,
+            value: upper_value,
+        })
     } else {
         Ok(())
     }

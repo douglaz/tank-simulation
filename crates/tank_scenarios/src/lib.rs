@@ -5,7 +5,7 @@ use tank_core::{
     ShrimpRuntimeParams, SimMeta, SimSeed, SourceWaterProfile, SubstrateLayerState, TankGeometry,
     TankState, WaterState,
 };
-use tank_data::{load_scenario, ScenarioPreset};
+use tank_data::{load_scenario, ScenarioPreset, ShrimpPreset};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ScenarioGeometryOverrides {
@@ -510,19 +510,10 @@ fn materialize_scenario(
 
     // Shrimp species parameters
     let shrimp_preset = tank_data::load_shrimp(&scenario.shrimp_profile_id)?;
-    let shrimp_params = ShrimpRuntimeParams {
-        optimal_temp_min_c: shrimp_preset.optimal_temp_min_c,
-        optimal_temp_max_c: shrimp_preset.optimal_temp_max_c,
-        gh_min_d: shrimp_preset.gh_min_d,
-        gh_max_d: shrimp_preset.gh_max_d,
-        base_spawn_rate: shrimp_preset.base_spawn_rate,
-        egg_duration_days: shrimp_preset.egg_duration_days,
-        hatch_success_base: shrimp_preset.hatch_success_base,
-        juvenile_sensitivity: shrimp_preset.juvenile_sensitivity,
-        high_temp_repro_penalty_start_c: shrimp_preset.high_temp_repro_penalty_start_c,
-        high_temp_repro_penalty_full_c: shrimp_preset.high_temp_repro_penalty_full_c,
-        ..ShrimpRuntimeParams::default()
-    };
+    let shrimp_params = shrimp_preset_to_params(
+        &shrimp_preset,
+        process_params.shrimp_juvenile_maturation_days,
+    );
 
     // Environment
     let environment = tank_core::EnvironmentState {
@@ -550,6 +541,62 @@ fn materialize_scenario(
     state.refresh_habitat_registry();
 
     Ok(state)
+}
+
+fn shrimp_preset_to_params(
+    shrimp_preset: &ShrimpPreset,
+    legacy_total_maturation_days: f64,
+) -> ShrimpRuntimeParams {
+    let mut params = ShrimpRuntimeParams {
+        optimal_temp_min_c: shrimp_preset.optimal_temp_min_c,
+        optimal_temp_max_c: shrimp_preset.optimal_temp_max_c,
+        gh_min_d: shrimp_preset.gh_min_d,
+        gh_max_d: shrimp_preset.gh_max_d,
+        base_spawn_rate: shrimp_preset.base_spawn_rate,
+        egg_duration_days: shrimp_preset.egg_duration_days,
+        hatch_success_base: shrimp_preset.hatch_success_base,
+        juvenile_sensitivity: shrimp_preset.juvenile_sensitivity,
+        high_temp_repro_penalty_start_c: shrimp_preset.high_temp_repro_penalty_start_c,
+        high_temp_repro_penalty_full_c: shrimp_preset.high_temp_repro_penalty_full_c,
+        ..ShrimpRuntimeParams::default()
+    };
+    params.apply_legacy_total_maturation_days(legacy_total_maturation_days);
+
+    if let Some(value) = shrimp_preset.body_nitrogen_mg_per_g_wet_mass {
+        params.body_nitrogen_mg_per_g_wet_mass = value;
+    }
+    if let Some(value) = shrimp_preset.body_carbon_mg_per_g_wet_mass {
+        params.body_carbon_mg_per_g_wet_mass = value;
+    }
+    if let Some(value) = shrimp_preset.juvenile_to_subadult_days {
+        params.juvenile_to_subadult_days = value;
+    }
+    if let Some(value) = shrimp_preset.subadult_to_adult_days {
+        params.subadult_to_adult_days = value;
+    }
+    if let Some(value) = shrimp_preset.juvenile_maturation_condition_threshold {
+        params.juvenile_maturation_condition_threshold = value;
+    }
+    if let Some(value) = shrimp_preset.subadult_maturation_condition_threshold {
+        params.subadult_maturation_condition_threshold = value;
+    }
+    if let Some(value) = shrimp_preset.base_molt_interval_days {
+        params.base_molt_interval_days = value;
+    }
+    if let Some(value) = shrimp_preset.failed_molt_mortality_scale {
+        params.failed_molt_mortality_scale = value;
+    }
+    if let Some(value) = shrimp_preset.sub_adult_sensitivity {
+        params.sub_adult_sensitivity = value;
+    }
+    if let Some(value) = shrimp_preset.base_clutch_size {
+        params.base_clutch_size = value;
+    }
+    if let Some(value) = shrimp_preset.min_clutch_condition {
+        params.min_clutch_condition = value;
+    }
+
+    params
 }
 
 fn apply_startup_overrides(
@@ -883,7 +930,7 @@ fn cycling_base_state(seed: SimSeed) -> TankState {
 
 #[cfg(test)]
 mod tests {
-    use super::{process_preset_to_params, source_water_to_profile};
+    use super::{process_preset_to_params, shrimp_preset_to_params, source_water_to_profile};
     use tank_core::WaterState;
 
     #[test]
@@ -922,6 +969,42 @@ mod tests {
         assert_eq!(params.microfauna_respiration_fraction_of_assimilated, 0.64);
         assert_eq!(params.microfauna_excretion_fraction_of_assimilated, 0.11);
         assert_eq!(params.microfauna_growth_fraction_of_assimilated, 0.25);
+    }
+
+    #[test]
+    fn shrimp_preset_mapping_carries_stage_runtime_fields_and_legacy_split() {
+        let mut preset = tank_data::load_shrimp("neocaridina_davidi")
+            .expect("default shrimp preset should load");
+        preset.body_nitrogen_mg_per_g_wet_mass = Some(31.0);
+        preset.body_carbon_mg_per_g_wet_mass = Some(165.0);
+        preset.juvenile_to_subadult_days = None;
+        preset.subadult_to_adult_days = None;
+        preset.juvenile_maturation_condition_threshold = Some(0.22);
+        preset.subadult_maturation_condition_threshold = Some(0.41);
+        preset.base_molt_interval_days = Some(19.0);
+        preset.failed_molt_mortality_scale = Some(0.27);
+        preset.sub_adult_sensitivity = Some(1.9);
+        preset.base_clutch_size = Some(17);
+        preset.min_clutch_condition = Some(0.44);
+
+        let params = shrimp_preset_to_params(&preset, 40.0);
+        assert_eq!(params.body_nitrogen_mg_per_g_wet_mass, 31.0);
+        assert_eq!(params.body_carbon_mg_per_g_wet_mass, 165.0);
+        assert!((params.juvenile_to_subadult_days - 24.0).abs() < 1e-9);
+        assert!((params.subadult_to_adult_days - 16.0).abs() < 1e-9);
+        assert_eq!(params.juvenile_maturation_condition_threshold, 0.22);
+        assert_eq!(params.subadult_maturation_condition_threshold, 0.41);
+        assert_eq!(params.base_molt_interval_days, 19.0);
+        assert_eq!(params.failed_molt_mortality_scale, 0.27);
+        assert_eq!(params.sub_adult_sensitivity, 1.9);
+        assert_eq!(params.base_clutch_size, 17);
+        assert_eq!(params.min_clutch_condition, 0.44);
+
+        preset.juvenile_to_subadult_days = Some(15.0);
+        preset.subadult_to_adult_days = Some(9.0);
+        let overridden = shrimp_preset_to_params(&preset, 40.0);
+        assert_eq!(overridden.juvenile_to_subadult_days, 15.0);
+        assert_eq!(overridden.subadult_to_adult_days, 9.0);
     }
 
     #[test]

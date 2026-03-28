@@ -160,6 +160,28 @@ pub struct ShrimpPreset {
     pub high_temp_repro_penalty_start_c: f64,
     #[serde(default = "default_shrimp_high_temp_repro_penalty_full")]
     pub high_temp_repro_penalty_full_c: f64,
+    #[serde(default)]
+    pub body_nitrogen_mg_per_g_wet_mass: Option<f64>,
+    #[serde(default)]
+    pub body_carbon_mg_per_g_wet_mass: Option<f64>,
+    #[serde(default)]
+    pub juvenile_to_subadult_days: Option<f64>,
+    #[serde(default)]
+    pub subadult_to_adult_days: Option<f64>,
+    #[serde(default)]
+    pub juvenile_maturation_condition_threshold: Option<f64>,
+    #[serde(default)]
+    pub subadult_maturation_condition_threshold: Option<f64>,
+    #[serde(default)]
+    pub base_molt_interval_days: Option<f64>,
+    #[serde(default)]
+    pub failed_molt_mortality_scale: Option<f64>,
+    #[serde(default)]
+    pub sub_adult_sensitivity: Option<f64>,
+    #[serde(default)]
+    pub base_clutch_size: Option<u32>,
+    #[serde(default)]
+    pub min_clutch_condition: Option<f64>,
     pub provenance: Option<Provenance>,
 }
 
@@ -224,6 +246,84 @@ impl ShrimpPreset {
                 "hatch_success_base must be <= 1.0, got {}",
                 self.hatch_success_base
             ));
+        }
+        for (name, value) in [
+            (
+                "body_nitrogen_mg_per_g_wet_mass",
+                self.body_nitrogen_mg_per_g_wet_mass,
+            ),
+            (
+                "body_carbon_mg_per_g_wet_mass",
+                self.body_carbon_mg_per_g_wet_mass,
+            ),
+            ("juvenile_to_subadult_days", self.juvenile_to_subadult_days),
+            ("subadult_to_adult_days", self.subadult_to_adult_days),
+            (
+                "juvenile_maturation_condition_threshold",
+                self.juvenile_maturation_condition_threshold,
+            ),
+            (
+                "subadult_maturation_condition_threshold",
+                self.subadult_maturation_condition_threshold,
+            ),
+            ("base_molt_interval_days", self.base_molt_interval_days),
+            (
+                "failed_molt_mortality_scale",
+                self.failed_molt_mortality_scale,
+            ),
+            ("sub_adult_sensitivity", self.sub_adult_sensitivity),
+            ("min_clutch_condition", self.min_clutch_condition),
+        ] {
+            let Some(value) = value else {
+                continue;
+            };
+            if !value.is_finite() {
+                return Err(format!("field `{name}` must be finite, got {value}"));
+            }
+            if value < 0.0 {
+                return Err(format!("field `{name}` must be non-negative, got {value}"));
+            }
+        }
+        for (name, value) in [
+            (
+                "body_nitrogen_mg_per_g_wet_mass",
+                self.body_nitrogen_mg_per_g_wet_mass,
+            ),
+            (
+                "body_carbon_mg_per_g_wet_mass",
+                self.body_carbon_mg_per_g_wet_mass,
+            ),
+            ("juvenile_to_subadult_days", self.juvenile_to_subadult_days),
+            ("subadult_to_adult_days", self.subadult_to_adult_days),
+            ("base_molt_interval_days", self.base_molt_interval_days),
+        ] {
+            if let Some(value) = value {
+                if value <= 0.0 {
+                    return Err(format!("field `{name}` must be > 0.0, got {value}"));
+                }
+            }
+        }
+        for (name, value) in [
+            (
+                "juvenile_maturation_condition_threshold",
+                self.juvenile_maturation_condition_threshold,
+            ),
+            (
+                "subadult_maturation_condition_threshold",
+                self.subadult_maturation_condition_threshold,
+            ),
+            ("min_clutch_condition", self.min_clutch_condition),
+        ] {
+            if let Some(value) = value {
+                if value > 1.0 {
+                    return Err(format!("field `{name}` must be <= 1.0, got {value}"));
+                }
+            }
+        }
+        if let Some(base_clutch_size) = self.base_clutch_size {
+            if base_clutch_size == 0 {
+                return Err("base_clutch_size must be > 0".to_string());
+            }
         }
         Ok(())
     }

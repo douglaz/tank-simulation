@@ -101,6 +101,20 @@ fn warm_room_materializes_with_high_ambient() {
 }
 
 #[test]
+fn materialized_scenarios_preserve_total_shrimp_maturation_days() {
+    let state = tank_scenarios::seeded_state(SimSeed(45), "nano_cycle")
+        .expect("nano_cycle should materialize");
+
+    let total_stage_days =
+        state.shrimp_params.juvenile_to_subadult_days + state.shrimp_params.subadult_to_adult_days;
+    assert!(
+        (total_stage_days - state.process_params.shrimp_juvenile_maturation_days).abs()
+            < f64::EPSILON,
+        "scenario materialization should preserve the legacy total maturation schedule"
+    );
+}
+
+#[test]
 fn deterministic_materialization() {
     let state_a =
         tank_scenarios::seeded_state(SimSeed(99), "nano_cycle").expect("should materialize");

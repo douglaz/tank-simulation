@@ -75,7 +75,9 @@ fn stocked_scenario(seed: SimSeed, ambient_temp_c: f64) -> TankState {
     state.shrimp_params.egg_duration_days = 14;
     // Keep successful hatches visible as juveniles for the full 60-day window so
     // the test isolates thermal reproduction rather than maturation timing.
-    state.process_params.shrimp_juvenile_maturation_days = 120.0;
+    state
+        .shrimp_params
+        .apply_legacy_total_maturation_days(120.0);
 
     // Initialize stability tracker from actual state
     state.stability_tracker.prev_temp_c = state.water.temperature_c;

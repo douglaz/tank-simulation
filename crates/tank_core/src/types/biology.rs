@@ -336,6 +336,25 @@ impl Default for ShrimpRuntimeParams {
     }
 }
 
+impl ShrimpRuntimeParams {
+    /// Splits the legacy total maturation period into juvenile and sub-adult
+    /// stage durations while preserving the default 30:20 ratio.
+    pub fn split_legacy_total_maturation_days(total_days: f64) -> (f64, f64) {
+        let juvenile_ratio = default_juvenile_to_subadult_days()
+            / (default_juvenile_to_subadult_days() + default_subadult_to_adult_days());
+        let juvenile_to_subadult_days = total_days * juvenile_ratio;
+        let subadult_to_adult_days = total_days - juvenile_to_subadult_days;
+        (juvenile_to_subadult_days, subadult_to_adult_days)
+    }
+
+    pub fn apply_legacy_total_maturation_days(&mut self, total_days: f64) {
+        let (juvenile_to_subadult_days, subadult_to_adult_days) =
+            Self::split_legacy_total_maturation_days(total_days);
+        self.juvenile_to_subadult_days = juvenile_to_subadult_days;
+        self.subadult_to_adult_days = subadult_to_adult_days;
+    }
+}
+
 fn default_shrimp_body_nitrogen_mg_per_g_wet_mass() -> f64 {
     DEFAULT_SHRIMP_BODY_NITROGEN_MG_PER_G_WET_MASS
 }
@@ -488,7 +507,7 @@ impl AnimalState {
             return;
         }
 
-        let adult_weight = f64::from(self.adult.count);
+        let adult_weight = f64::from(self.adult.count) * ADULT_FEEDING_WEIGHT;
         let sub_adult_weight = f64::from(self.sub_adult.count) * SUB_ADULT_FEEDING_WEIGHT;
         let juvenile_weight = f64::from(self.juvenile.count) * JUVENILE_FEEDING_WEIGHT;
         let total_weight = adult_weight + sub_adult_weight + juvenile_weight;

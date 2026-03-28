@@ -2,8 +2,9 @@ use tank_core::systems::chemistry::solve_carbonate_equilibrium;
 use tank_core::systems::shrimp::update_stability_tracker;
 use tank_core::{
     compute_habitat_registry, shrimp_biomass_g, Engine, MicrobeState, PlayerAction, ProcessParams,
-    SaveFile, SimError, SimSeed, SimulationEngine, SourceWaterProfile, StabilityTracker, TankState,
-    WaterState, APP_VERSION, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G, SCHEMA_VERSION,
+    SaveFile, ShrimpRuntimeParams, SimError, SimSeed, SimulationEngine, SourceWaterProfile,
+    StabilityTracker, TankState, WaterState, APP_VERSION, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
+    SCHEMA_VERSION,
 };
 
 fn legacy_pre_stage_state_json(
@@ -30,6 +31,7 @@ fn legacy_pre_stage_state_json(
         .and_then(serde_json::Value::as_object_mut)
         .expect("filter object")
         .remove("media_area_cm2");
+    state_obj.remove("shrimp_params");
 
     let mut animal = serde_json::Map::new();
     animal.insert("adults_count".to_string(), serde_json::json!(adults_count));
@@ -461,6 +463,7 @@ fn legacy_schema_v4_saves_preserve_trim_plants_as_leave_cuttings() -> Result<(),
         .and_then(serde_json::Value::as_object_mut)
         .expect("filter object")
         .remove("media_area_cm2");
+    state_obj.remove("shrimp_params");
     state_obj.insert(
         "animal".to_string(),
         serde_json::json!({
@@ -517,6 +520,33 @@ fn legacy_schema_v4_saves_preserve_trim_plants_as_leave_cuttings() -> Result<(),
         PlayerAction::TrimPlantsAndLeaveCuttings { fraction: 0.5 }
     );
 
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v4_saves_split_legacy_maturation_days_into_stage_params() -> Result<(), SimError> {
+    let mut legacy_state = TankState::new(SimSeed(111));
+    legacy_state.process_params.shrimp_juvenile_maturation_days = 75.0;
+    let state_json = legacy_pre_stage_state_json(&legacy_state, 4, 7, Some(1.2), 0.65, 0.35);
+
+    let json = serde_json::json!({
+        "schema_version": 4,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+    let (expected_juvenile, expected_subadult) =
+        ShrimpRuntimeParams::split_legacy_total_maturation_days(75.0);
+
+    assert!(
+        (migrated.state.shrimp_params.juvenile_to_subadult_days - expected_juvenile).abs() < 1e-9
+    );
+    assert!((migrated.state.shrimp_params.subadult_to_adult_days - expected_subadult).abs() < 1e-9);
+
+    let _engine = migrated.into_engine()?;
     Ok(())
 }
 
@@ -757,6 +787,62 @@ fn malformed_v4_save_with_invalid_shrimp_partition_sum_is_rejected() -> Result<(
         }
         other => panic!("expected shrimp partition invariant violation, got: {other:?}"),
     }
+
+    Ok(())
+}
+
+#[test]
+fn malformed_current_save_with_invalid_shrimp_stage_duration_is_rejected() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(112));
+    state.shrimp_params.juvenile_to_subadult_days = 0.0;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    let err = loaded.into_engine().unwrap_err();
+
+    assert_eq!(
+        err,
+        SimError::InvariantViolation {
+            field: "shrimp_params.juvenile_to_subadult_days",
+            value: 0.0,
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn malformed_current_save_with_inverted_shrimp_thermal_penalty_range_is_rejected(
+) -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(113));
+    state.shrimp_params.high_temp_repro_penalty_start_c = 33.0;
+    state.shrimp_params.high_temp_repro_penalty_full_c = 30.0;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    let err = loaded.into_engine().unwrap_err();
+
+    assert_eq!(
+        err,
+        SimError::InvariantViolation {
+            field: "shrimp_params.high_temp_repro_penalty_full_c",
+            value: 30.0,
+        }
+    );
 
     Ok(())
 }

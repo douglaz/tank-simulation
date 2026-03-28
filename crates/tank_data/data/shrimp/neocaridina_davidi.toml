@@ -11,6 +11,15 @@ hatch_success_base = 0.7
 juvenile_sensitivity = 1.5
 high_temp_repro_penalty_start_c = 28.0
 high_temp_repro_penalty_full_c = 33.0
+body_nitrogen_mg_per_g_wet_mass = 27.586206896551722
+body_carbon_mg_per_g_wet_mass = 172.41379310344828
+juvenile_maturation_condition_threshold = 0.3
+subadult_maturation_condition_threshold = 0.4
+base_molt_interval_days = 28.0
+failed_molt_mortality_scale = 0.15
+sub_adult_sensitivity = 1.2
+base_clutch_size = 25
+min_clutch_condition = 0.3
 
 [provenance]
 source_title = "Starter preset pack"

@@ -4,7 +4,7 @@ use serde_json::Value;
 use crate::{
     engine::{Engine, SimulationEngine},
     types::{
-        shrimp_biomass_g, PlayerAction, SimError, StabilityTracker, TankState,
+        shrimp_biomass_g, PlayerAction, ShrimpRuntimeParams, SimError, StabilityTracker, TankState,
         LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
     },
 };
@@ -406,6 +406,36 @@ fn migrate_v3_to_v4(value: &mut Value) -> Result<(), SimError> {
 ///    `queued_actions` array so legacy queued trims keep their original
 ///    closed-system semantics.
 fn migrate_v4_to_v5(value: &mut Value) -> Result<(), SimError> {
+    {
+        let legacy_total_maturation_days = required_positive_f64_at(
+            value,
+            4,
+            5,
+            "/state/process_params/shrimp_juvenile_maturation_days",
+        )?;
+        let state = required_object_mut_at(value, 4, 5, "/state")?;
+        let shrimp_params = state
+            .entry("shrimp_params".to_string())
+            .or_insert_with(|| serde_json::json!({}));
+        let shrimp_params = shrimp_params.as_object_mut().ok_or_else(|| {
+            schema_migration_error(4, 5, "expected object at /state/shrimp_params")
+        })?;
+        let (juvenile_to_subadult_days, subadult_to_adult_days) =
+            ShrimpRuntimeParams::split_legacy_total_maturation_days(legacy_total_maturation_days);
+        if !shrimp_params.contains_key("juvenile_to_subadult_days") {
+            shrimp_params.insert(
+                "juvenile_to_subadult_days".to_string(),
+                serde_json::json!(juvenile_to_subadult_days),
+            );
+        }
+        if !shrimp_params.contains_key("subadult_to_adult_days") {
+            shrimp_params.insert(
+                "subadult_to_adult_days".to_string(),
+                serde_json::json!(subadult_to_adult_days),
+            );
+        }
+    }
+
     // --- Stage-structured shrimp model migration ---
     //
     // Scoped block so the mutable borrow of `/state/animal` is released
