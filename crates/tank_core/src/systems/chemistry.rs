@@ -5,6 +5,46 @@ use crate::types::{
 use tracing::debug;
 
 // ---------------------------------------------------------------------------
+// CO2 gas exchange constants (Henry's law)
+// ---------------------------------------------------------------------------
+
+/// Atmospheric CO2 concentration in ppm.
+const ATMOSPHERIC_CO2_PPM: f64 = 410.0;
+
+/// Henry's law constant for CO2 at 25°C in mol/(L·atm).
+const KH_CO2_25C_MOL_PER_L_ATM: f64 = 3.4e-2;
+
+/// Temperature correction coefficient for Henry's law (dimensionless, K).
+///
+/// Derived from -ΔH_sol/R for CO2 dissolution. Dissolution is exothermic
+/// (ΔH_sol < 0), so this value is positive: warmer water holds less CO2.
+const KH_TEMP_FACTOR_K: f64 = 2400.0;
+
+/// Reference temperature for the Henry's law constant (25°C in K).
+const KH_REFERENCE_T_K: f64 = 298.15;
+
+/// K_LA ratio: CO2 transfer coefficient relative to O2.
+///
+/// Derived from the square root of the diffusion coefficient ratio:
+/// (D_CO2 / D_O2)^0.5 ≈ 0.91
+const KLA_CO2_TO_O2_RATIO: f64 = 0.91;
+
+/// Equilibrium dissolved CO2 concentration (mg C/L) at a given temperature,
+/// computed from Henry's law with atmospheric CO2 at ~410 ppm.
+///
+/// At 25°C this returns ≈ 0.167 mg C/L (≈ 0.61 mg CO2/L).
+pub fn co2_sat_mg_c_per_l(temperature_c: f64) -> f64 {
+    let t_k = temperature_c + 273.15;
+    // Temperature-corrected Henry's law constant (van 't Hoff).
+    let kh =
+        KH_CO2_25C_MOL_PER_L_ATM * (KH_TEMP_FACTOR_K * (1.0 / t_k - 1.0 / KH_REFERENCE_T_K)).exp();
+    let pco2_atm = ATMOSPHERIC_CO2_PPM * 1e-6;
+    let co2_mol_per_l = kh * pco2_atm;
+    // Convert mol CO2/L → mg C/L (molar mass of C = 12 g/mol = 12 000 mg/mol).
+    co2_mol_per_l * 12_000.0
+}
+
+// ---------------------------------------------------------------------------
 // Carbonate equilibrium constants
 // ---------------------------------------------------------------------------
 
@@ -480,6 +520,7 @@ pub fn step_hourly_chemistry_with_budget(state: &mut TankState, light_on: bool) 
 struct HourlyChemistryTerms {
     respiration_dic_mg: f64,
     photosynthesis_dic_mg: f64,
+    co2_exchange_dic_mg: f64,
 }
 
 fn hourly_chemistry_terms(state: &TankState, light_on: bool) -> Option<HourlyChemistryTerms> {
@@ -509,9 +550,27 @@ fn hourly_chemistry_terms(state: &TankState, light_on: bool) -> Option<HourlyChe
         0.0
     };
 
+    // CO2 gas exchange with the atmosphere via Henry's law.
+    // Uses the same K_LA infrastructure as O2 reaeration, scaled by the
+    // diffusion-coefficient ratio (CO2/O2)^0.5 ≈ 0.91.
+    // Positive = CO2 dissolving in (current CO2 below atmospheric equilibrium).
+    // Negative = CO2 off-gassing (current CO2 above atmospheric equilibrium).
+    let eq = solve_carbonate_equilibrium(
+        state.water.dissolved_inorganic_carbon_mg_c_total,
+        state.water.alkalinity_meq_total,
+        state.water.temperature_c,
+        volume_l,
+    );
+    let co2_current_mg_c_per_l = eq.co2_aq_mmol_per_l * 12.0;
+    let co2_eq_mg_c_per_l = co2_sat_mg_c_per_l(state.water.temperature_c);
+    let k_la_o2 = crate::systems::dissolved_oxygen::compute_o2_kla(state);
+    let k_la_co2 = (k_la_o2 * KLA_CO2_TO_O2_RATIO).min(1.0);
+    let co2_exchange_dic_mg = k_la_co2 * (co2_eq_mg_c_per_l - co2_current_mg_c_per_l) * volume_l;
+
     Some(HourlyChemistryTerms {
         respiration_dic_mg,
         photosynthesis_dic_mg,
+        co2_exchange_dic_mg,
     })
 }
 
@@ -520,8 +579,9 @@ fn apply_hourly_chemistry_terms(
     terms: HourlyChemistryTerms,
 ) -> ElementBudget {
     let dic_before_mg = state.water.dissolved_inorganic_carbon_mg_c_total.max(0.0);
-    let carbon_in_mg = terms.respiration_dic_mg.max(0.0);
-    let carbon_out_requested_mg = terms.photosynthesis_dic_mg.max(0.0);
+    let carbon_in_mg = terms.respiration_dic_mg.max(0.0) + terms.co2_exchange_dic_mg.max(0.0);
+    let carbon_out_requested_mg =
+        terms.photosynthesis_dic_mg.max(0.0) + (-terms.co2_exchange_dic_mg).max(0.0);
     let carbon_out_mg = carbon_out_requested_mg.min(dic_before_mg + carbon_in_mg);
 
     state.water.dissolved_inorganic_carbon_mg_c_total =

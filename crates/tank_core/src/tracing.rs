@@ -146,7 +146,6 @@ impl TraceSink for StderrSink {
 /// Snapshot of key simulation pool values for computing deltas.
 pub(crate) struct PoolSnapshot {
     pools: Vec<(&'static str, f64)>,
-    event_count: usize,
 }
 
 impl PoolSnapshot {
@@ -187,23 +186,14 @@ impl PoolSnapshot {
                 ("algae.suspended_g", state.algae.suspended_biomass_g),
                 ("algae.periphyton_g", state.algae.periphyton_biomass_g),
                 ("microbe.decomposer_g", state.microbe.decomposer_biomass_g),
-                (
-                    "microbe.aob_g",
-                    state.microbe.ammonia_oxidizer_biomass_g,
-                ),
-                (
-                    "microbe.nob_g",
-                    state.microbe.nitrite_oxidizer_biomass_g,
-                ),
+                ("microbe.aob_g", state.microbe.ammonia_oxidizer_biomass_g),
+                ("microbe.nob_g", state.microbe.nitrite_oxidizer_biomass_g),
                 ("microbe.comammox_g", state.microbe.comammox_biomass_g),
                 ("animal.adults", f64::from(state.animal.adults_count)),
                 ("animal.juveniles", f64::from(state.animal.juveniles_count)),
                 ("animal.condition", state.animal.condition_index),
                 ("animal.reserve_g", state.animal.reserve_g),
-                (
-                    "microfauna.population",
-                    state.microfauna.population_index,
-                ),
+                ("microfauna.population", state.microfauna.population_index),
                 // Detritus
                 (
                     "detritus.particulate_g",

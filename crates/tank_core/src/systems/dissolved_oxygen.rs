@@ -61,19 +61,7 @@ fn dissolved_oxygen_terms(state: &TankState, light_on: bool) -> Option<Dissolved
 
     let do_sat_mg_l = do_sat_mg_l(state.water.temperature_c);
     let do_mg_l = state.do_mg_per_l();
-    let aeration_intensity = if state.hardware.aeration.enabled {
-        state.hardware.aeration.intensity
-    } else {
-        0.0
-    };
-    let filter_kla_boost = if state.hardware.filter.enabled {
-        0.02 * (state.hardware.filter.flow_lph / 200.0).min(2.0)
-    } else {
-        0.0
-    };
-    let k_la = (state.process_params.reaeration_kla_base * state.geometry.top_exchange_factor())
-        + (state.process_params.aeration_kla_boost * aeration_intensity)
-        + filter_kla_boost;
+    let k_la = compute_o2_kla(state);
     // Cap k_la at 1.0 so the explicit Euler step cannot overshoot saturation.
     // With k_la <= 1.0, gas exchange moves DO at most 100% toward the
     // saturation target per hour, asymptotically approaching but never crossing.

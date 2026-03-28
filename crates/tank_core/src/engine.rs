@@ -4,6 +4,7 @@ use crate::{
     invariants::enforce_invariants,
     rng::SimSeed,
     systems,
+    tracing::{PoolSnapshot, SimTracer, SystemTraceEntry, TickTraceBuilder, Verbosity},
     types::{
         live_biomass_carbon_mg, live_biomass_nitrogen_mg, BudgetDelta, BudgetEntry, BudgetLedger,
         BudgetSnapshot, ElementBudget, EventCause, EventKind, EventSeverity, PlayerAction,
@@ -20,11 +21,47 @@ pub trait SimulationEngine {
     fn full_state(&self) -> &TankState;
 }
 
-#[derive(Debug, Clone, PartialEq)]
 pub struct Engine {
     state: TankState,
     queued_actions: VecDeque<PlayerAction>,
     budget_ledger: Option<BudgetLedger>,
+    tracer: Option<SimTracer>,
+}
+
+impl std::fmt::Debug for Engine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Engine")
+            .field("state", &self.state)
+            .field("queued_actions", &self.queued_actions)
+            .field("budget_ledger", &self.budget_ledger)
+            .field("tracer", &self.tracer)
+            .finish()
+    }
+}
+
+impl Clone for Engine {
+    fn clone(&self) -> Self {
+        Self {
+            state: self.state.clone(),
+            queued_actions: self.queued_actions.clone(),
+            budget_ledger: self.budget_ledger.clone(),
+            tracer: None,
+        }
+    }
+}
+
+impl PartialEq for Engine {
+    fn eq(&self, other: &Self) -> bool {
+        self.state == other.state
+            && self.queued_actions == other.queued_actions
+            && self.budget_ledger == other.budget_ledger
+    }
+}
+
+/// Per-tick working state for both budget tracking and tracing.
+struct TickContext {
+    budget: Option<TickBudgetRecord>,
+    trace: Option<TickTraceBuilder>,
 }
 
 impl Engine {
@@ -33,6 +70,7 @@ impl Engine {
             state: TankState::new(seed),
             queued_actions: VecDeque::new(),
             budget_ledger: None,
+            tracer: None,
         }
     }
 
@@ -41,6 +79,7 @@ impl Engine {
             state,
             queued_actions: queued_actions.into(),
             budget_ledger: None,
+            tracer: None,
         }
     }
 
@@ -62,11 +101,38 @@ impl Engine {
         self.budget_ledger.as_ref()
     }
 
+    /// Enable structured tracing with the given tracer configuration.
+    pub fn enable_tracing(&mut self, tracer: SimTracer) {
+        self.tracer = Some(tracer);
+    }
+
+    /// Disable tracing, returning the tracer with all recorded data.
+    pub fn disable_tracing(&mut self) -> Option<SimTracer> {
+        self.tracer.take()
+    }
+
+    /// Access the active tracer (if any).
+    pub fn tracer(&self) -> Option<&SimTracer> {
+        self.tracer.as_ref()
+    }
+
+    /// Mutably access the active tracer (if any).
+    pub fn tracer_mut(&mut self) -> Option<&mut SimTracer> {
+        self.tracer.as_mut()
+    }
+
     fn step_one_hour(&mut self) -> Result<(), SimError> {
-        let mut tick = self
-            .budget_ledger
-            .as_ref()
-            .map(|ledger| TickBudgetRecord::start(&self.state, ledger.ticks.len()));
+        let mut ctx = TickContext {
+            budget: self
+                .budget_ledger
+                .as_ref()
+                .map(|ledger| TickBudgetRecord::start(&self.state, ledger.ticks.len())),
+            trace: self
+                .tracer
+                .as_ref()
+                .map(|tracer| tracer.begin_tick(&self.state)),
+        };
+
         let actions_slice: Vec<_> = self.queued_actions.iter().cloned().collect();
         // Validate all queued actions (covers from_parts callers that bypass apply_action).
         let mut available_shrimp = self.state.animal.adults_count as i64;
@@ -94,14 +160,14 @@ impl Engine {
         while let Some(action) = self.queued_actions.pop_front() {
             let label = action_budget_label(&action);
             self.maybe_record_stage_with_explicit_budget(
-                &mut tick,
+                &mut ctx,
                 label,
                 move |engine, tracking| ((), engine.process_action(action, tracking)),
             );
         }
 
         // Step 4: update water temperature from ambient and heater
-        self.maybe_record_stage(&mut tick, "system:temperature", |engine| {
+        self.maybe_record_stage(&mut ctx, "system:temperature", |engine| {
             systems::temperature::step_temperature(&mut engine.state);
         });
 
@@ -117,13 +183,13 @@ impl Engine {
         // This runs between light-state resolution and chemistry/DO/event phases.
         // Nitrification O2 consumption and alkalinity depletion are handled
         // internally by the nitrogen cycle system.
-        self.maybe_record_stage(&mut tick, "system:nitrogen_cycle", |engine| {
+        self.maybe_record_stage(&mut ctx, "system:nitrogen_cycle", |engine| {
             let _ = systems::nitrogen_cycle::step_nitrogen_cycle(&mut engine.state);
         });
 
         // Step 9: update DIC, alkalinity, and pH.
         self.maybe_record_stage_with_explicit_budget(
-            &mut tick,
+            &mut ctx,
             "system:chemistry",
             move |engine, tracking| {
                 let delta = if tracking {
@@ -142,7 +208,7 @@ impl Engine {
         // Step 10 / 11-partial: update dissolved oxygen with background respiration and
         // light-driven photosynthetic support from existing biomass.
         self.maybe_record_stage_with_explicit_budget(
-            &mut tick,
+            &mut ctx,
             "system:dissolved_oxygen",
             move |engine, tracking| {
                 let delta = if tracking {
@@ -161,12 +227,12 @@ impl Engine {
         );
 
         // Step 12: hourly shrimp stress accumulation.
-        self.maybe_record_stage(&mut tick, "system:shrimp_stress", |engine| {
+        self.maybe_record_stage(&mut ctx, "system:shrimp_stress", |engine| {
             systems::shrimp::step_hourly_shrimp_stress(&mut engine.state);
         });
 
         // Step 13: emit threshold-based chemistry warnings.
-        self.maybe_record_stage(&mut tick, "system:hourly_events", |engine| {
+        self.maybe_record_stage(&mut ctx, "system:hourly_events", |engine| {
             systems::events::emit_hourly_threshold_events(&mut engine.state);
         });
 
@@ -174,53 +240,57 @@ impl Engine {
         if self.state.environment.hour_of_day == 0 {
             self.state.environment.day += 1;
             // Daily pipeline
-            self.run_daily_update(&mut tick);
+            self.run_daily_update(&mut ctx);
         }
 
-        self.maybe_record_stage(&mut tick, "system:invariants", |engine| {
+        self.maybe_record_stage(&mut ctx, "system:invariants", |engine| {
             enforce_invariants(&mut engine.state)
         })?;
 
-        if let Some(tick_record) = tick.as_ref() {
+        if let Some(tick_record) = ctx.budget.as_ref() {
             enforce_tracked_tick_budget_guard(tick_record)?;
         }
 
-        if let (Some(ledger), Some(tick)) = (self.budget_ledger.as_mut(), tick) {
+        if let (Some(ledger), Some(tick)) = (self.budget_ledger.as_mut(), ctx.budget) {
             ledger.push_tick(tick);
+        }
+
+        if let (Some(tracer), Some(builder)) = (self.tracer.as_mut(), ctx.trace) {
+            tracer.finish_tick(builder);
         }
 
         Ok(())
     }
 
-    fn run_daily_update(&mut self, tick: &mut Option<TickBudgetRecord>) {
+    fn run_daily_update(&mut self, ctx: &mut TickContext) {
         // Daily pipeline: plants → algae → microfauna → stability → shrimp → biofilter
-        self.maybe_record_stage(tick, "system:daily_plants", |engine| {
+        self.maybe_record_stage(ctx, "system:daily_plants", |engine| {
             systems::plant_growth::step_daily_plants(&mut engine.state);
         });
-        self.maybe_record_stage(tick, "system:daily_algae", |engine| {
+        self.maybe_record_stage(ctx, "system:daily_algae", |engine| {
             systems::algae_growth::step_daily_algae(&mut engine.state);
         });
-        self.maybe_record_stage(tick, "system:daily_microfauna", |engine| {
+        self.maybe_record_stage(ctx, "system:daily_microfauna", |engine| {
             systems::microfauna::step_daily_microfauna(&mut engine.state);
         });
 
         // Update stability metrics before shrimp so that same-day chemistry
         // swings (water changes, temperature shifts) are reflected in the
         // instability_index that shrimp condition/mortality reads.
-        self.maybe_record_stage(tick, "system:stability_tracker", |engine| {
+        self.maybe_record_stage(ctx, "system:stability_tracker", |engine| {
             systems::shrimp::update_stability_tracker(&mut engine.state);
         });
 
-        self.maybe_record_stage(tick, "system:daily_shrimp", |engine| {
+        self.maybe_record_stage(ctx, "system:daily_shrimp", |engine| {
             systems::shrimp::step_daily_shrimp(&mut engine.state);
         });
-        self.maybe_record_stage(tick, "system:daily_filter_clogging", |engine| {
+        self.maybe_record_stage(ctx, "system:daily_filter_clogging", |engine| {
             systems::nitrogen_cycle::update_daily_filter_clogging(&mut engine.state);
         });
 
         // Biofilter maturity summary update
         let maturity_delta =
-            self.maybe_record_stage(tick, "system:daily_biofilter_maturity", |engine| {
+            self.maybe_record_stage(ctx, "system:daily_biofilter_maturity", |engine| {
                 systems::nitrogen_cycle::update_daily_biofilter_maturity(&mut engine.state)
             });
         if maturity_delta > 0.005 {
@@ -249,44 +319,106 @@ impl Engine {
 
     fn maybe_record_stage<F, R>(
         &mut self,
-        tick: &mut Option<TickBudgetRecord>,
+        ctx: &mut TickContext,
         label: &'static str,
         stage: F,
     ) -> R
     where
         F: FnOnce(&mut Self) -> R,
     {
-        let before = tick
+        let budget_before = ctx
+            .budget
             .as_ref()
             .map(|_| BudgetSnapshot::from_state(&self.state));
+        let trace_before = ctx
+            .trace
+            .as_ref()
+            .filter(|t| t.verbosity >= Verbosity::Detail)
+            .map(|_| PoolSnapshot::capture(&self.state));
+        let event_count_before = ctx
+            .trace
+            .as_ref()
+            .map(|_| self.state.event_log.len());
+
         let result = stage(self);
-        if let (Some(tick), Some(before)) = (tick.as_mut(), before) {
+
+        if let (Some(tick), Some(before)) = (ctx.budget.as_mut(), budget_before) {
             let after = BudgetSnapshot::from_state(&self.state);
             let delta = BudgetDelta::from_snapshots(&before, &after);
             tick.record_stage(label, before.totals, after.totals, delta);
         }
+
+        if let Some(trace) = ctx.trace.as_mut() {
+            let pool_deltas = if let Some(before) = trace_before {
+                let after = PoolSnapshot::capture(&self.state);
+                before.deltas_to(&after)
+            } else {
+                Vec::new()
+            };
+            let events_generated = event_count_before
+                .map(|before| self.state.event_log.len().saturating_sub(before))
+                .unwrap_or(0);
+            trace.entries.push(SystemTraceEntry {
+                system: label.to_owned(),
+                pool_deltas,
+                notes: Vec::new(),
+                events_generated,
+            });
+        }
+
         result
     }
 
     fn maybe_record_stage_with_explicit_budget<F, R>(
         &mut self,
-        tick: &mut Option<TickBudgetRecord>,
+        ctx: &mut TickContext,
         label: &'static str,
         stage: F,
     ) -> R
     where
         F: FnOnce(&mut Self, bool) -> (R, Option<BudgetDelta>),
     {
-        let before = tick
+        let budget_before = ctx
+            .budget
             .as_ref()
             .map(|_| BudgetSnapshot::from_state(&self.state));
-        let (result, explicit_delta) = stage(self, tick.is_some());
-        if let (Some(tick), Some(before)) = (tick.as_mut(), before) {
+        let trace_before = ctx
+            .trace
+            .as_ref()
+            .filter(|t| t.verbosity >= Verbosity::Detail)
+            .map(|_| PoolSnapshot::capture(&self.state));
+        let event_count_before = ctx
+            .trace
+            .as_ref()
+            .map(|_| self.state.event_log.len());
+
+        let (result, explicit_delta) = stage(self, ctx.budget.is_some());
+
+        if let (Some(tick), Some(before)) = (ctx.budget.as_mut(), budget_before) {
             let after = BudgetSnapshot::from_state(&self.state);
             let delta =
                 explicit_delta.unwrap_or_else(|| BudgetDelta::from_snapshots(&before, &after));
             tick.record_stage(label, before.totals, after.totals, delta);
         }
+
+        if let Some(trace) = ctx.trace.as_mut() {
+            let pool_deltas = if let Some(before) = trace_before {
+                let after = PoolSnapshot::capture(&self.state);
+                before.deltas_to(&after)
+            } else {
+                Vec::new()
+            };
+            let events_generated = event_count_before
+                .map(|before| self.state.event_log.len().saturating_sub(before))
+                .unwrap_or(0);
+            trace.entries.push(SystemTraceEntry {
+                system: label.to_owned(),
+                pool_deltas,
+                notes: Vec::new(),
+                events_generated,
+            });
+        }
+
         result
     }
 

@@ -15,9 +15,13 @@ fn chemistry_state(seed: SimSeed, hour_of_day: u8) -> TankState {
     state.plant_guilds[0].biomass_g = 14.0;
     state.plant_guilds[1].biomass_g = 8.0;
     state.animal.adults_count = 20;
+    // Zero K_LA to isolate biological DIC effects from atmospheric CO2
+    // gas exchange, which would otherwise dominate the respiration rate.
     state.process_params = ProcessParams {
         respiration_dic_rate_mg_c_per_g_per_hour: 0.20,
         photosynthesis_dic_rate_mg_c_per_g_per_hour: 0.35,
+        reaeration_kla_base: 0.0,
+        aeration_kla_boost: 0.0,
         ..ProcessParams::default()
     };
     state

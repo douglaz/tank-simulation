@@ -16,6 +16,10 @@ use tank_core::{
 
 fn active_budget_state(seed: SimSeed) -> TankState {
     let mut state = TankState::new(seed);
+    // Zero K_LA so CO2 atmospheric exchange does not break closed-system
+    // carbon conservation assertions.
+    state.process_params.reaeration_kla_base = 0.0;
+    state.process_params.aeration_kla_boost = 0.0;
     state.water.ammonia_total_mg_n_total = 6.5;
     state.water.nitrite_mg_n_total = 1.5;
     state.water.nitrate_mg_n_total = 14.0;
