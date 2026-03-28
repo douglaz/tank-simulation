@@ -39,6 +39,11 @@ impl std::fmt::Debug for Engine {
     }
 }
 
+/// Cloned engines intentionally start with tracing disabled.
+///
+/// `SimTracer` can own non-cloneable external sinks, so clones keep the
+/// simulation state, queued actions, and budget ledger but drop the tracer.
+/// Re-enable tracing on scenario forks that still need diagnostics.
 impl Clone for Engine {
     fn clone(&self) -> Self {
         Self {
@@ -134,6 +139,10 @@ impl Engine {
     }
 
     /// Enable structured tracing with the given tracer configuration.
+    ///
+    /// Engine clones do not inherit this tracer because `SimTracer` may own a
+    /// non-cloneable sink. Re-enable tracing on cloned engines explicitly when
+    /// forked scenarios still need trace output.
     pub fn enable_tracing(&mut self, tracer: SimTracer) {
         self.tracer = Some(tracer);
     }

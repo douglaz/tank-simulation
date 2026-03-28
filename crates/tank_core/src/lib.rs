@@ -13,6 +13,6 @@ pub use rng::{SimRng, SimSeed};
 pub use save::{SaveFile, APP_VERSION, SCHEMA_VERSION};
 pub use tracing::{
     JsonLinesSink, PoolDelta, SimTracer, StderrSink, SystemTraceEntry, TickTrace, TraceSink,
-    Verbosity,
+    TraceSinkError, TraceSinkFailure, UntrackedPoolError, Verbosity,
 };
 pub use types::*;

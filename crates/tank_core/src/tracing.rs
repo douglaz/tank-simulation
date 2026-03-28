@@ -17,11 +17,11 @@
 //! - **JSON-lines file**: `SimTracer::with_sink()` + [`JsonLinesSink`] — for CI archival
 //! - **Stderr**: `SimTracer::with_sink()` + [`StderrSink`] — for interactive debugging
 
-use std::io::Write;
+use std::{error::Error, fmt, io::Write};
 
 use serde::{Deserialize, Serialize};
 
-use crate::types::TankState;
+use crate::types::{PlantGuild, TankState};
 
 // ---------------------------------------------------------------------------
 // Verbosity
@@ -89,9 +89,31 @@ impl SystemTraceEntry {
         self.pool_deltas.iter().find(|d| d.pool == pool)
     }
 
-    /// Get the delta value for a pool, or 0.0 if the pool wasn't modified.
+    /// Returns whether `pool` is part of the stable traced-pool schema.
+    pub fn tracks_pool(pool: &str) -> bool {
+        TRACKED_POOL_NAMES.contains(&pool)
+    }
+
+    /// Get the delta value for a tracked pool, or 0.0 if the pool wasn't modified.
+    ///
+    /// Panics if `pool` is not part of the traced-pool schema. Use
+    /// [`SystemTraceEntry::tracks_pool`] or [`SystemTraceEntry::try_delta_for`]
+    /// to probe support without panicking.
     pub fn delta_for(&self, pool: &str) -> f64 {
-        self.pool_delta(pool).map(|d| d.delta).unwrap_or(0.0)
+        self.try_delta_for(pool)
+            .unwrap_or_else(|err| panic!("{err}"))
+    }
+
+    /// Get the delta value for a tracked pool, or an error when the tracer
+    /// schema does not record that pool at detail verbosity.
+    pub fn try_delta_for(&self, pool: &str) -> Result<f64, UntrackedPoolError> {
+        if !Self::tracks_pool(pool) {
+            return Err(UntrackedPoolError {
+                pool: pool.to_owned(),
+            });
+        }
+
+        Ok(self.pool_delta(pool).map(|d| d.delta).unwrap_or(0.0))
     }
 }
 
@@ -102,8 +124,51 @@ impl SystemTraceEntry {
 /// Trait for external trace output destinations.
 pub trait TraceSink: Send {
     /// Write one tick's trace record.
-    fn emit_tick(&mut self, tick: &TickTrace);
+    fn emit_tick(&mut self, tick: &TickTrace) -> Result<(), TraceSinkError>;
 }
+
+/// Error returned by an external trace sink.
+#[derive(Debug)]
+pub enum TraceSinkError {
+    Serialization(serde_json::Error),
+    Write(std::io::Error),
+}
+
+impl fmt::Display for TraceSinkError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Serialization(err) => write!(f, "trace serialization failed: {err}"),
+            Self::Write(err) => write!(f, "trace write failed: {err}"),
+        }
+    }
+}
+
+impl Error for TraceSinkError {}
+
+/// A sink failure captured by [`SimTracer`] while still retaining the in-memory tick.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TraceSinkFailure {
+    pub tick_index: usize,
+    pub error: String,
+}
+
+/// Error returned when callers ask for a pool outside the stable traced schema.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UntrackedPoolError {
+    pub pool: String,
+}
+
+impl fmt::Display for UntrackedPoolError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "pool '{}' is not tracked by the simulation trace schema",
+            self.pool
+        )
+    }
+}
+
+impl Error for UntrackedPoolError {}
 
 /// JSON-lines output sink. Each tick becomes one line of JSON.
 pub struct JsonLinesSink<W: Write> {
@@ -121,10 +186,9 @@ impl<W: Write> JsonLinesSink<W> {
 }
 
 impl<W: Write + Send> TraceSink for JsonLinesSink<W> {
-    fn emit_tick(&mut self, tick: &TickTrace) {
-        if let Ok(line) = serde_json::to_string(tick) {
-            let _ = writeln!(self.writer, "{line}");
-        }
+    fn emit_tick(&mut self, tick: &TickTrace) -> Result<(), TraceSinkError> {
+        let line = serde_json::to_string(tick).map_err(TraceSinkError::Serialization)?;
+        writeln!(self.writer, "{line}").map_err(TraceSinkError::Write)
     }
 }
 
@@ -132,10 +196,11 @@ impl<W: Write + Send> TraceSink for JsonLinesSink<W> {
 pub struct StderrSink;
 
 impl TraceSink for StderrSink {
-    fn emit_tick(&mut self, tick: &TickTrace) {
-        if let Ok(line) = serde_json::to_string(tick) {
-            eprintln!("{line}");
-        }
+    fn emit_tick(&mut self, tick: &TickTrace) -> Result<(), TraceSinkError> {
+        let stderr = std::io::stderr();
+        let mut handle = stderr.lock();
+        let line = serde_json::to_string(tick).map_err(TraceSinkError::Serialization)?;
+        writeln!(&mut handle, "{line}").map_err(TraceSinkError::Write)
     }
 }
 
@@ -144,7 +209,6 @@ impl TraceSink for StderrSink {
 // ---------------------------------------------------------------------------
 
 /// Snapshot of key simulation pool values for computing deltas.
-#[allow(dead_code)]
 pub(crate) struct PoolSnapshot {
     pools: Vec<(&'static str, f64)>,
     event_count: usize,
@@ -159,6 +223,46 @@ impl PoolSnapshot {
             .iter()
             .map(|l| l.nutrient_store_mg_n_total)
             .sum();
+        let substrate_p_mg: f64 = state
+            .substrate_layers
+            .iter()
+            .map(|l| l.nutrient_store_mg_p_total)
+            .sum();
+        let fast_stem_biomass_g =
+            total_guild_metric(state, PlantGuild::FastStem, |plant| plant.biomass_g);
+        let fast_stem_health =
+            average_guild_metric(state, PlantGuild::FastStem, |plant| plant.health_index);
+        let fast_stem_crowding =
+            average_guild_metric(state, PlantGuild::FastStem, |plant| plant.crowding_index);
+        let fast_stem_habitat =
+            average_guild_metric(state, PlantGuild::FastStem, |plant| plant.habitat_index);
+        let rosette_biomass_g =
+            total_guild_metric(state, PlantGuild::RootFeedingRosette, |plant| {
+                plant.biomass_g
+            });
+        let rosette_health = average_guild_metric(state, PlantGuild::RootFeedingRosette, |plant| {
+            plant.health_index
+        });
+        let rosette_crowding =
+            average_guild_metric(state, PlantGuild::RootFeedingRosette, |plant| {
+                plant.crowding_index
+            });
+        let rosette_habitat =
+            average_guild_metric(state, PlantGuild::RootFeedingRosette, |plant| {
+                plant.habitat_index
+            });
+        let egg_count: u32 = state
+            .animal
+            .egg_cohorts
+            .iter()
+            .map(|cohort| cohort.count)
+            .sum();
+        let max_egg_progress_days = state
+            .animal
+            .egg_cohorts
+            .iter()
+            .map(|cohort| cohort.progress_days)
+            .fold(0.0, f64::max);
 
         Self {
             pools: vec![
@@ -181,21 +285,83 @@ impl PoolSnapshot {
                 ("water.do_mg", state.water.dissolved_oxygen_mg_total),
                 ("water.alkalinity_meq", state.water.alkalinity_meq_total),
                 ("water.phosphate_mg_p", state.water.phosphate_mg_p_total),
+                ("water.calcium_mg", state.water.calcium_mg_total),
+                ("water.magnesium_mg", state.water.magnesium_mg_total),
+                ("water.sodium_mg", state.water.sodium_mg_total),
+                ("water.potassium_mg", state.water.potassium_mg_total),
+                ("water.bicarbonate_mg", state.water.bicarbonate_mg_total),
+                ("water.chloride_mg", state.water.chloride_mg_total),
+                ("water.sulfate_mg", state.water.sulfate_mg_total),
                 ("water.ph", state.water.ph),
                 ("water.temperature_c", state.water.temperature_c),
                 // Biology
                 ("plants.biomass_g", plant_biomass_g),
+                ("plants.fast_stem_biomass_g", fast_stem_biomass_g),
+                ("plants.fast_stem_health", fast_stem_health),
+                ("plants.fast_stem_crowding", fast_stem_crowding),
+                ("plants.fast_stem_habitat", fast_stem_habitat),
+                ("plants.root_feeding_rosette_biomass_g", rosette_biomass_g),
+                ("plants.root_feeding_rosette_health", rosette_health),
+                ("plants.root_feeding_rosette_crowding", rosette_crowding),
+                ("plants.root_feeding_rosette_habitat", rosette_habitat),
                 ("algae.suspended_g", state.algae.suspended_biomass_g),
                 ("algae.periphyton_g", state.algae.periphyton_biomass_g),
+                ("algae.nuisance_index", state.algae.nuisance_index),
                 ("microbe.decomposer_g", state.microbe.decomposer_biomass_g),
                 ("microbe.aob_g", state.microbe.ammonia_oxidizer_biomass_g),
                 ("microbe.nob_g", state.microbe.nitrite_oxidizer_biomass_g),
                 ("microbe.comammox_g", state.microbe.comammox_biomass_g),
+                ("microbe.maturity_index", state.microbe.maturity_index),
                 ("animal.adults", f64::from(state.animal.adults_count)),
                 ("animal.juveniles", f64::from(state.animal.juveniles_count)),
+                (
+                    "animal.berried_females",
+                    f64::from(state.animal.berried_females_count),
+                ),
                 ("animal.condition", state.animal.condition_index),
+                ("animal.molt_stress", state.animal.molt_stress_index),
+                (
+                    "animal.reproductive_readiness",
+                    state.animal.reproductive_readiness_index,
+                ),
+                ("animal.egg_progress_days", state.animal.egg_progress_days),
+                (
+                    "animal.egg_cohort_count",
+                    state.animal.egg_cohorts.len() as f64,
+                ),
+                ("animal.egg_count", f64::from(egg_count)),
+                ("animal.max_egg_cohort_progress_days", max_egg_progress_days),
+                (
+                    "animal.nh3_stress_accum",
+                    state.animal.hourly_nh3_stress_accum,
+                ),
+                (
+                    "animal.nitrite_stress_accum",
+                    state.animal.hourly_nitrite_stress_accum,
+                ),
+                (
+                    "animal.low_do_stress_accum",
+                    state.animal.hourly_low_do_stress_accum,
+                ),
+                (
+                    "animal.heat_stress_accum",
+                    state.animal.hourly_heat_stress_accum,
+                ),
+                (
+                    "animal.instability_stress_accum",
+                    state.animal.hourly_instability_stress_accum,
+                ),
+                (
+                    "animal.daily_food_consumed_g",
+                    state.animal.daily_food_consumed_g,
+                ),
+                ("animal.maturation_accum", state.animal.maturation_accum),
                 ("animal.reserve_g", state.animal.reserve_g),
                 ("microfauna.population", state.microfauna.population_index),
+                (
+                    "microfauna.grazing_pressure",
+                    state.microfauna.grazing_pressure_index,
+                ),
                 // Detritus
                 (
                     "detritus.particulate_g",
@@ -208,14 +374,31 @@ impl PoolSnapshot {
                 ),
                 // Substrate & filter
                 ("substrate.n_mg", substrate_n_mg),
+                ("substrate.p_mg", substrate_p_mg),
                 (
                     "filter.maturity",
                     state.filter_state.biofilter_maturity_index,
                 ),
                 ("filter.clogging", state.filter_state.clogging_index),
                 (
+                    "filter.seeded_biomass",
+                    state.filter_state.seeded_biomass_index,
+                ),
+                (
                     "filter.cleanliness",
                     state.hardware.filter.cleanliness_index,
+                ),
+                ("heater.last_output_w", state.hardware.heater.last_output_w),
+                ("stability.prev_temp_c", state.stability_tracker.prev_temp_c),
+                ("stability.prev_ph", state.stability_tracker.prev_ph),
+                ("stability.prev_gh_d", state.stability_tracker.prev_gh_d),
+                (
+                    "stability.prev_do_mg_l",
+                    state.stability_tracker.prev_do_mg_l,
+                ),
+                (
+                    "stability.instability_index",
+                    state.stability_tracker.instability_index,
                 ),
             ],
             event_count: state.event_log.len(),
@@ -230,7 +413,7 @@ impl PoolSnapshot {
             .zip(after.pools.iter())
             .filter_map(|((name, before_val), (_, after_val))| {
                 let delta = after_val - before_val;
-                if delta.abs() > f64::EPSILON {
+                if meaningful_delta(*before_val, *after_val) {
                     Some(PoolDelta {
                         pool: (*name).to_owned(),
                         before: *before_val,
@@ -287,7 +470,9 @@ impl TickTraceBuilder {
 pub struct SimTracer {
     verbosity: Verbosity,
     ticks: Vec<TickTrace>,
+    next_tick_index: usize,
     sink: Option<Box<dyn TraceSink>>,
+    sink_failures: Vec<TraceSinkFailure>,
 }
 
 impl std::fmt::Debug for SimTracer {
@@ -305,7 +490,9 @@ impl SimTracer {
         Self {
             verbosity,
             ticks: Vec::new(),
+            next_tick_index: 0,
             sink: None,
+            sink_failures: Vec::new(),
         }
     }
 
@@ -314,7 +501,9 @@ impl SimTracer {
         Self {
             verbosity,
             ticks: Vec::new(),
+            next_tick_index: 0,
             sink: Some(sink),
+            sink_failures: Vec::new(),
         }
     }
 
@@ -333,6 +522,21 @@ impl SimTracer {
         self.ticks.len()
     }
 
+    /// Number of ticks emitted so far, including ticks that have already been drained.
+    pub fn total_tick_count(&self) -> usize {
+        self.next_tick_index
+    }
+
+    /// Sink failures captured while writing external trace output.
+    pub fn sink_failures(&self) -> &[TraceSinkFailure] {
+        &self.sink_failures
+    }
+
+    /// Number of sink failures captured so far.
+    pub fn sink_failure_count(&self) -> usize {
+        self.sink_failures.len()
+    }
+
     /// Drain all recorded ticks, freeing memory.
     pub fn drain_ticks(&mut self) -> Vec<TickTrace> {
         std::mem::take(&mut self.ticks)
@@ -342,7 +546,7 @@ impl SimTracer {
     pub(crate) fn begin_tick(&self, state: &TankState) -> TickTraceBuilder {
         TickTraceBuilder {
             verbosity: self.verbosity,
-            tick_index: self.ticks.len(),
+            tick_index: self.next_tick_index,
             day: state.environment.day,
             hour: state.environment.hour_of_day,
             entries: Vec::new(),
@@ -353,15 +557,144 @@ impl SimTracer {
     pub(crate) fn finish_tick(&mut self, builder: TickTraceBuilder) {
         let tick = builder.into_tick_trace();
         if let Some(sink) = self.sink.as_mut() {
-            sink.emit_tick(&tick);
+            if let Err(err) = sink.emit_tick(&tick) {
+                self.sink_failures.push(TraceSinkFailure {
+                    tick_index: tick.tick_index,
+                    error: err.to_string(),
+                });
+            }
         }
+        self.next_tick_index = tick.tick_index + 1;
         self.ticks.push(tick);
+    }
+}
+
+const TRACKED_POOL_NAMES: &[&str] = &[
+    "water.ammonia_mg_n",
+    "water.nitrite_mg_n",
+    "water.nitrate_mg_n",
+    "water.don_mg_n",
+    "water.dic_mg_c",
+    "water.doc_mg_c",
+    "water.do_mg",
+    "water.alkalinity_meq",
+    "water.phosphate_mg_p",
+    "water.calcium_mg",
+    "water.magnesium_mg",
+    "water.sodium_mg",
+    "water.potassium_mg",
+    "water.bicarbonate_mg",
+    "water.chloride_mg",
+    "water.sulfate_mg",
+    "water.ph",
+    "water.temperature_c",
+    "plants.biomass_g",
+    "plants.fast_stem_biomass_g",
+    "plants.fast_stem_health",
+    "plants.fast_stem_crowding",
+    "plants.fast_stem_habitat",
+    "plants.root_feeding_rosette_biomass_g",
+    "plants.root_feeding_rosette_health",
+    "plants.root_feeding_rosette_crowding",
+    "plants.root_feeding_rosette_habitat",
+    "algae.suspended_g",
+    "algae.periphyton_g",
+    "algae.nuisance_index",
+    "microbe.decomposer_g",
+    "microbe.aob_g",
+    "microbe.nob_g",
+    "microbe.comammox_g",
+    "microbe.maturity_index",
+    "animal.adults",
+    "animal.juveniles",
+    "animal.berried_females",
+    "animal.condition",
+    "animal.molt_stress",
+    "animal.reproductive_readiness",
+    "animal.egg_progress_days",
+    "animal.egg_cohort_count",
+    "animal.egg_count",
+    "animal.max_egg_cohort_progress_days",
+    "animal.nh3_stress_accum",
+    "animal.nitrite_stress_accum",
+    "animal.low_do_stress_accum",
+    "animal.heat_stress_accum",
+    "animal.instability_stress_accum",
+    "animal.daily_food_consumed_g",
+    "animal.maturation_accum",
+    "animal.reserve_g",
+    "microfauna.population",
+    "microfauna.grazing_pressure",
+    "detritus.particulate_g",
+    "detritus.fine_g",
+    "detritus.feed_residue_g",
+    "substrate.n_mg",
+    "substrate.p_mg",
+    "filter.maturity",
+    "filter.clogging",
+    "filter.seeded_biomass",
+    "filter.cleanliness",
+    "heater.last_output_w",
+    "stability.prev_temp_c",
+    "stability.prev_ph",
+    "stability.prev_gh_d",
+    "stability.prev_do_mg_l",
+    "stability.instability_index",
+];
+
+const ABSOLUTE_DELTA_THRESHOLD: f64 = 1e-12;
+const RELATIVE_DELTA_THRESHOLD: f64 = 1e-12;
+
+fn meaningful_delta(before: f64, after: f64) -> bool {
+    let delta = after - before;
+    let scale = before.abs().max(after.abs()).max(1.0);
+    delta.abs() > ABSOLUTE_DELTA_THRESHOLD.max(scale * RELATIVE_DELTA_THRESHOLD)
+}
+
+fn total_guild_metric<F>(state: &TankState, guild: PlantGuild, select: F) -> f64
+where
+    F: Fn(&crate::types::PlantGuildState) -> f64,
+{
+    state
+        .plant_guilds
+        .iter()
+        .filter(|plant| plant.guild == guild)
+        .map(select)
+        .sum()
+}
+
+fn average_guild_metric<F>(state: &TankState, guild: PlantGuild, select: F) -> f64
+where
+    F: Fn(&crate::types::PlantGuildState) -> f64,
+{
+    let matching: Vec<_> = state
+        .plant_guilds
+        .iter()
+        .filter(|plant| plant.guild == guild)
+        .collect();
+    if matching.is_empty() {
+        0.0
+    } else {
+        matching.iter().map(|plant| select(plant)).sum::<f64>() / matching.len() as f64
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io;
+
+    struct FailingWriter;
+
+    impl Write for FailingWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::other("expected write failure"))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
 
     #[test]
     fn verbosity_ordering() {
@@ -422,13 +755,15 @@ mod tests {
                 day: 0,
                 hour: 0,
                 systems: vec![],
-            });
+            })
+            .expect("sink should serialize first tick");
             sink.emit_tick(&TickTrace {
                 tick_index: 1,
                 day: 0,
                 hour: 1,
                 systems: vec![],
-            });
+            })
+            .expect("sink should serialize second tick");
         }
         let output = String::from_utf8(buf).expect("utf8");
         let lines: Vec<&str> = output.trim().split('\n').collect();
@@ -436,6 +771,34 @@ mod tests {
         for line in &lines {
             let _: TickTrace = serde_json::from_str(line).expect("valid JSON per line");
         }
+    }
+
+    #[test]
+    fn json_lines_sink_reports_write_failures() {
+        let mut sink = JsonLinesSink::new(FailingWriter);
+        let err = sink
+            .emit_tick(&TickTrace {
+                tick_index: 0,
+                day: 0,
+                hour: 0,
+                systems: vec![],
+            })
+            .expect_err("sink should report write failures");
+        assert!(matches!(err, TraceSinkError::Write(_)));
+    }
+
+    #[test]
+    fn pool_delta_suppresses_rounding_noise() {
+        let before = PoolSnapshot {
+            pools: vec![("a", 42.0)],
+            event_count: 0,
+        };
+        let after = PoolSnapshot {
+            pools: vec![("a", 42.0 + 5e-13)],
+            event_count: 0,
+        };
+
+        assert!(before.deltas_to(&after).is_empty());
     }
 
     #[test]
@@ -452,6 +815,21 @@ mod tests {
             events_generated: 0,
         };
         assert!((entry.delta_for("water.ph") - (-0.2)).abs() < f64::EPSILON);
-        assert!((entry.delta_for("nonexistent") - 0.0).abs() < f64::EPSILON);
+        assert!(SystemTraceEntry::tracks_pool("water.ph"));
+    }
+
+    #[test]
+    fn try_delta_for_rejects_untracked_pools() {
+        let entry = SystemTraceEntry {
+            system: "test".to_owned(),
+            pool_deltas: vec![],
+            notes: vec![],
+            events_generated: 0,
+        };
+
+        let err = entry
+            .try_delta_for("nonexistent")
+            .expect_err("untracked pools should be rejected explicitly");
+        assert_eq!(err.pool, "nonexistent");
     }
 }

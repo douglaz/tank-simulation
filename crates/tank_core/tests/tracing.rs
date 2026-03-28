@@ -1,13 +1,16 @@
 //! Integration tests for the simulation tracing facility.
 
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
+use std::{
+    io::{self, Write},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
 };
 
 use tank_core::{
-    Engine, JsonLinesSink, PlayerAction, SimSeed, SimTracer, SimulationEngine, TankState,
-    TickTrace, TraceSink, Verbosity,
+    Engine, JsonLinesSink, PlayerAction, SimSeed, SimTracer, SimulationEngine, SystemTraceEntry,
+    TankState, TickTrace, TraceSink, TraceSinkError, Verbosity,
 };
 
 // ---------------------------------------------------------------------------
@@ -42,8 +45,21 @@ struct CountingSink {
 }
 
 impl TraceSink for CountingSink {
-    fn emit_tick(&mut self, _tick: &TickTrace) {
+    fn emit_tick(&mut self, _tick: &TickTrace) -> Result<(), TraceSinkError> {
         self.emitted_ticks.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+struct FailingWriter;
+
+impl Write for FailingWriter {
+    fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+        Err(io::Error::other("expected tracing sink failure"))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
 
@@ -264,6 +280,60 @@ fn daily_systems_appear_on_day_boundary_ticks() -> Result<(), tank_core::SimErro
     Ok(())
 }
 
+#[test]
+fn detail_tracing_surfaces_daily_shrimp_internal_state_deltas() -> Result<(), tank_core::SimError> {
+    let mut state = active_state(SimSeed(650));
+    state.environment.hour_of_day = 23;
+    state.animal.adults_count = 12;
+    state.animal.condition_index = 0.55;
+    state.animal.reproductive_readiness_index = 0.2;
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_tracing(SimTracer::new(Verbosity::Detail));
+    engine.step_hours(1)?;
+
+    let tick = &engine.tracer().unwrap().ticks()[0];
+    let daily_shrimp = tick
+        .system("system:daily_shrimp")
+        .expect("daily shrimp stage should be traced");
+
+    assert!(SystemTraceEntry::tracks_pool(
+        "animal.daily_food_consumed_g"
+    ));
+    assert!(
+        daily_shrimp.delta_for("animal.daily_food_consumed_g") > 0.0,
+        "daily shrimp tracing should surface feeding-driven internal state deltas"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn detail_tracing_surfaces_stability_tracker_baseline_deltas() -> Result<(), tank_core::SimError> {
+    let mut state = active_state(SimSeed(660));
+    state.environment.hour_of_day = 23;
+    state.stability_tracker.prev_ph = state.water.ph + 0.35;
+    state.stability_tracker.prev_temp_c = state.water.temperature_c - 1.0;
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_tracing(SimTracer::new(Verbosity::Detail));
+    engine.step_hours(1)?;
+
+    let tick = &engine.tracer().unwrap().ticks()[0];
+    let stability = tick
+        .system("system:stability_tracker")
+        .expect("stability tracker stage should be traced");
+
+    assert!(SystemTraceEntry::tracks_pool("stability.prev_ph"));
+    assert!(
+        stability
+            .pool_deltas
+            .iter()
+            .any(|delta| delta.pool == "stability.prev_ph"),
+        "stability tracker tracing should surface baseline updates explicitly"
+    );
+
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // JSON-lines output
 // ---------------------------------------------------------------------------
@@ -280,7 +350,8 @@ fn json_lines_output_produces_valid_parseable_records() -> Result<(), tank_core:
     {
         let mut sink = JsonLinesSink::new(&mut buf);
         for tick in tracer.ticks() {
-            sink.emit_tick(tick);
+            sink.emit_tick(tick)
+                .expect("json lines sink should serialize tick");
         }
     }
 
@@ -309,7 +380,8 @@ fn json_lines_output_is_jq_compatible() -> Result<(), tank_core::SimError> {
     let mut buf = Vec::new();
     {
         let mut sink = JsonLinesSink::new(&mut buf);
-        sink.emit_tick(&tracer.ticks()[0]);
+        sink.emit_tick(&tracer.ticks()[0])
+            .expect("json lines sink should serialize tick");
     }
 
     let output = String::from_utf8(buf).expect("utf8");
@@ -414,6 +486,29 @@ fn tracing_compatible_with_budget_tracking() -> Result<(), tank_core::SimError> 
     Ok(())
 }
 
+#[test]
+fn tracer_records_sink_failures_without_losing_ticks() -> Result<(), tank_core::SimError> {
+    let mut engine = Engine::from_parts(active_state(SimSeed(1050)), vec![]);
+    engine.enable_tracing(SimTracer::with_sink(
+        Verbosity::Detail,
+        Box::new(JsonLinesSink::new(FailingWriter)),
+    ));
+    engine.step_hours(1)?;
+
+    let tracer = engine.tracer().expect("tracer should stay attached");
+    assert_eq!(tracer.tick_count(), 1);
+    assert_eq!(tracer.sink_failure_count(), 1);
+    assert_eq!(tracer.sink_failures()[0].tick_index, 0);
+    assert!(
+        tracer.sink_failures()[0]
+            .error
+            .contains("trace write failed"),
+        "sink failures should be retained for callers to inspect"
+    );
+
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Drain and disable
 // ---------------------------------------------------------------------------
@@ -435,6 +530,32 @@ fn drain_ticks_frees_memory() -> Result<(), tank_core::SimError> {
 }
 
 #[test]
+fn drain_ticks_preserves_monotonic_tick_indices() -> Result<(), tank_core::SimError> {
+    let mut engine = Engine::from_parts(active_state(SimSeed(1150)), vec![]);
+    engine.enable_tracing(SimTracer::new(Verbosity::Summary));
+    engine.step_hours(5)?;
+
+    {
+        let tracer = engine.tracer_mut().unwrap();
+        let drained = tracer.drain_ticks();
+        assert_eq!(drained.len(), 5);
+        assert_eq!(drained[0].tick_index, 0);
+        assert_eq!(drained[4].tick_index, 4);
+        assert_eq!(tracer.total_tick_count(), 5);
+    }
+
+    engine.step_hours(2)?;
+
+    let tracer = engine.tracer().unwrap();
+    assert_eq!(tracer.total_tick_count(), 7);
+    assert_eq!(tracer.tick_count(), 2);
+    assert_eq!(tracer.ticks()[0].tick_index, 5);
+    assert_eq!(tracer.ticks()[1].tick_index, 6);
+
+    Ok(())
+}
+
+#[test]
 fn disable_tracing_returns_tracer_with_data() -> Result<(), tank_core::SimError> {
     let mut engine = Engine::from_parts(active_state(SimSeed(1200)), vec![]);
     engine.enable_tracing(SimTracer::new(Verbosity::Detail));
@@ -445,4 +566,13 @@ fn disable_tracing_returns_tracer_with_data() -> Result<(), tank_core::SimError>
     assert!(engine.tracer().is_none());
 
     Ok(())
+}
+
+#[test]
+fn cloned_engine_requires_tracing_to_be_reenabled() {
+    let mut engine = Engine::from_parts(active_state(SimSeed(1250)), vec![]);
+    engine.enable_tracing(SimTracer::new(Verbosity::Detail));
+
+    let cloned = engine.clone();
+    assert!(cloned.tracer().is_none());
 }
