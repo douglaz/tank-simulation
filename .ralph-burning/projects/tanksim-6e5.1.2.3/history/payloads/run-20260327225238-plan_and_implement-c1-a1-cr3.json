@@ -1,0 +1,47 @@
+{
+  "payload_id": "run-20260327225238-plan_and_implement-c1-a1-cr3",
+  "stage_id": "plan_and_implement",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T23:41:06.603654045Z",
+  "payload": {
+    "data": {
+      "change_summary": "Applied both pending amendments: (1) Added `alk_budget` decrement after the comammox step in nitrogen_cycle.rs for consistency with the `do_budget` pattern — assigned to `_alk_budget` since NOB does not currently read it, with a comment explaining the intent for future guilds; (2) Replaced `serde_json::from_str::<SaveFile>(&raw)` with `SaveFile::from_json(&raw)` in the TUI `load_from_disk` method so disk loads go through the migration-aware constructor, ensuring version validation, migration chain application, and proper stability_tracker reseeding.",
+      "outstanding_risks": [
+        "The v2→v3 migration is frozen as raw-JSON logic independent of WaterState::rescale_totals_for_volume; this is by design for migration immutability (carried forward, unchanged)",
+        "Pre-existing test failures in events.rs (threshold_events_emit_with_cause_codes, threshold_events_are_deduplicated_per_day) and overfeeding_effects.rs are not caused by this task's changes — confirmed by running tests on the stashed clean state"
+      ],
+      "steps": [
+        {
+          "description": "In crates/tank_core/src/systems/nitrogen_cycle.rs line 274, added `let _alk_budget = (alk_budget - comammox_alk_cost).max(0.0);` after the DO budget decrement, with a comment explaining why the assignment is prefixed with underscore (NOB does not currently read alk_budget but future guilds may).",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "In crates/tank_tui/src/lib.rs line 237, replaced `serde_json::from_str::<SaveFile>(&raw)` with `SaveFile::from_json(&raw)` so that TUI disk loads run through the migration chain, version checks, and stability_tracker reseeding.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Verified both changes with `cargo test -p tank_core --test save_load` (10/10 pass), `cargo clippy -p tank_core -p tank_tui -- -D warnings` (zero warnings), and `cargo fmt --check` (no diffs in changed files; only pre-existing formatting in chemistry.rs from concurrent task tanksim-6e5.3.2).",
+          "order": 3,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "cargo test -p tank_core --test save_load: all 10 save_load tests pass",
+        "cargo test across all non-events/non-overfeeding suites: all pass (events and overfeeding failures are pre-existing, confirmed by running against stashed clean state)",
+        "cargo clippy -p tank_core -p tank_tui -- -D warnings: zero warnings (the _alk_budget prefix suppresses the unused assignment warning)",
+        "cargo fmt --check: only diffs are in chemistry.rs from concurrent task tanksim-6e5.3.2, not from this task's changes"
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 3
+}

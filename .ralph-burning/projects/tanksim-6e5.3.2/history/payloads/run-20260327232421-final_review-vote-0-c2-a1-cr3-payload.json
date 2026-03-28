@@ -1,0 +1,59 @@
+{
+  "payload_id": "run-20260327232421-final_review-vote-0-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T01:34:16.868040901Z",
+  "payload": {
+    "summary": "Verified all 8 amendments against the current codebase. Two amendments identify real current defects: the v3→v4 migration seeds reserve_g at 0.0 via serde default (blocking hatching/maturation for established colonies), and route_consumed_food never credits alkalinity when producing TAN. The remaining six are either already fixed in the current code or propose speculative enhancements rather than correcting demonstrated bugs.",
+    "votes": [
+      {
+        "amendment_id": "fr-3-694949da",
+        "decision": "accept",
+        "rationale": "Confirmed: migrate_v3_to_v4 is a no-op (lines 327-328 of save.rs), relying entirely on #[serde(default)] which sets reserve_g to 0.0. fund_live_shrimp_biomass (line 636-648 of shrimp.rs) returns false when reserve is insufficient, so a v3 save with an established colony will have all hatching and juvenile maturation fail until feeding cycles build up reserve. The migration should seed reserve_g proportionally to existing population biomass to avoid this transient regression."
+      },
+      {
+        "amendment_id": "fr-3-c4d41a63",
+        "decision": "accept",
+        "rationale": "Confirmed: route_consumed_food adds excreted N (line 212) and respired N (line 243) to ammonia_total_mg_n_total but never adjusts alkalinity_meq_total. Grep confirms no alkalinity modification anywhere in shrimp.rs outside test setup. Since nitrification elsewhere debits alkalinity for the same nitrogen, omitting the NHx alkalinity credit creates a systematic acid bias in the carbonate system. The fix is chemically correct and straightforward."
+      },
+      {
+        "amendment_id": "fr-3-e0885878",
+        "decision": "reject",
+        "rationale": "The code at lines 245-248 explicitly documents this as a Phase 1 limitation with planned future work for maintenance/molt/reproduction drains. Adding an arbitrary 1%/day reserve bleed without a grounded metabolic model would introduce a new TAN/DIC source and retune shrimp life-history behavior. This is a design enhancement, not a correctness bug."
+      },
+      {
+        "amendment_id": "fr-3-769ef011",
+        "decision": "reject",
+        "rationale": "Confirmed stale: route_consumed_food (lines 218-238) already scales respiration by available O2. It computes o2_demand, takes actual_o2_consumed as min(available_do, o2_demand), computes respiration_scale = actual/demand, and applies that scale to DIC/TAN routing. Unrespired mass is retained in reserve_g. The bug described does not exist in the current code."
+      },
+      {
+        "amendment_id": "fr-3-35499590",
+        "decision": "reject",
+        "rationale": "Confirmed stale: step_daily_shrimp (lines 64-90) calls shrimp_feeding at line 77, then refresh_carbonate_state at line 78, then update_condition at line 79. Carbonate state is refreshed after feeding and before condition evaluation. The ordering bug described has already been fixed."
+      },
+      {
+        "amendment_id": "fr-3-61de90b7",
+        "decision": "reject",
+        "rationale": "Confirmed stale: fund_live_shrimp_biomass (lines 636-648) checks if reserve_g >= required_reserve_g and returns false if insufficient. There is no fallback to DOC/DIC/DON/TAN pools. The dissolved-pool fallback described in the amendment does not exist in the current code."
+      },
+      {
+        "amendment_id": "fr-3-eac07306",
+        "decision": "reject",
+        "rationale": "Confirmed stale: RemoveShrimp (lines 402-414 of engine.rs) computes total = adults_count + juveniles_count (line 404) and uses that total for removed_frac (line 406). The reserve export is already proportional to the whole population, not just adults. The bug described has been fixed."
+      },
+      {
+        "amendment_id": "fr-3-96fc0cd7",
+        "decision": "reject",
+        "rationale": "Confirmed stale: The loader extracts file_version (line 143 of save.rs) and passes it to reconcile_stability_tracker (line 182). The function has_unseeded_legacy_stability_tracker checks source_schema_version == 2 with default tracker detection. Schema-v2 saves with unseeded default trackers are correctly reseeded. The loader retains full version-aware handling."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 3
+}
