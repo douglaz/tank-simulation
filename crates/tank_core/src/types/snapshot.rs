@@ -80,6 +80,154 @@ pub struct TankSnapshot {
     pub recent_events: Vec<SimEvent>,
 }
 
+#[derive(Debug, Deserialize)]
+struct TankSnapshotRepr {
+    day: u32,
+    hour: u8,
+    ambient_temp_c: f64,
+    water_temp_c: f64,
+    water_volume_l: f64,
+    tan_mg_n_per_l: f64,
+    nh3_mg_n_per_l: f64,
+    nitrite_mg_n_per_l: f64,
+    nitrate_mg_n_per_l: f64,
+    phosphate_mg_p_per_l: f64,
+    dissolved_inorganic_carbon_mg_c_per_l: f64,
+    co2_aq_mmol_per_l: f64,
+    do_mg_l: f64,
+    do_sat_mg_l: f64,
+    gh_d: f64,
+    kh_d: f64,
+    estimated_tds_7_ion_mg_per_l: f64,
+    estimated_conductivity_us_cm: f64,
+    ph: f64,
+    light_enabled: bool,
+    photoperiod_hours: f64,
+    light_intensity_index: f64,
+    heater_enabled: bool,
+    heater_setpoint_c: f64,
+    aeration_enabled: bool,
+    aeration_intensity: f64,
+    filter_cleanliness_index: f64,
+    total_shrimp_count: u32,
+    adult_shrimp_count: u32,
+    sub_adult_count: u32,
+    juveniles_count: u32,
+    berried_females_count: u32,
+    shrimp_condition_index: f64,
+    shrimp_molt_stress_index: f64,
+    shrimp_reproductive_readiness: f64,
+    microfauna_population_index: f64,
+    microfauna_grazing_pressure_index: f64,
+    total_plant_biomass_g: f64,
+    fast_stem_biomass_g: f64,
+    fast_stem_health_index: f64,
+    root_feeding_rosette_biomass_g: f64,
+    root_feeding_rosette_health_index: f64,
+    suspended_algae_biomass_g: f64,
+    periphyton_biomass_g: f64,
+    algae_nuisance_index: f64,
+    detritus_particulate_g_total: f64,
+    detritus_fine_g_total: f64,
+    substrate_nutrient_remaining_mg_n_total: f64,
+    substrate_nutrient_remaining_mg_p_total: f64,
+    biofilter_maturity_index: f64,
+    ammonia_oxidizer_biomass_g: f64,
+    nitrite_oxidizer_biomass_g: f64,
+    comammox_biomass_g: f64,
+    decomposer_biomass_g: f64,
+    last_heater_output_w: f64,
+    recent_events: Vec<SimEvent>,
+}
+
+impl From<TankSnapshotRepr> for TankSnapshot {
+    fn from(value: TankSnapshotRepr) -> Self {
+        Self {
+            day: value.day,
+            hour: value.hour,
+            ambient_temp_c: value.ambient_temp_c,
+            water_temp_c: value.water_temp_c,
+            water_volume_l: value.water_volume_l,
+            tan_mg_n_per_l: value.tan_mg_n_per_l,
+            nh3_mg_n_per_l: value.nh3_mg_n_per_l,
+            nitrite_mg_n_per_l: value.nitrite_mg_n_per_l,
+            nitrate_mg_n_per_l: value.nitrate_mg_n_per_l,
+            phosphate_mg_p_per_l: value.phosphate_mg_p_per_l,
+            dissolved_inorganic_carbon_mg_c_per_l: value.dissolved_inorganic_carbon_mg_c_per_l,
+            co2_aq_mmol_per_l: value.co2_aq_mmol_per_l,
+            do_mg_l: value.do_mg_l,
+            do_sat_mg_l: value.do_sat_mg_l,
+            gh_d: value.gh_d,
+            kh_d: value.kh_d,
+            estimated_tds_7_ion_mg_per_l: value.estimated_tds_7_ion_mg_per_l,
+            estimated_conductivity_us_cm: value.estimated_conductivity_us_cm,
+            ph: value.ph,
+            light_enabled: value.light_enabled,
+            photoperiod_hours: value.photoperiod_hours,
+            light_intensity_index: value.light_intensity_index,
+            heater_enabled: value.heater_enabled,
+            heater_setpoint_c: value.heater_setpoint_c,
+            aeration_enabled: value.aeration_enabled,
+            aeration_intensity: value.aeration_intensity,
+            filter_cleanliness_index: value.filter_cleanliness_index,
+            total_shrimp_count: value.total_shrimp_count,
+            adult_shrimp_count: value.adult_shrimp_count,
+            sub_adult_count: value.sub_adult_count,
+            juveniles_count: value.juveniles_count,
+            berried_females_count: value.berried_females_count,
+            shrimp_condition_index: value.shrimp_condition_index,
+            shrimp_molt_stress_index: value.shrimp_molt_stress_index,
+            shrimp_reproductive_readiness: value.shrimp_reproductive_readiness,
+            microfauna_population_index: value.microfauna_population_index,
+            microfauna_grazing_pressure_index: value.microfauna_grazing_pressure_index,
+            total_plant_biomass_g: value.total_plant_biomass_g,
+            fast_stem_biomass_g: value.fast_stem_biomass_g,
+            fast_stem_health_index: value.fast_stem_health_index,
+            root_feeding_rosette_biomass_g: value.root_feeding_rosette_biomass_g,
+            root_feeding_rosette_health_index: value.root_feeding_rosette_health_index,
+            suspended_algae_biomass_g: value.suspended_algae_biomass_g,
+            periphyton_biomass_g: value.periphyton_biomass_g,
+            algae_nuisance_index: value.algae_nuisance_index,
+            detritus_particulate_g_total: value.detritus_particulate_g_total,
+            detritus_fine_g_total: value.detritus_fine_g_total,
+            substrate_nutrient_remaining_mg_n_total: value.substrate_nutrient_remaining_mg_n_total,
+            substrate_nutrient_remaining_mg_p_total: value.substrate_nutrient_remaining_mg_p_total,
+            biofilter_maturity_index: value.biofilter_maturity_index,
+            ammonia_oxidizer_biomass_g: value.ammonia_oxidizer_biomass_g,
+            nitrite_oxidizer_biomass_g: value.nitrite_oxidizer_biomass_g,
+            comammox_biomass_g: value.comammox_biomass_g,
+            decomposer_biomass_g: value.decomposer_biomass_g,
+            last_heater_output_w: value.last_heater_output_w,
+            recent_events: value.recent_events,
+        }
+    }
+}
+
+fn normalize_snapshot_object(object: &mut Map<String, Value>) {
+    for (legacy, canonical) in LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES {
+        if object.contains_key(canonical) {
+            object.remove(legacy);
+            continue;
+        }
+        if let Some(legacy_value) = object.remove(legacy) {
+            object.insert(canonical.to_string(), legacy_value);
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for TankSnapshot {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let mut object = Map::<String, Value>::deserialize(deserializer)?;
+        normalize_snapshot_object(&mut object);
+        serde_json::from_value::<TankSnapshotRepr>(Value::Object(object))
+            .map(Into::into)
+            .map_err(D::Error::custom)
+    }
+}
+
 impl TankSnapshot {
     pub fn from_state(state: &TankState) -> Self {
         let chemistry = state.concentrations();
