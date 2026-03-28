@@ -14,6 +14,7 @@ fn helper_state() -> TankState {
         glass_thickness_mm: 5.0,
         open_top: true,
         lid_exchange_factor: 0.25,
+        hardscape_area_cm2: 0.0,
     };
     state.substrate_layers = vec![SubstrateLayerState {
         kind: SubstrateKind::InertSand,
@@ -148,6 +149,7 @@ fn helpers_remain_stable_for_very_large_tanks() {
         glass_thickness_mm: 12.0,
         open_top: true,
         lid_exchange_factor: 0.25,
+        hardscape_area_cm2: 0.0,
     };
     state.substrate_layers = vec![SubstrateLayerState {
         depth_cm: 10.0,
@@ -195,6 +197,7 @@ fn geometry_water_constructors_use_net_water_volume() {
         glass_thickness_mm: 5.0,
         open_top: true,
         lid_exchange_factor: 0.25,
+        hardscape_area_cm2: 0.0,
     };
     let substrate_depth_cm = 2.0;
     let net_volume_l = geometry.water_volume_l_with_substrate_depth(substrate_depth_cm);
@@ -329,6 +332,7 @@ proptest! {
             glass_thickness_mm: 5.0,
             open_top: true,
             lid_exchange_factor: 0.25,
+            hardscape_area_cm2: 0.0,
         };
         state.substrate_layers = vec![SubstrateLayerState {
             depth_cm: substrate_depth_cm,

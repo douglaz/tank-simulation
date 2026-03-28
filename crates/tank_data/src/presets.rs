@@ -1313,7 +1313,9 @@ k_wall_w_per_m2_k = 5.0
 unit = "mg N/L"
 "#;
         let preset: ProcessParamsPreset = toml::from_str(toml_str)?;
-        let err = preset.validate().expect_err("unknown param_meta key should fail");
+        let err = preset
+            .validate()
+            .expect_err("unknown param_meta key should fail");
         assert!(err.contains("unknown param_meta entries"));
         assert!(err.contains("aob_k_tan_typo"));
         Ok(())

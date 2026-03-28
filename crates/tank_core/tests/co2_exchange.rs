@@ -226,6 +226,7 @@ fn test_co2_exchange_independent_of_tank_volume() -> Result<(), tank_core::SimEr
             glass_thickness_mm: 5.0,
             open_top: true,
             lid_exchange_factor: 0.25,
+            hardscape_area_cm2: 0.0,
         };
         let volume_l = state.water_volume_l();
         // Same concentration in both tanks.

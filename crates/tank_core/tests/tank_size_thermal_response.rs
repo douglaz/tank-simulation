@@ -28,6 +28,7 @@ fn state_with_volume(seed: SimSeed, target_volume_l: f64) -> TankState {
         glass_thickness_mm: 5.0,
         open_top: true,
         lid_exchange_factor: 0.25,
+        hardscape_area_cm2: 0.0,
     };
 
     // Re-initialize water for new geometry

@@ -316,7 +316,7 @@ fn legacy_schema_v3_saves_seed_reserve_from_existing_shrimp_biomass() -> Result<
 
     let migrated = SaveFile::from_json(&json)?;
     let defaults = ProcessParams::default();
-    let expected_reserve_g = shrimp_biomass_g(30, 20) * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+    let expected_reserve_g = shrimp_biomass_g(30, 0, 20) * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
     assert_eq!(migrated.schema_version, SCHEMA_VERSION);
     assert!(
         (migrated.state.animal.total_reserve_g() - expected_reserve_g).abs() < 1e-12,
@@ -635,7 +635,7 @@ fn malformed_v4_save_with_negative_reserve_is_rejected() -> Result<(), SimError>
     assert_eq!(
         err,
         SimError::InvariantViolation {
-            field: "animal.reserve_g",
+            field: "animal.total_reserve_g",
             value: -0.01,
         }
     );

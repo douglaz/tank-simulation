@@ -319,7 +319,10 @@ impl PoolSnapshot {
                     "animal.berried_females",
                     f64::from(state.animal.berried_females_count),
                 ),
-                ("animal.condition", state.animal.population_condition_index()),
+                (
+                    "animal.condition",
+                    state.animal.population_condition_index(),
+                ),
                 ("animal.molt_stress", state.animal.molt_stress_index),
                 (
                     "animal.reproductive_readiness",
@@ -356,7 +359,10 @@ impl PoolSnapshot {
                     "animal.daily_food_consumed_g",
                     state.animal.daily_food_consumed_g,
                 ),
-                ("animal.maturation_accum", state.animal.juvenile.maturation_accum),
+                (
+                    "animal.maturation_accum",
+                    state.animal.juvenile.maturation_accum,
+                ),
                 ("animal.reserve_g", state.animal.total_reserve_g()),
                 ("microfauna.population", state.microfauna.population_index),
                 (

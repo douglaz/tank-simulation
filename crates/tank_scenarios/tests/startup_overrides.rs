@@ -26,7 +26,7 @@ fn startup_overrides_apply_heater_and_initial_shrimp() {
 
     assert!(state.hardware.heater.enabled);
     assert!((state.hardware.heater.setpoint_c - 26.0).abs() < f64::EPSILON);
-    assert_eq!(state.animal.adults_count, 10);
+    assert_eq!(state.animal.adult.count, 10);
 }
 
 #[test]
