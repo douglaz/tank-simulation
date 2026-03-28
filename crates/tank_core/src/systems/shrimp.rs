@@ -137,36 +137,35 @@ fn shrimp_feeding(state: &mut TankState) {
         .shrimp_periphyton_grazing_g_per_shrimp_per_day;
     let grazing_access_factor =
         0.5 + (0.5 * state.avg_substrate_index(|layer| layer.grazing_surface_index));
-    let food_demand = total_feeding_units * rate * grazing_access_factor;
+    let food_demand_biomass_g = total_feeding_units * rate * grazing_access_factor;
+    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
+    let food_demand_route_g = algae_detrital_mass_g(food_demand_biomass_g, n_to_c_ratio);
 
     // Shrimp graze periphyton (at most 50% of available per day)
     let max_periph = state.algae.periphyton_biomass_g * 0.5;
-    let periph_consumed = food_demand.min(max_periph).max(0.0);
+    let periph_consumed_biomass_g = food_demand_biomass_g.min(max_periph).max(0.0);
     state.algae.periphyton_biomass_g =
-        (state.algae.periphyton_biomass_g - periph_consumed).max(0.0);
+        (state.algae.periphyton_biomass_g - periph_consumed_biomass_g).max(0.0);
+    let periph_consumed_route_g = algae_detrital_mass_g(periph_consumed_biomass_g, n_to_c_ratio);
 
-    // Fine detritus only fills the portion of the same daily appetite that
-    // periphyton could not satisfy. This keeps total intake bounded by the
-    // configured grazing rate instead of double-counting one day's demand
-    // against both food pools.
-    let detritus_demand = (food_demand - periph_consumed).max(0.0);
-    let max_detritus = state.detritus.fine_detritus_g_total * 0.2;
-    let detritus_consumed = detritus_demand.min(max_detritus).max(0.0);
+    // Fine detritus only fills the remaining appetite on the same routing
+    // organic-matter basis used by daily_food_consumed_g and reserve routing.
+    let detritus_demand_route_g = (food_demand_route_g - periph_consumed_route_g).max(0.0);
+    let max_detritus_route_g = state.detritus.fine_detritus_g_total * 0.2;
+    let detritus_consumed_route_g = detritus_demand_route_g.min(max_detritus_route_g).max(0.0);
     state.detritus.fine_detritus_g_total =
-        (state.detritus.fine_detritus_g_total - detritus_consumed).max(0.0);
+        (state.detritus.fine_detritus_g_total - detritus_consumed_route_g).max(0.0);
 
     // Convert consumed food to elemental N and C for routing.
     // Phase-1 simplification: periphyton and fine detritus share the same
     // food-quality assumption (feed_n_to_c_ratio). This is documented in
     // ProcessParams and acceptable because both food sources are mixed
     // organic matter at similar N:C in a shrimp tank.
-    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
-    let periph_consumed_route_g = algae_detrital_mass_g(periph_consumed, n_to_c_ratio);
-    state.animal.daily_food_consumed_g = periph_consumed_route_g + detritus_consumed;
-    let consumed_n_mg =
-        algae_nitrogen_mg(periph_consumed) + detritus_nitrogen_mg(detritus_consumed, n_to_c_ratio);
-    let consumed_c_mg = algae_carbon_mg(periph_consumed, n_to_c_ratio)
-        + detritus_carbon_mg(detritus_consumed, n_to_c_ratio);
+    state.animal.daily_food_consumed_g = periph_consumed_route_g + detritus_consumed_route_g;
+    let consumed_n_mg = algae_nitrogen_mg(periph_consumed_biomass_g)
+        + detritus_nitrogen_mg(detritus_consumed_route_g, n_to_c_ratio);
+    let consumed_c_mg = algae_carbon_mg(periph_consumed_biomass_g, n_to_c_ratio)
+        + detritus_carbon_mg(detritus_consumed_route_g, n_to_c_ratio);
 
     route_consumed_food(state, consumed_n_mg, consumed_c_mg);
 }
@@ -832,7 +831,7 @@ mod tests {
     }
 
     #[test]
-    fn shrimp_feeding_uses_detritus_only_for_unmet_demand() {
+    fn shrimp_feeding_caps_total_intake_on_routing_mass_basis() {
         let mut state = TankState::new(SimSeed(10_003));
         state.algae.periphyton_biomass_g = 0.08;
         state.detritus.fine_detritus_g_total = 5.0;
@@ -849,25 +848,30 @@ mod tests {
         let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
         let total_feeding_units =
             state.animal.adults_count as f64 + state.animal.juveniles_count as f64 * 0.3;
-        let max_daily_intake_g = total_feeding_units
-            * state
-                .process_params
-                .shrimp_periphyton_grazing_g_per_shrimp_per_day;
+        let max_daily_intake_route_g = algae_detrital_mass_g(
+            total_feeding_units
+                * state
+                    .process_params
+                    .shrimp_periphyton_grazing_g_per_shrimp_per_day,
+            n_to_c_ratio,
+        );
 
         shrimp_feeding(&mut state);
 
-        let periphyton_consumed = 0.08 - state.algae.periphyton_biomass_g;
-        let detritus_consumed = 5.0 - state.detritus.fine_detritus_g_total;
+        let periphyton_consumed_biomass_g = 0.08 - state.algae.periphyton_biomass_g;
+        let periphyton_consumed_route_g =
+            algae_detrital_mass_g(periphyton_consumed_biomass_g, n_to_c_ratio);
+        let detritus_consumed_route_g = 5.0 - state.detritus.fine_detritus_g_total;
 
-        assert_close(periphyton_consumed, 0.04, 1e-12);
+        assert_close(periphyton_consumed_biomass_g, 0.04, 1e-12);
         assert_close(
-            periphyton_consumed + detritus_consumed,
-            max_daily_intake_g,
+            periphyton_consumed_route_g + detritus_consumed_route_g,
+            max_daily_intake_route_g,
             1e-9,
         );
         assert_close(
             state.animal.daily_food_consumed_g,
-            algae_detrital_mass_g(periphyton_consumed, n_to_c_ratio) + detritus_consumed,
+            periphyton_consumed_route_g + detritus_consumed_route_g,
             1e-9,
         );
     }

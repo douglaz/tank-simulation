@@ -84,7 +84,7 @@ impl TankSnapshot {
         let kh_d = chemistry.kh_d();
         let tds_mg_l = chemistry.tds_mg_per_l();
         let conductivity_us_cm = chemistry.conductivity_us_cm();
-        let ph = state.water.ph;
+        let ph = carbonate_eq.ph;
         let nh3_mg_l = compute_nh3_mg_l(tan_mg_l, ph, state.water.temperature_c);
         let fast_stem_biomass_g: f64 = state
             .plant_guilds
@@ -183,5 +183,42 @@ fn average_guild_health_index(state: &TankState, guild: PlantGuild) -> Option<f6
         None
     } else {
         Some(matching.iter().map(|plant| plant.health_index).sum::<f64>() / matching.len() as f64)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TankSnapshot;
+    use crate::{rng::SimSeed, systems::chemistry::solve_carbonate_equilibrium, TankState};
+
+    fn assert_close(actual: f64, expected: f64, tolerance: f64) {
+        assert!(
+            (actual - expected).abs() <= tolerance,
+            "expected {expected}, got {actual} (tolerance {tolerance})"
+        );
+    }
+
+    #[test]
+    fn snapshot_uses_one_carbonate_solution_for_ph_and_co2() {
+        let mut state = TankState::new(SimSeed(404));
+        let volume_l = state.water_volume_l();
+        state.water.dissolved_inorganic_carbon_mg_c_total = 8.0 * volume_l;
+        state.water.alkalinity_meq_total = 2.6 * volume_l;
+        state.water.ph = 6.1;
+
+        let expected = solve_carbonate_equilibrium(
+            state.water.dissolved_inorganic_carbon_mg_c_total,
+            state.water.alkalinity_meq_total,
+            state.water.temperature_c,
+            volume_l,
+        );
+        let snapshot = TankSnapshot::from_state(&state);
+
+        assert_close(snapshot.ph, expected.ph, 1e-12);
+        assert_close(
+            snapshot.co2_aq_mmol_per_l,
+            expected.co2_aq_mmol_per_l,
+            1e-12,
+        );
     }
 }

@@ -22,6 +22,9 @@ pub struct SourceWaterProfile {
     pub magnesium_mg_per_l: f64,
     pub sodium_mg_per_l: f64,
     pub potassium_mg_per_l: f64,
+    /// Display/documentation field only. Runtime carbonate chemistry uses DIC,
+    /// alkalinity, and temperature as the authoritative inputs and immediately
+    /// re-derives bicarbonate when materializing water state or snapshots.
     pub bicarbonate_mg_per_l: f64,
     pub chloride_mg_per_l: f64,
     pub sulfate_mg_per_l: f64,
