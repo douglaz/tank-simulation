@@ -114,7 +114,7 @@ impl StageCohort {
             return;
         }
 
-        let total_count = previous_count + incoming_count;
+        let total_count = previous_count.saturating_add(incoming_count);
         self.count = total_count;
         self.reserve_g += incoming_reserve_g;
         self.condition_index = ((f64::from(previous_count) * self.condition_index)
@@ -539,7 +539,9 @@ impl AnimalState {
     }
 
     pub fn egg_cohort_count_total(&self) -> u32 {
-        self.egg_cohorts.iter().map(|cohort| cohort.count).sum()
+        self.egg_cohorts
+            .iter()
+            .fold(0u32, |total, cohort| total.saturating_add(cohort.count))
     }
 
     /// Adds retained reserve back into the stage pools using the same weights

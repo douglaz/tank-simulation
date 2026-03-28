@@ -1,8 +1,8 @@
 use tank_core::systems::chemistry::compute_nh3_mg_n_per_l;
 use tank_core::{
     systems::shrimp::step_daily_shrimp, EggCohort, Engine, EventKind, PlayerAction, ProcessParams,
-    SimError, SimSeed, SimulationEngine, TankState, JUVENILE_SHRIMP_BIOMASS_G,
-    LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G, SUB_ADULT_SHRIMP_BIOMASS_G,
+    SimError, SimSeed, SimulationEngine, TankState, ADULT_SHRIMP_BIOMASS_G,
+    JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G, SUB_ADULT_SHRIMP_BIOMASS_G,
 };
 
 /// Creates a well-conditioned tank with shrimp for population tests.
@@ -375,6 +375,142 @@ fn dissolved_pools_do_not_fund_juvenile_maturation_when_reserve_is_short() {
         state.water.dissolved_inorganic_carbon_mg_c_total,
         100.0,
         1e-9,
+    );
+}
+
+#[test]
+fn hatch_into_empty_juvenile_resets_stale_stage_state() {
+    let mut state = shrimp_test_state(SimSeed(7_154));
+    state
+        .process_params
+        .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.shrimp_params.hatch_success_base = 1.0;
+    state.shrimp_params.base_clutch_size = 1;
+    state.shrimp_params.juvenile_to_subadult_days = 10.0;
+    state.shrimp_params.subadult_to_adult_days = 10.0;
+    state.animal.adult.count = 1;
+    state.animal.adult.condition_index = 0.9;
+    state.animal.juvenile.condition_index = 0.05;
+    state.animal.juvenile.maturation_accum = 1.0;
+    state.animal.juvenile.reserve_g = (SUB_ADULT_SHRIMP_BIOMASS_G - JUVENILE_SHRIMP_BIOMASS_G)
+        * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+    state.animal.berried_females_count = 1;
+    state.animal.egg_progress_days = 20.0;
+    state.animal.egg_cohorts = vec![EggCohort {
+        count: 1,
+        progress_days: 20.0,
+    }];
+    state.animal.adult.reserve_g =
+        JUVENILE_SHRIMP_BIOMASS_G * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+
+    step_daily_shrimp(&mut state);
+
+    assert_eq!(state.animal.berried_females_count, 0);
+    assert_eq!(state.animal.juvenile.count, 1);
+    assert_eq!(state.animal.sub_adult.count, 0);
+    assert_close(state.animal.juvenile.condition_index, 0.9, 1e-12);
+    assert_close(state.animal.juvenile.maturation_accum, 0.1, 1e-12);
+    assert_close(state.animal.juvenile.reserve_g, 0.0, 1e-12);
+}
+
+#[test]
+fn promotion_into_empty_subadult_resets_stale_stage_state() {
+    let mut state = shrimp_test_state(SimSeed(7_155));
+    state
+        .process_params
+        .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.shrimp_params.juvenile_to_subadult_days = 10.0;
+    state.shrimp_params.subadult_to_adult_days = 10.0;
+    state.animal.adult.count = 0;
+    state.animal.juvenile.count = 1;
+    state.animal.juvenile.condition_index = 0.9;
+    state.animal.juvenile.maturation_accum = 1.0;
+    state.animal.juvenile.reserve_g = (SUB_ADULT_SHRIMP_BIOMASS_G - JUVENILE_SHRIMP_BIOMASS_G)
+        * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+    state.animal.sub_adult.condition_index = 0.05;
+    state.animal.sub_adult.maturation_accum = 1.0;
+    state.animal.sub_adult.reserve_g = (ADULT_SHRIMP_BIOMASS_G - SUB_ADULT_SHRIMP_BIOMASS_G)
+        * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+    state.animal.last_molt_success = true;
+
+    step_daily_shrimp(&mut state);
+
+    assert_eq!(state.animal.juvenile.count, 0);
+    assert_eq!(state.animal.sub_adult.count, 1);
+    assert_eq!(state.animal.adult.count, 0);
+    assert_close(state.animal.sub_adult.condition_index, 0.9, 1e-12);
+    assert_close(state.animal.sub_adult.maturation_accum, 0.1, 1e-12);
+    assert_close(state.animal.sub_adult.reserve_g, 0.0, 1e-12);
+}
+
+#[test]
+fn stage_model_conserves_population_counts_across_births_and_deaths() {
+    let mut state = shrimp_test_state(SimSeed(7_156));
+    state
+        .process_params
+        .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.25;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.shrimp_params.hatch_success_base = 1.0;
+    state.shrimp_params.base_clutch_size = 4;
+    state.shrimp_params.juvenile_to_subadult_days = 10_000.0;
+    state.shrimp_params.subadult_to_adult_days = 10_000.0;
+    state.animal.adult.count = 1;
+    state.animal.juvenile.count = 0;
+    state.animal.set_population_condition_index(1.0);
+    state.animal.berried_females_count = 1;
+    state.animal.egg_progress_days = 20.0;
+    state.animal.egg_cohorts = vec![EggCohort {
+        count: 1,
+        progress_days: 20.0,
+    }];
+    state.animal.adult.reserve_g =
+        4.0 * JUVENILE_SHRIMP_BIOMASS_G * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+
+    let initial_total = state.animal.total_count();
+    let mut total_births = 0u32;
+    let mut total_deaths = 0u32;
+
+    for _ in 0..30 {
+        let prev_adult = state.animal.adult.count;
+        let prev_juvenile = state.animal.juvenile.count;
+        let births_today = state
+            .animal
+            .egg_cohorts
+            .iter()
+            .filter(|cohort| {
+                cohort.progress_days + 1.0 >= f64::from(state.shrimp_params.egg_duration_days)
+            })
+            .map(|cohort| cohort.count * state.shrimp_params.base_clutch_size)
+            .sum::<u32>();
+
+        step_daily_shrimp(&mut state);
+
+        assert_eq!(state.animal.sub_adult.count, 0);
+
+        let adult_deaths = prev_adult.saturating_sub(state.animal.adult.count);
+        let juvenile_deaths = prev_juvenile
+            .saturating_add(births_today)
+            .saturating_sub(state.animal.juvenile.count);
+        total_births += births_today;
+        total_deaths += adult_deaths + juvenile_deaths;
+    }
+
+    assert!(total_births > 0);
+    assert!(total_deaths > 0);
+    assert_eq!(
+        i64::from(state.animal.total_count()) - i64::from(initial_total),
+        i64::from(total_births) - i64::from(total_deaths),
     );
 }
 
