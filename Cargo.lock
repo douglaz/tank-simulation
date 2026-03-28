@@ -1408,6 +1408,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tank_harness"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tank_core",
+ "tank_scenarios",
+]
+
+[[package]]
 name = "tank_scenarios"
 version = "0.1.0"
 dependencies = [

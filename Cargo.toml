@@ -5,6 +5,7 @@ members = [
     "crates/tank_tui",
     "crates/tank_scenarios",
     "crates/tank_api",
+    "crates/tank_harness",
 ]
 resolver = "2"
 

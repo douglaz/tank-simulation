@@ -52,6 +52,11 @@ pub struct MicrobeState {
 pub struct MicrofaunaState {
     pub population_index: f64,
     pub grazing_pressure_index: f64,
+    /// Retained organic matter from consumer routing (organic matter grams).
+    /// Microfauna are index-based so this lightweight reserve pool serves as
+    /// the explicit "retained" destination required by the routing contract.
+    #[serde(default)]
+    pub reserve_g: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -192,6 +197,7 @@ impl Default for MicrofaunaState {
         Self {
             population_index: 0.2,
             grazing_pressure_index: 0.2,
+            reserve_g: 0.0,
         }
     }
 }

@@ -336,6 +336,11 @@ impl Default for ProcessParams {
             microfauna_periphyton_consumption: 0.02,
             microfauna_population_smoothing: 0.1,
             microfauna_shrimp_pressure_threshold: 3.0,
+
+            microfauna_assimilation_efficiency: default_microfauna_assimilation_efficiency(),
+            microfauna_respiration_fraction_of_assimilated: default_microfauna_respiration_fraction(),
+            microfauna_excretion_fraction_of_assimilated: default_microfauna_excretion_fraction(),
+            microfauna_growth_fraction_of_assimilated: default_microfauna_growth_fraction(),
         }
     }
 }
@@ -364,4 +369,22 @@ fn default_shrimp_o2_per_mg_c_respired() -> f64 {
 /// All dead biomass stays in-tank as fine detritus by default.
 fn default_death_biomass_to_detritus_fraction() -> f64 {
     1.0
+}
+
+// -- Microfauna feeding pathway defaults --
+// Phase-1 values parallel shrimp defaults. Microfauna are smaller organisms
+// with similar detritivorous feeding ecology.
+// respiration (0.70) + excretion (0.10) + growth (0.20) = 1.0
+
+fn default_microfauna_assimilation_efficiency() -> f64 {
+    0.50
+}
+fn default_microfauna_respiration_fraction() -> f64 {
+    0.70
+}
+fn default_microfauna_excretion_fraction() -> f64 {
+    0.10
+}
+fn default_microfauna_growth_fraction() -> f64 {
+    0.20
 }

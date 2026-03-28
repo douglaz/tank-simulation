@@ -1,0 +1,10 @@
+[package]
+name = "tank_harness"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tank_core = { path = "../tank_core" }
+tank_scenarios = { path = "../tank_scenarios" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
