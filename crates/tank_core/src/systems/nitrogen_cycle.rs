@@ -361,8 +361,10 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let total_alk_consumed = aob_alk_cost + comammox_alk_cost;
     state.water.alkalinity_meq_total =
         (state.water.alkalinity_meq_total - total_alk_consumed).max(0.0);
-    // bicarbonate_mg_total is now a cached projection from the carbonate
-    // equilibrium solver; the chemistry step resolve will update it.
+    // The subsequent chemistry step is responsible for re-running the carbonate
+    // solver after this alkalinity mutation. Until then, `water.ph` and
+    // `bicarbonate_mg_total` remain stale cached projections, so any new system
+    // inserted between nitrification and chemistry must not read them.
 
     // Nitrifier growth consumes DIC for assimilatory uptake, while the broader
     // chemistry model still omits a more detailed inorganic-carbon coupling.

@@ -56,7 +56,7 @@ impl WaterState {
             magnesium_mg_total: 5.0 * volume_l,
             sodium_mg_total: 10.0 * volume_l,
             potassium_mg_total: 3.0 * volume_l,
-            bicarbonate_mg_total: 70.0 * volume_l,
+            bicarbonate_mg_total: 0.0, // solver-derived; set by resolve_carbonate_state below
             chloride_mg_total: 12.0 * volume_l,
             sulfate_mg_total: 8.0 * volume_l,
             ph: default_ph(),
@@ -102,7 +102,7 @@ impl WaterState {
             magnesium_mg_total: profile.magnesium_mg_per_l * volume_l,
             sodium_mg_total: profile.sodium_mg_per_l * volume_l,
             potassium_mg_total: profile.potassium_mg_per_l * volume_l,
-            bicarbonate_mg_total: profile.bicarbonate_mg_per_l * volume_l,
+            bicarbonate_mg_total: 0.0, // solver-derived; set by resolve_carbonate_state below
             chloride_mg_total: profile.chloride_mg_per_l * volume_l,
             sulfate_mg_total: profile.sulfate_mg_per_l * volume_l,
             ph: default_ph(),
