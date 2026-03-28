@@ -109,6 +109,21 @@ fn water_change_50_percent_ro_like_halves_dissolved_totals() -> Result<(), tank_
             after.dissolved_inorganic_carbon_mg_c_total,
         ),
         (
+            "dissolved_organic_carbon_mg_c_total",
+            before.dissolved_organic_carbon_mg_c_total,
+            after.dissolved_organic_carbon_mg_c_total,
+        ),
+        (
+            "dissolved_organic_nitrogen_mg_n_total",
+            before.dissolved_organic_nitrogen_mg_n_total,
+            after.dissolved_organic_nitrogen_mg_n_total,
+        ),
+        (
+            "alkalinity_meq_total",
+            before.alkalinity_meq_total,
+            after.alkalinity_meq_total,
+        ),
+        (
             "calcium_mg_total",
             before.calcium_mg_total,
             after.calcium_mg_total,
@@ -127,11 +142,6 @@ fn water_change_50_percent_ro_like_halves_dissolved_totals() -> Result<(), tank_
             "potassium_mg_total",
             before.potassium_mg_total,
             after.potassium_mg_total,
-        ),
-        (
-            "bicarbonate_mg_total",
-            before.bicarbonate_mg_total,
-            after.bicarbonate_mg_total,
         ),
         (
             "chloride_mg_total",
