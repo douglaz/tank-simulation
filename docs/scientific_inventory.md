@@ -132,6 +132,7 @@ Two important runtime facts before the catalog:
 - `ProcessParams::default()` mirrors most TOML defaults, but it leaves `respiration_dic_rate_mg_c_per_g_per_hour` and `photosynthesis_dic_rate_mg_c_per_g_per_hour` at `0.0`. Scenario materialization overwrites them with `0.08` and `0.12` from TOML.
 
 The TOML files already carry file-level `[provenance]` blocks, but not per-parameter provenance/unit metadata. That gap is what `G1 / tanksim-6e5.7.1` is meant to close.
+File-level `provenance.confidence` intentionally stays coarse and free-form (`"high"`, `"medium"`, etc.) because it summarizes a preset pack as a whole; per-parameter `param_meta.*.confidence` is the validated scientific enum.
 
 ### 2.1 Data-backed runtime coefficients
 

@@ -5,11 +5,18 @@ use tank_core::systems::chemistry::{
     validate_source_water_carbonate_profile, SourceWaterCarbonateValidationError, CARBONATE_PH_MAX,
     CARBONATE_PH_MIN,
 };
-use tank_core::types::provenance::{ParamMeta, RangeWarning};
+use tank_core::types::{
+    legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2, ParamMeta, RangeWarning,
+};
 
 const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
+const CLOSED_LOOP_DEATH_FRACTION_TOLERANCE: f64 = 1e-9;
 
 /// Preset-level provenance metadata (describes the preset file as a whole).
+///
+/// `confidence` intentionally remains free-form so whole-file summaries can
+/// use coarse labels such as `"high"` or `"medium"`. Per-parameter
+/// `param_meta.*.confidence` uses the validated `ConfidenceLevel` enum.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Provenance {
     pub source_title: Option<String>,
@@ -370,6 +377,9 @@ pub struct ProcessParamsPreset {
     #[serde(default = "default_shrimp_o2_per_mg_c_respired")]
     pub shrimp_o2_per_mg_c_respired: f64,
 
+    #[serde(default = "default_death_biomass_to_detritus_fraction")]
+    pub death_biomass_to_detritus_fraction: f64,
+
     // -- Microfauna turnover --
     #[serde(default = "default_microfauna_mineralization_boost")]
     pub microfauna_mineralization_boost: f64,
@@ -379,6 +389,15 @@ pub struct ProcessParamsPreset {
     pub microfauna_population_smoothing: f64,
     #[serde(default = "default_microfauna_shrimp_pressure_threshold")]
     pub microfauna_shrimp_pressure_threshold: f64,
+
+    #[serde(default = "default_microfauna_assimilation_efficiency")]
+    pub microfauna_assimilation_efficiency: f64,
+    #[serde(default = "default_microfauna_respiration_fraction")]
+    pub microfauna_respiration_fraction_of_assimilated: f64,
+    #[serde(default = "default_microfauna_excretion_fraction")]
+    pub microfauna_excretion_fraction_of_assimilated: f64,
+    #[serde(default = "default_microfauna_growth_fraction")]
+    pub microfauna_growth_fraction_of_assimilated: f64,
 
     pub provenance: Option<Provenance>,
 
@@ -491,22 +510,57 @@ impl ProcessParamsPreset {
                 Some(self.shrimp_growth_fraction_of_assimilated)
             }
             "shrimp_o2_per_mg_c_respired" => Some(self.shrimp_o2_per_mg_c_respired),
+            "death_biomass_to_detritus_fraction" => {
+                Some(self.death_biomass_to_detritus_fraction)
+            }
             "microfauna_mineralization_boost" => Some(self.microfauna_mineralization_boost),
             "microfauna_periphyton_consumption" => Some(self.microfauna_periphyton_consumption),
             "microfauna_population_smoothing" => Some(self.microfauna_population_smoothing),
             "microfauna_shrimp_pressure_threshold" => {
                 Some(self.microfauna_shrimp_pressure_threshold)
             }
+            "microfauna_assimilation_efficiency" => Some(self.microfauna_assimilation_efficiency),
+            "microfauna_respiration_fraction_of_assimilated" => {
+                Some(self.microfauna_respiration_fraction_of_assimilated)
+            }
+            "microfauna_excretion_fraction_of_assimilated" => {
+                Some(self.microfauna_excretion_fraction_of_assimilated)
+            }
+            "microfauna_growth_fraction_of_assimilated" => {
+                Some(self.microfauna_growth_fraction_of_assimilated)
+            }
             _ => None,
         }
+    }
+
+    fn provenance_value(&self, name: &str) -> Option<f64> {
+        let value = self.param_value(name)?;
+        let unit = self.param_meta.get(name).and_then(|meta| meta.unit.as_deref());
+        Some(normalize_process_param_for_provenance(name, value, unit))
+    }
+
+    pub fn format_param(&self, name: &str) -> Option<String> {
+        let value = self.provenance_value(name)?;
+        Some(match self.param_meta.get(name) {
+            Some(meta) => tank_core::types::provenance::format_param(name, value, meta),
+            None => tank_core::types::provenance::format_param(
+                name,
+                value,
+                &ParamMeta {
+                    unit: None,
+                    source: None,
+                    confidence: None,
+                    valid_range: None,
+                    notes: None,
+                },
+            ),
+        })
     }
 
     /// Check all param_meta entries with valid_range against current values.
     /// Returns warnings for out-of-range values (never errors).
     pub fn check_ranges(&self) -> Vec<RangeWarning> {
-        tank_core::types::provenance::check_all_ranges(&self.param_meta, &|name| {
-            self.param_value(name)
-        })
+        tank_core::types::provenance::check_all_ranges(&self.param_meta, &|name| self.provenance_value(name))
     }
 }
 
@@ -707,6 +761,9 @@ fn default_shrimp_growth_fraction() -> f64 {
 fn default_shrimp_o2_per_mg_c_respired() -> f64 {
     2.67
 }
+fn default_death_biomass_to_detritus_fraction() -> f64 {
+    1.0
+}
 fn default_microfauna_mineralization_boost() -> f64 {
     0.15
 }
@@ -718,6 +775,71 @@ fn default_microfauna_population_smoothing() -> f64 {
 }
 fn default_microfauna_shrimp_pressure_threshold() -> f64 {
     3.0
+}
+fn default_microfauna_assimilation_efficiency() -> f64 {
+    0.50
+}
+fn default_microfauna_respiration_fraction() -> f64 {
+    0.70
+}
+fn default_microfauna_excretion_fraction() -> f64 {
+    0.10
+}
+fn default_microfauna_growth_fraction() -> f64 {
+    0.20
+}
+
+fn normalize_process_param_for_provenance(name: &str, value: f64, unit: Option<&str>) -> f64 {
+    match legacy_process_param_normalization(name, unit) {
+        ProvenanceNormalization::None => value,
+        ProvenanceNormalization::LegacyMgPerL => legacy_total_param_to_mg_per_l(value),
+        ProvenanceNormalization::LegacyMgPerM2 => legacy_total_param_to_mg_per_m2(value),
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProvenanceNormalization {
+    None,
+    LegacyMgPerL,
+    LegacyMgPerM2,
+}
+
+fn legacy_process_param_normalization(name: &str, unit: Option<&str>) -> ProvenanceNormalization {
+    match name {
+        "decomposer_k_doc_mg"
+        | "decomposer_k_do_mg"
+        | "aob_k_tan_mg"
+        | "aob_k_do_mg"
+        | "nob_k_nitrite_mg"
+        | "nob_k_do_mg"
+        | "comammox_k_tan_mg"
+        | "comammox_k_do_mg"
+        | "algae_half_saturation_n_mg_total"
+        | "algae_half_saturation_p_mg_total" => ProvenanceNormalization::LegacyMgPerL,
+        "plant_half_saturation_n_mg_total"
+        | "plant_half_saturation_p_mg_total"
+        | "plant_half_saturation_c_mg_total" => {
+            if unit_requests_area_normalization(unit) {
+                ProvenanceNormalization::LegacyMgPerM2
+            } else {
+                ProvenanceNormalization::LegacyMgPerL
+            }
+        }
+        _ => ProvenanceNormalization::None,
+    }
+}
+
+fn unit_requests_area_normalization(unit: Option<&str>) -> bool {
+    let Some(unit) = unit else {
+        return false;
+    };
+    let normalized = unit
+        .chars()
+        .filter(|ch| !ch.is_whitespace())
+        .collect::<String>()
+        .replace('²', "2")
+        .to_ascii_lowercase();
+    normalized.contains("/m2") || normalized.contains("/m^2")
 }
 
 impl ProcessParamsPreset {
@@ -933,6 +1055,10 @@ impl ProcessParamsPreset {
                 "shrimp_o2_per_mg_c_respired",
                 self.shrimp_o2_per_mg_c_respired,
             ),
+            (
+                "death_biomass_to_detritus_fraction",
+                self.death_biomass_to_detritus_fraction,
+            ),
         ];
         for (name, value) in shrimp_fields {
             if !value.is_finite() {
@@ -973,6 +1099,14 @@ impl ProcessParamsPreset {
                 self.shrimp_o2_per_mg_c_respired
             ));
         }
+        if (self.death_biomass_to_detritus_fraction - 1.0).abs()
+            > CLOSED_LOOP_DEATH_FRACTION_TOLERANCE
+        {
+            return Err(format!(
+                "death_biomass_to_detritus_fraction must remain 1.0 until explicit export accounting exists, got {}",
+                self.death_biomass_to_detritus_fraction
+            ));
+        }
         let shrimp_partition_sum = self.shrimp_respiration_fraction_of_assimilated
             + self.shrimp_excretion_fraction_of_assimilated
             + self.shrimp_growth_fraction_of_assimilated;
@@ -1000,6 +1134,22 @@ impl ProcessParamsPreset {
                 "microfauna_shrimp_pressure_threshold",
                 self.microfauna_shrimp_pressure_threshold,
             ),
+            (
+                "microfauna_assimilation_efficiency",
+                self.microfauna_assimilation_efficiency,
+            ),
+            (
+                "microfauna_respiration_fraction_of_assimilated",
+                self.microfauna_respiration_fraction_of_assimilated,
+            ),
+            (
+                "microfauna_excretion_fraction_of_assimilated",
+                self.microfauna_excretion_fraction_of_assimilated,
+            ),
+            (
+                "microfauna_growth_fraction_of_assimilated",
+                self.microfauna_growth_fraction_of_assimilated,
+            ),
         ];
         for (name, value) in microfauna_fields {
             if !value.is_finite() {
@@ -1008,6 +1158,23 @@ impl ProcessParamsPreset {
             if *value < 0.0 {
                 return Err(format!("field `{name}` must be non-negative, got {value}"));
             }
+        }
+        if self.microfauna_assimilation_efficiency <= 0.0
+            || self.microfauna_assimilation_efficiency >= 1.0
+        {
+            return Err(format!(
+                "microfauna_assimilation_efficiency must be in (0, 1), got {}",
+                self.microfauna_assimilation_efficiency
+            ));
+        }
+        let microfauna_partition_sum = self.microfauna_respiration_fraction_of_assimilated
+            + self.microfauna_excretion_fraction_of_assimilated
+            + self.microfauna_growth_fraction_of_assimilated;
+        if (microfauna_partition_sum - 1.0).abs() > SHRIMP_ROUTE_SUM_TOLERANCE {
+            return Err(format!(
+                "microfauna assimilated partition sum must equal 1.0, got {}",
+                microfauna_partition_sum
+            ));
         }
         Ok(())
     }
@@ -1183,6 +1350,18 @@ confidence = "medium"
         Ok(())
     }
 
+    #[test]
+    fn test_preset_level_provenance_confidence_is_freeform() {
+        let preset = default_process_preset();
+        assert_eq!(
+            preset
+                .provenance
+                .as_ref()
+                .and_then(|provenance| provenance.confidence.as_deref()),
+            Some("medium")
+        );
+    }
+
     /// AC 4: valid_range specified and value outside → warning (not error).
     #[test]
     fn test_valid_range_enforcement() -> Result<(), Box<dyn std::error::Error>> {
@@ -1199,7 +1378,7 @@ respiration_dic_rate_mg_c_per_g_per_hour = 0.0
 photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0
 k_surface_w_per_m2_k = 10.0
 k_wall_w_per_m2_k = 5.0
-aob_k_tan_mg = 10.0
+aob_k_tan_mg = 200.0
 
 [param_meta.aob_k_tan_mg]
 unit = "mg N/L"
@@ -1227,6 +1406,36 @@ valid_range = [0.1, 5.0]
         };
         assert!(check_param_range("aob_k_tan_mg", 0.5, &meta).is_none());
         Ok(())
+    }
+
+    #[test]
+    fn test_valid_range_warns_for_invalid_range_or_non_finite_value() {
+        let mut preset = default_process_preset();
+        preset.aob_k_tan_mg = f64::INFINITY;
+        preset.param_meta.insert(
+            "aob_k_tan_mg".to_string(),
+            ParamMeta {
+                unit: Some("mg N/L".into()),
+                source: None,
+                confidence: None,
+                valid_range: Some([5.0, 0.1]),
+                notes: None,
+            },
+        );
+
+        let warnings = preset.check_ranges();
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].to_string().contains("invalid valid_range"));
+
+        preset
+            .param_meta
+            .get_mut("aob_k_tan_mg")
+            .expect("param_meta entry should exist")
+            .valid_range = Some([0.1, 5.0]);
+        let warnings = preset.check_ranges();
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].value.is_infinite());
+        assert!(warnings[0].to_string().contains("non-finite"));
     }
 
     /// AC 5: Existing TOML data files WITHOUT provenance metadata still load.
@@ -1260,6 +1469,11 @@ k_wall_w_per_m2_k = 5.0
         let preset: ProcessParamsPreset = toml::from_str(minimal)?;
         assert!(preset.param_meta.is_empty());
         assert!(preset.provenance.is_none());
+        assert_eq!(preset.death_biomass_to_detritus_fraction, 1.0);
+        assert_eq!(preset.microfauna_assimilation_efficiency, 0.50);
+        assert_eq!(preset.microfauna_respiration_fraction_of_assimilated, 0.70);
+        assert_eq!(preset.microfauna_excretion_fraction_of_assimilated, 0.10);
+        assert_eq!(preset.microfauna_growth_fraction_of_assimilated, 0.20);
         Ok(())
     }
 
@@ -1291,6 +1505,28 @@ k_wall_w_per_m2_k = 5.0
         assert!(display_full.contains("EPA 2013"));
         assert!(display_full.contains("range [0.1, 5.0]"));
         assert!(display_full.contains("notes: biofilter context"));
+    }
+
+    #[test]
+    fn test_process_preset_format_param_normalizes_legacy_total_units() {
+        let mut preset = default_process_preset();
+        preset.param_meta.insert(
+            "aob_k_tan_mg".to_string(),
+            ParamMeta {
+                unit: Some("mg N/L".into()),
+                source: Some("EPA 2013".into()),
+                confidence: Some(ConfidenceLevel::Literature),
+                valid_range: Some([0.01, 0.1]),
+                notes: None,
+            },
+        );
+
+        let display = preset
+            .format_param("aob_k_tan_mg")
+            .expect("parameter should format");
+        assert!(display.starts_with("aob_k_tan_mg: 0.025 "));
+        assert!(display.contains("mg N/L"));
+        assert!(display.contains("range [0.01, 0.1]"));
     }
 
     #[test]

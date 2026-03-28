@@ -92,9 +92,23 @@ shrimp_excretion_fraction_of_assimilated = 0.10
 shrimp_growth_fraction_of_assimilated = 0.20
 # Stoichiometric O2:C for organic matter oxidation (32/12 ≈ 2.67)
 shrimp_o2_per_mg_c_respired = 2.67
+death_biomass_to_detritus_fraction = 1.0
+
+# Microfauna feeding pathway fractions (consumer routing contract)
+# Constraint: respiration + excretion + growth = 1.0
+microfauna_mineralization_boost = 0.15
+microfauna_periphyton_consumption = 0.02
+microfauna_population_smoothing = 0.10
+microfauna_shrimp_pressure_threshold = 3.0
+microfauna_assimilation_efficiency = 0.50
+microfauna_respiration_fraction_of_assimilated = 0.70
+microfauna_excretion_fraction_of_assimilated = 0.10
+microfauna_growth_fraction_of_assimilated = 0.20
 
 [provenance]
 source_title = "Starter preset pack"
 source_year = 2026
+# Whole-file provenance confidence is intentionally coarse/free-form;
+# per-parameter [param_meta.*].confidence uses the validated enum.
 confidence = "medium"
 notes = "Default process coefficients including heat-transfer parameters for the hourly thermal model."

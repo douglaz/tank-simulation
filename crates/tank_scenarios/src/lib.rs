@@ -430,17 +430,20 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
         shrimp_growth_fraction_of_assimilated: preset.shrimp_growth_fraction_of_assimilated,
         shrimp_o2_per_mg_c_respired: preset.shrimp_o2_per_mg_c_respired,
 
-        death_biomass_to_detritus_fraction: 1.0,
+        death_biomass_to_detritus_fraction: preset.death_biomass_to_detritus_fraction,
 
         microfauna_mineralization_boost: preset.microfauna_mineralization_boost,
         microfauna_periphyton_consumption: preset.microfauna_periphyton_consumption,
         microfauna_population_smoothing: preset.microfauna_population_smoothing,
         microfauna_shrimp_pressure_threshold: preset.microfauna_shrimp_pressure_threshold,
 
-        microfauna_assimilation_efficiency: 0.50,
-        microfauna_respiration_fraction_of_assimilated: 0.70,
-        microfauna_excretion_fraction_of_assimilated: 0.10,
-        microfauna_growth_fraction_of_assimilated: 0.20,
+        microfauna_assimilation_efficiency: preset.microfauna_assimilation_efficiency,
+        microfauna_respiration_fraction_of_assimilated: preset
+            .microfauna_respiration_fraction_of_assimilated,
+        microfauna_excretion_fraction_of_assimilated: preset
+            .microfauna_excretion_fraction_of_assimilated,
+        microfauna_growth_fraction_of_assimilated: preset
+            .microfauna_growth_fraction_of_assimilated,
     }
 }
 
@@ -896,6 +899,25 @@ mod tests {
         assert_eq!(params.shrimp_excretion_fraction_of_assimilated, 0.13);
         assert_eq!(params.shrimp_growth_fraction_of_assimilated, 0.25);
         assert_eq!(params.shrimp_o2_per_mg_c_respired, 2.91);
+    }
+
+    #[test]
+    fn process_preset_mapping_carries_microfauna_and_death_routing_fields() {
+        let mut preset =
+            tank_data::load_process_params("default").expect("default process preset should load");
+        preset.death_biomass_to_detritus_fraction = 1.0;
+        preset.microfauna_assimilation_efficiency = 0.57;
+        preset.microfauna_respiration_fraction_of_assimilated = 0.64;
+        preset.microfauna_excretion_fraction_of_assimilated = 0.11;
+        preset.microfauna_growth_fraction_of_assimilated = 0.25;
+
+        let params = process_preset_to_params(&preset);
+
+        assert_eq!(params.death_biomass_to_detritus_fraction, 1.0);
+        assert_eq!(params.microfauna_assimilation_efficiency, 0.57);
+        assert_eq!(params.microfauna_respiration_fraction_of_assimilated, 0.64);
+        assert_eq!(params.microfauna_excretion_fraction_of_assimilated, 0.11);
+        assert_eq!(params.microfauna_growth_fraction_of_assimilated, 0.25);
     }
 
     #[test]
