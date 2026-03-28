@@ -6,6 +6,69 @@ use tank_core::{
     APP_VERSION, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G, SCHEMA_VERSION,
 };
 
+fn legacy_pre_stage_state_json(
+    state: &TankState,
+    adults_count: u32,
+    juveniles_count: u32,
+    reserve_g: Option<f64>,
+    condition_index: f64,
+    maturation_accum: f64,
+) -> serde_json::Value {
+    let mut state_json = serde_json::to_value(state).expect("serialize legacy state");
+    let state_obj = state_json.as_object_mut().expect("state json object");
+    state_obj.remove("habitat_registry");
+    state_obj
+        .get_mut("geometry")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("geometry object")
+        .remove("hardscape_area_cm2");
+    state_obj
+        .get_mut("hardware")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("hardware object")
+        .get_mut("filter")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("filter object")
+        .remove("media_area_cm2");
+
+    let mut animal = serde_json::Map::new();
+    animal.insert("adults_count".to_string(), serde_json::json!(adults_count));
+    animal.insert(
+        "juveniles_count".to_string(),
+        serde_json::json!(juveniles_count),
+    );
+    animal.insert(
+        "condition_index".to_string(),
+        serde_json::json!(condition_index),
+    );
+    animal.insert(
+        "maturation_accum".to_string(),
+        serde_json::json!(maturation_accum),
+    );
+    animal.insert(
+        "berried_females_count".to_string(),
+        serde_json::json!(state.animal.berried_females_count),
+    );
+    animal.insert(
+        "molt_stress_index".to_string(),
+        serde_json::json!(state.animal.molt_stress_index),
+    );
+    animal.insert(
+        "reproductive_readiness_index".to_string(),
+        serde_json::json!(state.animal.reproductive_readiness_index),
+    );
+    animal.insert(
+        "egg_progress_days".to_string(),
+        serde_json::json!(state.animal.egg_progress_days),
+    );
+    if let Some(reserve_g) = reserve_g {
+        animal.insert("reserve_g".to_string(), serde_json::json!(reserve_g));
+    }
+    state_obj.insert("animal".to_string(), serde_json::Value::Object(animal));
+
+    state_json
+}
+
 #[test]
 fn save_load_roundtrip() -> Result<(), tank_core::SimError> {
     let mut engine = Engine::new(SimSeed(42));
@@ -166,11 +229,12 @@ fn legacy_schema_v2_saves_are_migrated_to_net_water_volume() -> Result<(), tank_
     legacy_state.water.ammonia_total_mg_n_total = 1.5 * gross_volume_l;
     legacy_state.water.nitrate_mg_n_total = 3.0 * gross_volume_l;
     legacy_state.water.phosphate_mg_p_total = 0.4 * gross_volume_l;
+    let state_json = legacy_pre_stage_state_json(&legacy_state, 0, 0, None, 0.8, 0.0);
 
     let json = serde_json::json!({
         "schema_version": 2,
         "app_version": APP_VERSION,
-        "state": legacy_state,
+        "state": state_json,
         "queued_actions": [],
     })
     .to_string();
@@ -199,7 +263,7 @@ fn legacy_schema_v2_saves_without_tracker_reseed_stability_baselines(
     legacy_state.water.calcium_mg_total = 34.0 * gross_volume_l;
     legacy_state.water.magnesium_mg_total = 9.0 * gross_volume_l;
 
-    let mut state_json = serde_json::to_value(&legacy_state).expect("serialize legacy state");
+    let mut state_json = legacy_pre_stage_state_json(&legacy_state, 0, 0, None, 0.8, 0.0);
     state_json
         .as_object_mut()
         .expect("state json object")
@@ -237,11 +301,12 @@ fn legacy_schema_v2_saves_with_unseeded_tracker_reseed_stability_baselines(
     let gross_volume_l = legacy_state.geometry.gross_water_volume_l();
     legacy_state.water = WaterState::default_for_volume_l(gross_volume_l);
     legacy_state.stability_tracker = StabilityTracker::default();
+    let state_json = legacy_pre_stage_state_json(&legacy_state, 0, 0, None, 0.8, 0.0);
 
     let json = serde_json::json!({
         "schema_version": 2,
         "app_version": APP_VERSION,
-        "state": legacy_state,
+        "state": state_json,
         "queued_actions": [],
     })
     .to_string();
@@ -273,26 +338,18 @@ fn legacy_schema_v2_saves_with_unseeded_tracker_reseed_stability_baselines(
 #[test]
 fn legacy_schema_v3_saves_seed_reserve_from_existing_shrimp_biomass() -> Result<(), SimError> {
     let legacy_state = TankState::new(SimSeed(103));
-    let mut state_json = serde_json::to_value(&legacy_state).expect("serialize legacy state");
-    let state_obj = state_json.as_object_mut().expect("state json object");
-    state_obj
-        .get_mut("animal")
-        .and_then(serde_json::Value::as_object_mut)
-        .expect("animal object")
-        .insert("adults_count".to_string(), serde_json::json!(30));
-    state_obj
-        .get_mut("animal")
-        .and_then(serde_json::Value::as_object_mut)
-        .expect("animal object")
-        .insert("juveniles_count".to_string(), serde_json::json!(20));
-
-    state_obj
+    let mut state_json = legacy_pre_stage_state_json(&legacy_state, 30, 20, None, 0.8, 0.0);
+    state_json
+        .as_object_mut()
+        .expect("state json object")
         .get_mut("animal")
         .and_then(serde_json::Value::as_object_mut)
         .expect("animal object")
         .remove("reserve_g");
 
-    let process_obj = state_obj
+    let process_obj = state_json
+        .as_object_mut()
+        .expect("state json object")
         .get_mut("process_params")
         .and_then(serde_json::Value::as_object_mut)
         .expect("process params object");
@@ -597,11 +654,12 @@ fn migration_chain_applies_v2_to_current() -> Result<(), SimError> {
     let gross_volume_l = legacy_state.geometry.gross_water_volume_l();
     legacy_state.water = WaterState::default_for_volume_l(gross_volume_l);
     legacy_state.water.ammonia_total_mg_n_total = 2.0 * gross_volume_l;
+    let state_json = legacy_pre_stage_state_json(&legacy_state, 0, 0, None, 0.8, 0.0);
 
     let json = serde_json::json!({
         "schema_version": 2,
         "app_version": APP_VERSION,
-        "state": legacy_state,
+        "state": state_json,
         "queued_actions": [],
     })
     .to_string();

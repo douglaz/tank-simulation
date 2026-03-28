@@ -57,6 +57,18 @@ pub struct HabitatEntry {
     pub light_exposure: f64,
 }
 
+/// Shared environmental context computed once per registry build and passed
+/// to each per-habitat helper.
+struct HabitatEnv {
+    normalized_flow: f64,
+    aeration_boost: f64,
+    light_intensity: f64,
+    avg_crowding: f64,
+    avg_low_o2: f64,
+    root_zone_o2_boost: f64,
+    depth_attenuation: f64,
+}
+
 /// Recompute the full habitat registry from current tank state.
 ///
 /// Colonizable areas are derived from geometry, hardware configuration, and
@@ -66,20 +78,6 @@ pub fn compute_habitat_registry(state: &TankState) -> Vec<HabitatEntry> {
     let volume_l = state.water_volume_l().max(f64::EPSILON);
     let flow_lph = if state.hardware.filter.enabled {
         state.hardware.filter.flow_lph
-    } else {
-        0.0
-    };
-    // Turnover rate normalized: 10 turnovers/hour maps to 1.0
-    let normalized_flow = (flow_lph / volume_l / 10.0).clamp(0.0, 1.0);
-
-    let aeration_boost = if state.hardware.aeration.enabled {
-        state.hardware.aeration.intensity
-    } else {
-        0.0
-    };
-
-    let light_intensity = if state.hardware.light.enabled {
-        state.hardware.light.intensity_index
     } else {
         0.0
     };
@@ -95,50 +93,39 @@ pub fn compute_habitat_registry(state: &TankState) -> Vec<HabitatEntry> {
             / state.plant_guilds.len() as f64
     };
 
-    let avg_low_o2 = state.avg_substrate_index(|l| l.low_oxygen_tendency_index);
-
     let has_rooted_plants = state
         .plant_guilds
         .iter()
         .any(|p| matches!(p.guild, PlantGuild::RootFeedingRosette) && p.biomass_g > 0.1);
-    let root_zone_o2_boost = if has_rooted_plants { 0.1 } else { 0.0 };
 
-    let depth_attenuation = (1.0 - state.geometry.mean_depth_cm() / 60.0).clamp(0.1, 1.0);
+    let env = HabitatEnv {
+        // Turnover rate normalized: 10 turnovers/hour maps to 1.0
+        normalized_flow: (flow_lph / volume_l / 10.0).clamp(0.0, 1.0),
+        aeration_boost: if state.hardware.aeration.enabled {
+            state.hardware.aeration.intensity
+        } else {
+            0.0
+        },
+        light_intensity: if state.hardware.light.enabled {
+            state.hardware.light.intensity_index
+        } else {
+            0.0
+        },
+        avg_crowding,
+        avg_low_o2: state.avg_substrate_index(|l| l.low_oxygen_tendency_index),
+        root_zone_o2_boost: if has_rooted_plants { 0.1 } else { 0.0 },
+        depth_attenuation: (1.0 - state.geometry.mean_depth_cm() / 60.0).clamp(0.1, 1.0),
+    };
 
     HabitatKind::ALL
         .iter()
         .map(|&kind| {
             let (area, flow, oxygen, light) = match kind {
-                HabitatKind::FilterMedia => {
-                    compute_filter_media(state, normalized_flow, aeration_boost, light_intensity)
-                }
-                HabitatKind::GlassHardscape => compute_glass_hardscape(
-                    state,
-                    normalized_flow,
-                    aeration_boost,
-                    light_intensity,
-                    avg_crowding,
-                ),
-                HabitatKind::PlantSurfaces => compute_plant_surfaces(
-                    state,
-                    normalized_flow,
-                    aeration_boost,
-                    light_intensity,
-                    avg_crowding,
-                ),
-                HabitatKind::SubstrateSurface => compute_substrate_surface(
-                    state,
-                    normalized_flow,
-                    aeration_boost,
-                    light_intensity,
-                    avg_crowding,
-                    avg_low_o2,
-                    root_zone_o2_boost,
-                    depth_attenuation,
-                ),
-                HabitatKind::SubstrateDeep => {
-                    compute_substrate_deep(state, normalized_flow, avg_low_o2)
-                }
+                HabitatKind::FilterMedia => compute_filter_media(state, &env),
+                HabitatKind::GlassHardscape => compute_glass_hardscape(state, &env),
+                HabitatKind::PlantSurfaces => compute_plant_surfaces(state, &env),
+                HabitatKind::SubstrateSurface => compute_substrate_surface(state, &env),
+                HabitatKind::SubstrateDeep => compute_substrate_deep(state, &env),
             };
             HabitatEntry {
                 kind,
@@ -160,12 +147,7 @@ pub fn find_habitat(registry: &[HabitatEntry], kind: HabitatKind) -> Option<&Hab
 // Per-habitat computation helpers
 // ---------------------------------------------------------------------------
 
-fn compute_filter_media(
-    state: &TankState,
-    normalized_flow: f64,
-    aeration_boost: f64,
-    light_intensity: f64,
-) -> (f64, f64, f64, f64) {
+fn compute_filter_media(state: &TankState, env: &HabitatEnv) -> (f64, f64, f64, f64) {
     let area = if state.hardware.filter.enabled {
         state.hardware.filter.media_area_cm2
     } else {
@@ -173,45 +155,33 @@ fn compute_filter_media(
     };
 
     let flow = if state.hardware.filter.enabled {
-        0.6 + 0.35 * normalized_flow
+        0.6 + 0.35 * env.normalized_flow
     } else {
         0.05
     };
 
     let oxygen = if state.hardware.filter.enabled {
-        (0.6 + 0.2 * aeration_boost) * (1.0 - 0.5 * state.filter_state.clogging_index)
+        (0.6 + 0.2 * env.aeration_boost) * (1.0 - 0.5 * state.filter_state.clogging_index)
     } else {
         0.1
     };
 
-    let light = 0.05 * light_intensity;
+    let light = 0.05 * env.light_intensity;
 
     (area, flow, oxygen, light)
 }
 
-fn compute_glass_hardscape(
-    state: &TankState,
-    normalized_flow: f64,
-    aeration_boost: f64,
-    light_intensity: f64,
-    avg_crowding: f64,
-) -> (f64, f64, f64, f64) {
+fn compute_glass_hardscape(state: &TankState, env: &HabitatEnv) -> (f64, f64, f64, f64) {
     let area = state.geometry.wall_area_cm2() + state.geometry.hardscape_area_cm2;
 
-    let flow = 0.15 + 0.45 * normalized_flow;
-    let oxygen = 0.6 + 0.25 * aeration_boost + 0.1 * normalized_flow;
-    let light = 0.4 * light_intensity * (1.0 - 0.3 * avg_crowding);
+    let flow = 0.15 + 0.45 * env.normalized_flow;
+    let oxygen = 0.6 + 0.25 * env.aeration_boost + 0.1 * env.normalized_flow;
+    let light = 0.4 * env.light_intensity * (1.0 - 0.3 * env.avg_crowding);
 
     (area, flow, oxygen, light)
 }
 
-fn compute_plant_surfaces(
-    state: &TankState,
-    normalized_flow: f64,
-    aeration_boost: f64,
-    light_intensity: f64,
-    avg_crowding: f64,
-) -> (f64, f64, f64, f64) {
+fn compute_plant_surfaces(state: &TankState, env: &HabitatEnv) -> (f64, f64, f64, f64) {
     let area: f64 = state
         .plant_guilds
         .iter()
@@ -224,52 +194,39 @@ fn compute_plant_surfaces(
         })
         .sum();
 
-    let flow = 0.1 + 0.3 * normalized_flow;
-    let oxygen = 0.65 + 0.2 * aeration_boost + 0.1 * normalized_flow;
-    let light = 0.7 * light_intensity * (1.0 - 0.3 * avg_crowding);
+    let flow = 0.1 + 0.3 * env.normalized_flow;
+    let oxygen = 0.65 + 0.2 * env.aeration_boost + 0.1 * env.normalized_flow;
+    let light = 0.7 * env.light_intensity * (1.0 - 0.3 * env.avg_crowding);
 
     (area, flow, oxygen, light)
 }
 
-fn compute_substrate_surface(
-    state: &TankState,
-    normalized_flow: f64,
-    aeration_boost: f64,
-    light_intensity: f64,
-    avg_crowding: f64,
-    avg_low_o2: f64,
-    root_zone_o2_boost: f64,
-    depth_attenuation: f64,
-) -> (f64, f64, f64, f64) {
+fn compute_substrate_surface(state: &TankState, env: &HabitatEnv) -> (f64, f64, f64, f64) {
     let area = if state.substrate_layers.is_empty() {
         0.0
     } else {
         state.geometry.footprint_area_cm2()
     };
 
-    let flow = 0.05 + 0.2 * normalized_flow;
-    let oxygen = 0.3 + 0.15 * normalized_flow - 0.15 * avg_low_o2
-        + 0.1 * aeration_boost
-        + root_zone_o2_boost;
-    let light = 0.25 * light_intensity * depth_attenuation * (1.0 - 0.5 * avg_crowding);
+    let flow = 0.05 + 0.2 * env.normalized_flow;
+    let oxygen = 0.3 + 0.15 * env.normalized_flow - 0.15 * env.avg_low_o2
+        + 0.1 * env.aeration_boost
+        + env.root_zone_o2_boost;
+    let light = 0.25 * env.light_intensity * env.depth_attenuation * (1.0 - 0.5 * env.avg_crowding);
 
     (area, flow, oxygen, light)
 }
 
-fn compute_substrate_deep(
-    state: &TankState,
-    normalized_flow: f64,
-    avg_low_o2: f64,
-) -> (f64, f64, f64, f64) {
+fn compute_substrate_deep(state: &TankState, env: &HabitatEnv) -> (f64, f64, f64, f64) {
     let area: f64 = state
         .substrate_layers
         .iter()
         .map(|l| l.colonizable_area_cm2)
         .sum();
 
-    let flow = 0.02 + 0.05 * normalized_flow;
+    let flow = 0.02 + 0.05 * env.normalized_flow;
     // Capped at 0.2: even with flow, deep substrate remains oxygen-limited.
-    let oxygen = (0.1 * (1.0 - avg_low_o2) + 0.05 * normalized_flow).clamp(0.02, 0.2);
+    let oxygen = (0.1 * (1.0 - env.avg_low_o2) + 0.05 * env.normalized_flow).clamp(0.02, 0.2);
     let light = 0.0;
 
     (area, flow, oxygen, light)
