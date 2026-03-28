@@ -38,7 +38,7 @@ use std::path::PathBuf;
 
 use tank_core::{
     Engine, JsonLinesSink, PlayerAction, SimSeed, SimTracer, SimulationEngine, TankSnapshot,
-    TraceSink, Verbosity,
+    TankState, TraceSink, Verbosity,
 };
 use tank_scenarios::StartupOverrides;
 
@@ -72,6 +72,9 @@ pub struct Envelope {
     pub nitrate_mg_n_per_l_bounds: Option<(f64, f64)>,
     pub do_mg_l_bounds: Option<(f64, f64)>,
     pub shrimp_count_bounds: Option<(u32, u32)>,
+    pub juveniles_count_bounds: Option<(u32, u32)>,
+    pub berried_females_count_bounds: Option<(u32, u32)>,
+    pub shrimp_reproductive_readiness_bounds: Option<(f64, f64)>,
     pub plant_biomass_g_bounds: Option<(f64, f64)>,
     pub algae_nuisance_bounds: Option<(f64, f64)>,
     pub biofilter_maturity_bounds: Option<(f64, f64)>,
@@ -117,6 +120,21 @@ impl Envelope {
 
     pub fn shrimp_count(mut self, min: u32, max: u32) -> Self {
         self.shrimp_count_bounds = Some((min, max));
+        self
+    }
+
+    pub fn juveniles_count(mut self, min: u32, max: u32) -> Self {
+        self.juveniles_count_bounds = Some((min, max));
+        self
+    }
+
+    pub fn berried_females_count(mut self, min: u32, max: u32) -> Self {
+        self.berried_females_count_bounds = Some((min, max));
+        self
+    }
+
+    pub fn shrimp_reproductive_readiness(mut self, min: f64, max: f64) -> Self {
+        self.shrimp_reproductive_readiness_bounds = Some((min, max));
         self
     }
 
@@ -201,6 +219,31 @@ impl Envelope {
             let total = snap.total_shrimp_count;
             if total < min || total > max {
                 violations.push(format!("shrimp count {} outside [{}, {}]", total, min, max));
+            }
+        }
+        if let Some((min, max)) = self.juveniles_count_bounds {
+            if snap.juveniles_count < min || snap.juveniles_count > max {
+                violations.push(format!(
+                    "juveniles {} outside [{}, {}]",
+                    snap.juveniles_count, min, max
+                ));
+            }
+        }
+        if let Some((min, max)) = self.berried_females_count_bounds {
+            if snap.berried_females_count < min || snap.berried_females_count > max {
+                violations.push(format!(
+                    "berried females {} outside [{}, {}]",
+                    snap.berried_females_count, min, max
+                ));
+            }
+        }
+        if let Some((min, max)) = self.shrimp_reproductive_readiness_bounds {
+            if snap.shrimp_reproductive_readiness < min || snap.shrimp_reproductive_readiness > max
+            {
+                violations.push(format!(
+                    "shrimp reproductive readiness {:.3} outside [{:.2}, {:.2}]",
+                    snap.shrimp_reproductive_readiness, min, max
+                ));
             }
         }
         if let Some((min, max)) = self.plant_biomass_g_bounds {
@@ -360,6 +403,19 @@ impl HarnessRun {
             failures: Vec::new(),
             verbose,
         })
+    }
+
+    /// Create a new harness run from a caller-prepared state.
+    pub fn from_state(seed: SimSeed, scenario_id: &str, state: TankState) -> Self {
+        let verbose = is_verbose();
+        Self {
+            seed,
+            scenario_id: scenario_id.to_owned(),
+            engine: Engine::from_parts(state, vec![]),
+            checkpoints: Vec::new(),
+            failures: Vec::new(),
+            verbose,
+        }
     }
 
     /// Enable budget tracking and tracing on the engine.
@@ -626,6 +682,26 @@ mod tests {
         let snapshot = TankSnapshot::from_state(&state);
 
         let violations = Envelope::default().shrimp_count(6, 6).check(&snapshot);
+
+        assert!(
+            violations.is_empty(),
+            "unexpected violations: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn reproduction_envelope_checks_snapshot_fields() {
+        let mut state = TankState::new(SimSeed(8_002));
+        state.animal.juvenile.count = 12;
+        state.animal.berried_females_count = 2;
+        state.animal.reproductive_readiness_index = 0.6;
+        let snapshot = TankSnapshot::from_state(&state);
+
+        let violations = Envelope::default()
+            .juveniles_count(10, 15)
+            .berried_females_count(1, 3)
+            .shrimp_reproductive_readiness(0.5, 0.7)
+            .check(&snapshot);
 
         assert!(
             violations.is_empty(),
