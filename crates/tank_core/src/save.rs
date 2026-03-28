@@ -3,7 +3,10 @@ use serde_json::Value;
 
 use crate::{
     engine::{Engine, SimulationEngine},
-    types::{PlayerAction, SimError, StabilityTracker, TankState},
+    types::{
+        shrimp_biomass_g, PlayerAction, SimError, StabilityTracker, TankState,
+        LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
+    },
 };
 
 /// Current schema version. Bump this when the save format changes.
@@ -81,9 +84,9 @@ const MIGRATIONS: &[MigrationFn] = &[
     migrate_v2_to_v3,
     // Index 1: schema 3 → 4
     // Add shrimp feeding pathway parameters and animal.reserve_g. Process
-    // parameters and the new reserve pool both rely on serde defaults so
-    // legacy saves preserve their prior physical state instead of gaining a
-    // synthetic reserve snapshot.
+    // parameters rely on serde defaults, while reserve_g is reconstructed
+    // from the serialized shrimp population so migrated colonies keep the
+    // retained biomass needed for post-load growth/reproduction transitions.
     migrate_v3_to_v4,
 ];
 
@@ -323,11 +326,50 @@ fn migrate_v2_to_v3(value: &mut Value) -> Result<(), SimError> {
 
 /// Schema 3 → 4: add shrimp feeding pathway parameters (assimilation
 /// efficiency, respiration/excretion/growth fractions, O2:C quotient) and
-/// `animal.reserve_g`. Both the process parameters and reserve pool
-/// deserialize through `#[serde(default)]` so legacy saves keep the same
-/// structural biomass and do not gain synthetic retained reserve.
+/// `animal.reserve_g`. Process parameters still deserialize through
+/// `#[serde(default)]`, but reserve_g must be reconstructed from the legacy
+/// shrimp population because later growth, hatching, and maturation all draw
+/// exclusively from that retained organic-matter pool.
 fn migrate_v3_to_v4(value: &mut Value) -> Result<(), SimError> {
-    let _ = value;
+    let animal = required_object_mut_at(value, 3, 4, "/state/animal")?;
+
+    if animal.contains_key("reserve_g") {
+        return Ok(());
+    }
+
+    let adults_count = animal
+        .get("adults_count")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| schema_migration_error(3, 4, "expected u32 at /state/animal/adults_count"))
+        .and_then(|count| {
+            u32::try_from(count).map_err(|_| {
+                schema_migration_error(
+                    3,
+                    4,
+                    format!("value at /state/animal/adults_count exceeds u32 range: {count}"),
+                )
+            })
+        })?;
+    let juveniles_count = animal
+        .get("juveniles_count")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            schema_migration_error(3, 4, "expected u32 at /state/animal/juveniles_count")
+        })
+        .and_then(|count| {
+            u32::try_from(count).map_err(|_| {
+                schema_migration_error(
+                    3,
+                    4,
+                    format!("value at /state/animal/juveniles_count exceeds u32 range: {count}"),
+                )
+            })
+        })?;
+
+    let reserve_g =
+        shrimp_biomass_g(adults_count, juveniles_count) * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+    animal.insert("reserve_g".to_string(), serde_json::json!(reserve_g));
+
     Ok(())
 }
 
