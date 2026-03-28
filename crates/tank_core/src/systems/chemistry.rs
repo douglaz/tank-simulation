@@ -1,6 +1,6 @@
 use crate::types::{
     BudgetDelta, ElementBudget, TankState, WaterState, ADULT_SHRIMP_BIOMASS_G,
-    JUVENILE_SHRIMP_BIOMASS_G,
+    JUVENILE_SHRIMP_BIOMASS_G, SUB_ADULT_SHRIMP_BIOMASS_G,
 };
 use tracing::debug;
 
@@ -487,10 +487,10 @@ pub fn resolve_carbonate_state(water: &mut WaterState, volume_l: f64) {
 // NH3 speciation (unchanged)
 // ---------------------------------------------------------------------------
 
-pub fn compute_nh3_mg_l(tan_mg_l: f64, ph: f64, temp_c: f64) -> f64 {
+pub fn compute_nh3_mg_n_per_l(tan_mg_n_per_l: f64, ph: f64, temp_c: f64) -> f64 {
     let pka = 0.09018 + 2729.92 / (273.2 + temp_c);
     let fraction_nh3 = 1.0 / (1.0 + 10.0_f64.powf(pka - ph));
-    tan_mg_l * fraction_nh3
+    tan_mg_n_per_l * fraction_nh3
 }
 
 // ---------------------------------------------------------------------------
@@ -603,8 +603,9 @@ pub(crate) fn respiring_biomass_g(state: &TankState) -> f64 {
         + state.microbe.ammonia_oxidizer_biomass_g
         + state.microbe.nitrite_oxidizer_biomass_g
         + state.microbe.comammox_biomass_g;
-    let shrimp_biomass_g = (f64::from(state.animal.adults_count) * ADULT_SHRIMP_BIOMASS_G)
-        + (f64::from(state.animal.juveniles_count) * JUVENILE_SHRIMP_BIOMASS_G);
+    let shrimp_biomass_g = (f64::from(state.animal.adult.count) * ADULT_SHRIMP_BIOMASS_G)
+        + (f64::from(state.animal.sub_adult.count) * SUB_ADULT_SHRIMP_BIOMASS_G)
+        + (f64::from(state.animal.juvenile.count) * JUVENILE_SHRIMP_BIOMASS_G);
 
     plant_biomass_g + algae_biomass_g + microbe_biomass_g + shrimp_biomass_g
 }

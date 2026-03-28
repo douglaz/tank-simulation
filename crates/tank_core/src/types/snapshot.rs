@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{PlantGuild, SimEvent, TankState};
 use crate::systems::{
-    chemistry::{compute_nh3_mg_l, solve_carbonate_equilibrium},
+    chemistry::{compute_nh3_mg_n_per_l, solve_carbonate_equilibrium},
     temperature::do_sat_mg_l,
 };
 
@@ -13,19 +13,19 @@ pub struct TankSnapshot {
     pub ambient_temp_c: f64,
     pub water_temp_c: f64,
     pub water_volume_l: f64,
-    pub tan_mg_l: f64,
-    pub nh3_mg_l: f64,
-    pub nitrite_mg_l: f64,
-    pub nitrate_mg_l: f64,
-    pub phosphate_mg_l: f64,
-    pub dissolved_inorganic_carbon_mg_l: f64,
+    pub tan_mg_n_per_l: f64,
+    pub nh3_mg_n_per_l: f64,
+    pub nitrite_mg_n_per_l: f64,
+    pub nitrate_mg_n_per_l: f64,
+    pub phosphate_mg_p_per_l: f64,
+    pub dissolved_inorganic_carbon_mg_c_per_l: f64,
     pub co2_aq_mmol_per_l: f64,
     pub do_mg_l: f64,
     pub do_sat_mg_l: f64,
     pub gh_d: f64,
     pub kh_d: f64,
-    pub tds_mg_l: f64,
-    pub conductivity_us_cm: f64,
+    pub estimated_tds_7_ion_mg_per_l: f64,
+    pub estimated_conductivity_us_cm: f64,
     pub ph: f64,
     pub light_enabled: bool,
     pub photoperiod_hours: f64,
@@ -69,11 +69,11 @@ impl TankSnapshot {
     pub fn from_state(state: &TankState) -> Self {
         let chemistry = state.concentrations();
         let volume_l = chemistry.volume_l();
-        let tan_mg_l = chemistry.tan_mg_n_per_l();
-        let nitrite_mg_l = chemistry.nitrite_mg_n_per_l();
-        let nitrate_mg_l = chemistry.nitrate_mg_n_per_l();
-        let phosphate_mg_l = chemistry.phosphate_mg_p_per_l();
-        let dissolved_inorganic_carbon_mg_l = chemistry.dic_mg_c_per_l();
+        let tan_mg_n_per_l = chemistry.tan_mg_n_per_l();
+        let nitrite_mg_n_per_l = chemistry.nitrite_mg_n_per_l();
+        let nitrate_mg_n_per_l = chemistry.nitrate_mg_n_per_l();
+        let phosphate_mg_p_per_l = chemistry.phosphate_mg_p_per_l();
+        let dissolved_inorganic_carbon_mg_c_per_l = chemistry.dic_mg_c_per_l();
         let carbonate_eq = solve_carbonate_equilibrium(
             state.water.dissolved_inorganic_carbon_mg_c_total,
             state.water.alkalinity_meq_total,
@@ -83,10 +83,10 @@ impl TankSnapshot {
         let do_mg_l_val = chemistry.do_mg_per_l();
         let gh_d = chemistry.gh_d();
         let kh_d = chemistry.kh_d();
-        let tds_mg_l = chemistry.tds_mg_per_l();
-        let conductivity_us_cm = chemistry.conductivity_us_cm();
+        let estimated_tds_7_ion_mg_per_l = chemistry.tds_mg_per_l();
+        let estimated_conductivity_us_cm = chemistry.conductivity_us_cm();
         let ph = carbonate_eq.ph;
-        let nh3_mg_l = compute_nh3_mg_l(tan_mg_l, ph, state.water.temperature_c);
+        let nh3_mg_n_per_l = compute_nh3_mg_n_per_l(tan_mg_n_per_l, ph, state.water.temperature_c);
         let fast_stem_biomass_g: f64 = state
             .plant_guilds
             .iter()
@@ -112,19 +112,19 @@ impl TankSnapshot {
             ambient_temp_c: state.environment.ambient_temp_c,
             water_temp_c: state.water.temperature_c,
             water_volume_l: volume_l,
-            tan_mg_l,
-            nh3_mg_l,
-            nitrite_mg_l,
-            nitrate_mg_l,
-            phosphate_mg_l,
-            dissolved_inorganic_carbon_mg_l,
+            tan_mg_n_per_l,
+            nh3_mg_n_per_l,
+            nitrite_mg_n_per_l,
+            nitrate_mg_n_per_l,
+            phosphate_mg_p_per_l,
+            dissolved_inorganic_carbon_mg_c_per_l,
             co2_aq_mmol_per_l: carbonate_eq.co2_aq_mmol_per_l,
             do_mg_l: do_mg_l_val,
             do_sat_mg_l: do_sat_mg_l(state.water.temperature_c),
             gh_d,
             kh_d,
-            tds_mg_l,
-            conductivity_us_cm,
+            estimated_tds_7_ion_mg_per_l,
+            estimated_conductivity_us_cm,
             ph,
             light_enabled: state.hardware.light.enabled,
             photoperiod_hours: state.hardware.light.photoperiod_hours,

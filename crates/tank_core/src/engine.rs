@@ -177,7 +177,7 @@ impl Engine {
 
         let actions_slice: Vec<_> = self.queued_actions.iter().cloned().collect();
         // Validate all queued actions (covers from_parts callers that bypass apply_action).
-        let mut available_shrimp = self.state.animal.adults_count as i64;
+        let mut available_shrimp = self.state.animal.adult.count as i64;
         for action in &actions_slice {
             action.validate()?;
             // State-aware check: RemoveShrimp must not exceed available adults.
@@ -670,20 +670,21 @@ impl Engine {
                 None
             }
             PlayerAction::AddShrimp { count } => {
-                self.state.animal.adults_count =
-                    self.state.animal.adults_count.saturating_add(count);
+                self.state.animal.adult.count =
+                    self.state.animal.adult.count.saturating_add(count);
                 None
             }
             PlayerAction::RemoveShrimp { count } => {
-                // Export proportional share of reserve with removed shrimp.
-                let total = self.state.animal.adults_count + self.state.animal.juveniles_count;
-                if total > 0 && self.state.animal.reserve_g > f64::EPSILON {
+                // Export proportional share of adult reserve with removed shrimp.
+                let total = self.state.animal.total_count();
+                if total > 0 && self.state.animal.adult.reserve_g > f64::EPSILON {
                     let removed_frac = f64::from(count.min(total)) / f64::from(total);
-                    self.state.animal.reserve_g -= self.state.animal.reserve_g * removed_frac;
+                    self.state.animal.adult.reserve_g -=
+                        self.state.animal.adult.reserve_g * removed_frac;
                 }
-                self.state.animal.adults_count =
-                    self.state.animal.adults_count.saturating_sub(count);
-                // Preserve berried_females_count <= adults_count (also trims egg cohorts)
+                self.state.animal.adult.count =
+                    self.state.animal.adult.count.saturating_sub(count);
+                // Preserve berried_females_count <= adult.count (also trims egg cohorts)
                 self.state.animal.clamp_berried_to_adults();
                 None
             }
@@ -735,7 +736,7 @@ impl SimulationEngine for Engine {
 
         // State-aware validation for RemoveShrimp
         if let PlayerAction::RemoveShrimp { count } = &action {
-            let mut available = self.state.animal.adults_count as i64;
+            let mut available = self.state.animal.adult.count as i64;
             for queued in &self.queued_actions {
                 match queued {
                     PlayerAction::RemoveShrimp { count: c } => available -= *c as i64,

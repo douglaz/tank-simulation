@@ -1,6 +1,7 @@
 use crate::types::{
     concentration_from_total, legacy_total_param_to_mg_per_l, live_biomass_carbon_mg,
     live_biomass_nitrogen_mg, TankState, ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G,
+    SUB_ADULT_SHRIMP_BIOMASS_G,
 };
 
 const FEED_P_TO_N_MASS_RATIO: f64 = 0.10;
@@ -613,8 +614,9 @@ pub fn update_daily_filter_clogging(state: &mut TankState) -> f64 {
     let detritus_pressure =
         (fine_detritus_g_l + (0.35 * particulate_detritus_g_l) + (0.25 * dissolved_residue_g_l))
             .clamp(0.0, 2.0);
-    let shrimp_biomass_g = (f64::from(state.animal.adults_count) * ADULT_SHRIMP_BIOMASS_G)
-        + (f64::from(state.animal.juveniles_count) * JUVENILE_SHRIMP_BIOMASS_G);
+    let shrimp_biomass_g = (f64::from(state.animal.adult.count) * ADULT_SHRIMP_BIOMASS_G)
+        + (f64::from(state.animal.sub_adult.count) * SUB_ADULT_SHRIMP_BIOMASS_G)
+        + (f64::from(state.animal.juvenile.count) * JUVENILE_SHRIMP_BIOMASS_G);
     let bioload_pressure = (shrimp_biomass_g / volume_l).clamp(0.0, 1.0);
 
     let cleanliness_before = state.hardware.filter.cleanliness_index.clamp(0.0, 1.0);

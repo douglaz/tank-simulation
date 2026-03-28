@@ -1396,3 +1396,112 @@ fn test_high_mortality_200_hours_conserves_n_c_and_accumulates_detritus() -> Res
 
     Ok(())
 }
+
+#[test]
+fn test_weekly_trim_and_remove_exports_nutrients_over_500_hours() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(9_020));
+    state.geometry.length_cm = 60.0;
+    state.geometry.width_cm = 30.0;
+    state.geometry.height_cm = 35.0;
+    state.geometry.fill_height_cm = 30.0;
+    state.water = WaterState::default_for_volume_l(state.water_volume_l());
+    state.water.temperature_c = 25.0;
+    state.environment.ambient_temp_c = 25.0;
+
+    let vol = state.water_volume_l();
+    state.water.ammonia_total_mg_n_total = 1.0;
+    state.water.nitrite_mg_n_total = 0.5;
+    state.water.nitrate_mg_n_total = 20.0;
+    state.water.dissolved_oxygen_mg_total = 8.0 * vol;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 10.0 * vol;
+    state.water.dissolved_organic_carbon_mg_c_total = 5.0;
+    state.water.dissolved_organic_nitrogen_mg_n_total = 2.0;
+    state.water.calcium_mg_total = 40.0 * vol;
+    state.water.magnesium_mg_total = 10.0 * vol;
+    state.water.alkalinity_meq_total = 4.0 * vol;
+    state.water.bicarbonate_mg_total = 150.0 * vol;
+    state.water.phosphate_mg_p_total = 2.0;
+
+    state.plant_guilds = vec![
+        PlantGuildState {
+            biomass_g: 8.0,
+            ..PlantGuildState::default()
+        },
+        PlantGuildState {
+            biomass_g: 6.0,
+            ..PlantGuildState::default()
+        },
+        PlantGuildState {
+            biomass_g: 4.0,
+            ..PlantGuildState::default()
+        },
+    ];
+
+    state.animal.adults_count = 5;
+    state.animal.juveniles_count = 0;
+    state.animal.berried_females_count = 0;
+    state.algae.periphyton_biomass_g = 1.0;
+    state.algae.suspended_biomass_g = 0.2;
+    state.detritus.fine_detritus_g_total = 0.5;
+    state.detritus.particulate_organics_g_total = 0.2;
+    state.microfauna.population_index = 0.0;
+    state.microfauna.grazing_pressure_index = 0.0;
+
+    state.hardware.light.enabled = true;
+    state.hardware.light.intensity_index = 0.8;
+    state.hardware.light.photoperiod_hours = 10.0;
+    state.hardware.aeration.enabled = false;
+
+    state.process_params = ProcessParams::default();
+    state.process_params.reaeration_kla_base = 0.0;
+    state.process_params.aeration_kla_boost = 0.0;
+    state.hardware.filter.flow_lph = 0.0;
+
+    state.substrate_layers[0].nutrient_store_mg_n_total = 20.0;
+    state.substrate_layers[0].nutrient_store_mg_p_total = 5.0;
+    state.reseed_stability_tracker();
+
+    let initial_total_n = state.total_nitrogen();
+    let mut cumulative_exported_n_mg = 0.0;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_budget_tracking();
+
+    let trim_interval = 168;
+    let trim_fraction = 0.25;
+    for hour in 1..=500 {
+        if hour % trim_interval == 0 {
+            let trimmed_n_mg: f64 = engine
+                .full_state()
+                .plant_guilds
+                .iter()
+                .map(|p| tank_core::plant_nitrogen_mg(p.biomass_g * trim_fraction))
+                .sum();
+            cumulative_exported_n_mg += trimmed_n_mg;
+
+            engine.apply_action(PlayerAction::TrimPlantsAndRemove {
+                fraction: trim_fraction,
+            })?;
+        }
+        engine.step_hours(1)?;
+    }
+
+    let final_total_n = engine.full_state().total_nitrogen();
+
+    assert!(
+        cumulative_exported_n_mg > 1.0,
+        "expected non-trivial nutrient export, got {cumulative_exported_n_mg:.4} mg N"
+    );
+    assert!(
+        final_total_n < initial_total_n,
+        "total N should decrease with trim-and-remove: initial={initial_total_n:.4}, final={final_total_n:.4}"
+    );
+
+    let actual_decrease = initial_total_n - final_total_n;
+    assert!(
+        (actual_decrease - cumulative_exported_n_mg).abs() < 2.0,
+        "N decrease ({actual_decrease:.4} mg) should be close to cumulative export ({cumulative_exported_n_mg:.4} mg)"
+    );
+
+    Ok(())
+}

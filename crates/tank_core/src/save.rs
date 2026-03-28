@@ -13,7 +13,7 @@ use crate::{
 ///
 /// When you bump from N to N+1, you **must** also append a migration function
 /// to [`MIGRATIONS`]. See the migration contract below.
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: u32 = 6;
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Oldest schema version that the migration chain can handle.
@@ -93,7 +93,13 @@ const MIGRATIONS: &[MigrationFn] = &[
     // condition_index, reserve_g, maturation_accum) into nested StageCohort
     // structs (juvenile, sub_adult, adult) with proportional reserve
     // distribution. Adds new molt lifecycle fields with sensible defaults.
+    // Also renames the TrimPlants queued action to TrimPlantsAndRemove.
     migrate_v4_to_v5,
+    // Index 3: schema 5 → 6
+    // Add habitat registry, geometry.hardscape_area_cm2, and filter.media_area_cm2.
+    // All new fields use #[serde(default)]; habitat registry is populated in the
+    // post-migration fixup.
+    migrate_v5_to_v6,
 ];
 
 // Compile-time check: MIGRATIONS length must equal SCHEMA_VERSION - MIN_SUPPORTED_SCHEMA.
@@ -194,6 +200,12 @@ impl SaveFile {
             stability_tracker_present,
             carbonate_cache_normalized,
         );
+
+        // Ensure the habitat registry is populated for saves that predate it.
+        if save.state.habitat_registry.is_empty() {
+            save.state.habitat_registry =
+                crate::types::habitat::compute_habitat_registry(&save.state);
+        }
 
         Ok(save)
     }
@@ -379,11 +391,17 @@ fn migrate_v3_to_v4(value: &mut Value) -> Result<(), SimError> {
     Ok(())
 }
 
-/// Schema 4 → 5: transform flat AnimalState fields into nested StageCohort
-/// structs. The old `adults_count`, `juveniles_count`, `condition_index`,
-/// `reserve_g`, and `maturation_accum` fields are replaced by nested
-/// `juvenile`, `sub_adult`, and `adult` objects. Reserve is distributed
-/// proportional to biomass. New molt lifecycle fields get sensible defaults.
+/// Schema 4 → 5: two structural changes.
+///
+/// 1. **Stage-structured shrimp model**: transform flat `AnimalState` fields
+///    (`adults_count`, `juveniles_count`, `condition_index`, `reserve_g`,
+///    `maturation_accum`) into nested `StageCohort` structs (`juvenile`,
+///    `sub_adult`, `adult`). Reserve is distributed proportional to biomass.
+///    New molt lifecycle fields (`molt_readiness`, `inter_molt_timer_days`,
+///    `last_molt_success`, `failed_molt_accum`) get sensible defaults.
+///
+/// 2. **Action rename**: `TrimPlants` → `TrimPlantsAndRemove` in the
+///    `queued_actions` array.
 fn migrate_v4_to_v5(value: &mut Value) -> Result<(), SimError> {
     // --- Stage-structured shrimp model migration ---
     //
@@ -552,6 +570,13 @@ fn migrate_v4_to_v5(value: &mut Value) -> Result<(), SimError> {
         }
     }
 
+    Ok(())
+}
+
+/// Schema 5 → 6: add habitat registry, geometry.hardscape_area_cm2, and
+/// filter.media_area_cm2. All new fields carry `#[serde(default)]` so no
+/// JSON transform is required.
+fn migrate_v5_to_v6(_value: &mut Value) -> Result<(), SimError> {
     Ok(())
 }
 

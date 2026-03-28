@@ -12,6 +12,9 @@ pub struct TankGeometry {
     pub open_top: bool,
     #[serde(default = "default_lid_exchange_factor")]
     pub lid_exchange_factor: f64,
+    /// Configurable hardscape surface area (rocks, driftwood) in cm².
+    #[serde(default)]
+    pub hardscape_area_cm2: f64,
 }
 
 impl TankGeometry {
@@ -99,6 +102,7 @@ impl Default for TankGeometry {
             glass_thickness_mm: 5.0,
             open_top: true,
             lid_exchange_factor: DEFAULT_LID_EXCHANGE_FACTOR,
+            hardscape_area_cm2: 0.0,
         }
     }
 }

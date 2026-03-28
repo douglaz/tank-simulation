@@ -356,6 +356,40 @@ fn legacy_schema_v3_saves_seed_reserve_from_existing_shrimp_biomass() -> Result<
     Ok(())
 }
 
+#[test]
+fn legacy_schema_v4_saves_migrate_trim_plants_to_trim_and_remove() -> Result<(), SimError> {
+    let state = TankState::new(SimSeed(110));
+    let json = serde_json::json!({
+        "schema_version": 4,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [
+            { "TrimPlants": { "fraction": 0.3 } },
+            { "Feed": { "grams": 1.0 } },
+            { "TrimPlants": { "fraction": 0.5 } },
+        ],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+
+    let engine = migrated.into_engine()?;
+    let actions = engine.queued_actions();
+    assert_eq!(actions.len(), 3);
+    assert_eq!(
+        actions[0],
+        PlayerAction::TrimPlantsAndRemove { fraction: 0.3 }
+    );
+    assert_eq!(actions[1], PlayerAction::Feed { grams: 1.0 });
+    assert_eq!(
+        actions[2],
+        PlayerAction::TrimPlantsAndRemove { fraction: 0.5 }
+    );
+
+    Ok(())
+}
+
 fn assert_schema_v2_migration_failure(state_json: serde_json::Value, expected_message: &str) {
     let json = serde_json::json!({
         "schema_version": 2,

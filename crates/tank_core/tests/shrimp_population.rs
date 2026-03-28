@@ -1,4 +1,4 @@
-use tank_core::systems::chemistry::compute_nh3_mg_l;
+use tank_core::systems::chemistry::compute_nh3_mg_n_per_l;
 use tank_core::{
     systems::shrimp::step_daily_shrimp, EggCohort, Engine, EventKind, PlayerAction, ProcessParams,
     SimError, SimSeed, SimulationEngine, TankState, JUVENILE_SHRIMP_BIOMASS_G,
@@ -143,7 +143,7 @@ fn hatch_produces_juveniles() {
         state.animal.juveniles_count,
         state.animal.reserve_g,
         final_view.tan_mg_n_per_l(),
-        compute_nh3_mg_l(
+        compute_nh3_mg_n_per_l(
             final_view.tan_mg_n_per_l(),
             state.water.ph,
             state.water.temperature_c,

@@ -274,24 +274,35 @@ pub fn nitrogen_budget_components(state: &TankState) -> [BudgetComponent; 18] {
             amount_mg: live_biomass_nitrogen_mg(state.microbe.comammox_biomass_g, n_to_c_ratio),
         },
         BudgetComponent {
-            label: "animal.adults_count",
+            label: "animal.adult.count",
             amount_mg: shrimp_nitrogen_mg(
-                state.animal.adults_count,
+                state.animal.adult.count,
+                0,
                 0,
                 state.shrimp_params.body_nitrogen_mg_per_g_wet_mass,
             ),
         },
         BudgetComponent {
-            label: "animal.juveniles_count",
+            label: "animal.sub_adult.count",
             amount_mg: shrimp_nitrogen_mg(
                 0,
-                state.animal.juveniles_count,
+                state.animal.sub_adult.count,
+                0,
+                state.shrimp_params.body_nitrogen_mg_per_g_wet_mass,
+            ),
+        },
+        BudgetComponent {
+            label: "animal.juvenile.count",
+            amount_mg: shrimp_nitrogen_mg(
+                0,
+                0,
+                state.animal.juvenile.count,
                 state.shrimp_params.body_nitrogen_mg_per_g_wet_mass,
             ),
         },
         BudgetComponent {
             label: "animal.reserve_g",
-            amount_mg: detritus_nitrogen_mg(state.animal.reserve_g, n_to_c_ratio),
+            amount_mg: detritus_nitrogen_mg(state.animal.total_reserve_g(), n_to_c_ratio),
         },
         BudgetComponent {
             label: "microfauna.reserve_g",
@@ -371,24 +382,35 @@ pub fn carbon_budget_components(state: &TankState) -> [BudgetComponent; 15] {
             amount_mg: live_biomass_carbon_mg(state.microbe.comammox_biomass_g, n_to_c_ratio),
         },
         BudgetComponent {
-            label: "animal.adults_count",
+            label: "animal.adult.count",
             amount_mg: shrimp_carbon_mg(
-                state.animal.adults_count,
+                state.animal.adult.count,
+                0,
                 0,
                 state.shrimp_params.body_carbon_mg_per_g_wet_mass,
             ),
         },
         BudgetComponent {
-            label: "animal.juveniles_count",
+            label: "animal.sub_adult.count",
             amount_mg: shrimp_carbon_mg(
                 0,
-                state.animal.juveniles_count,
+                state.animal.sub_adult.count,
+                0,
+                state.shrimp_params.body_carbon_mg_per_g_wet_mass,
+            ),
+        },
+        BudgetComponent {
+            label: "animal.juvenile.count",
+            amount_mg: shrimp_carbon_mg(
+                0,
+                0,
+                state.animal.juvenile.count,
                 state.shrimp_params.body_carbon_mg_per_g_wet_mass,
             ),
         },
         BudgetComponent {
             label: "animal.reserve_g",
-            amount_mg: detritus_carbon_mg(state.animal.reserve_g, n_to_c_ratio),
+            amount_mg: detritus_carbon_mg(state.animal.total_reserve_g(), n_to_c_ratio),
         },
         BudgetComponent {
             label: "microfauna.reserve_g",
@@ -508,22 +530,24 @@ pub fn shrimp_body_detrital_mass_g(
 
 pub fn shrimp_nitrogen_mg(
     adults_count: u32,
+    sub_adult_count: u32,
     juveniles_count: u32,
     body_nitrogen_mg_per_g_wet_mass: f64,
 ) -> f64 {
     shrimp_body_nitrogen_mg(
-        shrimp_biomass_g(adults_count, juveniles_count),
+        shrimp_biomass_g(adults_count, sub_adult_count, juveniles_count),
         body_nitrogen_mg_per_g_wet_mass,
     )
 }
 
 pub fn shrimp_carbon_mg(
     adults_count: u32,
+    sub_adult_count: u32,
     juveniles_count: u32,
     body_carbon_mg_per_g_wet_mass: f64,
 ) -> f64 {
     shrimp_body_carbon_mg(
-        shrimp_biomass_g(adults_count, juveniles_count),
+        shrimp_biomass_g(adults_count, sub_adult_count, juveniles_count),
         body_carbon_mg_per_g_wet_mass,
     )
 }

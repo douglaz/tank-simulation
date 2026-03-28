@@ -4,6 +4,7 @@ pub mod budget;
 pub mod environment;
 pub mod events;
 pub mod geometry;
+pub mod habitat;
 pub mod hardware;
 pub mod process;
 pub mod provenance;
@@ -34,6 +35,7 @@ pub use budget::{
 pub use environment::EnvironmentState;
 pub use events::{EventCause, EventKind, EventSeverity, SimEvent};
 pub use geometry::TankGeometry;
+pub use habitat::{compute_habitat_registry, find_habitat, HabitatEntry, HabitatKind};
 pub use hardware::{
     AerationState, FilterHardware, FilterState, HardwareState, HeaterState, LightState,
 };

@@ -1,6 +1,6 @@
 use tank_core::{
     systems::chemistry::{
-        compute_nh3_mg_l, resolve_carbonate_state, solve_carbonate_equilibrium,
+        compute_nh3_mg_n_per_l, resolve_carbonate_state, solve_carbonate_equilibrium,
         validate_source_water_carbonate_profile, SourceWaterCarbonateValidationError,
     },
     Engine, ProcessParams, SimSeed, SimulationEngine, TankState, WaterState,
@@ -77,9 +77,9 @@ fn nh3_speciation_matches_reference_formula() {
         tan_mg_l * fraction_nh3
     };
 
-    let computed = compute_nh3_mg_l(tan_mg_l, ph, temp_c);
+    let computed = compute_nh3_mg_n_per_l(tan_mg_l, ph, temp_c);
     assert!((computed - expected).abs() < 1e-12);
-    assert!(compute_nh3_mg_l(tan_mg_l, 8.4, temp_c) > computed);
+    assert!(compute_nh3_mg_n_per_l(tan_mg_l, 8.4, temp_c) > computed);
 }
 
 #[test]

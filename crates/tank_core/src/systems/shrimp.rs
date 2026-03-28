@@ -1,4 +1,4 @@
-use crate::systems::chemistry::{compute_nh3_mg_l, resolve_carbonate_state};
+use crate::systems::chemistry::{compute_nh3_mg_n_per_l, resolve_carbonate_state};
 use crate::types::{
     algae_carbon_mg, algae_detrital_mass_g, algae_nitrogen_mg, detritus_carbon_mg,
     detritus_nitrogen_mg, shrimp_body_detrital_mass_g, EggCohort, EventCause, EventKind,
@@ -28,7 +28,7 @@ pub fn step_hourly_shrimp_stress(state: &mut TankState) {
     }
 
     let tan_mg_l = chemistry.tan_mg_n_per_l();
-    let nh3_mg_l = compute_nh3_mg_l(tan_mg_l, state.water.ph, state.water.temperature_c);
+    let nh3_mg_l = compute_nh3_mg_n_per_l(tan_mg_l, state.water.ph, state.water.temperature_c);
     let nitrite_mg_l = chemistry.nitrite_mg_n_per_l();
     let do_mg_l = chemistry.do_mg_per_l();
     let temp = state.water.temperature_c;
@@ -273,7 +273,7 @@ fn route_consumed_food(state: &mut TankState, consumed_n_mg: f64, consumed_c_mg:
 fn update_condition(state: &mut TankState) {
     let chemistry = state.concentrations();
     let tan_mg_l = chemistry.tan_mg_n_per_l();
-    let nh3_mg_l = compute_nh3_mg_l(tan_mg_l, state.water.ph, state.water.temperature_c);
+    let nh3_mg_l = compute_nh3_mg_n_per_l(tan_mg_l, state.water.ph, state.water.temperature_c);
     let nitrite_mg_l = chemistry.nitrite_mg_n_per_l();
     let do_mg_l = chemistry.do_mg_per_l();
     let temp = state.water.temperature_c;

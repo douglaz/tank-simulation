@@ -162,7 +162,10 @@ fn validate_invariants_inner(state: &TankState) -> Result<(), SimError> {
             value: state.geometry.fill_height_cm,
         });
     }
-    check_non_negative("animal.reserve_g", state.animal.reserve_g)?;
+    check_non_negative("animal.total_reserve_g", state.animal.total_reserve_g())?;
+    check_non_negative("animal.adult.reserve_g", state.animal.adult.reserve_g)?;
+    check_non_negative("animal.sub_adult.reserve_g", state.animal.sub_adult.reserve_g)?;
+    check_non_negative("animal.juvenile.reserve_g", state.animal.juvenile.reserve_g)?;
 
     // Process parameters: reject negative coefficients that would produce
     // nonsensical physics (negative heat transfer, negative reaeration, etc.).

@@ -1,5 +1,5 @@
 use crate::{
-    systems::chemistry::compute_nh3_mg_l,
+    systems::chemistry::compute_nh3_mg_n_per_l,
     types::{EventCause, EventKind, EventSeverity, SimEvent, TankState},
 };
 
@@ -11,7 +11,7 @@ pub fn emit_hourly_threshold_events(state: &mut TankState) {
     }
 
     let tan_mg_l = chemistry.tan_mg_n_per_l();
-    let nh3_mg_l = compute_nh3_mg_l(tan_mg_l, state.water.ph, state.water.temperature_c);
+    let nh3_mg_l = compute_nh3_mg_n_per_l(tan_mg_l, state.water.ph, state.water.temperature_c);
     let nitrite_mg_l = chemistry.nitrite_mg_n_per_l();
     let do_mg_l = chemistry.do_mg_per_l();
 

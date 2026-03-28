@@ -6,9 +6,9 @@ use crate::rng::{SimRng, SimSeed};
 
 use super::{
     AlgaeState, AnimalState, BudgetTotals, ConcentrationView, DetritusState, EnvironmentState,
-    FilterState, HardwareState, MicrobeState, MicrofaunaState, PlantGuild, PlantGuildState,
-    ProcessParams, ShrimpRuntimeParams, SimEvent, SourceWaterProfile, StabilityTracker,
-    SubstrateKind, SubstrateLayerState, TankGeometry, WaterState,
+    FilterState, HabitatEntry, HardwareState, MicrobeState, MicrofaunaState, PlantGuild,
+    PlantGuildState, ProcessParams, ShrimpRuntimeParams, SimEvent, SourceWaterProfile,
+    StabilityTracker, SubstrateKind, SubstrateLayerState, TankGeometry, WaterState,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -46,6 +46,10 @@ pub struct TankState {
     /// Tracks recent chemistry swings for shrimp stress.
     #[serde(default)]
     pub stability_tracker: StabilityTracker,
+    /// Habitat registry: colonizable areas and exposure modifiers for each
+    /// ecological zone. Recomputed daily from geometry, hardware, and plant state.
+    #[serde(default)]
+    pub habitat_registry: Vec<HabitatEntry>,
 }
 
 impl TankState {
@@ -92,10 +96,12 @@ impl TankState {
             process_params: ProcessParams::default(),
             shrimp_params: ShrimpRuntimeParams::default(),
             stability_tracker: StabilityTracker::default(),
+            habitat_registry: Vec::new(),
         };
         // Seed stability baseline from the freshly built water state so the
         // first daily update does not register a false chemistry swing.
         state.reseed_stability_tracker();
+        state.habitat_registry = super::habitat::compute_habitat_registry(&state);
         state
     }
 
@@ -132,6 +138,7 @@ impl TankState {
             .water
             .rescale_totals_for_volume(old_volume_l, volume_l);
         state.reseed_stability_tracker();
+        state.habitat_registry = super::habitat::compute_habitat_registry(&state);
         state
     }
 
