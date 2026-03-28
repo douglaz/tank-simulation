@@ -3,12 +3,11 @@ use crate::types::{SimError, TankState};
 const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
 
 pub fn validate_invariants(state: &TankState) -> Result<(), SimError> {
-    let mut probe = state.clone();
-    enforce_invariants(&mut probe)
+    validate_invariants_inner(state)
 }
 
 pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
-    validate_invariants(state)?;
+    validate_invariants_inner(state)?;
 
     state.water.dissolved_oxygen_mg_total =
         normalized_non_negative_if_finite(state.water.dissolved_oxygen_mg_total);
@@ -59,7 +58,7 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
     Ok(())
 }
 
-fn validate_invariants(state: &TankState) -> Result<(), SimError> {
+fn validate_invariants_inner(state: &TankState) -> Result<(), SimError> {
     check_non_negative(
         "ammonia_total_mg_n_total",
         state.water.ammonia_total_mg_n_total,

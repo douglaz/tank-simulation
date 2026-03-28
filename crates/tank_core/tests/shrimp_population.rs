@@ -1,7 +1,8 @@
 use tank_core::systems::chemistry::compute_nh3_mg_l;
 use tank_core::{
-    EggCohort, Engine, EventKind, PlayerAction, ProcessParams, SimError, SimSeed, SimulationEngine,
-    TankState,
+    systems::shrimp::step_daily_shrimp, EggCohort, Engine, EventKind, PlayerAction, ProcessParams,
+    SimError, SimSeed, SimulationEngine, TankState, JUVENILE_SHRIMP_BIOMASS_G,
+    LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
 };
 
 /// Creates a well-conditioned tank with shrimp for population tests.
@@ -63,6 +64,13 @@ fn shrimp_test_state(seed: SimSeed) -> TankState {
     state.stability_tracker.prev_ph = 7.5;
 
     state
+}
+
+fn assert_close(actual: f64, expected: f64, tolerance: f64) {
+    assert!(
+        (actual - expected).abs() <= tolerance,
+        "expected {expected}, got {actual} (tolerance {tolerance})"
+    );
 }
 
 #[test]
@@ -135,6 +143,72 @@ fn hatch_produces_juveniles() -> Result<(), SimError> {
     );
 
     Ok(())
+}
+
+#[test]
+fn reserve_funds_hatching_before_dissolved_pools() {
+    let mut state = shrimp_test_state(SimSeed(7_150));
+    state
+        .process_params
+        .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.shrimp_params.hatch_success_base = 1.0;
+    state.water.ammonia_total_mg_n_total = 0.0;
+    state.water.dissolved_organic_nitrogen_mg_n_total = 0.0;
+    state.water.dissolved_organic_carbon_mg_c_total = 0.0;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 0.0;
+    state.animal.adults_count = 1;
+    state.animal.juveniles_count = 0;
+    state.animal.berried_females_count = 1;
+    state.animal.egg_progress_days = 20.0;
+    state.animal.egg_cohorts = vec![EggCohort {
+        count: 1,
+        progress_days: 20.0,
+    }];
+    state.animal.reserve_g =
+        f64::from(25) * JUVENILE_SHRIMP_BIOMASS_G * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+
+    step_daily_shrimp(&mut state);
+
+    assert_eq!(state.animal.juveniles_count, 25);
+    assert_eq!(state.animal.berried_females_count, 0);
+    assert_close(state.animal.reserve_g, 0.0, 1e-9);
+    assert_close(state.water.ammonia_total_mg_n_total, 0.0, 1e-9);
+    assert_close(state.water.dissolved_organic_nitrogen_mg_n_total, 0.0, 1e-9);
+    assert_close(state.water.dissolved_organic_carbon_mg_c_total, 0.0, 1e-9);
+    assert_close(state.water.dissolved_inorganic_carbon_mg_c_total, 0.0, 1e-9);
+}
+
+#[test]
+fn reserve_funds_juvenile_maturation_before_dissolved_pools() {
+    let mut state = shrimp_test_state(SimSeed(7_151));
+    state
+        .process_params
+        .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+    state.process_params.shrimp_juvenile_maturation_days = 1.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.water.ammonia_total_mg_n_total = 0.0;
+    state.water.dissolved_organic_nitrogen_mg_n_total = 0.0;
+    state.water.dissolved_organic_carbon_mg_c_total = 0.0;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 0.0;
+    state.animal.adults_count = 0;
+    state.animal.juveniles_count = 1;
+    state.animal.reserve_g = (tank_core::ADULT_SHRIMP_BIOMASS_G - JUVENILE_SHRIMP_BIOMASS_G)
+        * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+
+    step_daily_shrimp(&mut state);
+
+    assert_eq!(state.animal.adults_count, 1);
+    assert_eq!(state.animal.juveniles_count, 0);
+    assert_close(state.animal.reserve_g, 0.0, 1e-9);
+    assert_close(state.water.ammonia_total_mg_n_total, 0.0, 1e-9);
+    assert_close(state.water.dissolved_organic_nitrogen_mg_n_total, 0.0, 1e-9);
+    assert_close(state.water.dissolved_organic_carbon_mg_c_total, 0.0, 1e-9);
+    assert_close(state.water.dissolved_inorganic_carbon_mg_c_total, 0.0, 1e-9);
 }
 
 #[test]

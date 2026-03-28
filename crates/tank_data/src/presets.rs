@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Provenance {
     pub source_title: Option<String>,
@@ -325,6 +327,16 @@ pub struct ProcessParamsPreset {
     pub shrimp_periphyton_grazing_g_per_shrimp_per_day: f64,
     #[serde(default = "default_shrimp_condition_smoothing")]
     pub shrimp_condition_smoothing: f64,
+    #[serde(default = "default_shrimp_assimilation_efficiency")]
+    pub shrimp_assimilation_efficiency: f64,
+    #[serde(default = "default_shrimp_respiration_fraction")]
+    pub shrimp_respiration_fraction_of_assimilated: f64,
+    #[serde(default = "default_shrimp_excretion_fraction")]
+    pub shrimp_excretion_fraction_of_assimilated: f64,
+    #[serde(default = "default_shrimp_growth_fraction")]
+    pub shrimp_growth_fraction_of_assimilated: f64,
+    #[serde(default = "default_shrimp_o2_per_mg_c_respired")]
+    pub shrimp_o2_per_mg_c_respired: f64,
 
     // -- Microfauna turnover --
     #[serde(default = "default_microfauna_mineralization_boost")]
@@ -520,6 +532,21 @@ fn default_shrimp_periphyton_grazing() -> f64 {
 }
 fn default_shrimp_condition_smoothing() -> f64 {
     0.15
+}
+fn default_shrimp_assimilation_efficiency() -> f64 {
+    0.50
+}
+fn default_shrimp_respiration_fraction() -> f64 {
+    0.70
+}
+fn default_shrimp_excretion_fraction() -> f64 {
+    0.10
+}
+fn default_shrimp_growth_fraction() -> f64 {
+    0.20
+}
+fn default_shrimp_o2_per_mg_c_respired() -> f64 {
+    2.67
 }
 fn default_microfauna_mineralization_boost() -> f64 {
     0.15
@@ -719,6 +746,26 @@ impl ProcessParamsPreset {
                 "shrimp_condition_smoothing",
                 self.shrimp_condition_smoothing,
             ),
+            (
+                "shrimp_assimilation_efficiency",
+                self.shrimp_assimilation_efficiency,
+            ),
+            (
+                "shrimp_respiration_fraction_of_assimilated",
+                self.shrimp_respiration_fraction_of_assimilated,
+            ),
+            (
+                "shrimp_excretion_fraction_of_assimilated",
+                self.shrimp_excretion_fraction_of_assimilated,
+            ),
+            (
+                "shrimp_growth_fraction_of_assimilated",
+                self.shrimp_growth_fraction_of_assimilated,
+            ),
+            (
+                "shrimp_o2_per_mg_c_respired",
+                self.shrimp_o2_per_mg_c_respired,
+            ),
         ];
         for (name, value) in shrimp_fields {
             if !value.is_finite() {
@@ -727,6 +774,46 @@ impl ProcessParamsPreset {
             if *value < 0.0 {
                 return Err(format!("field `{name}` must be non-negative, got {value}"));
             }
+        }
+        if self.shrimp_assimilation_efficiency <= 0.0 || self.shrimp_assimilation_efficiency >= 1.0
+        {
+            return Err(format!(
+                "shrimp_assimilation_efficiency must be in (0, 1), got {}",
+                self.shrimp_assimilation_efficiency
+            ));
+        }
+        if self.shrimp_respiration_fraction_of_assimilated > 1.0 {
+            return Err(format!(
+                "shrimp_respiration_fraction_of_assimilated must be <= 1.0, got {}",
+                self.shrimp_respiration_fraction_of_assimilated
+            ));
+        }
+        if self.shrimp_excretion_fraction_of_assimilated > 1.0 {
+            return Err(format!(
+                "shrimp_excretion_fraction_of_assimilated must be <= 1.0, got {}",
+                self.shrimp_excretion_fraction_of_assimilated
+            ));
+        }
+        if self.shrimp_growth_fraction_of_assimilated > 1.0 {
+            return Err(format!(
+                "shrimp_growth_fraction_of_assimilated must be <= 1.0, got {}",
+                self.shrimp_growth_fraction_of_assimilated
+            ));
+        }
+        if self.shrimp_o2_per_mg_c_respired <= 0.0 {
+            return Err(format!(
+                "shrimp_o2_per_mg_c_respired must be > 0.0, got {}",
+                self.shrimp_o2_per_mg_c_respired
+            ));
+        }
+        let shrimp_partition_sum = self.shrimp_respiration_fraction_of_assimilated
+            + self.shrimp_excretion_fraction_of_assimilated
+            + self.shrimp_growth_fraction_of_assimilated;
+        if (shrimp_partition_sum - 1.0).abs() > SHRIMP_ROUTE_SUM_TOLERANCE {
+            return Err(format!(
+                "shrimp assimilated partition sum must equal 1.0, got {}",
+                shrimp_partition_sum
+            ));
         }
         // Validate microfauna turnover fields
         let microfauna_fields: &[(&str, f64)] = &[
@@ -774,4 +861,32 @@ pub struct ScenarioPreset {
     pub fill_height_cm: f64,
     pub ambient_temp_c: f64,
     pub provenance: Option<Provenance>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProcessParamsPreset;
+
+    fn default_process_preset() -> ProcessParamsPreset {
+        toml::from_str(include_str!("../data/process/default.toml"))
+            .expect("default process preset should parse")
+    }
+
+    #[test]
+    fn process_preset_rejects_degenerate_shrimp_assimilation_efficiency() {
+        let mut preset = default_process_preset();
+        preset.shrimp_assimilation_efficiency = 0.0;
+
+        let err = preset.validate().expect_err("preset should be rejected");
+        assert!(err.contains("shrimp_assimilation_efficiency"));
+    }
+
+    #[test]
+    fn process_preset_rejects_invalid_shrimp_partition_sum() {
+        let mut preset = default_process_preset();
+        preset.shrimp_growth_fraction_of_assimilated = 0.25;
+
+        let err = preset.validate().expect_err("preset should be rejected");
+        assert!(err.contains("partition sum"));
+    }
 }

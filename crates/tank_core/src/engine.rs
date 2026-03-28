@@ -5,7 +5,7 @@ use crate::{
     rng::SimSeed,
     systems,
     types::{
-        live_biomass_carbon_mg, live_biomass_nitrogen_mg, BudgetDelta, BudgetLedger,
+        live_biomass_carbon_mg, live_biomass_nitrogen_mg, BudgetDelta, BudgetEntry, BudgetLedger,
         BudgetSnapshot, ElementBudget, EventCause, EventKind, EventSeverity, PlayerAction,
         SimError, SimEvent, TankSnapshot, TankState, TickBudgetRecord,
     },
@@ -559,6 +559,7 @@ fn route_live_biomass_to_dissolved_organics(state: &mut TankState, biomass_g: f6
         live_biomass_carbon_mg(biomass_g, n_to_c_ratio);
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn tick_has_closed_system_nitrogen(tick: &TickBudgetRecord) -> bool {
     !tick
         .entries
@@ -566,6 +567,7 @@ fn tick_has_closed_system_nitrogen(tick: &TickBudgetRecord) -> bool {
         .any(|entry| entry_has_open_action_flux(entry.label.as_str(), entry.delta.nitrogen))
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn tick_has_closed_system_carbon(tick: &TickBudgetRecord) -> bool {
     !tick
         .entries
@@ -605,6 +607,7 @@ where
         .sum()
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn entry_has_open_action_flux(label: &str, budget: ElementBudget) -> bool {
     is_open_system_action_label(label) && element_budget_has_flux(budget)
 }
@@ -620,6 +623,7 @@ fn is_open_system_action_label(label: &str) -> bool {
     )
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn element_budget_has_flux(budget: ElementBudget) -> bool {
     budget.in_mg.abs() > BUDGET_GUARD_TOLERANCE_MG
         || budget.out_mg.abs() > BUDGET_GUARD_TOLERANCE_MG
@@ -874,9 +878,8 @@ mod tests {
             },
         );
 
-        let err = enforce_tracked_tick_budget_guard(&tick).expect_err(
-            "external carbon export should not hide unrelated same-tick carbon drift",
-        );
+        let err = enforce_tracked_tick_budget_guard(&tick)
+            .expect_err("external carbon export should not hide unrelated same-tick carbon drift");
         assert_eq!(
             err,
             SimError::BudgetImbalance {

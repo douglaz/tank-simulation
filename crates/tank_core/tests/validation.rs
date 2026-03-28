@@ -108,6 +108,71 @@ fn step_hours_rejects_invalid_shrimp_assimilation_before_simulation() {
 }
 
 #[test]
+fn step_hours_leaves_state_untouched_when_clamps_precede_a_validation_error() {
+    let mut state = tank_core::TankState::new(SimSeed(16));
+    state.water.dissolved_oxygen_mg_total = -3.0;
+    state.water.ph = 9.2;
+    state.hardware.light.intensity_index = 1.4;
+    state.animal.egg_progress_days = -2.0;
+    state.animal.egg_cohorts.push(tank_core::EggCohort {
+        count: 0,
+        progress_days: 4.0,
+    });
+    state.process_params.shrimp_assimilation_efficiency = 1.2;
+    let expected = state.clone();
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    let result = engine.step_hours(1);
+
+    assert_eq!(
+        result,
+        Err(SimError::InvariantViolation {
+            field: "process.shrimp_assimilation_efficiency",
+            value: 1.2,
+        })
+    );
+    assert_eq!(engine.full_state(), &expected);
+}
+
+#[test]
+fn step_hours_rejects_zero_shrimp_assimilation_before_simulation() {
+    let mut state = tank_core::TankState::new(SimSeed(16));
+    state.process_params.shrimp_assimilation_efficiency = 0.0;
+    let expected = state.clone();
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    let result = engine.step_hours(1);
+
+    assert_eq!(
+        result,
+        Err(SimError::InvariantViolation {
+            field: "process.shrimp_assimilation_efficiency",
+            value: 0.0,
+        })
+    );
+    assert_eq!(engine.full_state(), &expected);
+}
+
+#[test]
+fn step_hours_rejects_unity_shrimp_assimilation_before_simulation() {
+    let mut state = tank_core::TankState::new(SimSeed(17));
+    state.process_params.shrimp_assimilation_efficiency = 1.0;
+    let expected = state.clone();
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    let result = engine.step_hours(1);
+
+    assert_eq!(
+        result,
+        Err(SimError::InvariantViolation {
+            field: "process.shrimp_assimilation_efficiency",
+            value: 1.0,
+        })
+    );
+    assert_eq!(engine.full_state(), &expected);
+}
+
+#[test]
 fn step_hours_rejects_non_positive_shrimp_o2_ratio_before_simulation() {
     let mut state = tank_core::TankState::new(SimSeed(15));
     state.process_params.shrimp_o2_per_mg_c_respired = 0.0;
@@ -121,6 +186,26 @@ fn step_hours_rejects_non_positive_shrimp_o2_ratio_before_simulation() {
         Err(SimError::InvariantViolation {
             field: "process.shrimp_o2_per_mg_c_respired",
             value: 0.0,
+        })
+    );
+    assert_eq!(engine.full_state(), &expected);
+}
+
+#[test]
+fn step_hours_read_only_validation_does_not_preserve_partial_clamps() {
+    let mut state = tank_core::TankState::new(SimSeed(18));
+    state.water.ph = 9.2;
+    state.animal.reserve_g = -0.01;
+    let expected = state.clone();
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    let result = engine.step_hours(1);
+
+    assert_eq!(
+        result,
+        Err(SimError::InvariantViolation {
+            field: "animal.reserve_g",
+            value: -0.01,
         })
     );
     assert_eq!(engine.full_state(), &expected);

@@ -1,10 +1,10 @@
 use crate::systems::chemistry::{compute_nh3_mg_l, resolve_carbonate_state};
 use crate::types::{
     algae_carbon_mg, algae_detrital_mass_g, algae_nitrogen_mg, detritus_carbon_mg,
-    detritus_nitrogen_mg,
-    live_biomass_carbon_mg, live_biomass_detrital_mass_g, live_biomass_nitrogen_mg, EggCohort,
-    EventCause, EventKind, EventSeverity, ShrimpRuntimeParams, TankState, ADULT_SHRIMP_BIOMASS_G,
-    JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
+    detritus_nitrogen_mg, live_biomass_carbon_mg, live_biomass_detrital_mass_g,
+    live_biomass_nitrogen_mg, EggCohort, EventCause, EventKind, EventSeverity, ShrimpRuntimeParams,
+    TankState, ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G,
+    LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
 };
 
 const JUVENILES_PER_CLUTCH: u32 = 25;

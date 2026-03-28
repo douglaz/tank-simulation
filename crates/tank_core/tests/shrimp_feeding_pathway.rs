@@ -1,4 +1,5 @@
 use tank_core::systems::chemistry::solve_carbonate_equilibrium;
+use tank_core::systems::shrimp::step_daily_shrimp;
 /// Tests for the shrimp ingestion → assimilation → excretion → feces → respiration loop.
 ///
 /// These tests verify the consumer routing contract from docs/ROUTING.md:
@@ -7,7 +8,8 @@ use tank_core::systems::chemistry::solve_carbonate_equilibrium;
 ///   fecal_fraction = 1.0 - assimilation_efficiency
 ///   respiration_fraction + excretion_fraction + growth_fraction = 1.0
 use tank_core::{
-    Engine, ProcessParams, SimError, SimSeed, SimulationEngine, TankState, WaterState,
+    algae_detrital_mass_g, Engine, ProcessParams, SimError, SimSeed, SimulationEngine, TankState,
+    WaterState,
 };
 
 fn assert_close(actual: f64, expected: f64, tolerance: f64) {
@@ -146,6 +148,24 @@ fn feeding_consumes_dissolved_oxygen() -> Result<(), SimError> {
         after.water.dissolved_oxygen_mg_total
     );
     Ok(())
+}
+
+#[test]
+fn feeding_bookkeeping_uses_routing_mass_basis() {
+    let mut state = feeding_test_state();
+    state.detritus.fine_detritus_g_total = 0.0;
+    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
+    let periphyton_before = state.algae.periphyton_biomass_g;
+
+    step_daily_shrimp(&mut state);
+
+    let periphyton_removed = periphyton_before - state.algae.periphyton_biomass_g;
+    let expected_consumed_g = algae_detrital_mass_g(periphyton_removed, n_to_c_ratio);
+    assert_close(
+        state.animal.daily_food_consumed_g,
+        expected_consumed_g,
+        1e-12,
+    );
 }
 
 #[test]

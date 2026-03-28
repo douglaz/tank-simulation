@@ -423,16 +423,12 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
         shrimp_periphyton_grazing_g_per_shrimp_per_day: preset
             .shrimp_periphyton_grazing_g_per_shrimp_per_day,
         shrimp_condition_smoothing: preset.shrimp_condition_smoothing,
-
-        // Shrimp feeding pathway parameters — not yet in presets, use defaults.
-        shrimp_assimilation_efficiency: ProcessParams::default().shrimp_assimilation_efficiency,
-        shrimp_respiration_fraction_of_assimilated: ProcessParams::default()
+        shrimp_assimilation_efficiency: preset.shrimp_assimilation_efficiency,
+        shrimp_respiration_fraction_of_assimilated: preset
             .shrimp_respiration_fraction_of_assimilated,
-        shrimp_excretion_fraction_of_assimilated: ProcessParams::default()
-            .shrimp_excretion_fraction_of_assimilated,
-        shrimp_growth_fraction_of_assimilated: ProcessParams::default()
-            .shrimp_growth_fraction_of_assimilated,
-        shrimp_o2_per_mg_c_respired: ProcessParams::default().shrimp_o2_per_mg_c_respired,
+        shrimp_excretion_fraction_of_assimilated: preset.shrimp_excretion_fraction_of_assimilated,
+        shrimp_growth_fraction_of_assimilated: preset.shrimp_growth_fraction_of_assimilated,
+        shrimp_o2_per_mg_c_respired: preset.shrimp_o2_per_mg_c_respired,
 
         microfauna_mineralization_boost: preset.microfauna_mineralization_boost,
         microfauna_periphyton_consumption: preset.microfauna_periphyton_consumption,
@@ -866,4 +862,28 @@ fn cycling_base_state(seed: SimSeed) -> TankState {
         .seed_from_water(&state.water, volume_l);
 
     state
+}
+
+#[cfg(test)]
+mod tests {
+    use super::process_preset_to_params;
+
+    #[test]
+    fn process_preset_mapping_carries_shrimp_routing_fields() {
+        let mut preset =
+            tank_data::load_process_params("default").expect("default process preset should load");
+        preset.shrimp_assimilation_efficiency = 0.61;
+        preset.shrimp_respiration_fraction_of_assimilated = 0.62;
+        preset.shrimp_excretion_fraction_of_assimilated = 0.13;
+        preset.shrimp_growth_fraction_of_assimilated = 0.25;
+        preset.shrimp_o2_per_mg_c_respired = 2.91;
+
+        let params = process_preset_to_params(&preset);
+
+        assert_eq!(params.shrimp_assimilation_efficiency, 0.61);
+        assert_eq!(params.shrimp_respiration_fraction_of_assimilated, 0.62);
+        assert_eq!(params.shrimp_excretion_fraction_of_assimilated, 0.13);
+        assert_eq!(params.shrimp_growth_fraction_of_assimilated, 0.25);
+        assert_eq!(params.shrimp_o2_per_mg_c_respired, 2.91);
+    }
 }
