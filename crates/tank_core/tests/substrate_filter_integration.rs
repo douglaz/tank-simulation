@@ -165,12 +165,17 @@ fn substrate_grazing_divergence() -> Result<(), tank_core::SimError> {
         high.step_hours(24)?;
     }
 
-    let low_condition = low.full_state().animal.condition_index;
-    let high_condition = high.full_state().animal.condition_index;
+    let low_reserve = low.full_state().animal.reserve_g;
+    let high_reserve = high.full_state().animal.reserve_g;
 
+    // Higher grazing-surface substrate increases the amount of food shrimp can
+    // actually route into retained biomass. Terminal condition is now heavily
+    // flattened by the shared late-stage chemistry crash in this 30-day
+    // no-water-change fixture, so reserve is the more direct deterministic
+    // signal for the grazing-surface divergence this test is meant to cover.
     assert!(
-        high_condition >= low_condition * 1.02,
-        "high-grazing substrate should improve shrimp condition by at least 2%: high={high_condition:.3}, low={low_condition:.3}"
+        high_reserve >= low_reserve * 1.40,
+        "high-grazing substrate should retain at least 40% more shrimp reserve after 30 days: high={high_reserve:.3} g, low={low_reserve:.3} g"
     );
 
     Ok(())
