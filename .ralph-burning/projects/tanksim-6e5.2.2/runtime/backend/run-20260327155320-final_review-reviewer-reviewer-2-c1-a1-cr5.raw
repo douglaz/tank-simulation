@@ -1,1 +1,0 @@
-{"amendments":[],"summary":"Ran git diff (the worktree itself was clean), reviewed the committed delta in the touched concentration/save/plant-growth files end-to-end, and ran `cargo test -p tank_core --tests` plus `cargo test -p tank_scenarios`. I did not find any correctness, safety, or robustness issues in these changes."}
