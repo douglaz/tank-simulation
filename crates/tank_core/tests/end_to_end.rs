@@ -529,7 +529,10 @@ fn sad_overstocking_nano() {
 
     // With 50 shrimp in 10L and heavy feeding, conditions should be poor
     // Ammonia should be elevated
-    assert!(s.tan_mg_n_per_l > 0.5, "TAN should be elevated from overstocking");
+    assert!(
+        s.tan_mg_n_per_l > 0.5,
+        "TAN should be elevated from overstocking"
+    );
 }
 
 /// User removes all shrimp — ecosystem should still function, just without fauna.

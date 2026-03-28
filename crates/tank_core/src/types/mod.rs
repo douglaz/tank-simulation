@@ -17,8 +17,9 @@ pub mod water;
 pub use actions::{PlayerAction, SimError};
 pub use biology::{
     total_colonizable_area_cm2, AlgaeState, AnimalState, DetritusState, EggCohort, MicrobeState,
-    MicrofaunaState, PlantGuild, PlantGuildState, ShrimpRuntimeParams, StageCohort, StabilityTracker,
-    DEFAULT_SHRIMP_BODY_CARBON_MG_PER_G_WET_MASS, DEFAULT_SHRIMP_BODY_NITROGEN_MG_PER_G_WET_MASS,
+    MicrofaunaState, PlantGuild, PlantGuildState, ShrimpRuntimeParams, StabilityTracker,
+    StageCohort, DEFAULT_SHRIMP_BODY_CARBON_MG_PER_G_WET_MASS,
+    DEFAULT_SHRIMP_BODY_NITROGEN_MG_PER_G_WET_MASS,
 };
 pub(crate) use budget::BudgetSnapshot;
 pub use budget::{
@@ -29,8 +30,8 @@ pub use budget::{
     shrimp_carbon_mg, shrimp_nitrogen_mg, BudgetComponent, BudgetDelta, BudgetEntry, BudgetLedger,
     BudgetRecordingKind, BudgetTotals, ElementBudget, TickBudgetRecord, ADULT_SHRIMP_BIOMASS_G,
     ALGAE_N_MG_PER_G_BIOMASS, JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
-    SUB_ADULT_SHRIMP_BIOMASS_G,
     PLANT_N_MG_PER_G_BIOMASS, SHRIMP_C_MG_PER_G_WET_MASS, SHRIMP_N_MG_PER_G_WET_MASS,
+    SUB_ADULT_SHRIMP_BIOMASS_G,
 };
 pub use environment::EnvironmentState;
 pub use events::{EventCause, EventKind, EventSeverity, SimEvent};

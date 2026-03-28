@@ -248,7 +248,8 @@ fn compute_substrate_surface(
     };
 
     let flow = 0.05 + 0.2 * normalized_flow;
-    let oxygen = 0.3 + 0.15 * normalized_flow - 0.15 * avg_low_o2 + 0.1 * aeration_boost
+    let oxygen = 0.3 + 0.15 * normalized_flow - 0.15 * avg_low_o2
+        + 0.1 * aeration_boost
         + root_zone_o2_boost;
     let light = 0.25 * light_intensity * depth_attenuation * (1.0 - 0.5 * avg_crowding);
 

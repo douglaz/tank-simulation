@@ -120,8 +120,8 @@ pub struct BudgetComponent {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct BudgetSnapshot {
     pub(crate) totals: BudgetTotals,
-    nitrogen_components: [BudgetComponent; 18],
-    carbon_components: [BudgetComponent; 15],
+    nitrogen_components: [BudgetComponent; 19],
+    carbon_components: [BudgetComponent; 16],
 }
 
 impl BudgetSnapshot {

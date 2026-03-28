@@ -670,8 +670,7 @@ impl Engine {
                 None
             }
             PlayerAction::AddShrimp { count } => {
-                self.state.animal.adult.count =
-                    self.state.animal.adult.count.saturating_add(count);
+                self.state.animal.adult.count = self.state.animal.adult.count.saturating_add(count);
                 None
             }
             PlayerAction::RemoveShrimp { count } => {
@@ -682,8 +681,7 @@ impl Engine {
                     self.state.animal.adult.reserve_g -=
                         self.state.animal.adult.reserve_g * removed_frac;
                 }
-                self.state.animal.adult.count =
-                    self.state.animal.adult.count.saturating_sub(count);
+                self.state.animal.adult.count = self.state.animal.adult.count.saturating_sub(count);
                 // Preserve berried_females_count <= adult.count (also trims egg cohorts)
                 self.state.animal.clamp_berried_to_adults();
                 None

@@ -385,7 +385,7 @@ fn migrate_v3_to_v4(value: &mut Value) -> Result<(), SimError> {
         })?;
 
     let reserve_g =
-        shrimp_biomass_g(adults_count, juveniles_count) * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+        shrimp_biomass_g(adults_count, 0, juveniles_count) * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
     animal.insert("reserve_g".to_string(), serde_json::json!(reserve_g));
 
     Ok(())
@@ -541,10 +541,7 @@ fn migrate_v4_to_v5(value: &mut Value) -> Result<(), SimError> {
                 animal.insert("molt_readiness".to_string(), serde_json::json!(0.5));
             }
             if !animal.contains_key("inter_molt_timer_days") {
-                animal.insert(
-                    "inter_molt_timer_days".to_string(),
-                    serde_json::json!(14.0),
-                );
+                animal.insert("inter_molt_timer_days".to_string(), serde_json::json!(14.0));
             }
             if !animal.contains_key("last_molt_success") {
                 animal.insert("last_molt_success".to_string(), serde_json::json!(true));

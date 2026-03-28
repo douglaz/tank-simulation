@@ -41,7 +41,7 @@ pub fn step_daily_microfauna(state: &mut TankState) {
         (0.5 * detritus_resource + 0.5 * periphyton_resource).clamp(0.0, 1.0);
 
     // Shrimp grazing pressure on microfauna
-    let total_shrimp = (state.animal.adults_count + state.animal.juveniles_count) as f64;
+    let total_shrimp = state.animal.total_count() as f64;
     let shrimp_density = total_shrimp / volume_l;
     let shrimp_pressure =
         (shrimp_density / pp.microfauna_shrimp_pressure_threshold.max(0.01)).clamp(0.0, 1.0);

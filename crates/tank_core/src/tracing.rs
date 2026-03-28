@@ -312,13 +312,14 @@ impl PoolSnapshot {
                 ("microbe.nob_g", state.microbe.nitrite_oxidizer_biomass_g),
                 ("microbe.comammox_g", state.microbe.comammox_biomass_g),
                 ("microbe.maturity_index", state.microbe.maturity_index),
-                ("animal.adults", f64::from(state.animal.adults_count)),
-                ("animal.juveniles", f64::from(state.animal.juveniles_count)),
+                ("animal.adults", f64::from(state.animal.adult.count)),
+                ("animal.sub_adults", f64::from(state.animal.sub_adult.count)),
+                ("animal.juveniles", f64::from(state.animal.juvenile.count)),
                 (
                     "animal.berried_females",
                     f64::from(state.animal.berried_females_count),
                 ),
-                ("animal.condition", state.animal.condition_index),
+                ("animal.condition", state.animal.population_condition_index()),
                 ("animal.molt_stress", state.animal.molt_stress_index),
                 (
                     "animal.reproductive_readiness",
@@ -355,8 +356,8 @@ impl PoolSnapshot {
                     "animal.daily_food_consumed_g",
                     state.animal.daily_food_consumed_g,
                 ),
-                ("animal.maturation_accum", state.animal.maturation_accum),
-                ("animal.reserve_g", state.animal.reserve_g),
+                ("animal.maturation_accum", state.animal.juvenile.maturation_accum),
+                ("animal.reserve_g", state.animal.total_reserve_g()),
                 ("microfauna.population", state.microfauna.population_index),
                 (
                     "microfauna.grazing_pressure",

@@ -21,10 +21,16 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
     let dissolved = Paragraph::new(vec![
         Line::from(format!("pH {:.3}", snapshot.ph)),
         Line::from(format!("TAN {:.3} mg N/L", snapshot.tan_mg_n_per_l)),
-        Line::from(format!("Free NH3-N {:.5} mg NH3-N/L", snapshot.nh3_mg_n_per_l)),
+        Line::from(format!(
+            "Free NH3-N {:.5} mg NH3-N/L",
+            snapshot.nh3_mg_n_per_l
+        )),
         Line::from(format!("Nitrite {:.3} mg N/L", snapshot.nitrite_mg_n_per_l)),
         Line::from(format!("Nitrate {:.3} mg N/L", snapshot.nitrate_mg_n_per_l)),
-        Line::from(format!("Phosphate {:.3} mg P/L", snapshot.phosphate_mg_p_per_l)),
+        Line::from(format!(
+            "Phosphate {:.3} mg P/L",
+            snapshot.phosphate_mg_p_per_l
+        )),
         Line::from(format!(
             "DIC {:.3} mg C/L",
             snapshot.dissolved_inorganic_carbon_mg_c_per_l
@@ -44,7 +50,10 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
         )),
         Line::from(format!("GH (Ca+Mg) {:.1} d", snapshot.gh_d)),
         Line::from(format!("KH (alkalinity) {:.1} d", snapshot.kh_d)),
-        Line::from(format!("Est. TDS (7-ion) {:.0} mg/L", snapshot.estimated_tds_7_ion_mg_per_l)),
+        Line::from(format!(
+            "Est. TDS (7-ion) {:.0} mg/L",
+            snapshot.estimated_tds_7_ion_mg_per_l
+        )),
         Line::from(format!(
             "Est. conductivity {:.0} uS/cm",
             snapshot.estimated_conductivity_us_cm

@@ -4,20 +4,24 @@ use crate::types::{
     detritus_nitrogen_mg, shrimp_body_detrital_mass_g, EggCohort, EventCause, EventKind,
     EventSeverity, ShrimpRuntimeParams, TankState, ADULT_SHRIMP_BIOMASS_G,
     JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
+    SUB_ADULT_SHRIMP_BIOMASS_G,
 };
 
-const JUVENILES_PER_CLUTCH: u32 = 25;
 const MG_N_PER_MEQ_AMMONIA: f64 = 14.007;
 const ROUTING_MASS_ASSERT_TOLERANCE_G: f64 = 1e-12;
 const DEATH_DETRITUS_FRACTION_TOLERANCE: f64 = 1e-9;
+
+// ── Feeding weight constants (relative to adult = 1.0) ────────────────────
+const ADULT_FEEDING_WEIGHT: f64 = 1.0;
+const SUB_ADULT_FEEDING_WEIGHT: f64 = 0.67;
+const JUVENILE_FEEDING_WEIGHT: f64 = 0.3;
 
 // ── Hourly ──────────────────────────────────────────────────────────────────
 
 /// Accumulates NH3, nitrite, low-DO, heat, and instability stress each hour.
 /// Runs after chemistry/DO updates, before hourly event emission.
 pub fn step_hourly_shrimp_stress(state: &mut TankState) {
-    let total = state.animal.adults_count + state.animal.juveniles_count;
-    if total == 0 {
+    if state.animal.total_count() == 0 {
         return;
     }
 
@@ -61,12 +65,11 @@ pub fn step_hourly_shrimp_stress(state: &mut TankState) {
 
 // ── Daily ───────────────────────────────────────────────────────────────────
 
-/// Full daily shrimp lifecycle: feeding → condition → molt stress →
-/// reproductive readiness → spawning → egg development/hatching →
-/// juvenile recruitment → mortality → events.
+/// Full daily shrimp lifecycle: feeding -> condition -> molt stress ->
+/// molt cycle -> reproductive readiness -> spawning -> egg development/hatching ->
+/// juvenile recruitment (two-stage) -> mortality -> events.
 pub fn step_daily_shrimp(state: &mut TankState) {
-    let total = state.animal.adults_count + state.animal.juveniles_count;
-    if total == 0 && state.animal.berried_females_count == 0 {
+    if state.animal.total_count() == 0 && state.animal.berried_females_count == 0 {
         reset_hourly_accumulators(state);
         return;
     }
@@ -81,10 +84,12 @@ pub fn step_daily_shrimp(state: &mut TankState) {
     refresh_carbonate_state(state);
     update_condition(state);
     update_molt_stress(state);
+    molt_cycle(state);
     update_reproductive_readiness(state);
     spawning(state);
     egg_development(state);
-    juvenile_recruitment(state);
+    juvenile_to_subadult(state);
+    subadult_to_adult(state);
     mortality(state);
     refresh_carbonate_state(state);
     emit_molt_stress_warning(state);
@@ -126,9 +131,15 @@ pub fn update_stability_tracker(state: &mut TankState) {
 // ── Private helpers ─────────────────────────────────────────────────────────
 
 fn shrimp_feeding(state: &mut TankState) {
-    let adults = state.animal.adults_count as f64;
-    let juveniles = state.animal.juveniles_count as f64;
-    let total_feeding_units = adults + juveniles * 0.3;
+    let adults = state.animal.adult.count as f64;
+    let sub_adults = state.animal.sub_adult.count as f64;
+    let juveniles = state.animal.juvenile.count as f64;
+
+    let adult_feeding = adults * ADULT_FEEDING_WEIGHT;
+    let sub_adult_feeding = sub_adults * SUB_ADULT_FEEDING_WEIGHT;
+    let juvenile_feeding = juveniles * JUVENILE_FEEDING_WEIGHT;
+    let total_feeding_units = adult_feeding + sub_adult_feeding + juvenile_feeding;
+
     if total_feeding_units <= f64::EPSILON {
         state.animal.daily_food_consumed_g = 0.0;
         return;
@@ -158,11 +169,7 @@ fn shrimp_feeding(state: &mut TankState) {
     state.detritus.fine_detritus_g_total =
         (state.detritus.fine_detritus_g_total - detritus_consumed_route_g).max(0.0);
 
-    // Convert consumed food to elemental N and C for routing.
-    // Phase-1 simplification: periphyton and fine detritus share the same
-    // food-quality assumption (feed_n_to_c_ratio). This is documented in
-    // ProcessParams and acceptable because both food sources are mixed
-    // organic matter at similar N:C in a shrimp tank.
+    // Total consumed food (population-wide)
     state.animal.daily_food_consumed_g = periph_consumed_route_g + detritus_consumed_route_g;
     let consumed_n_mg = algae_nitrogen_mg(periph_consumed_biomass_g)
         + detritus_nitrogen_mg(detritus_consumed_route_g, n_to_c_ratio);
@@ -177,7 +184,16 @@ fn shrimp_feeding(state: &mut TankState) {
         elemental_food_mass_g,
     );
 
-    route_consumed_food(state, consumed_n_mg, consumed_c_mg);
+    // Distribute retained share proportionally to each stage's feeding weight.
+    route_consumed_food(
+        state,
+        consumed_n_mg,
+        consumed_c_mg,
+        adult_feeding,
+        sub_adult_feeding,
+        juvenile_feeding,
+        total_feeding_units,
+    );
 }
 
 /// Routes consumed food through the consumer routing contract:
@@ -188,13 +204,21 @@ fn shrimp_feeding(state: &mut TankState) {
 /// ```
 ///
 /// Destinations:
-/// - feces → fine_detritus_g_total (as organic matter grams)
-/// - excreted N → ammonia_total_mg_n_total (TAN)
-/// - excreted C → dissolved_organic_carbon_mg_c_total (DOC)
-/// - respired C → dissolved_inorganic_carbon_mg_c_total (DIC)
-/// - respired → O2 demand (dissolved_oxygen_mg_total)
-/// - retained → animal.reserve_g (organic matter grams)
-fn route_consumed_food(state: &mut TankState, consumed_n_mg: f64, consumed_c_mg: f64) {
+/// - feces -> fine_detritus_g_total (as organic matter grams)
+/// - excreted N -> ammonia_total_mg_n_total (TAN)
+/// - excreted C -> dissolved_organic_carbon_mg_c_total (DOC)
+/// - respired C -> dissolved_inorganic_carbon_mg_c_total (DIC)
+/// - respired -> O2 demand (dissolved_oxygen_mg_total)
+/// - retained -> per-stage reserve_g (organic matter grams, proportional to feeding weight)
+fn route_consumed_food(
+    state: &mut TankState,
+    consumed_n_mg: f64,
+    consumed_c_mg: f64,
+    adult_feeding: f64,
+    sub_adult_feeding: f64,
+    juvenile_feeding: f64,
+    total_feeding_units: f64,
+) {
     if consumed_n_mg <= f64::EPSILON && consumed_c_mg <= f64::EPSILON {
         return;
     }
@@ -206,11 +230,10 @@ fn route_consumed_food(state: &mut TankState, consumed_n_mg: f64, consumed_c_mg:
     let excr_frac = params.shrimp_excretion_fraction_of_assimilated;
     let growth_frac = params.shrimp_growth_fraction_of_assimilated;
     let o2_per_c = params.shrimp_o2_per_mg_c_respired;
-    // ── Feces: unassimilated share → fine detritus ──
+
+    // ── Feces: unassimilated share -> fine detritus ──
     let fecal_n_mg = consumed_n_mg * fecal_fraction;
     let fecal_c_mg = consumed_c_mg * fecal_fraction;
-    // Convert elemental mg back to organic-matter grams for the detritus pool.
-    // organic_matter_g = (N_mg + C_mg) / 1000.0
     let fecal_mass_g = (fecal_n_mg + fecal_c_mg) / 1000.0;
     state.detritus.fine_detritus_g_total += fecal_mass_g;
 
@@ -219,21 +242,14 @@ fn route_consumed_food(state: &mut TankState, consumed_n_mg: f64, consumed_c_mg:
     let assimilated_c_mg = consumed_c_mg * ae;
 
     // ── Excretion: TAN + DOC ──
-    // Phase-1 lumping: dissolved N excretion goes to TAN and dissolved C
-    // excretion goes to DOC. We still do not create separate urea or DON pools.
     let excreted_n_mg = assimilated_n_mg * excr_frac;
     state.water.ammonia_total_mg_n_total += excreted_n_mg;
     state.water.alkalinity_meq_total += excreted_n_mg / MG_N_PER_MEQ_AMMONIA;
 
-    // Excreted C goes to the canonical DOC pool.
     let excreted_c_mg = assimilated_c_mg * excr_frac;
     state.water.dissolved_organic_carbon_mg_c_total += excreted_c_mg;
 
     // ── Respiration: O2 demand + DIC ──
-    // When DO is limiting we only oxidize the share that available O2 can
-    // support. The unrespired assimilated mass stays in reserve so C/N and O2
-    // remain stoichiometrically coupled instead of creating DIC/TAN from
-    // respiration that never actually consumed oxygen.
     let target_respired_c_mg = assimilated_c_mg * resp_frac;
     let o2_demand_mg = target_respired_c_mg * o2_per_c;
     let actual_o2_consumed_mg = state
@@ -251,37 +267,45 @@ fn route_consumed_food(state: &mut TankState, consumed_n_mg: f64, consumed_c_mg:
     state.water.dissolved_oxygen_mg_total =
         (state.water.dissolved_oxygen_mg_total - actual_o2_consumed_mg).max(0.0);
 
-    // Respired N is released as TAN (nitrogen from oxidized amino acids).
     let target_respired_n_mg = assimilated_n_mg * resp_frac;
     let respired_n_mg = target_respired_n_mg * respiration_scale;
     state.water.ammonia_total_mg_n_total += respired_n_mg;
-    // NH3/NH4+ release returns ~1 meq alkalinity per mol N, which offsets part
-    // of the concurrent DIC-driven pH suppression from respiration.
     state.water.alkalinity_meq_total += respired_n_mg / MG_N_PER_MEQ_AMMONIA;
 
-    // ── Retained: body reserve ──
-    // Phase 1 only accumulates this retained share. Later reserve/condition
-    // work will add maintenance, molt, and reproduction drains so reserve_g
-    // does not grow without bound over multi-year runs.
+    // ── Retained: per-stage reserve ──
     let retained_n_mg = assimilated_n_mg * growth_frac + (target_respired_n_mg - respired_n_mg);
     let retained_c_mg = assimilated_c_mg * growth_frac + (target_respired_c_mg - respired_c_mg);
-    // Convert back to organic-matter grams for the reserve pool.
     let retained_mass_g = (retained_n_mg + retained_c_mg) / 1000.0;
-    state.animal.reserve_g += retained_mass_g;
+
+    // Distribute retained mass proportionally to each stage's feeding weight contribution.
+    if total_feeding_units > f64::EPSILON {
+        state.animal.adult.reserve_g +=
+            retained_mass_g * adult_feeding / total_feeding_units;
+        state.animal.sub_adult.reserve_g +=
+            retained_mass_g * sub_adult_feeding / total_feeding_units;
+        state.animal.juvenile.reserve_g +=
+            retained_mass_g * juvenile_feeding / total_feeding_units;
+    }
 }
 
 fn update_condition(state: &mut TankState) {
     let chemistry = state.concentrations();
     let tan_mg_l = chemistry.tan_mg_n_per_l();
-    let nh3_mg_l = compute_nh3_mg_n_per_l(tan_mg_l, state.water.ph, state.water.temperature_c);
+    let nh3_mg_l =
+        compute_nh3_mg_n_per_l(tan_mg_l, state.water.ph, state.water.temperature_c);
     let nitrite_mg_l = chemistry.nitrite_mg_n_per_l();
     let do_mg_l = chemistry.do_mg_per_l();
     let temp = state.water.temperature_c;
-
     let gh_d = chemistry.gh_d();
 
-    let total_feeding_units =
-        state.animal.adults_count as f64 + state.animal.juveniles_count as f64 * 0.3;
+    // Compute population-level food factor using total feeding units.
+    let adults = state.animal.adult.count as f64;
+    let sub_adults = state.animal.sub_adult.count as f64;
+    let juveniles = state.animal.juvenile.count as f64;
+    let total_feeding_units = adults * ADULT_FEEDING_WEIGHT
+        + sub_adults * SUB_ADULT_FEEDING_WEIGHT
+        + juveniles * JUVENILE_FEEDING_WEIGHT;
+
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let target_food_g = algae_detrital_mass_g(
         total_feeding_units
@@ -297,7 +321,6 @@ fn update_condition(state: &mut TankState) {
         1.0
     };
     let do_factor = (do_mg_l / 6.0).clamp(0.0, 1.0);
-    // NH3 risk: condition degrades steadily, reaching zero at ~0.33 mg/L NH3
     let nh3_factor = (1.0 - nh3_mg_l * 3.0).clamp(0.0, 1.0);
     let nitrite_factor = (1.0 - nitrite_mg_l * 0.5).clamp(0.0, 1.0);
 
@@ -323,8 +346,21 @@ fn update_condition(state: &mut TankState) {
         .clamp(0.0, 1.0);
 
     let smoothing = state.process_params.shrimp_condition_smoothing;
-    state.animal.condition_index += smoothing * (target - state.animal.condition_index);
-    state.animal.condition_index = state.animal.condition_index.clamp(0.0, 1.0);
+
+    // Apply to each stage's condition independently.
+    state.animal.adult.condition_index +=
+        smoothing * (target - state.animal.adult.condition_index);
+    state.animal.adult.condition_index = state.animal.adult.condition_index.clamp(0.0, 1.0);
+
+    state.animal.sub_adult.condition_index +=
+        smoothing * (target - state.animal.sub_adult.condition_index);
+    state.animal.sub_adult.condition_index =
+        state.animal.sub_adult.condition_index.clamp(0.0, 1.0);
+
+    state.animal.juvenile.condition_index +=
+        smoothing * (target - state.animal.juvenile.condition_index);
+    state.animal.juvenile.condition_index =
+        state.animal.juvenile.condition_index.clamp(0.0, 1.0);
 }
 
 fn update_molt_stress(state: &mut TankState) {
@@ -338,7 +374,7 @@ fn update_molt_stress(state: &mut TankState) {
     };
 
     let instability_stress = state.stability_tracker.instability_index;
-    let condition_stress = (0.5 - state.animal.condition_index).max(0.0);
+    let condition_stress = (0.5 - state.animal.population_condition_index()).max(0.0);
     let thermal_stress = if state.water.temperature_c > params.optimal_temp_max_c {
         ((state.water.temperature_c - params.optimal_temp_max_c) / 8.0).clamp(0.0, 0.5)
     } else {
@@ -359,9 +395,55 @@ fn update_molt_stress(state: &mut TankState) {
     if stress_pressure > state.animal.molt_stress_index {
         state.animal.molt_stress_index += 0.2 * (stress_pressure - state.animal.molt_stress_index);
     } else {
-        state.animal.molt_stress_index += 0.05 * (stress_pressure - state.animal.molt_stress_index);
+        state.animal.molt_stress_index +=
+            0.05 * (stress_pressure - state.animal.molt_stress_index);
     }
     state.animal.molt_stress_index = state.animal.molt_stress_index.clamp(0.0, 1.0);
+}
+
+/// Explicit molt cycle: timer-based readiness, success/failure resolution,
+/// and failed_molt_accum penalty tracking.
+fn molt_cycle(state: &mut TankState) {
+    if state.animal.total_count() == 0 {
+        return;
+    }
+
+    let gh_d = state.concentrations().gh_d();
+    let params = &state.shrimp_params;
+    let base_interval = params.base_molt_interval_days.max(1.0);
+
+    let timer_factor = (state.animal.inter_molt_timer_days / base_interval).clamp(0.0, 1.0);
+    let mineral_factor = gh_mineral_factor(gh_d, params);
+    let condition_factor = state.animal.population_condition_index();
+
+    let molt_readiness = timer_factor * mineral_factor * condition_factor;
+    state.animal.molt_readiness = molt_readiness;
+
+    if molt_readiness >= 0.8 {
+        // Molt event triggered
+        if mineral_factor >= 0.5 && condition_factor >= 0.3 {
+            // Success
+            state.animal.inter_molt_timer_days = 0.0;
+            state.animal.last_molt_success = true;
+            state.animal.failed_molt_accum = (state.animal.failed_molt_accum - 0.5).max(0.0);
+        } else {
+            // Failure
+            state.animal.inter_molt_timer_days = 0.0;
+            state.animal.last_molt_success = false;
+            state.animal.failed_molt_accum = (state.animal.failed_molt_accum + 0.3).min(1.0);
+        }
+    }
+
+    // Advance timer
+    state.animal.inter_molt_timer_days += 1.0;
+
+    // Derive molt_stress_index from failed_molt_accum and current factors.
+    // This grounds the existing index in explicit state rather than independent
+    // integration. The update_molt_stress call has already set a baseline; we
+    // blend in the failed_molt_accum contribution.
+    let accum_stress = state.animal.failed_molt_accum * 0.5;
+    state.animal.molt_stress_index =
+        (state.animal.molt_stress_index + accum_stress).clamp(0.0, 1.0);
 }
 
 fn update_reproductive_readiness(state: &mut TankState) {
@@ -369,7 +451,7 @@ fn update_reproductive_readiness(state: &mut TankState) {
     let params = &state.shrimp_params;
 
     let f_temp = temp_repro_factor(temp, params);
-    let f_condition = state.animal.condition_index;
+    let f_condition = state.animal.adult.condition_index;
     let f_stability = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
     let f_molt = (1.0 - state.animal.molt_stress_index).clamp(0.0, 1.0);
 
@@ -382,11 +464,11 @@ fn update_reproductive_readiness(state: &mut TankState) {
 }
 
 fn spawning(state: &mut TankState) {
-    if state.animal.adults_count == 0 {
+    if state.animal.adult.count == 0 {
         return;
     }
 
-    let eligible = ((0.5 * state.animal.adults_count as f64)
+    let eligible = ((0.5 * state.animal.adult.count as f64)
         - state.animal.berried_females_count as f64)
         .max(0.0) as u32;
 
@@ -396,9 +478,8 @@ fn spawning(state: &mut TankState) {
 
     let temp = state.water.temperature_c;
     let params = &state.shrimp_params;
-
     let f_temp = temp_repro_factor(temp, params);
-    let f_condition = state.animal.condition_index;
+    let f_condition = state.animal.adult.condition_index;
     let f_stability = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
 
     let gh_d = state.concentrations().gh_d();
@@ -450,7 +531,7 @@ fn egg_development(state: &mut TankState) {
     let temp = state.water.temperature_c;
     let params = &state.shrimp_params;
 
-    let f_condition = state.animal.condition_index;
+    let f_condition = state.animal.adult.condition_index;
     let f_oxygen = (do_mg_l / 6.0).clamp(0.0, 1.0);
     let f_temp = temp_repro_factor(temp, params);
     let f_stability = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
@@ -460,6 +541,10 @@ fn egg_development(state: &mut TankState) {
 
     let p_hatch =
         params.hatch_success_base * f_condition * f_oxygen * f_temp * f_stability * f_mineral;
+
+    // Condition-dependent clutch size
+    let adult_condition = state.animal.adult.condition_index;
+    let effective_clutch_size = clutch_condition_modifier(adult_condition, params);
 
     let egg_duration = params.egg_duration_days as f64;
     let mut total_successful = 0u32;
@@ -478,7 +563,7 @@ fn egg_development(state: &mut TankState) {
 
             for _ in 0..cohort.count {
                 if state.rng.next_f64() < p_hatch {
-                    if fund_hatched_clutch_biomass(state) {
+                    if fund_hatched_clutch_biomass(state, effective_clutch_size) {
                         total_successful += 1;
                     } else {
                         total_resource_limited += 1;
@@ -493,9 +578,9 @@ fn egg_development(state: &mut TankState) {
         }
     }
 
-    // Successful hatches produce juveniles (~25 per clutch for Neocaridina)
+    // Successful hatches produce juveniles
     if total_successful > 0 {
-        state.animal.juveniles_count += total_successful * JUVENILES_PER_CLUTCH;
+        state.animal.juvenile.count += total_successful * effective_clutch_size;
     }
 
     // Only resolved clutches leave berried_females_count
@@ -505,7 +590,6 @@ fn egg_development(state: &mut TankState) {
         .saturating_sub(resolved_berried);
 
     if total_failed > 0 || total_resource_limited > 0 {
-        // Failure-mode invariant: on hatch failure, juveniles_count does NOT increase
         let mut causes = Vec::new();
         if f_oxygen < 0.6 {
             causes.push(EventCause::LowOxygen);
@@ -542,30 +626,55 @@ fn egg_development(state: &mut TankState) {
     state.animal.sync_egg_progress_from_cohorts();
 }
 
-fn juvenile_recruitment(state: &mut TankState) {
-    if state.animal.juveniles_count == 0 {
-        // Reset accumulator so stale progress doesn't leak to the next cohort.
-        state.animal.maturation_accum = 0.0;
+/// Condition-dependent effective clutch size. Returns the number of juveniles
+/// per clutch adjusted by the mother's condition.
+fn clutch_condition_modifier(adult_condition: f64, params: &ShrimpRuntimeParams) -> u32 {
+    let base = params.base_clutch_size;
+    let min_cond = params.min_clutch_condition;
+
+    let modifier = if adult_condition >= 0.7 {
+        1.0
+    } else if adult_condition >= min_cond {
+        // Linear taper from 1.0 at 0.7 to 0.5 at min_clutch_condition
+        0.5 + 0.5 * (adult_condition - min_cond) / (0.7 - min_cond).max(f64::EPSILON)
+    } else {
+        0.0
+    };
+
+    (f64::from(base) * modifier).round().max(0.0) as u32
+}
+
+/// Juvenile -> sub-adult stage transition.
+fn juvenile_to_subadult(state: &mut TankState) {
+    if state.animal.juvenile.count == 0 {
+        state.animal.juvenile.maturation_accum = 0.0;
         return;
     }
 
-    let maturation_rate = 1.0
-        / state
-            .process_params
-            .shrimp_juvenile_maturation_days
-            .max(1.0);
-    // Use a fractional accumulator so small cohorts don't freeze (floor=0)
-    // or mature too fast (max(1)). The fractional remainder carries over to
-    // the next day.
-    state.animal.maturation_accum += state.animal.juveniles_count as f64 * maturation_rate;
-    let candidate_maturing =
-        (state.animal.maturation_accum.floor() as u32).min(state.animal.juveniles_count);
-    state.animal.maturation_accum -= candidate_maturing as f64;
+    let params = &state.shrimp_params;
+    let base_rate = 1.0 / params.juvenile_to_subadult_days.max(1.0);
+    let temp = state.water.temperature_c;
+    let temp_scale = temp_condition_factor(temp, params);
 
-    let growth_biomass_g = (ADULT_SHRIMP_BIOMASS_G - JUVENILE_SHRIMP_BIOMASS_G).max(0.0);
+    // Condition gate: only accumulate if juvenile condition is above threshold
+    let condition_gate =
+        if state.animal.juvenile.condition_index >= params.juvenile_maturation_condition_threshold {
+            1.0
+        } else {
+            0.0
+        };
+
+    let daily_rate = base_rate * temp_scale * condition_gate;
+    state.animal.juvenile.maturation_accum += state.animal.juvenile.count as f64 * daily_rate;
+
+    let candidate_maturing = (state.animal.juvenile.maturation_accum.floor() as u32)
+        .min(state.animal.juvenile.count);
+    state.animal.juvenile.maturation_accum -= candidate_maturing as f64;
+
+    let growth_biomass_g = (SUB_ADULT_SHRIMP_BIOMASS_G - JUVENILE_SHRIMP_BIOMASS_G).max(0.0);
     let mut funded_maturing = 0u32;
     for _ in 0..candidate_maturing {
-        if fund_live_shrimp_biomass(state, growth_biomass_g) {
+        if fund_live_shrimp_biomass(&mut state.animal.juvenile.reserve_g, growth_biomass_g) {
             funded_maturing += 1;
         } else {
             break;
@@ -573,63 +682,168 @@ fn juvenile_recruitment(state: &mut TankState) {
     }
 
     let unfunded_maturing = candidate_maturing.saturating_sub(funded_maturing);
-    state.animal.maturation_accum += f64::from(unfunded_maturing);
-    state.animal.juveniles_count -= funded_maturing;
-    state.animal.adults_count += funded_maturing;
+    state.animal.juvenile.maturation_accum += f64::from(unfunded_maturing);
+
+    // Transfer proportional reserve from juvenile to sub_adult
+    if funded_maturing > 0 {
+        let pre_count = state.animal.juvenile.count;
+        let transfer_fraction = if pre_count > 0 {
+            f64::from(funded_maturing) / f64::from(pre_count)
+        } else {
+            0.0
+        };
+        let reserve_transfer = state.animal.juvenile.reserve_g * transfer_fraction;
+        state.animal.juvenile.reserve_g -= reserve_transfer;
+        state.animal.sub_adult.reserve_g += reserve_transfer;
+    }
+
+    state.animal.juvenile.count -= funded_maturing;
+    state.animal.sub_adult.count += funded_maturing;
+}
+
+/// Sub-adult -> adult stage transition.
+fn subadult_to_adult(state: &mut TankState) {
+    if state.animal.sub_adult.count == 0 {
+        state.animal.sub_adult.maturation_accum = 0.0;
+        return;
+    }
+
+    let params = &state.shrimp_params;
+    let base_rate = 1.0 / params.subadult_to_adult_days.max(1.0);
+    let temp = state.water.temperature_c;
+    let temp_scale = temp_condition_factor(temp, params);
+
+    // Condition gate: condition threshold AND last molt must have succeeded
+    let condition_gate = if state.animal.sub_adult.condition_index
+        >= params.subadult_maturation_condition_threshold
+        && state.animal.last_molt_success
+    {
+        1.0
+    } else {
+        0.0
+    };
+
+    let daily_rate = base_rate * temp_scale * condition_gate;
+    state.animal.sub_adult.maturation_accum += state.animal.sub_adult.count as f64 * daily_rate;
+
+    let candidate_maturing = (state.animal.sub_adult.maturation_accum.floor() as u32)
+        .min(state.animal.sub_adult.count);
+    state.animal.sub_adult.maturation_accum -= candidate_maturing as f64;
+
+    let growth_biomass_g = (ADULT_SHRIMP_BIOMASS_G - SUB_ADULT_SHRIMP_BIOMASS_G).max(0.0);
+    let mut funded_maturing = 0u32;
+    for _ in 0..candidate_maturing {
+        if fund_live_shrimp_biomass(&mut state.animal.sub_adult.reserve_g, growth_biomass_g) {
+            funded_maturing += 1;
+        } else {
+            break;
+        }
+    }
+
+    let unfunded_maturing = candidate_maturing.saturating_sub(funded_maturing);
+    state.animal.sub_adult.maturation_accum += f64::from(unfunded_maturing);
+
+    // Transfer proportional reserve from sub_adult to adult
+    if funded_maturing > 0 {
+        let pre_count = state.animal.sub_adult.count;
+        let transfer_fraction = if pre_count > 0 {
+            f64::from(funded_maturing) / f64::from(pre_count)
+        } else {
+            0.0
+        };
+        let reserve_transfer = state.animal.sub_adult.reserve_g * transfer_fraction;
+        state.animal.sub_adult.reserve_g -= reserve_transfer;
+        state.animal.adult.reserve_g += reserve_transfer;
+    }
+
+    state.animal.sub_adult.count -= funded_maturing;
+    state.animal.adult.count += funded_maturing;
 }
 
 fn mortality(state: &mut TankState) {
     let base_rate = state.process_params.shrimp_base_mortality_per_day;
     let stress_scale = state.process_params.shrimp_stress_mortality_scale;
 
+    let pop_condition = state.animal.population_condition_index();
     let stress_total = state.animal.hourly_nh3_stress_accum
         + state.animal.hourly_nitrite_stress_accum
         + state.animal.hourly_low_do_stress_accum
         + state.animal.hourly_heat_stress_accum
         + (state.animal.molt_stress_index - 0.5).max(0.0)
-        + (0.5 - state.animal.condition_index).max(0.0);
+        + (0.5 - pop_condition).max(0.0);
 
-    let p_adult_death = (base_rate + stress_total * stress_scale).clamp(0.0, 0.5);
+    // Failed molt accumulator contribution to mortality
+    let molt_mortality =
+        state.animal.failed_molt_accum * state.shrimp_params.failed_molt_mortality_scale;
+
+    let p_adult_death =
+        (base_rate + stress_total * stress_scale + molt_mortality).clamp(0.0, 0.5);
+
+    let sub_adult_sensitivity = state.shrimp_params.sub_adult_sensitivity;
+    let p_sub_adult_death =
+        (base_rate + stress_total * stress_scale * sub_adult_sensitivity + molt_mortality)
+            .clamp(0.0, 0.5);
 
     let juv_sensitivity = state.shrimp_params.juvenile_sensitivity;
-    let p_juv_death = (base_rate + stress_total * stress_scale * juv_sensitivity).clamp(0.0, 0.5);
+    let p_juv_death =
+        (base_rate + stress_total * stress_scale * juv_sensitivity + molt_mortality)
+            .clamp(0.0, 0.5);
 
     let mut adult_deaths = 0u32;
-    for _ in 0..state.animal.adults_count {
+    for _ in 0..state.animal.adult.count {
         if state.rng.next_f64() < p_adult_death {
             adult_deaths += 1;
         }
     }
 
+    let mut sub_adult_deaths = 0u32;
+    for _ in 0..state.animal.sub_adult.count {
+        if state.rng.next_f64() < p_sub_adult_death {
+            sub_adult_deaths += 1;
+        }
+    }
+
     let mut juv_deaths = 0u32;
-    for _ in 0..state.animal.juveniles_count {
+    for _ in 0..state.animal.juvenile.count {
         if state.rng.next_f64() < p_juv_death {
             juv_deaths += 1;
         }
     }
 
-    route_dead_shrimp_to_detritus(state, adult_deaths, juv_deaths);
+    route_dead_shrimp_to_detritus(state, adult_deaths, sub_adult_deaths, juv_deaths);
 
-    state.animal.adults_count = state.animal.adults_count.saturating_sub(adult_deaths);
+    state.animal.adult.count = state.animal.adult.count.saturating_sub(adult_deaths);
 
-    // Scale maturation_accum so dead juveniles' progress doesn't leak to survivors.
-    let pre_juv = state.animal.juveniles_count;
-    state.animal.juveniles_count = pre_juv.saturating_sub(juv_deaths);
+    // Scale sub-adult maturation_accum so dead sub-adults' progress doesn't leak.
+    let pre_sub = state.animal.sub_adult.count;
+    state.animal.sub_adult.count = pre_sub.saturating_sub(sub_adult_deaths);
+    if sub_adult_deaths > 0 && pre_sub > 0 {
+        state.animal.sub_adult.maturation_accum *=
+            state.animal.sub_adult.count as f64 / pre_sub as f64;
+    }
+
+    // Scale juvenile maturation_accum so dead juveniles' progress doesn't leak.
+    let pre_juv = state.animal.juvenile.count;
+    state.animal.juvenile.count = pre_juv.saturating_sub(juv_deaths);
     if juv_deaths > 0 && pre_juv > 0 {
-        state.animal.maturation_accum *= state.animal.juveniles_count as f64 / pre_juv as f64;
+        state.animal.juvenile.maturation_accum *=
+            state.animal.juvenile.count as f64 / pre_juv as f64;
     }
 
     // Preserve berried_females <= adults invariant (also trims egg cohorts)
     state.animal.clamp_berried_to_adults();
 }
 
-fn route_dead_shrimp_to_detritus(state: &mut TankState, adult_deaths: u32, juv_deaths: u32) {
-    if adult_deaths == 0 && juv_deaths == 0 {
+fn route_dead_shrimp_to_detritus(
+    state: &mut TankState,
+    adult_deaths: u32,
+    sub_adult_deaths: u32,
+    juv_deaths: u32,
+) {
+    if adult_deaths == 0 && sub_adult_deaths == 0 && juv_deaths == 0 {
         return;
     }
 
-    let total_shrimp = state.animal.adults_count + state.animal.juveniles_count;
-    let total_dead = adult_deaths + juv_deaths;
     let detritus_fraction = state.process_params.death_biomass_to_detritus_fraction;
     debug_assert!(
         (detritus_fraction - 1.0).abs() <= DEATH_DETRITUS_FRACTION_TOLERANCE,
@@ -637,9 +851,9 @@ fn route_dead_shrimp_to_detritus(state: &mut TankState, adult_deaths: u32, juv_d
         detritus_fraction,
     );
 
-    // Phase-1 mortality is closed-loop: all dead biomass and reserve stay
-    // in-tank as detritus until an explicit export path exists.
+    // Route dead body biomass per stage
     let dead_biomass_g = (f64::from(adult_deaths) * ADULT_SHRIMP_BIOMASS_G)
+        + (f64::from(sub_adult_deaths) * SUB_ADULT_SHRIMP_BIOMASS_G)
         + (f64::from(juv_deaths) * JUVENILE_SHRIMP_BIOMASS_G);
     state.detritus.fine_detritus_g_total += shrimp_body_detrital_mass_g(
         dead_biomass_g * detritus_fraction,
@@ -647,33 +861,67 @@ fn route_dead_shrimp_to_detritus(state: &mut TankState, adult_deaths: u32, juv_d
         state.shrimp_params.body_carbon_mg_per_g_wet_mass,
     );
 
-    // Proportionally transfer dead shrimp's share of the reserve pool to detritus.
-    if total_shrimp > 0 && state.animal.reserve_g > f64::EPSILON {
-        let dead_fraction = f64::from(total_dead) / f64::from(total_shrimp);
-        let reserve_transfer_g = state.animal.reserve_g * dead_fraction;
-        state.animal.reserve_g -= reserve_transfer_g;
-        state.detritus.fine_detritus_g_total += reserve_transfer_g * detritus_fraction;
+    // Transfer dead shrimp's share of each stage's reserve to detritus.
+    // Adult reserve
+    if adult_deaths > 0 && state.animal.adult.count > 0 {
+        let dead_fraction = f64::from(adult_deaths) / f64::from(state.animal.adult.count);
+        let reserve_transfer = state.animal.adult.reserve_g * dead_fraction;
+        state.animal.adult.reserve_g -= reserve_transfer;
+        state.detritus.fine_detritus_g_total += reserve_transfer * detritus_fraction;
+    } else if adult_deaths > 0 {
+        // All adults died: transfer entire reserve
+        state.detritus.fine_detritus_g_total +=
+            state.animal.adult.reserve_g * detritus_fraction;
+        state.animal.adult.reserve_g = 0.0;
+    }
+
+    // Sub-adult reserve
+    if sub_adult_deaths > 0 && state.animal.sub_adult.count > 0 {
+        let dead_fraction =
+            f64::from(sub_adult_deaths) / f64::from(state.animal.sub_adult.count);
+        let reserve_transfer = state.animal.sub_adult.reserve_g * dead_fraction;
+        state.animal.sub_adult.reserve_g -= reserve_transfer;
+        state.detritus.fine_detritus_g_total += reserve_transfer * detritus_fraction;
+    } else if sub_adult_deaths > 0 {
+        state.detritus.fine_detritus_g_total +=
+            state.animal.sub_adult.reserve_g * detritus_fraction;
+        state.animal.sub_adult.reserve_g = 0.0;
+    }
+
+    // Juvenile reserve
+    if juv_deaths > 0 && state.animal.juvenile.count > 0 {
+        let dead_fraction = f64::from(juv_deaths) / f64::from(state.animal.juvenile.count);
+        let reserve_transfer = state.animal.juvenile.reserve_g * dead_fraction;
+        state.animal.juvenile.reserve_g -= reserve_transfer;
+        state.detritus.fine_detritus_g_total += reserve_transfer * detritus_fraction;
+    } else if juv_deaths > 0 {
+        state.detritus.fine_detritus_g_total +=
+            state.animal.juvenile.reserve_g * detritus_fraction;
+        state.animal.juvenile.reserve_g = 0.0;
     }
 }
 
-fn fund_hatched_clutch_biomass(state: &mut TankState) -> bool {
+/// Fund the biomass for a hatched clutch from the adult reserve.
+fn fund_hatched_clutch_biomass(state: &mut TankState, effective_clutch_size: u32) -> bool {
     fund_live_shrimp_biomass(
-        state,
-        f64::from(JUVENILES_PER_CLUTCH) * JUVENILE_SHRIMP_BIOMASS_G,
+        &mut state.animal.adult.reserve_g,
+        f64::from(effective_clutch_size) * JUVENILE_SHRIMP_BIOMASS_G,
     )
 }
 
-fn fund_live_shrimp_biomass(state: &mut TankState, biomass_g: f64) -> bool {
+/// Attempts to fund growth biomass from a given reserve pool.
+/// Returns true if the reserve was sufficient.
+fn fund_live_shrimp_biomass(reserve: &mut f64, biomass_g: f64) -> bool {
     if biomass_g <= f64::EPSILON {
         return true;
     }
 
     let required_reserve_g = biomass_g * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
-    if state.animal.reserve_g + f64::EPSILON < required_reserve_g {
+    if *reserve + f64::EPSILON < required_reserve_g {
         return false;
     }
 
-    state.animal.reserve_g -= required_reserve_g;
+    *reserve -= required_reserve_g;
     true
 }
 
@@ -727,7 +975,7 @@ fn reset_hourly_accumulators(state: &mut TankState) {
 // ── Factor functions ────────────────────────────────────────────────────────
 
 /// Temperature factor for reproduction.
-/// Best 22–26 °C, clearly worse by 30 °C, near-zero by 33 °C.
+/// Best 22-26 C, clearly worse by 30 C, near-zero by 33 C.
 fn temp_repro_factor(temp: f64, params: &ShrimpRuntimeParams) -> f64 {
     let opt_min = params.optimal_temp_min_c;
     let opt_max = params.optimal_temp_max_c;
@@ -777,7 +1025,8 @@ fn gh_mineral_factor(gh_d: f64, params: &ShrimpRuntimeParams) -> f64 {
 mod tests {
     use super::{
         refresh_carbonate_state, route_consumed_food, shrimp_feeding, step_daily_shrimp,
-        update_condition, MG_N_PER_MEQ_AMMONIA,
+        update_condition, ADULT_FEEDING_WEIGHT, JUVENILE_FEEDING_WEIGHT, MG_N_PER_MEQ_AMMONIA,
+        SUB_ADULT_FEEDING_WEIGHT,
     };
     use crate::{algae_detrital_mass_g, SimSeed, TankState, WaterState};
 
@@ -807,8 +1056,10 @@ mod tests {
         state.water.magnesium_mg_total = 10.0 * volume_l;
         state.algae.periphyton_biomass_g = 5.0;
 
-        state.animal.adults_count = 10;
-        state.animal.condition_index = 0.0;
+        state.animal.adult.count = 10;
+        state.animal.adult.condition_index = 0.0;
+        state.animal.sub_adult.condition_index = 0.0;
+        state.animal.juvenile.condition_index = 0.0;
         state.animal.molt_stress_index = 0.0;
         state.animal.reproductive_readiness_index = 0.0;
 
@@ -828,12 +1079,15 @@ mod tests {
         let mut state = TankState::new(SimSeed(9999));
         state.algae.periphyton_biomass_g = 5.0;
         state.detritus.fine_detritus_g_total = 0.0;
-        state.animal.adults_count = 10;
+        state.animal.adult.count = 10;
 
         let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
         let grazing_access_factor =
             0.5 + (0.5 * state.avg_substrate_index(|layer| layer.grazing_surface_index));
-        let expected_periphyton_biomass_removed = 10.0
+        let total_feeding_units = state.animal.adult.count as f64 * ADULT_FEEDING_WEIGHT
+            + state.animal.sub_adult.count as f64 * SUB_ADULT_FEEDING_WEIGHT
+            + state.animal.juvenile.count as f64 * JUVENILE_FEEDING_WEIGHT;
+        let expected_periphyton_biomass_removed = total_feeding_units
             * state
                 .process_params
                 .shrimp_periphyton_grazing_g_per_shrimp_per_day
@@ -856,8 +1110,8 @@ mod tests {
         let mut state = TankState::new(SimSeed(10_003));
         state.algae.periphyton_biomass_g = 0.08;
         state.detritus.fine_detritus_g_total = 5.0;
-        state.animal.adults_count = 10;
-        state.animal.juveniles_count = 0;
+        state.animal.adult.count = 10;
+        state.animal.juvenile.count = 0;
         state
             .process_params
             .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.01;
@@ -867,8 +1121,9 @@ mod tests {
         }
 
         let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
-        let total_feeding_units =
-            state.animal.adults_count as f64 + state.animal.juveniles_count as f64 * 0.3;
+        let total_feeding_units = state.animal.adult.count as f64 * ADULT_FEEDING_WEIGHT
+            + state.animal.sub_adult.count as f64 * SUB_ADULT_FEEDING_WEIGHT
+            + state.animal.juvenile.count as f64 * JUVENILE_FEEDING_WEIGHT;
         let max_daily_intake_route_g = algae_detrital_mass_g(
             total_feeding_units
                 * state
@@ -905,7 +1160,7 @@ mod tests {
         state.water.alkalinity_meq_total = 0.0;
         state.water.dissolved_organic_carbon_mg_c_total = 0.0;
         state.water.dissolved_inorganic_carbon_mg_c_total = 0.0;
-        state.animal.reserve_g = 0.0;
+        state.animal.adult.reserve_g = 0.0;
 
         let consumed_n_mg = 16.0;
         let consumed_c_mg = 100.0;
@@ -921,7 +1176,8 @@ mod tests {
         let o2_demand_mg = target_respired_c_mg * params.shrimp_o2_per_mg_c_respired;
         let respiration_scale = state.water.dissolved_oxygen_mg_total / o2_demand_mg;
 
-        route_consumed_food(&mut state, consumed_n_mg, consumed_c_mg);
+        // Route with all feeding weight going to adults (no sub-adults or juveniles)
+        route_consumed_food(&mut state, consumed_n_mg, consumed_c_mg, 1.0, 0.0, 0.0, 1.0);
 
         assert_close(state.water.dissolved_oxygen_mg_total, 0.0, 1e-12);
         assert_close(
@@ -941,7 +1197,7 @@ mod tests {
             1e-12,
         );
         assert_close(
-            state.animal.reserve_g,
+            state.animal.adult.reserve_g,
             (assimilated_n_mg * growth_frac
                 + (target_respired_n_mg - target_respired_n_mg * respiration_scale)
                 + assimilated_c_mg * growth_frac
@@ -968,8 +1224,8 @@ mod tests {
         );
         assert_close(actual.water.ph, expected.water.ph, 1e-9);
         assert_close(
-            actual.animal.condition_index,
-            expected.animal.condition_index,
+            actual.animal.adult.condition_index,
+            expected.animal.adult.condition_index,
             1e-9,
         );
     }
