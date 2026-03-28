@@ -172,12 +172,20 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let nob_k_do_mg_per_l = pp.nob_k_do_mg_per_l.max(0.01);
 
     // Shared logistic factor for nitrifier growth bookkeeping.
-    // Growth is suppressed as total biomass approaches the carrying capacity.
-    let capacity_g = 0.5;
+    // Growth is suppressed as total biomass approaches the habitat-derived
+    // carrying capacity (base_density × Σ area × flow × O2 per habitat).
+    let capacity_g = compute_biofilter_carrying_capacity(
+        &state.habitat_registry,
+        pp.nitrifier_base_density_g_per_cm2,
+    );
     let total_nitrifier_g = state.microbe.ammonia_oxidizer_biomass_g
         + state.microbe.nitrite_oxidizer_biomass_g
         + state.microbe.comammox_biomass_g;
-    let logistic_factor = (1.0 - total_nitrifier_g / capacity_g).clamp(0.0, 1.0);
+    let logistic_factor = if capacity_g > f64::EPSILON {
+        (1.0 - total_nitrifier_g / capacity_g).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
 
     // 4a. AOB: TAN -> nitrite
     let aob_env_factor = combined_env
@@ -576,17 +584,50 @@ fn monod_factor(substrate: f64, k_substrate: f64) -> f64 {
     substrate / (substrate + k_substrate)
 }
 
+/// Compute the total nitrifier carrying capacity (g) from the habitat
+/// registry.
+///
+/// Each habitat contributes:
+///   area_cm2 × flow_exposure × oxygen_exposure × base_density_g_per_cm2
+///
+/// The product area × flow × O2 represents the *effective* colonizable area
+/// for nitrifiers: high flow delivers substrate (TAN) and the oxygen needed
+/// for autotrophic nitrification, so both modifiers act multiplicatively.
+///
+/// A minimum floor of 0.01 g prevents division-by-zero in the logistic factor
+/// when the registry is empty or all areas are zero (e.g. no filter, no
+/// substrate, no hardscape).
+pub fn compute_biofilter_carrying_capacity(
+    habitat_registry: &[crate::types::HabitatEntry],
+    base_density_g_per_cm2: f64,
+) -> f64 {
+    let density = safe_rate(base_density_g_per_cm2);
+    let raw: f64 = habitat_registry
+        .iter()
+        .map(|h| h.colonizable_area_cm2.max(0.0) * h.flow_exposure * h.oxygen_exposure * density)
+        .sum();
+    raw.max(0.01)
+}
+
 /// Daily biofilter maturity update. Called every 24 ticks.
 /// Recomputes `filter_state.biofilter_maturity_index` from guild biomass.
 pub fn update_daily_biofilter_maturity(state: &mut TankState) -> f64 {
     let prev = state.filter_state.biofilter_maturity_index;
 
-    // Capacity reference: a "mature" biofilter might have ~0.5g total nitrifier biomass
-    let capacity_g = 0.5;
+    // Capacity reference derived from habitat registry: same formulation used
+    // by the hourly logistic factor so that maturity tracks the same ceiling.
+    let capacity_g = compute_biofilter_carrying_capacity(
+        &state.habitat_registry,
+        state.process_params.nitrifier_base_density_g_per_cm2,
+    );
     let total_nitrifier_g = state.microbe.ammonia_oxidizer_biomass_g
         + state.microbe.nitrite_oxidizer_biomass_g
         + state.microbe.comammox_biomass_g;
-    let raw_maturity = (total_nitrifier_g / capacity_g).clamp(0.0, 1.0);
+    let raw_maturity = if capacity_g > f64::EPSILON {
+        (total_nitrifier_g / capacity_g).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
 
     // Smooth towards raw_maturity
     let alpha = 0.1;

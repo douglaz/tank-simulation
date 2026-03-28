@@ -388,6 +388,8 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
         comammox_growth_yield: preset.comammox_growth_yield,
         comammox_decay_rate_per_hour: preset.comammox_decay_rate_per_hour,
 
+        nitrifier_base_density_g_per_cm2: defaults.nitrifier_base_density_g_per_cm2,
+
         o2_per_mg_n_nitrified: preset.o2_per_mg_n_nitrified,
         alkalinity_meq_per_mg_n_nitrified: preset.alkalinity_meq_per_mg_n_nitrified,
 

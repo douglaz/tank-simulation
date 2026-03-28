@@ -411,6 +411,15 @@ fn default_death_biomass_to_detritus_fraction() -> f64 {
     1.0
 }
 
+// -- Biofilter carrying capacity defaults --
+
+/// Default nitrifier density: 2.5e-4 g/cm². With the default 2000 cm²
+/// filter media at full flow and O2 exposure this yields ~0.5 g capacity,
+/// preserving backward compatibility with the former hardcoded constant.
+fn default_nitrifier_base_density_g_per_cm2() -> f64 {
+    2.5e-4
+}
+
 // -- Microfauna feeding pathway defaults --
 // Phase-1 values parallel shrimp defaults. Microfauna are smaller organisms
 // with similar detritivorous feeding ecology.

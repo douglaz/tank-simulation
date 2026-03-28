@@ -292,13 +292,8 @@ fn feed_pulse_moves_through_all_major_pools() -> Result<(), SimError> {
 #[test]
 fn doc_pathway_dissolution_and_consumption_balance() -> Result<(), SimError> {
     let state = doc_pathway_state();
-    let n_to_c = state.process_params.feed_n_to_c_ratio;
-    let diss_rate = state.process_params.fine_detritus_dissolution_rate_per_hour;
 
     let initial_fine_detritus = state.detritus.fine_detritus_g_total;
-    let initial_doc = state.water.dissolved_organic_carbon_mg_c_total;
-    let initial_don = state.water.dissolved_organic_nitrogen_mg_n_total;
-    let initial_dic = state.water.dissolved_inorganic_carbon_mg_c_total;
     let initial_tan = state.water.ammonia_total_mg_n_total;
 
     let mut engine = Engine::from_parts(state, vec![]);
@@ -311,20 +306,7 @@ fn doc_pathway_dissolution_and_consumption_balance() -> Result<(), SimError> {
         "fine detritus should decrease from dissolution: before={initial_fine_detritus}, after={}",
         after.detritus.fine_detritus_g_total
     );
-    let detritus_consumed_g = initial_fine_detritus - after.detritus.fine_detritus_g_total;
-
-    // 2. DOC produced = dissolved_g × 1000 / (1 + ratio) approximately
-    // (decomposer consumption will have consumed some, so DOC change will be less)
-    // But DOC + DIC change should account for all the carbon from dissolution.
-    let doc_change = after.water.dissolved_organic_carbon_mg_c_total - initial_doc;
-    let dic_change = after.water.dissolved_inorganic_carbon_mg_c_total - initial_dic;
-    // Carbon from dissolved detritus
-    let detritus_c_released_mg = detritus_consumed_g * 1000.0 / (1.0 + n_to_c);
-
-    // DOC increase + DIC increase + decomposer biomass C change should ≈ detritus C released
-    // (We use the overall budget conservation to verify this indirectly.)
-
-    // 3. TAN should increase from mineralization
+    // 2. TAN should increase from mineralization
     assert!(
         after.water.ammonia_total_mg_n_total > initial_tan,
         "TAN should increase from decomposer mineralization of DON: before={initial_tan}, after={}",
