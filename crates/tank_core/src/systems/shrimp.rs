@@ -1,10 +1,9 @@
 use crate::systems::chemistry::{compute_nh3_mg_l, resolve_carbonate_state};
 use crate::types::{
     algae_carbon_mg, algae_detrital_mass_g, algae_nitrogen_mg, detritus_carbon_mg,
-    detritus_nitrogen_mg, live_biomass_carbon_mg, live_biomass_detrital_mass_g,
-    live_biomass_nitrogen_mg, EggCohort, EventCause, EventKind, EventSeverity, ShrimpRuntimeParams,
-    TankState, ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G,
-    LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
+    detritus_nitrogen_mg, live_biomass_detrital_mass_g, EggCohort, EventCause, EventKind,
+    EventSeverity, ShrimpRuntimeParams, TankState, ADULT_SHRIMP_BIOMASS_G,
+    JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
 };
 
 const JUVENILES_PER_CLUTCH: u32 = 25;
@@ -76,6 +75,7 @@ pub fn step_daily_shrimp(state: &mut TankState) {
     }
 
     shrimp_feeding(state);
+    refresh_carbonate_state(state);
     update_condition(state);
     update_molt_stress(state);
     update_reproductive_readiness(state);
@@ -216,24 +216,38 @@ fn route_consumed_food(state: &mut TankState, consumed_n_mg: f64, consumed_c_mg:
     state.water.dissolved_organic_carbon_mg_c_total += excreted_c_mg;
 
     // ── Respiration: O2 demand + DIC ──
-    let respired_c_mg = assimilated_c_mg * resp_frac;
+    // When DO is limiting we only oxidize the share that available O2 can
+    // support. The unrespired assimilated mass stays in reserve so C/N and O2
+    // remain stoichiometrically coupled instead of creating DIC/TAN from
+    // respiration that never actually consumed oxygen.
+    let target_respired_c_mg = assimilated_c_mg * resp_frac;
+    let o2_demand_mg = target_respired_c_mg * o2_per_c;
+    let actual_o2_consumed_mg = state
+        .water
+        .dissolved_oxygen_mg_total
+        .max(0.0)
+        .min(o2_demand_mg);
+    let respiration_scale = if o2_demand_mg > f64::EPSILON {
+        actual_o2_consumed_mg / o2_demand_mg
+    } else {
+        1.0
+    };
+    let respired_c_mg = target_respired_c_mg * respiration_scale;
     state.water.dissolved_inorganic_carbon_mg_c_total += respired_c_mg;
-
-    // O2 consumption: mg O2 = mg C respired × respiratory quotient
-    let o2_demand_mg = respired_c_mg * o2_per_c;
     state.water.dissolved_oxygen_mg_total =
-        (state.water.dissolved_oxygen_mg_total - o2_demand_mg).max(0.0);
+        (state.water.dissolved_oxygen_mg_total - actual_o2_consumed_mg).max(0.0);
 
     // Respired N is released as TAN (nitrogen from oxidized amino acids).
-    let respired_n_mg = assimilated_n_mg * resp_frac;
+    let target_respired_n_mg = assimilated_n_mg * resp_frac;
+    let respired_n_mg = target_respired_n_mg * respiration_scale;
     state.water.ammonia_total_mg_n_total += respired_n_mg;
 
     // ── Retained: body reserve ──
     // Phase 1 only accumulates this retained share. Later reserve/condition
     // work will add maintenance, molt, and reproduction drains so reserve_g
     // does not grow without bound over multi-year runs.
-    let retained_n_mg = assimilated_n_mg * growth_frac;
-    let retained_c_mg = assimilated_c_mg * growth_frac;
+    let retained_n_mg = assimilated_n_mg * growth_frac + (target_respired_n_mg - respired_n_mg);
+    let retained_c_mg = assimilated_c_mg * growth_frac + (target_respired_c_mg - respired_c_mg);
     // Convert back to organic-matter grams for the reserve pool.
     let retained_mass_g = (retained_n_mg + retained_c_mg) / 1000.0;
     state.animal.reserve_g += retained_mass_g;
@@ -619,56 +633,17 @@ fn fund_hatched_clutch_biomass(state: &mut TankState) -> bool {
     )
 }
 
-fn withdraw_from_preferred_pools(preferred: &mut f64, fallback: &mut f64, amount_mg: f64) {
-    let preferred_withdrawal = preferred.min(amount_mg);
-    *preferred -= preferred_withdrawal;
-    let remaining = amount_mg - preferred_withdrawal;
-    if remaining > f64::EPSILON {
-        *fallback = (*fallback - remaining).max(0.0);
-    }
-}
-
 fn fund_live_shrimp_biomass(state: &mut TankState, biomass_g: f64) -> bool {
     if biomass_g <= f64::EPSILON {
         return true;
     }
 
     let required_reserve_g = biomass_g * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
-    let reserve_to_spend_g = state.animal.reserve_g.min(required_reserve_g);
-    let reserve_shortfall_g = required_reserve_g - reserve_to_spend_g;
-    if reserve_shortfall_g <= f64::EPSILON {
-        state.animal.reserve_g -= reserve_to_spend_g;
-        return true;
-    }
-
-    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
-    let water_biomass_equivalent_g = reserve_shortfall_g / LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
-    let required_nitrogen_mg = live_biomass_nitrogen_mg(water_biomass_equivalent_g, n_to_c_ratio);
-    let required_carbon_mg = live_biomass_carbon_mg(water_biomass_equivalent_g, n_to_c_ratio);
-    let available_nitrogen_mg =
-        state.water.dissolved_organic_nitrogen_mg_n_total + state.water.ammonia_total_mg_n_total;
-    let available_carbon_mg = state.water.dissolved_organic_carbon_mg_c_total
-        + state.water.dissolved_inorganic_carbon_mg_c_total;
-
-    if available_nitrogen_mg + f64::EPSILON < required_nitrogen_mg
-        || available_carbon_mg + f64::EPSILON < required_carbon_mg
-    {
+    if state.animal.reserve_g + f64::EPSILON < required_reserve_g {
         return false;
     }
 
-    state.animal.reserve_g -= reserve_to_spend_g;
-
-    withdraw_from_preferred_pools(
-        &mut state.water.dissolved_organic_nitrogen_mg_n_total,
-        &mut state.water.ammonia_total_mg_n_total,
-        required_nitrogen_mg,
-    );
-    withdraw_from_preferred_pools(
-        &mut state.water.dissolved_organic_carbon_mg_c_total,
-        &mut state.water.dissolved_inorganic_carbon_mg_c_total,
-        required_carbon_mg,
-    );
-
+    state.animal.reserve_g -= required_reserve_g;
     true
 }
 

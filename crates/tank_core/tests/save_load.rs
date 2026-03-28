@@ -1,7 +1,9 @@
 use tank_core::systems::chemistry::solve_carbonate_equilibrium;
+use tank_core::systems::shrimp::update_stability_tracker;
 use tank_core::{
     Engine, MicrobeState, PlayerAction, ProcessParams, SaveFile, SimError, SimSeed,
-    SimulationEngine, SourceWaterProfile, TankState, WaterState, APP_VERSION, SCHEMA_VERSION,
+    SimulationEngine, SourceWaterProfile, StabilityTracker, TankState, WaterState, APP_VERSION,
+    SCHEMA_VERSION,
 };
 
 #[test]
@@ -224,6 +226,46 @@ fn legacy_schema_v2_saves_without_tracker_reseed_stability_baselines(
     );
     assert!((migrated.state.stability_tracker.prev_gh_d - migrated.state.gh_d()).abs() < 1e-9);
     assert_eq!(migrated.state.stability_tracker.instability_index, 0.0);
+
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v2_saves_with_unseeded_tracker_reseed_stability_baselines(
+) -> Result<(), tank_core::SimError> {
+    let mut legacy_state = TankState::new(SimSeed(108));
+    let gross_volume_l = legacy_state.geometry.gross_water_volume_l();
+    legacy_state.water = WaterState::default_for_volume_l(gross_volume_l);
+    legacy_state.stability_tracker = StabilityTracker::default();
+
+    let json = serde_json::json!({
+        "schema_version": 2,
+        "app_version": APP_VERSION,
+        "state": legacy_state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert!(
+        (migrated.state.stability_tracker.prev_temp_c - migrated.state.water.temperature_c).abs()
+            < 1e-9
+    );
+    assert!((migrated.state.stability_tracker.prev_ph - migrated.state.water.ph).abs() < 1e-9);
+    assert!(
+        (migrated.state.stability_tracker.prev_do_mg_l - migrated.state.do_mg_per_l()).abs() < 1e-9
+    );
+    assert!((migrated.state.stability_tracker.prev_gh_d - migrated.state.gh_d()).abs() < 1e-9);
+    assert_eq!(migrated.state.stability_tracker.instability_index, 0.0);
+
+    let mut loaded_state = migrated.state.clone();
+    update_stability_tracker(&mut loaded_state);
+    assert!(
+        loaded_state.stability_tracker.instability_index.abs() < 1e-12,
+        "reseeded legacy tracker should not register a fake first-day swing"
+    );
 
     Ok(())
 }

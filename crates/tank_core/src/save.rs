@@ -3,7 +3,7 @@ use serde_json::Value;
 
 use crate::{
     engine::{Engine, SimulationEngine},
-    types::{PlayerAction, SimError, TankState},
+    types::{PlayerAction, SimError, StabilityTracker, TankState},
 };
 
 /// Current schema version. Bump this when the save format changes.
@@ -179,6 +179,7 @@ impl SaveFile {
         let carbonate_cache_normalized = normalize_loaded_carbonate_state(&mut save.state);
         reconcile_stability_tracker(
             &mut save.state,
+            file_version,
             stability_tracker_present,
             carbonate_cache_normalized,
         );
@@ -349,16 +350,52 @@ fn normalize_loaded_carbonate_state(state: &mut TankState) -> bool {
 
 fn reconcile_stability_tracker(
     state: &mut TankState,
+    source_schema_version: u32,
     stability_tracker_present: bool,
     carbonate_cache_normalized: bool,
 ) {
-    if !stability_tracker_present {
+    if !stability_tracker_present
+        || has_unseeded_legacy_stability_tracker(source_schema_version, state)
+    {
         state.reseed_stability_tracker();
     } else if carbonate_cache_normalized {
         // Avoid a fake load-time chemistry swing when we repaired stale
         // cached pH/bicarbonate fields from the canonical carbonate inputs.
         state.stability_tracker.prev_ph = state.water.ph;
     }
+}
+
+/// Schema-2 saves created before tracker seeding existed can serialize the
+/// `StabilityTracker::default()` sentinel even when the live water baselines
+/// were different. Reseed only that legacy/default case so valid historical
+/// trackers from later schemas keep their recorded baselines.
+fn has_unseeded_legacy_stability_tracker(source_schema_version: u32, state: &TankState) -> bool {
+    source_schema_version == 2
+        && state.stability_tracker == StabilityTracker::default()
+        && !stability_tracker_matches_water(state)
+}
+
+fn stability_tracker_matches_water(state: &TankState) -> bool {
+    let volume_l = state.water_volume_l();
+    approx_eq(
+        state.stability_tracker.prev_temp_c,
+        state.water.temperature_c,
+        1e-9,
+    ) && approx_eq(state.stability_tracker.prev_ph, state.water.ph, 1e-9)
+        && approx_eq(
+            state.stability_tracker.prev_gh_d,
+            state.water.gh_d(volume_l),
+            1e-9,
+        )
+        && approx_eq(
+            state.stability_tracker.prev_do_mg_l,
+            state.water.do_mg_per_l(volume_l),
+            1e-9,
+        )
+}
+
+fn approx_eq(lhs: f64, rhs: f64, tolerance: f64) -> bool {
+    (lhs - rhs).abs() <= tolerance
 }
 
 fn set_schema_version(value: &mut Value, version: u32) -> Result<(), SimError> {
