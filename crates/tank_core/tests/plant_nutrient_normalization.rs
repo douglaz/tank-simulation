@@ -53,6 +53,12 @@ fn state_at_volume_with_concentrations(
     state.hardware.light.intensity_index = 0.9;
     state.hardware.light.photoperiod_hours = 10.0;
     state.process_params = ProcessParams::default();
+    // Zero out extinction coefficients so depth-dependent light attenuation
+    // doesn't break concentration-invariance (tested separately).
+    state.process_params.base_extinction_coeff_per_cm = 0.0;
+    state.process_params.algae_extinction_coeff_per_cm_per_g_l = 0.0;
+    state.process_params.doc_extinction_coeff_per_cm_per_mg_c_l = 0.0;
+    state.process_params.detritus_extinction_coeff_per_cm_per_g_l = 0.0;
 
     state
 }
