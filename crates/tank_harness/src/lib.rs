@@ -211,6 +211,38 @@ impl Envelope {
                 ));
             }
         }
+        if let Some((min, max)) = self.algae_nuisance_bounds {
+            if snap.algae_nuisance_index < min || snap.algae_nuisance_index > max {
+                violations.push(format!(
+                    "algae nuisance {:.3} outside [{:.2}, {:.2}]",
+                    snap.algae_nuisance_index, min, max
+                ));
+            }
+        }
+        if let Some((min, max)) = self.biofilter_maturity_bounds {
+            if snap.biofilter_maturity_index < min || snap.biofilter_maturity_index > max {
+                violations.push(format!(
+                    "biofilter maturity {:.3} outside [{:.2}, {:.2}]",
+                    snap.biofilter_maturity_index, min, max
+                ));
+            }
+        }
+        if let Some((min, max)) = self.fast_stem_biomass_g_bounds {
+            if snap.fast_stem_biomass_g < min || snap.fast_stem_biomass_g > max {
+                violations.push(format!(
+                    "fast stem biomass {:.3}g outside [{:.2}, {:.2}]",
+                    snap.fast_stem_biomass_g, min, max
+                ));
+            }
+        }
+        if let Some((min, max)) = self.periphyton_biomass_g_bounds {
+            if snap.periphyton_biomass_g < min || snap.periphyton_biomass_g > max {
+                violations.push(format!(
+                    "periphyton biomass {:.4}g outside [{:.3}, {:.3}]",
+                    snap.periphyton_biomass_g, min, max
+                ));
+            }
+        }
 
         violations
     }
