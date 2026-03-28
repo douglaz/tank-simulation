@@ -213,11 +213,12 @@ fn json_lines_output_produces_valid_parseable_records() -> Result<(), tank_core:
 
     let tracer = engine.tracer().unwrap();
     let mut buf = Vec::new();
-    let mut sink = JsonLinesSink::new(&mut buf);
-    for tick in tracer.ticks() {
-        sink.emit_tick(tick);
+    {
+        let mut sink = JsonLinesSink::new(&mut buf);
+        for tick in tracer.ticks() {
+            sink.emit_tick(tick);
+        }
     }
-    drop(sink);
 
     let output = String::from_utf8(buf).expect("utf8");
     let lines: Vec<&str> = output.trim().split('\n').collect();
@@ -242,9 +243,10 @@ fn json_lines_output_is_jq_compatible() -> Result<(), tank_core::SimError> {
 
     let tracer = engine.tracer().unwrap();
     let mut buf = Vec::new();
-    let mut sink = JsonLinesSink::new(&mut buf);
-    sink.emit_tick(&tracer.ticks()[0]);
-    drop(sink);
+    {
+        let mut sink = JsonLinesSink::new(&mut buf);
+        sink.emit_tick(&tracer.ticks()[0]);
+    }
 
     let output = String::from_utf8(buf).expect("utf8");
     let tick: TickTrace =
