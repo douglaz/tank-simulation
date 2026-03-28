@@ -752,7 +752,7 @@ fn build_substrate_layers(
             cation_exchange_capacity_index: sub_preset.cation_exchange_capacity_index,
             detritus_trapping_index: sub_preset.detritus_trapping_index,
             colonizable_area_cm2: SubstrateLayerState {
-                kind: kind,
+                kind,
                 depth_cm: sub_preset.depth_cm,
                 ..SubstrateLayerState::default()
             }
