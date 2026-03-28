@@ -1,13 +1,13 @@
 use crate::systems::chemistry::{compute_nh3_mg_n_per_l, resolve_carbonate_state};
+#[cfg(test)]
+use crate::types::biology::{
+    ADULT_FEEDING_WEIGHT, JUVENILE_FEEDING_WEIGHT, SUB_ADULT_FEEDING_WEIGHT,
+};
 use crate::types::{
     algae_carbon_mg, algae_detrital_mass_g, algae_nitrogen_mg, detritus_carbon_mg,
     detritus_nitrogen_mg, shrimp_body_detrital_mass_g, EggCohort, EventCause, EventKind,
     EventSeverity, ShrimpRuntimeParams, TankState, ADULT_SHRIMP_BIOMASS_G,
     JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G, SUB_ADULT_SHRIMP_BIOMASS_G,
-};
-#[cfg(test)]
-use crate::types::biology::{
-    ADULT_FEEDING_WEIGHT, JUVENILE_FEEDING_WEIGHT, SUB_ADULT_FEEDING_WEIGHT,
 };
 
 const MG_N_PER_MEQ_AMMONIA: f64 = 14.007;
