@@ -77,6 +77,9 @@ pub struct AnimalState {
     pub hourly_heat_stress_accum: f64,
     #[serde(default)]
     pub hourly_instability_stress_accum: f64,
+    /// Daily consumed food on the shrimp-routing organic-matter basis.
+    /// Periphyton source biomass is converted onto that basis before this
+    /// field is recorded so satiation and reserve routing use the same units.
     #[serde(default)]
     pub daily_food_consumed_g: f64,
     /// Fractional maturation accumulator for juvenile → adult promotion.

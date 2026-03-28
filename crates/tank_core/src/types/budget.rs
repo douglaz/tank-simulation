@@ -376,6 +376,14 @@ pub fn algae_carbon_mg(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
     carbon_from_nitrogen_mg(algae_nitrogen_mg(biomass_g), n_to_c_ratio)
 }
 
+pub fn algae_detrital_mass_g(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
+    if biomass_g <= f64::EPSILON {
+        return 0.0;
+    }
+
+    (algae_nitrogen_mg(biomass_g) + algae_carbon_mg(biomass_g, n_to_c_ratio)) / 1000.0
+}
+
 pub fn live_biomass_nitrogen_mg(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
     organic_nitrogen_mg(
         biomass_g.max(0.0) * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,

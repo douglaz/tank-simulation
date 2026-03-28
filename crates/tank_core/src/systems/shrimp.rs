@@ -1,6 +1,7 @@
 use crate::systems::chemistry::{compute_nh3_mg_l, resolve_carbonate_state};
 use crate::types::{
-    algae_carbon_mg, algae_nitrogen_mg, detritus_carbon_mg, detritus_nitrogen_mg,
+    algae_carbon_mg, algae_detrital_mass_g, algae_nitrogen_mg, detritus_carbon_mg,
+    detritus_nitrogen_mg,
     live_biomass_carbon_mg, live_biomass_detrital_mass_g, live_biomass_nitrogen_mg, EggCohort,
     EventCause, EventKind, EventSeverity, ShrimpRuntimeParams, TankState, ADULT_SHRIMP_BIOMASS_G,
     JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
@@ -150,14 +151,14 @@ fn shrimp_feeding(state: &mut TankState) {
     state.detritus.fine_detritus_g_total =
         (state.detritus.fine_detritus_g_total - detritus_consumed).max(0.0);
 
-    state.animal.daily_food_consumed_g = periph_consumed + detritus_consumed;
-
     // Convert consumed food to elemental N and C for routing.
     // Phase-1 simplification: periphyton and fine detritus share the same
     // food-quality assumption (feed_n_to_c_ratio). This is documented in
     // ProcessParams and acceptable because both food sources are mixed
     // organic matter at similar N:C in a shrimp tank.
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
+    let periph_consumed_route_g = algae_detrital_mass_g(periph_consumed, n_to_c_ratio);
+    state.animal.daily_food_consumed_g = periph_consumed_route_g + detritus_consumed;
     let consumed_n_mg =
         algae_nitrogen_mg(periph_consumed) + detritus_nitrogen_mg(detritus_consumed, n_to_c_ratio);
     let consumed_c_mg = algae_carbon_mg(periph_consumed, n_to_c_ratio)
@@ -228,6 +229,9 @@ fn route_consumed_food(state: &mut TankState, consumed_n_mg: f64, consumed_c_mg:
     state.water.ammonia_total_mg_n_total += respired_n_mg;
 
     // ── Retained: body reserve ──
+    // Phase 1 only accumulates this retained share. Later reserve/condition
+    // work will add maintenance, molt, and reproduction drains so reserve_g
+    // does not grow without bound over multi-year runs.
     let retained_n_mg = assimilated_n_mg * growth_frac;
     let retained_c_mg = assimilated_c_mg * growth_frac;
     // Convert back to organic-matter grams for the reserve pool.
@@ -247,11 +251,12 @@ fn update_condition(state: &mut TankState) {
 
     let total_feeding_units =
         state.animal.adults_count as f64 + state.animal.juveniles_count as f64 * 0.3;
+    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let target_food_g = total_feeding_units
         * state
             .process_params
             .shrimp_periphyton_grazing_g_per_shrimp_per_day
-        * 2.0;
+        * (1.0 + algae_detrital_mass_g(1.0, n_to_c_ratio));
     let food_factor = if target_food_g > f64::EPSILON {
         let satiation = (state.animal.daily_food_consumed_g / target_food_g).clamp(0.0, 1.0);
         0.4 + (0.6 * satiation)

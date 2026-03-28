@@ -522,12 +522,11 @@ fn action_budget_label(action: &PlayerAction) -> &'static str {
 }
 
 fn enforce_tracked_tick_budget_guard(tick: &TickBudgetRecord) -> Result<(), SimError> {
-    if tick_has_closed_system_nitrogen(tick)
-        && tick.net_delta.nitrogen.net_mg().abs() > BUDGET_GUARD_TOLERANCE_MG
-    {
+    let nitrogen_residual_mg = nitrogen_guard_delta_mg(tick);
+    if nitrogen_residual_mg.abs() > BUDGET_GUARD_TOLERANCE_MG {
         return Err(SimError::BudgetImbalance {
             element: "nitrogen",
-            delta_mg: tick.net_delta.nitrogen.net_mg(),
+            delta_mg: nitrogen_residual_mg,
             tick_index: tick.tick_index,
             day: tick.day,
             hour: tick.hour,
@@ -535,7 +534,7 @@ fn enforce_tracked_tick_budget_guard(tick: &TickBudgetRecord) -> Result<(), SimE
     }
 
     let carbon_residual_mg = carbon_guard_delta_mg(tick);
-    if tick_has_closed_system_carbon(tick) && carbon_residual_mg.abs() > BUDGET_GUARD_TOLERANCE_MG {
+    if carbon_residual_mg.abs() > BUDGET_GUARD_TOLERANCE_MG {
         return Err(SimError::BudgetImbalance {
             element: "carbon",
             delta_mg: carbon_residual_mg,
@@ -574,11 +573,17 @@ fn tick_has_closed_system_carbon(tick: &TickBudgetRecord) -> bool {
         .any(|entry| entry_has_open_action_flux(entry.label.as_str(), entry.delta.carbon))
 }
 
+fn nitrogen_guard_delta_mg(tick: &TickBudgetRecord) -> f64 {
+    tick.net_delta.nitrogen.net_mg() - open_action_flux_mg(tick, |entry| entry.delta.nitrogen)
+}
+
 fn carbon_guard_delta_mg(tick: &TickBudgetRecord) -> f64 {
     // The hourly chemistry system can opt into an explicit atmospheric DIC
     // shortcut. Subtract that known open-system exchange so the guard still
     // catches unrelated carbon leaks elsewhere in the same tick.
-    tick.net_delta.carbon.net_mg() - chemistry_external_carbon_flux_mg(tick)
+    tick.net_delta.carbon.net_mg()
+        - open_action_flux_mg(tick, |entry| entry.delta.carbon)
+        - chemistry_external_carbon_flux_mg(tick)
 }
 
 fn chemistry_external_carbon_flux_mg(tick: &TickBudgetRecord) -> f64 {
@@ -589,7 +594,22 @@ fn chemistry_external_carbon_flux_mg(tick: &TickBudgetRecord) -> f64 {
         .sum()
 }
 
+fn open_action_flux_mg<F>(tick: &TickBudgetRecord, budget: F) -> f64
+where
+    F: Fn(&BudgetEntry) -> ElementBudget,
+{
+    tick.entries
+        .iter()
+        .filter(|entry| is_open_system_action_label(entry.label.as_str()))
+        .map(|entry| budget(entry).net_mg())
+        .sum()
+}
+
 fn entry_has_open_action_flux(label: &str, budget: ElementBudget) -> bool {
+    is_open_system_action_label(label) && element_budget_has_flux(budget)
+}
+
+fn is_open_system_action_label(label: &str) -> bool {
     matches!(
         label,
         "action:feed"
@@ -597,7 +617,7 @@ fn entry_has_open_action_flux(label: &str, budget: ElementBudget) -> bool {
             | "action:siphon_detritus"
             | "action:add_shrimp"
             | "action:remove_shrimp"
-    ) && element_budget_has_flux(budget)
+    )
 }
 
 fn element_budget_has_flux(budget: ElementBudget) -> bool {
@@ -758,6 +778,104 @@ mod tests {
 
         let err = enforce_tracked_tick_budget_guard(&tick).expect_err(
             "chemistry exchange should not hide unrelated carbon drift in the same tick",
+        );
+        assert_eq!(
+            err,
+            SimError::BudgetImbalance {
+                element: "carbon",
+                delta_mg: -4.0,
+                tick_index: 0,
+                day: 0,
+                hour: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn open_action_flux_is_subtracted_before_nitrogen_budget_guard_checks_other_leaks() {
+        let tick = synthetic_tick_with_net_delta(
+            vec![
+                BudgetEntry {
+                    label: "action:feed".to_owned(),
+                    delta: BudgetDelta {
+                        nitrogen: ElementBudget {
+                            in_mg: 10.0,
+                            out_mg: 0.0,
+                        },
+                        ..BudgetDelta::default()
+                    },
+                },
+                BudgetEntry {
+                    label: "system:daily_plants".to_owned(),
+                    delta: BudgetDelta {
+                        nitrogen: ElementBudget {
+                            in_mg: 0.0,
+                            out_mg: 3.0,
+                        },
+                        ..BudgetDelta::default()
+                    },
+                },
+            ],
+            BudgetDelta {
+                nitrogen: ElementBudget {
+                    in_mg: 10.0,
+                    out_mg: 3.0,
+                },
+                ..BudgetDelta::default()
+            },
+        );
+
+        let err = enforce_tracked_tick_budget_guard(&tick).expect_err(
+            "external feed import should not hide unrelated nitrogen drift in the same tick",
+        );
+        assert_eq!(
+            err,
+            SimError::BudgetImbalance {
+                element: "nitrogen",
+                delta_mg: -3.0,
+                tick_index: 0,
+                day: 0,
+                hour: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn open_action_flux_is_subtracted_before_carbon_budget_guard_checks_other_leaks() {
+        let tick = synthetic_tick_with_net_delta(
+            vec![
+                BudgetEntry {
+                    label: "action:water_change".to_owned(),
+                    delta: BudgetDelta {
+                        carbon: ElementBudget {
+                            in_mg: 0.0,
+                            out_mg: 8.0,
+                        },
+                        ..BudgetDelta::default()
+                    },
+                },
+                BudgetEntry {
+                    label: "system:daily_algae".to_owned(),
+                    delta: BudgetDelta {
+                        carbon: ElementBudget {
+                            in_mg: 0.0,
+                            out_mg: 4.0,
+                        },
+                        ..BudgetDelta::default()
+                    },
+                },
+            ],
+            BudgetDelta {
+                carbon: ElementBudget {
+                    in_mg: 0.0,
+                    out_mg: 12.0,
+                },
+                ..BudgetDelta::default()
+            },
+        );
+
+        let err = enforce_tracked_tick_budget_guard(&tick).expect_err(
+            "external carbon export should not hide unrelated same-tick carbon drift",
         );
         assert_eq!(
             err,

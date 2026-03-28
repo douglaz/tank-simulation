@@ -2,6 +2,11 @@ use crate::types::{SimError, TankState};
 
 const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
 
+pub fn validate_invariants(state: &TankState) -> Result<(), SimError> {
+    let mut probe = state.clone();
+    enforce_invariants(&mut probe)
+}
+
 pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
     validate_invariants(state)?;
 
@@ -190,7 +195,7 @@ fn validate_invariants(state: &TankState) -> Result<(), SimError> {
         "process.plant_photosynthesis_o2_mg_per_g_per_hour",
         pp.plant_photosynthesis_o2_mg_per_g_per_hour,
     )?;
-    check_unit_interval(
+    check_open_unit_interval(
         "process.shrimp_assimilation_efficiency",
         pp.shrimp_assimilation_efficiency,
     )?;
@@ -246,6 +251,14 @@ fn check_positive(field: &'static str, value: f64) -> Result<(), SimError> {
 
 fn check_unit_interval(field: &'static str, value: f64) -> Result<(), SimError> {
     if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+        Err(SimError::InvariantViolation { field, value })
+    } else {
+        Ok(())
+    }
+}
+
+fn check_open_unit_interval(field: &'static str, value: f64) -> Result<(), SimError> {
+    if !value.is_finite() || value <= 0.0 || value >= 1.0 {
         Err(SimError::InvariantViolation { field, value })
     } else {
         Ok(())
