@@ -31,14 +31,8 @@ pub enum PresetError {
 }
 
 pub fn load_source_water(id: &str) -> Result<SourceWaterPreset, PresetError> {
-    let preset: SourceWaterPreset = load_from_registry("source_water", id, SOURCE_WATER_PRESETS)?;
-    preset
-        .validate()
-        .map_err(|message| PresetError::Validation {
-            category: "source_water",
-            id: id.to_string(),
-            message,
-        })?;
+    let (preset, diagnostics) = load_source_water_with_diagnostics(id)?;
+    emit_diagnostics(&diagnostics);
     Ok(preset)
 }
 
@@ -51,27 +45,49 @@ pub fn load_plant(id: &str) -> Result<PlantPreset, PresetError> {
 }
 
 pub fn load_shrimp(id: &str) -> Result<ShrimpPreset, PresetError> {
-    let preset: ShrimpPreset = load_from_registry("shrimp", id, SHRIMP_PRESETS)?;
-    preset
-        .validate()
-        .map_err(|message| PresetError::Validation {
-            category: "shrimp",
-            id: id.to_string(),
-            message,
-        })?;
+    let (preset, diagnostics) = load_shrimp_with_diagnostics(id)?;
+    emit_diagnostics(&diagnostics);
     Ok(preset)
 }
 
 pub fn load_process_params(id: &str) -> Result<ProcessParamsPreset, PresetError> {
-    let preset: ProcessParamsPreset = load_from_registry("process", id, PROCESS_PRESETS)?;
-    preset
-        .validate()
-        .map_err(|message| PresetError::Validation {
-            category: "process",
-            id: id.to_string(),
-            message,
-        })?;
+    let (preset, diagnostics) = load_process_params_with_diagnostics(id)?;
+    emit_diagnostics(&diagnostics);
     Ok(preset)
+}
+
+pub fn load_source_water_with_diagnostics(
+    id: &str,
+) -> Result<(SourceWaterPreset, Vec<String>), PresetError> {
+    load_validated_with_range_diagnostics(
+        "source_water",
+        id,
+        SOURCE_WATER_PRESETS,
+        SourceWaterPreset::validate,
+        SourceWaterPreset::check_ranges,
+    )
+}
+
+pub fn load_shrimp_with_diagnostics(id: &str) -> Result<(ShrimpPreset, Vec<String>), PresetError> {
+    load_validated_with_range_diagnostics(
+        "shrimp",
+        id,
+        SHRIMP_PRESETS,
+        ShrimpPreset::validate,
+        ShrimpPreset::check_ranges,
+    )
+}
+
+pub fn load_process_params_with_diagnostics(
+    id: &str,
+) -> Result<(ProcessParamsPreset, Vec<String>), PresetError> {
+    load_validated_with_range_diagnostics(
+        "process",
+        id,
+        PROCESS_PRESETS,
+        ProcessParamsPreset::validate,
+        ProcessParamsPreset::check_ranges,
+    )
 }
 
 pub fn load_scenario(id: &str) -> Result<ScenarioPreset, PresetError> {
@@ -127,6 +143,41 @@ where
         id: id.to_string(),
         message: error.to_string(),
     })
+}
+
+fn load_validated_with_range_diagnostics<T, V, W>(
+    category: &'static str,
+    id: &str,
+    registry: &[(&str, &str)],
+    validate: V,
+    check_ranges: W,
+) -> Result<(T, Vec<String>), PresetError>
+where
+    T: DeserializeOwned,
+    V: Fn(&T) -> Result<(), String>,
+    W: Fn(&T) -> Vec<RangeWarning>,
+{
+    let preset: T = load_from_registry(category, id, registry)?;
+    validate(&preset).map_err(|message| PresetError::Validation {
+        category,
+        id: id.to_string(),
+        message,
+    })?;
+    let diagnostics = format_range_diagnostics(category, id, &check_ranges(&preset));
+    Ok((preset, diagnostics))
+}
+
+fn format_range_diagnostics(category: &'static str, id: &str, warnings: &[RangeWarning]) -> Vec<String> {
+    warnings
+        .iter()
+        .map(|warning| format!("warning: preset `{id}` in category `{category}`: {warning}"))
+        .collect()
+}
+
+fn emit_diagnostics(diagnostics: &[String]) {
+    for diagnostic in diagnostics {
+        eprintln!("{diagnostic}");
+    }
 }
 
 const SOURCE_WATER_PRESETS: &[(&str, &str)] = &[
@@ -194,3 +245,55 @@ const SCENARIO_PRESETS: &[(&str, &str)] = &[
         include_str!("../data/scenarios/warm_room.toml"),
     ),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn loader_range_diagnostics_use_explicit_warning_lines() -> Result<(), PresetError> {
+        let registry = &[(
+            "test",
+            r#"
+id = "test"
+name = "Test"
+mineralization_rate_per_day = 0.15
+nitrification_vmax = 0.08
+reaeration_kla_base = 0.35
+aeration_kla_boost = 0.9
+background_bod_mg_o2_per_g_biomass_per_hour = 0.05
+plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
+respiration_dic_rate_mg_c_per_g_per_hour = 0.08
+photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.12
+k_surface_w_per_m2_k = 10.0
+k_wall_w_per_m2_k = 5.0
+aob_k_tan_mg = 200.0
+
+[param_meta.aob_k_tan_mg]
+unit = "mg N/L"
+valid_range = [0.1, 5.0]
+"#,
+        )];
+
+        let (_preset, diagnostics) = load_validated_with_range_diagnostics::<ProcessParamsPreset, _, _>(
+            "process",
+            "test",
+            registry,
+            ProcessParamsPreset::validate,
+            ProcessParamsPreset::check_ranges,
+        )?;
+
+        assert_eq!(diagnostics.len(), 1);
+        assert!(diagnostics[0].contains("warning: preset `test` in category `process`"));
+        assert!(diagnostics[0].contains("parameter `aob_k_tan_mg` value 10"));
+        Ok(())
+    }
+
+    #[test]
+    fn shipped_param_meta_loaders_return_no_diagnostics() -> Result<(), PresetError> {
+        assert!(load_source_water_with_diagnostics("moderate")?.1.is_empty());
+        assert!(load_shrimp_with_diagnostics("neocaridina_davidi")?.1.is_empty());
+        assert!(load_process_params_with_diagnostics("default")?.1.is_empty());
+        Ok(())
+    }
+}

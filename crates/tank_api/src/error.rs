@@ -36,7 +36,9 @@ struct ApiErrorBody {
 impl From<SimError> for ApiError {
     fn from(err: SimError) -> Self {
         let status = match &err {
-            SimError::InvariantViolation { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+            SimError::InvariantViolation { .. } | SimError::OrderingViolation { .. } => {
+                StatusCode::INTERNAL_SERVER_ERROR
+            }
             SimError::Serialization(_) => StatusCode::INTERNAL_SERVER_ERROR,
             _ => StatusCode::BAD_REQUEST,
         };

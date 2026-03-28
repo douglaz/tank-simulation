@@ -19,15 +19,7 @@ pub fn step_daily_plants(state: &mut TankState) {
         legacy_total_param_to_mg_per_m2(state.process_params.plant_half_saturation_n_mg_total);
     let plant_half_saturation_p_mg_p_per_m2 =
         legacy_total_param_to_mg_per_m2(state.process_params.plant_half_saturation_p_mg_total);
-    let surface_area_m2 = state.geometry.footprint_area_m2().max(f64::MIN_POSITIVE);
-    let total_plant_biomass_g: f64 = state.plant_guilds.iter().map(|plant| plant.biomass_g).sum();
-    let crowding_index = (total_plant_biomass_g
-        / (surface_area_m2
-            * state
-                .process_params
-                .plant_crowding_biomass_g_per_m2
-                .max(1.0)))
-    .clamp(0.0, 1.0);
+    let crowding_index = state.derived_plant_crowding_index();
     let f_light = plant_light_factor(state);
     let f_temp = gaussian_response(
         state.water.temperature_c,

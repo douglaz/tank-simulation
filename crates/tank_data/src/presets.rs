@@ -6,7 +6,7 @@ use tank_core::systems::chemistry::{
     CARBONATE_PH_MIN,
 };
 use tank_core::types::{
-    ParamMeta, RangeWarning, LEGACY_KINETIC_REFERENCE_FOOTPRINT_M2,
+    check_all_ranges, format_param, ParamMeta, RangeWarning, LEGACY_KINETIC_REFERENCE_FOOTPRINT_M2,
     LEGACY_KINETIC_REFERENCE_VOLUME_L,
 };
 
@@ -24,6 +24,51 @@ pub struct Provenance {
     pub source_year: Option<u16>,
     pub confidence: Option<String>,
     pub notes: Option<String>,
+}
+
+fn empty_param_meta() -> ParamMeta {
+    ParamMeta {
+        unit: None,
+        source: None,
+        confidence: None,
+        valid_range: None,
+        notes: None,
+    }
+}
+
+trait ParamMetaPreset {
+    fn param_meta_map(&self) -> &BTreeMap<String, ParamMeta>;
+    fn lookup_param_value(&self, name: &str) -> Option<f64>;
+
+    fn has_param_named(&self, name: &str) -> bool {
+        self.lookup_param_value(name).is_some()
+    }
+
+    fn provenance_param_value(&self, name: &str) -> Option<f64> {
+        self.lookup_param_value(name)
+    }
+
+    fn unknown_param_meta_keys(&self) -> Vec<&str> {
+        self.param_meta_map()
+            .keys()
+            .filter(|name| !self.has_param_named(name))
+            .map(String::as_str)
+            .collect()
+    }
+
+    fn format_param(&self, name: &str) -> Option<String> {
+        let value = self.provenance_param_value(name)?;
+        Some(match self.param_meta_map().get(name) {
+            Some(meta) => format_param(name, value, meta),
+            None => format_param(name, value, &empty_param_meta()),
+        })
+    }
+
+    fn check_ranges(&self) -> Vec<RangeWarning> {
+        check_all_ranges(self.param_meta_map(), &|name| {
+            self.provenance_param_value(name)
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -47,11 +92,44 @@ pub struct SourceWaterPreset {
     pub chloride_mg_per_l: f64,
     pub sulfate_mg_per_l: f64,
     pub provenance: Option<Provenance>,
+
+    /// Per-parameter provenance metadata keyed by parameter name.
+    /// Missing entries mean no provenance has been attached yet.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub param_meta: BTreeMap<String, ParamMeta>,
 }
 
 impl SourceWaterPreset {
+    fn unknown_param_meta_keys(&self) -> Vec<&str> {
+        ParamMetaPreset::unknown_param_meta_keys(self)
+    }
+
+    /// Look up a source-water parameter value by name. Returns `None` for
+    /// unknown names.
+    pub fn param_value(&self, name: &str) -> Option<f64> {
+        ParamMetaPreset::lookup_param_value(self, name)
+    }
+
+    pub fn format_param(&self, name: &str) -> Option<String> {
+        ParamMetaPreset::format_param(self, name)
+    }
+
+    /// Check all param_meta entries with valid_range against current values.
+    /// Returns warnings for out-of-range values (never errors).
+    pub fn check_ranges(&self) -> Vec<RangeWarning> {
+        ParamMetaPreset::check_ranges(self)
+    }
+
     /// Validates that all chemistry fields are finite and non-negative.
     pub fn validate(&self) -> Result<(), String> {
+        let unknown_param_meta_keys = self.unknown_param_meta_keys();
+        if !unknown_param_meta_keys.is_empty() {
+            return Err(format!(
+                "unknown param_meta entries: {}",
+                unknown_param_meta_keys.join(", ")
+            ));
+        }
+
         let fields: &[(&str, f64)] = &[
             ("temperature_c", self.temperature_c),
             ("ammonia_mg_n_per_l", self.ammonia_mg_n_per_l),
@@ -110,6 +188,34 @@ impl SourceWaterPreset {
             }
         })?;
         Ok(())
+    }
+}
+
+impl ParamMetaPreset for SourceWaterPreset {
+    fn param_meta_map(&self) -> &BTreeMap<String, ParamMeta> {
+        &self.param_meta
+    }
+
+    fn lookup_param_value(&self, name: &str) -> Option<f64> {
+        match name {
+            "temperature_c" => Some(self.temperature_c),
+            "ammonia_mg_n_per_l" => Some(self.ammonia_mg_n_per_l),
+            "nitrite_mg_n_per_l" => Some(self.nitrite_mg_n_per_l),
+            "nitrate_mg_n_per_l" => Some(self.nitrate_mg_n_per_l),
+            "phosphate_mg_p_per_l" => Some(self.phosphate_mg_p_per_l),
+            "dic_mg_c_per_l" => Some(self.dic_mg_c_per_l),
+            "doc_mg_c_per_l" => Some(self.doc_mg_c_per_l),
+            "don_mg_n_per_l" => Some(self.don_mg_n_per_l),
+            "alkalinity_meq_per_l" => Some(self.alkalinity_meq_per_l),
+            "calcium_mg_per_l" => Some(self.calcium_mg_per_l),
+            "magnesium_mg_per_l" => Some(self.magnesium_mg_per_l),
+            "sodium_mg_per_l" => Some(self.sodium_mg_per_l),
+            "potassium_mg_per_l" => Some(self.potassium_mg_per_l),
+            "bicarbonate_mg_per_l" => Some(self.bicarbonate_mg_per_l),
+            "chloride_mg_per_l" => Some(self.chloride_mg_per_l),
+            "sulfate_mg_per_l" => Some(self.sulfate_mg_per_l),
+            _ => None,
+        }
     }
 }
 
@@ -183,12 +289,45 @@ pub struct ShrimpPreset {
     #[serde(default)]
     pub min_clutch_condition: Option<f64>,
     pub provenance: Option<Provenance>,
+
+    /// Per-parameter provenance metadata keyed by parameter name.
+    /// Missing entries mean no provenance has been attached yet.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub param_meta: BTreeMap<String, ParamMeta>,
 }
 
 impl ShrimpPreset {
+    fn unknown_param_meta_keys(&self) -> Vec<&str> {
+        ParamMetaPreset::unknown_param_meta_keys(self)
+    }
+
+    /// Look up a shrimp parameter value by name. Returns `None` for unknown
+    /// names or known optional parameters that are currently unset.
+    pub fn param_value(&self, name: &str) -> Option<f64> {
+        ParamMetaPreset::lookup_param_value(self, name)
+    }
+
+    pub fn format_param(&self, name: &str) -> Option<String> {
+        ParamMetaPreset::format_param(self, name)
+    }
+
+    /// Check all param_meta entries with valid_range against current values.
+    /// Returns warnings for out-of-range values (never errors).
+    pub fn check_ranges(&self) -> Vec<RangeWarning> {
+        ParamMetaPreset::check_ranges(self)
+    }
+
     /// Validates that all shrimp species parameters are finite, non-negative,
     /// and logically consistent.
     pub fn validate(&self) -> Result<(), String> {
+        let unknown_param_meta_keys = self.unknown_param_meta_keys();
+        if !unknown_param_meta_keys.is_empty() {
+            return Err(format!(
+                "unknown param_meta entries: {}",
+                unknown_param_meta_keys.join(", ")
+            ));
+        }
+
         let fields: &[(&str, f64)] = &[
             ("optimal_temp_min_c", self.optimal_temp_min_c),
             ("optimal_temp_max_c", self.optimal_temp_max_c),
@@ -326,6 +465,70 @@ impl ShrimpPreset {
             }
         }
         Ok(())
+    }
+}
+
+impl ParamMetaPreset for ShrimpPreset {
+    fn param_meta_map(&self) -> &BTreeMap<String, ParamMeta> {
+        &self.param_meta
+    }
+
+    fn lookup_param_value(&self, name: &str) -> Option<f64> {
+        match name {
+            "optimal_temp_min_c" => Some(self.optimal_temp_min_c),
+            "optimal_temp_max_c" => Some(self.optimal_temp_max_c),
+            "gh_min_d" => Some(self.gh_min_d),
+            "gh_max_d" => Some(self.gh_max_d),
+            "base_spawn_rate" => Some(self.base_spawn_rate),
+            "egg_duration_days" => Some(f64::from(self.egg_duration_days)),
+            "hatch_success_base" => Some(self.hatch_success_base),
+            "juvenile_sensitivity" => Some(self.juvenile_sensitivity),
+            "high_temp_repro_penalty_start_c" => Some(self.high_temp_repro_penalty_start_c),
+            "high_temp_repro_penalty_full_c" => Some(self.high_temp_repro_penalty_full_c),
+            "body_nitrogen_mg_per_g_wet_mass" => self.body_nitrogen_mg_per_g_wet_mass,
+            "body_carbon_mg_per_g_wet_mass" => self.body_carbon_mg_per_g_wet_mass,
+            "juvenile_to_subadult_days" => self.juvenile_to_subadult_days,
+            "subadult_to_adult_days" => self.subadult_to_adult_days,
+            "juvenile_maturation_condition_threshold" => {
+                self.juvenile_maturation_condition_threshold
+            }
+            "subadult_maturation_condition_threshold" => {
+                self.subadult_maturation_condition_threshold
+            }
+            "base_molt_interval_days" => self.base_molt_interval_days,
+            "failed_molt_mortality_scale" => self.failed_molt_mortality_scale,
+            "sub_adult_sensitivity" => self.sub_adult_sensitivity,
+            "base_clutch_size" => self.base_clutch_size.map(f64::from),
+            "min_clutch_condition" => self.min_clutch_condition,
+            _ => None,
+        }
+    }
+
+    fn has_param_named(&self, name: &str) -> bool {
+        matches!(
+            name,
+            "optimal_temp_min_c"
+                | "optimal_temp_max_c"
+                | "gh_min_d"
+                | "gh_max_d"
+                | "base_spawn_rate"
+                | "egg_duration_days"
+                | "hatch_success_base"
+                | "juvenile_sensitivity"
+                | "high_temp_repro_penalty_start_c"
+                | "high_temp_repro_penalty_full_c"
+                | "body_nitrogen_mg_per_g_wet_mass"
+                | "body_carbon_mg_per_g_wet_mass"
+                | "juvenile_to_subadult_days"
+                | "subadult_to_adult_days"
+                | "juvenile_maturation_condition_threshold"
+                | "subadult_maturation_condition_threshold"
+                | "base_molt_interval_days"
+                | "failed_molt_mortality_scale"
+                | "sub_adult_sensitivity"
+                | "base_clutch_size"
+                | "min_clutch_condition"
+        )
     }
 }
 
@@ -510,161 +713,22 @@ pub struct ProcessParamsPreset {
 
 impl ProcessParamsPreset {
     fn unknown_param_meta_keys(&self) -> Vec<&str> {
-        self.param_meta
-            .keys()
-            .filter(|name| self.param_value(name).is_none())
-            .map(String::as_str)
-            .collect()
+        ParamMetaPreset::unknown_param_meta_keys(self)
     }
 
     /// Look up a parameter value by name. Returns `None` for unknown names.
     pub fn param_value(&self, name: &str) -> Option<f64> {
-        match name {
-            "mineralization_rate_per_day" => Some(self.mineralization_rate_per_day),
-            "nitrification_vmax" => Some(self.nitrification_vmax),
-            "reaeration_kla_base" => Some(self.reaeration_kla_base),
-            "aeration_kla_boost" => Some(self.aeration_kla_boost),
-            "background_bod_mg_o2_per_g_biomass_per_hour" => {
-                Some(self.background_bod_mg_o2_per_g_biomass_per_hour)
-            }
-            "plant_photosynthesis_o2_mg_per_g_per_hour" => {
-                Some(self.plant_photosynthesis_o2_mg_per_g_per_hour)
-            }
-            "respiration_dic_rate_mg_c_per_g_per_hour" => {
-                Some(self.respiration_dic_rate_mg_c_per_g_per_hour)
-            }
-            "photosynthesis_dic_rate_mg_c_per_g_per_hour" => {
-                Some(self.photosynthesis_dic_rate_mg_c_per_g_per_hour)
-            }
-            "k_surface_w_per_m2_k" => Some(self.k_surface_w_per_m2_k),
-            "k_wall_w_per_m2_k" => Some(self.k_wall_w_per_m2_k),
-            "feed_leach_rate_per_hour" => Some(self.feed_leach_rate_per_hour),
-            "fine_detritus_dissolution_rate_per_hour" => {
-                Some(self.fine_detritus_dissolution_rate_per_hour)
-            }
-            "feed_n_to_c_ratio" => Some(self.feed_n_to_c_ratio),
-            "decomposer_vmax_per_hour" => Some(self.decomposer_vmax_per_hour),
-            "decomposer_k_doc_mg" => Some(self.decomposer_k_doc_mg),
-            "decomposer_k_do_mg" => Some(self.decomposer_k_do_mg),
-            "decomposer_growth_yield" => Some(self.decomposer_growth_yield),
-            "decomposer_decay_rate_per_hour" => Some(self.decomposer_decay_rate_per_hour),
-            "aob_vmax_mg_n_per_g_per_hour" => Some(self.aob_vmax_mg_n_per_g_per_hour),
-            "aob_k_tan_mg" => Some(self.aob_k_tan_mg),
-            "aob_k_do_mg" => Some(self.aob_k_do_mg),
-            "aob_growth_yield" => Some(self.aob_growth_yield),
-            "aob_decay_rate_per_hour" => Some(self.aob_decay_rate_per_hour),
-            "nob_vmax_mg_n_per_g_per_hour" => Some(self.nob_vmax_mg_n_per_g_per_hour),
-            "nob_k_nitrite_mg" => Some(self.nob_k_nitrite_mg),
-            "nob_k_do_mg" => Some(self.nob_k_do_mg),
-            "nob_growth_yield" => Some(self.nob_growth_yield),
-            "nob_decay_rate_per_hour" => Some(self.nob_decay_rate_per_hour),
-            "comammox_vmax_fraction" => Some(self.comammox_vmax_fraction),
-            "comammox_k_tan_mg" => Some(self.comammox_k_tan_mg),
-            "comammox_k_do_mg" => Some(self.comammox_k_do_mg),
-            "comammox_growth_yield" => Some(self.comammox_growth_yield),
-            "comammox_decay_rate_per_hour" => Some(self.comammox_decay_rate_per_hour),
-            "o2_per_mg_n_nitrified" => Some(self.o2_per_mg_n_nitrified),
-            "alkalinity_meq_per_mg_n_nitrified" => Some(self.alkalinity_meq_per_mg_n_nitrified),
-            "plant_max_growth_rate_fast_stem_per_day" => {
-                Some(self.plant_max_growth_rate_fast_stem_per_day)
-            }
-            "plant_max_growth_rate_root_rosette_per_day" => {
-                Some(self.plant_max_growth_rate_root_rosette_per_day)
-            }
-            "plant_respiration_fraction_per_day" => Some(self.plant_respiration_fraction_per_day),
-            "plant_senescence_fraction_per_day" => Some(self.plant_senescence_fraction_per_day),
-            "plant_health_recovery_per_day" => Some(self.plant_health_recovery_per_day),
-            "plant_health_decline_per_day" => Some(self.plant_health_decline_per_day),
-            "plant_half_saturation_n_mg_total" => Some(self.plant_half_saturation_n_mg_total),
-            "plant_half_saturation_p_mg_total" => Some(self.plant_half_saturation_p_mg_total),
-            "plant_half_saturation_c_mg_total" => Some(self.plant_half_saturation_c_mg_total),
-            "plant_light_half_saturation" => Some(self.plant_light_half_saturation),
-            "plant_temp_optimum_c" => Some(self.plant_temp_optimum_c),
-            "plant_temp_sigma_c" => Some(self.plant_temp_sigma_c),
-            "plant_crowding_biomass_g_per_m2" => Some(self.plant_crowding_biomass_g_per_m2),
-            "algae_max_growth_rate_per_day" => Some(self.algae_max_growth_rate_per_day),
-            "periphyton_max_growth_rate_per_day" => Some(self.periphyton_max_growth_rate_per_day),
-            "algae_respiration_fraction_per_day" => Some(self.algae_respiration_fraction_per_day),
-            "algae_half_saturation_n_mg_total" => Some(self.algae_half_saturation_n_mg_total),
-            "algae_half_saturation_p_mg_total" => Some(self.algae_half_saturation_p_mg_total),
-            "algae_light_half_saturation" => Some(self.algae_light_half_saturation),
-            "algae_temp_optimum_c" => Some(self.algae_temp_optimum_c),
-            "algae_temp_sigma_c" => Some(self.algae_temp_sigma_c),
-            "periphyton_capacity_g_per_m2" => Some(self.periphyton_capacity_g_per_m2),
-            "algae_bloom_threshold_g_per_l" => Some(self.algae_bloom_threshold_g_per_l),
-            "algae_nuisance_biomass_g_per_m2" => Some(self.algae_nuisance_biomass_g_per_m2),
-            "shrimp_base_mortality_per_day" => Some(self.shrimp_base_mortality_per_day),
-            "shrimp_stress_mortality_scale" => Some(self.shrimp_stress_mortality_scale),
-            "shrimp_juvenile_maturation_days" => Some(self.shrimp_juvenile_maturation_days),
-            "shrimp_periphyton_grazing_g_per_shrimp_per_day" => {
-                Some(self.shrimp_periphyton_grazing_g_per_shrimp_per_day)
-            }
-            "shrimp_condition_smoothing" => Some(self.shrimp_condition_smoothing),
-            "shrimp_assimilation_efficiency" => Some(self.shrimp_assimilation_efficiency),
-            "shrimp_respiration_fraction_of_assimilated" => {
-                Some(self.shrimp_respiration_fraction_of_assimilated)
-            }
-            "shrimp_excretion_fraction_of_assimilated" => {
-                Some(self.shrimp_excretion_fraction_of_assimilated)
-            }
-            "shrimp_growth_fraction_of_assimilated" => {
-                Some(self.shrimp_growth_fraction_of_assimilated)
-            }
-            "shrimp_o2_per_mg_c_respired" => Some(self.shrimp_o2_per_mg_c_respired),
-            "death_biomass_to_detritus_fraction" => Some(self.death_biomass_to_detritus_fraction),
-            "microfauna_mineralization_boost" => Some(self.microfauna_mineralization_boost),
-            "microfauna_periphyton_consumption" => Some(self.microfauna_periphyton_consumption),
-            "microfauna_population_smoothing" => Some(self.microfauna_population_smoothing),
-            "microfauna_shrimp_pressure_threshold" => {
-                Some(self.microfauna_shrimp_pressure_threshold)
-            }
-            "microfauna_assimilation_efficiency" => Some(self.microfauna_assimilation_efficiency),
-            "microfauna_respiration_fraction_of_assimilated" => {
-                Some(self.microfauna_respiration_fraction_of_assimilated)
-            }
-            "microfauna_excretion_fraction_of_assimilated" => {
-                Some(self.microfauna_excretion_fraction_of_assimilated)
-            }
-            "microfauna_growth_fraction_of_assimilated" => {
-                Some(self.microfauna_growth_fraction_of_assimilated)
-            }
-            _ => None,
-        }
-    }
-
-    fn provenance_value(&self, name: &str) -> Option<f64> {
-        let value = self.param_value(name)?;
-        let unit = self
-            .param_meta
-            .get(name)
-            .and_then(|meta| meta.unit.as_deref());
-        Some(normalize_process_param_for_provenance(name, value, unit))
+        ParamMetaPreset::lookup_param_value(self, name)
     }
 
     pub fn format_param(&self, name: &str) -> Option<String> {
-        let value = self.provenance_value(name)?;
-        Some(match self.param_meta.get(name) {
-            Some(meta) => tank_core::types::provenance::format_param(name, value, meta),
-            None => tank_core::types::provenance::format_param(
-                name,
-                value,
-                &ParamMeta {
-                    unit: None,
-                    source: None,
-                    confidence: None,
-                    valid_range: None,
-                    notes: None,
-                },
-            ),
-        })
+        ParamMetaPreset::format_param(self, name)
     }
 
     /// Check all param_meta entries with valid_range against current values.
     /// Returns warnings for out-of-range values (never errors).
     pub fn check_ranges(&self) -> Vec<RangeWarning> {
-        tank_core::types::provenance::check_all_ranges(&self.param_meta, &|name| {
-            self.provenance_value(name)
-        })
+        ParamMetaPreset::check_ranges(self)
     }
 }
 
@@ -958,6 +1022,135 @@ fn preserve_non_finite_division(value: f64, denominator: f64) -> f64 {
     }
 }
 
+impl ParamMetaPreset for ProcessParamsPreset {
+    fn param_meta_map(&self) -> &BTreeMap<String, ParamMeta> {
+        &self.param_meta
+    }
+
+    fn lookup_param_value(&self, name: &str) -> Option<f64> {
+        match name {
+            "mineralization_rate_per_day" => Some(self.mineralization_rate_per_day),
+            "nitrification_vmax" => Some(self.nitrification_vmax),
+            "reaeration_kla_base" => Some(self.reaeration_kla_base),
+            "aeration_kla_boost" => Some(self.aeration_kla_boost),
+            "background_bod_mg_o2_per_g_biomass_per_hour" => {
+                Some(self.background_bod_mg_o2_per_g_biomass_per_hour)
+            }
+            "plant_photosynthesis_o2_mg_per_g_per_hour" => {
+                Some(self.plant_photosynthesis_o2_mg_per_g_per_hour)
+            }
+            "respiration_dic_rate_mg_c_per_g_per_hour" => {
+                Some(self.respiration_dic_rate_mg_c_per_g_per_hour)
+            }
+            "photosynthesis_dic_rate_mg_c_per_g_per_hour" => {
+                Some(self.photosynthesis_dic_rate_mg_c_per_g_per_hour)
+            }
+            "k_surface_w_per_m2_k" => Some(self.k_surface_w_per_m2_k),
+            "k_wall_w_per_m2_k" => Some(self.k_wall_w_per_m2_k),
+            "feed_leach_rate_per_hour" => Some(self.feed_leach_rate_per_hour),
+            "fine_detritus_dissolution_rate_per_hour" => {
+                Some(self.fine_detritus_dissolution_rate_per_hour)
+            }
+            "feed_n_to_c_ratio" => Some(self.feed_n_to_c_ratio),
+            "decomposer_vmax_per_hour" => Some(self.decomposer_vmax_per_hour),
+            "decomposer_k_doc_mg" => Some(self.decomposer_k_doc_mg),
+            "decomposer_k_do_mg" => Some(self.decomposer_k_do_mg),
+            "decomposer_growth_yield" => Some(self.decomposer_growth_yield),
+            "decomposer_decay_rate_per_hour" => Some(self.decomposer_decay_rate_per_hour),
+            "aob_vmax_mg_n_per_g_per_hour" => Some(self.aob_vmax_mg_n_per_g_per_hour),
+            "aob_k_tan_mg" => Some(self.aob_k_tan_mg),
+            "aob_k_do_mg" => Some(self.aob_k_do_mg),
+            "aob_growth_yield" => Some(self.aob_growth_yield),
+            "aob_decay_rate_per_hour" => Some(self.aob_decay_rate_per_hour),
+            "nob_vmax_mg_n_per_g_per_hour" => Some(self.nob_vmax_mg_n_per_g_per_hour),
+            "nob_k_nitrite_mg" => Some(self.nob_k_nitrite_mg),
+            "nob_k_do_mg" => Some(self.nob_k_do_mg),
+            "nob_growth_yield" => Some(self.nob_growth_yield),
+            "nob_decay_rate_per_hour" => Some(self.nob_decay_rate_per_hour),
+            "comammox_vmax_fraction" => Some(self.comammox_vmax_fraction),
+            "comammox_k_tan_mg" => Some(self.comammox_k_tan_mg),
+            "comammox_k_do_mg" => Some(self.comammox_k_do_mg),
+            "comammox_growth_yield" => Some(self.comammox_growth_yield),
+            "comammox_decay_rate_per_hour" => Some(self.comammox_decay_rate_per_hour),
+            "o2_per_mg_n_nitrified" => Some(self.o2_per_mg_n_nitrified),
+            "alkalinity_meq_per_mg_n_nitrified" => Some(self.alkalinity_meq_per_mg_n_nitrified),
+            "plant_max_growth_rate_fast_stem_per_day" => {
+                Some(self.plant_max_growth_rate_fast_stem_per_day)
+            }
+            "plant_max_growth_rate_root_rosette_per_day" => {
+                Some(self.plant_max_growth_rate_root_rosette_per_day)
+            }
+            "plant_respiration_fraction_per_day" => Some(self.plant_respiration_fraction_per_day),
+            "plant_senescence_fraction_per_day" => Some(self.plant_senescence_fraction_per_day),
+            "plant_health_recovery_per_day" => Some(self.plant_health_recovery_per_day),
+            "plant_health_decline_per_day" => Some(self.plant_health_decline_per_day),
+            "plant_half_saturation_n_mg_total" => Some(self.plant_half_saturation_n_mg_total),
+            "plant_half_saturation_p_mg_total" => Some(self.plant_half_saturation_p_mg_total),
+            "plant_half_saturation_c_mg_total" => Some(self.plant_half_saturation_c_mg_total),
+            "plant_light_half_saturation" => Some(self.plant_light_half_saturation),
+            "plant_temp_optimum_c" => Some(self.plant_temp_optimum_c),
+            "plant_temp_sigma_c" => Some(self.plant_temp_sigma_c),
+            "plant_crowding_biomass_g_per_m2" => Some(self.plant_crowding_biomass_g_per_m2),
+            "algae_max_growth_rate_per_day" => Some(self.algae_max_growth_rate_per_day),
+            "periphyton_max_growth_rate_per_day" => Some(self.periphyton_max_growth_rate_per_day),
+            "algae_respiration_fraction_per_day" => Some(self.algae_respiration_fraction_per_day),
+            "algae_half_saturation_n_mg_total" => Some(self.algae_half_saturation_n_mg_total),
+            "algae_half_saturation_p_mg_total" => Some(self.algae_half_saturation_p_mg_total),
+            "algae_light_half_saturation" => Some(self.algae_light_half_saturation),
+            "algae_temp_optimum_c" => Some(self.algae_temp_optimum_c),
+            "algae_temp_sigma_c" => Some(self.algae_temp_sigma_c),
+            "periphyton_capacity_g_per_m2" => Some(self.periphyton_capacity_g_per_m2),
+            "algae_bloom_threshold_g_per_l" => Some(self.algae_bloom_threshold_g_per_l),
+            "algae_nuisance_biomass_g_per_m2" => Some(self.algae_nuisance_biomass_g_per_m2),
+            "shrimp_base_mortality_per_day" => Some(self.shrimp_base_mortality_per_day),
+            "shrimp_stress_mortality_scale" => Some(self.shrimp_stress_mortality_scale),
+            "shrimp_juvenile_maturation_days" => Some(self.shrimp_juvenile_maturation_days),
+            "shrimp_periphyton_grazing_g_per_shrimp_per_day" => {
+                Some(self.shrimp_periphyton_grazing_g_per_shrimp_per_day)
+            }
+            "shrimp_condition_smoothing" => Some(self.shrimp_condition_smoothing),
+            "shrimp_assimilation_efficiency" => Some(self.shrimp_assimilation_efficiency),
+            "shrimp_respiration_fraction_of_assimilated" => {
+                Some(self.shrimp_respiration_fraction_of_assimilated)
+            }
+            "shrimp_excretion_fraction_of_assimilated" => {
+                Some(self.shrimp_excretion_fraction_of_assimilated)
+            }
+            "shrimp_growth_fraction_of_assimilated" => {
+                Some(self.shrimp_growth_fraction_of_assimilated)
+            }
+            "shrimp_o2_per_mg_c_respired" => Some(self.shrimp_o2_per_mg_c_respired),
+            "death_biomass_to_detritus_fraction" => Some(self.death_biomass_to_detritus_fraction),
+            "microfauna_mineralization_boost" => Some(self.microfauna_mineralization_boost),
+            "microfauna_periphyton_consumption" => Some(self.microfauna_periphyton_consumption),
+            "microfauna_population_smoothing" => Some(self.microfauna_population_smoothing),
+            "microfauna_shrimp_pressure_threshold" => {
+                Some(self.microfauna_shrimp_pressure_threshold)
+            }
+            "microfauna_assimilation_efficiency" => Some(self.microfauna_assimilation_efficiency),
+            "microfauna_respiration_fraction_of_assimilated" => {
+                Some(self.microfauna_respiration_fraction_of_assimilated)
+            }
+            "microfauna_excretion_fraction_of_assimilated" => {
+                Some(self.microfauna_excretion_fraction_of_assimilated)
+            }
+            "microfauna_growth_fraction_of_assimilated" => {
+                Some(self.microfauna_growth_fraction_of_assimilated)
+            }
+            _ => None,
+        }
+    }
+
+    fn provenance_param_value(&self, name: &str) -> Option<f64> {
+        let value = self.lookup_param_value(name)?;
+        let unit = self
+            .param_meta_map()
+            .get(name)
+            .and_then(|meta| meta.unit.as_deref());
+        Some(normalize_process_param_for_provenance(name, value, unit))
+    }
+}
+
 impl ProcessParamsPreset {
     pub fn validate(&self) -> Result<(), String> {
         let unknown_param_meta_keys = self.unknown_param_meta_keys();
@@ -983,6 +1176,14 @@ impl ProcessParamsPreset {
             (
                 "plant_photosynthesis_o2_mg_per_g_per_hour",
                 self.plant_photosynthesis_o2_mg_per_g_per_hour,
+            ),
+            (
+                "respiration_dic_rate_mg_c_per_g_per_hour",
+                self.respiration_dic_rate_mg_c_per_g_per_hour,
+            ),
+            (
+                "photosynthesis_dic_rate_mg_c_per_g_per_hour",
+                self.photosynthesis_dic_rate_mg_c_per_g_per_hour,
             ),
             ("k_surface_w_per_m2_k", self.k_surface_w_per_m2_k),
             ("k_wall_w_per_m2_k", self.k_wall_w_per_m2_k),

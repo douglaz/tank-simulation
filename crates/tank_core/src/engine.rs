@@ -377,6 +377,10 @@ impl Engine {
             ctx,
             "system:habitat_registry_finalize",
             |engine, _stage_trace| {
+                // This second refresh is intentional: daily filter-clogging can
+                // change `filter_state.clogging_index`, and FilterMedia oxygen
+                // exposure reads that value directly from the serialized
+                // habitat registry.
                 engine.state.refresh_habitat_registry();
             },
         );
@@ -555,6 +559,7 @@ impl Engine {
         action: PlayerAction,
         tracking_budget: bool,
     ) -> Option<BudgetDelta> {
+        let refresh_habitat_registry = action.affects_habitat_registry();
         let delta = match action {
             PlayerAction::Feed { grams } => {
                 self.state.detritus.particulate_organics_g_total += grams;
@@ -724,7 +729,9 @@ impl Engine {
             }
         };
 
-        self.state.refresh_habitat_registry();
+        if refresh_habitat_registry {
+            self.state.refresh_habitat_registry();
+        }
         delta
     }
 

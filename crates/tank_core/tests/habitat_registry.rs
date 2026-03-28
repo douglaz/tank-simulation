@@ -182,6 +182,23 @@ fn substrate_surface_area_equals_footprint() -> Result<(), Box<dyn std::error::E
 }
 
 #[test]
+fn substrate_surface_zero_without_positive_depth() -> Result<(), Box<dyn std::error::Error>> {
+    let mut state = default_state();
+    state.substrate_layers = vec![SubstrateLayerState {
+        depth_cm: 0.0,
+        ..SubstrateLayerState::default()
+    }];
+    let registry = compute_habitat_registry(&state);
+    let entry = find(&registry, HabitatKind::SubstrateSurface);
+    assert!(
+        entry.colonizable_area_cm2.abs() < f64::EPSILON,
+        "SubstrateSurface should be 0 for zero-depth substrate: got {}",
+        entry.colonizable_area_cm2
+    );
+    Ok(())
+}
+
+#[test]
 fn substrate_surface_zero_without_substrate() -> Result<(), Box<dyn std::error::Error>> {
     let state = bare_state();
     let registry = compute_habitat_registry(&state);
@@ -195,25 +212,34 @@ fn substrate_surface_zero_without_substrate() -> Result<(), Box<dyn std::error::
 }
 
 #[test]
-fn substrate_deep_area_sums_layer_colonizable_areas() -> Result<(), Box<dyn std::error::Error>> {
+fn substrate_deep_area_scales_with_depth_and_kind() -> Result<(), Box<dyn std::error::Error>> {
     let mut state = bare_state();
     state.substrate_layers = vec![
         SubstrateLayerState {
-            colonizable_area_cm2: 400.0,
+            depth_cm: 2.0,
+            colonizable_area_cm2: 1.0,
             ..SubstrateLayerState::default()
         },
         SubstrateLayerState {
             kind: SubstrateKind::CoarsePorous,
-            colonizable_area_cm2: 250.0,
-            depth_cm: 1.0,
+            depth_cm: 1.5,
+            colonizable_area_cm2: 9_999.0,
+            ..SubstrateLayerState::default()
+        },
+        SubstrateLayerState {
+            kind: SubstrateKind::ActivePlanted,
+            depth_cm: 0.0,
+            colonizable_area_cm2: 9_999.0,
             ..SubstrateLayerState::default()
         },
     ];
     let registry = compute_habitat_registry(&state);
     let entry = find(&registry, HabitatKind::SubstrateDeep);
+    let footprint = state.geometry.footprint_area_cm2();
+    let expected = footprint * 2.0 * 0.5 + footprint * 1.5 * 0.9;
     assert!(
-        (entry.colonizable_area_cm2 - 650.0).abs() < 0.01,
-        "SubstrateDeep area should sum layer areas: expected 650, got {}",
+        (entry.colonizable_area_cm2 - expected).abs() < 0.01,
+        "SubstrateDeep area should scale with depth and substrate kind: expected {expected}, got {}",
         entry.colonizable_area_cm2
     );
     Ok(())
@@ -348,12 +374,14 @@ fn rooted_plants_boost_substrate_surface_oxygen() -> Result<(), Box<dyn std::err
 #[test]
 fn plant_crowding_reduces_light_exposure() -> Result<(), Box<dyn std::error::Error>> {
     let mut sparse = default_state();
-    for p in &mut sparse.plant_guilds {
-        p.crowding_index = 0.0;
+    for plant in &mut sparse.plant_guilds {
+        plant.biomass_g = 2.0;
+        plant.crowding_index = 0.0;
     }
     let mut dense = default_state();
-    for p in &mut dense.plant_guilds {
-        p.crowding_index = 0.9;
+    for plant in &mut dense.plant_guilds {
+        plant.biomass_g = 30.0;
+        plant.crowding_index = 0.0;
     }
     dense.hardware.light.enabled = true;
     dense.hardware.light.intensity_index = 0.8;
@@ -367,6 +395,31 @@ fn plant_crowding_reduces_light_exposure() -> Result<(), Box<dyn std::error::Err
     assert!(
         dense_light < sparse_light,
         "crowding should reduce GlassHardscape light: sparse={sparse_light}, dense={dense_light}"
+    );
+    Ok(())
+}
+
+#[test]
+fn substrate_surface_light_uses_water_above_substrate() -> Result<(), Box<dyn std::error::Error>> {
+    let mut shallow_bed = bare_state();
+    shallow_bed.hardware.light.enabled = true;
+    shallow_bed.hardware.light.intensity_index = 1.0;
+    shallow_bed.substrate_layers = vec![SubstrateLayerState {
+        depth_cm: 2.0,
+        ..SubstrateLayerState::default()
+    }];
+
+    let mut deep_bed = shallow_bed.clone();
+    deep_bed.substrate_layers[0].depth_cm = 8.0;
+
+    let shallow_reg = compute_habitat_registry(&shallow_bed);
+    let deep_reg = compute_habitat_registry(&deep_bed);
+
+    let shallow_light = find(&shallow_reg, HabitatKind::SubstrateSurface).light_exposure;
+    let deep_light = find(&deep_reg, HabitatKind::SubstrateSurface).light_exposure;
+    assert!(
+        deep_light > shallow_light,
+        "shallower water above the substrate should increase substrate-surface light: shallow={shallow_light}, deep={deep_light}"
     );
     Ok(())
 }
@@ -567,7 +620,7 @@ fn trim_action_hourly_step_keeps_stored_registry_current() -> Result<(), tank_co
     let mut state = bare_state();
     state.plant_guilds = vec![PlantGuildState {
         guild: PlantGuild::FastStem,
-        biomass_g: 10.0,
+        biomass_g: 20.0,
         health_index: 0.8,
         crowding_index: 0.1,
         habitat_index: 0.8,
@@ -575,6 +628,7 @@ fn trim_action_hourly_step_keeps_stored_registry_current() -> Result<(), tank_co
         substrate_uptake_bias: None,
     }];
     state.refresh_habitat_registry();
+    let light_before = find(&state.habitat_registry, HabitatKind::GlassHardscape).light_exposure;
 
     let mut engine = Engine::from_parts(state, vec![]);
     engine.apply_action(PlayerAction::TrimPlantsAndRemove { fraction: 0.5 })?;
@@ -585,14 +639,59 @@ fn trim_action_hourly_step_keeps_stored_registry_current() -> Result<(), tank_co
         compute_habitat_registry(engine.full_state())
     );
     assert!(
+        (engine.full_state().plant_guilds[0].crowding_index - 0.4).abs() < 0.01,
+        "trim should refresh the cached crowding index from the new biomass: got {}",
+        engine.full_state().plant_guilds[0].crowding_index
+    );
+    let light_after = find(
+        &engine.full_state().habitat_registry,
+        HabitatKind::GlassHardscape,
+    )
+    .light_exposure;
+    assert!(
+        light_after > light_before,
+        "trimming should increase light exposure once crowding is recomputed: before={light_before}, after={light_after}"
+    );
+    assert!(
         (find(
             &engine.full_state().habitat_registry,
             HabitatKind::PlantSurfaces
         )
         .colonizable_area_cm2
-            - 200.0)
+            - 400.0)
             .abs()
             < 0.01
+    );
+
+    Ok(())
+}
+
+#[test]
+fn light_action_hourly_step_keeps_stored_registry_current() -> Result<(), tank_core::SimError> {
+    let mut state = default_state();
+    state.hardware.light.enabled = true;
+    state.hardware.light.intensity_index = 0.2;
+    state.refresh_habitat_registry();
+    let light_before = find(&state.habitat_registry, HabitatKind::GlassHardscape).light_exposure;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.apply_action(PlayerAction::ChangeLightIntensity {
+        intensity_index: 0.9,
+    })?;
+    engine.step_hours(1)?;
+
+    assert_eq!(
+        engine.full_state().habitat_registry,
+        compute_habitat_registry(engine.full_state())
+    );
+    let light_after = find(
+        &engine.full_state().habitat_registry,
+        HabitatKind::GlassHardscape,
+    )
+    .light_exposure;
+    assert!(
+        light_after > light_before,
+        "changing light intensity should refresh habitat light exposure: before={light_before}, after={light_after}"
     );
 
     Ok(())

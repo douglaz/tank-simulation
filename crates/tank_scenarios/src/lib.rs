@@ -731,32 +731,42 @@ fn build_substrate_layers(
     let footprint = geometry.footprint_area_cm2();
     for sub_id in substrate_ids {
         let sub_preset = tank_data::load_substrate(sub_id)?;
+        let kind = match sub_preset.id.as_str() {
+            "inert_sand" => tank_core::SubstrateKind::InertSand,
+            "inert_gravel" => tank_core::SubstrateKind::InertGravel,
+            "active_planted" => tank_core::SubstrateKind::ActivePlanted,
+            "coarse_porous" => tank_core::SubstrateKind::CoarsePorous,
+            other => {
+                return Err(tank_data::PresetError::Validation {
+                    category: "substrate",
+                    id: other.to_string(),
+                    message: format!("unsupported substrate kind: `{other}`"),
+                });
+            }
+        };
         substrate_layers.push(SubstrateLayerState {
-            kind: match sub_preset.id.as_str() {
-                "inert_sand" => tank_core::SubstrateKind::InertSand,
-                "inert_gravel" => tank_core::SubstrateKind::InertGravel,
-                "active_planted" => tank_core::SubstrateKind::ActivePlanted,
-                "coarse_porous" => tank_core::SubstrateKind::CoarsePorous,
-                other => {
-                    return Err(tank_data::PresetError::Validation {
-                        category: "substrate",
-                        id: other.to_string(),
-                        message: format!("unsupported substrate kind: `{other}`"),
-                    });
-                }
-            },
+            kind,
             depth_cm: sub_preset.depth_cm,
             nutrient_store_mg_n_total: sub_preset.nutrient_charge_mg_n_total,
             nutrient_store_mg_p_total: sub_preset.nutrient_charge_mg_p_total,
             cation_exchange_capacity_index: sub_preset.cation_exchange_capacity_index,
             detritus_trapping_index: sub_preset.detritus_trapping_index,
-            colonizable_area_cm2: footprint * sub_preset.colonizable_area_factor,
+            colonizable_area_cm2: SubstrateLayerState {
+                kind: kind,
+                depth_cm: sub_preset.depth_cm,
+                ..SubstrateLayerState::default()
+            }
+            .derived_colonizable_area_cm2(footprint),
             low_oxygen_tendency_index: sub_preset.low_oxygen_tendency_index,
             grazing_surface_index: sub_preset.grazing_surface_index,
         });
     }
     if substrate_layers.is_empty() {
-        substrate_layers.push(SubstrateLayerState::default());
+        let default_substrate = SubstrateLayerState::default();
+        substrate_layers.push(SubstrateLayerState {
+            colonizable_area_cm2: default_substrate.derived_colonizable_area_cm2(footprint),
+            ..default_substrate
+        });
     }
     Ok(substrate_layers)
 }

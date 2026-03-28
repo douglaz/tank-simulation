@@ -82,17 +82,6 @@ pub fn compute_habitat_registry(state: &TankState) -> Vec<HabitatEntry> {
         0.0
     };
 
-    let avg_crowding = if state.plant_guilds.is_empty() {
-        0.0
-    } else {
-        state
-            .plant_guilds
-            .iter()
-            .map(|p| p.crowding_index)
-            .sum::<f64>()
-            / state.plant_guilds.len() as f64
-    };
-
     let has_rooted_plants = state
         .plant_guilds
         .iter()
@@ -111,10 +100,10 @@ pub fn compute_habitat_registry(state: &TankState) -> Vec<HabitatEntry> {
         } else {
             0.0
         },
-        avg_crowding,
+        avg_crowding: state.derived_plant_crowding_index(),
         avg_low_o2: state.avg_substrate_index(|l| l.low_oxygen_tendency_index),
         root_zone_o2_boost: if has_rooted_plants { 0.1 } else { 0.0 },
-        depth_attenuation: (1.0 - state.geometry.mean_depth_cm() / 60.0).clamp(0.1, 1.0),
+        depth_attenuation: (1.0 - state.water_depth_above_substrate_cm() / 60.0).clamp(0.1, 1.0),
     };
 
     HabitatKind::ALL
@@ -202,7 +191,7 @@ fn compute_plant_surfaces(state: &TankState, env: &HabitatEnv) -> (f64, f64, f64
 }
 
 fn compute_substrate_surface(state: &TankState, env: &HabitatEnv) -> (f64, f64, f64, f64) {
-    let area = if state.substrate_layers.is_empty() {
+    let area = if state.substrate_depth_cm() <= f64::EPSILON {
         0.0
     } else {
         state.geometry.footprint_area_cm2()
@@ -218,10 +207,11 @@ fn compute_substrate_surface(state: &TankState, env: &HabitatEnv) -> (f64, f64, 
 }
 
 fn compute_substrate_deep(state: &TankState, env: &HabitatEnv) -> (f64, f64, f64, f64) {
+    let footprint_area_cm2 = state.geometry.footprint_area_cm2();
     let area: f64 = state
         .substrate_layers
         .iter()
-        .map(|l| l.colonizable_area_cm2)
+        .map(|layer| layer.derived_colonizable_area_cm2(footprint_area_cm2))
         .sum();
 
     let flow = 0.02 + 0.05 * env.normalized_flow;

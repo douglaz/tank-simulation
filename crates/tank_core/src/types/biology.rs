@@ -587,11 +587,12 @@ fn trim_egg_cohorts(cohorts: &mut Vec<EggCohort>, mut to_remove: u32) {
 
 pub fn total_colonizable_area_cm2(
     substrate_layers: &[SubstrateLayerState],
+    footprint_area_cm2: f64,
     wall_area_cm2: f64,
 ) -> f64 {
     wall_area_cm2
         + substrate_layers
             .iter()
-            .map(|layer| layer.colonizable_area_cm2)
+            .map(|layer| layer.derived_colonizable_area_cm2(footprint_area_cm2))
             .sum::<f64>()
 }

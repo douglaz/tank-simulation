@@ -838,9 +838,11 @@ fn malformed_current_save_with_inverted_shrimp_thermal_penalty_range_is_rejected
 
     assert_eq!(
         err,
-        SimError::InvariantViolation {
-            field: "shrimp_params.high_temp_repro_penalty_full_c",
-            value: 30.0,
+        SimError::OrderingViolation {
+            lower_field: "shrimp_params.high_temp_repro_penalty_start_c",
+            lower_value: 33.0,
+            upper_field: "shrimp_params.high_temp_repro_penalty_full_c",
+            upper_value: 30.0,
         }
     );
 

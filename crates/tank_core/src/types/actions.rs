@@ -64,6 +64,13 @@ pub enum SimError {
     EmptySourceProfileId,
     #[error("invariant violation for `{field}` with value {value}")]
     InvariantViolation { field: &'static str, value: f64 },
+    #[error("`{lower_field}` ({lower_value}) must be less than `{upper_field}` ({upper_value})")]
+    OrderingViolation {
+        lower_field: &'static str,
+        lower_value: f64,
+        upper_field: &'static str,
+        upper_value: f64,
+    },
     #[error("unknown source water profile: `{id}`")]
     UnknownSourceProfile { id: String },
     #[error("invalid source water profile `{id}`: field `{field}` has invalid value {value}")]
@@ -147,6 +154,18 @@ impl PlayerAction {
             }
             Self::ChangeAeration { intensity, .. } => validate_fraction("intensity", *intensity),
         }
+    }
+
+    pub fn affects_habitat_registry(&self) -> bool {
+        matches!(
+            self,
+            Self::TrimPlantsAndRemove { .. }
+                | Self::TrimPlantsAndLeaveCuttings { .. }
+                | Self::CleanFilter { .. }
+                | Self::ChangePhotoperiod { .. }
+                | Self::ChangeLightIntensity { .. }
+                | Self::ChangeAeration { .. }
+        )
     }
 }
 

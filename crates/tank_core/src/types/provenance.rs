@@ -54,7 +54,10 @@ pub struct ParamMeta {
     /// Inclusive `[low, high]` range within which the value is expected to fall
     /// under normal conditions. Values outside this range produce a warning,
     /// not an error, because heuristic tuning may intentionally push values
-    /// beyond literature bounds.
+    /// beyond literature bounds. For legacy process fields whose names still
+    /// end in `_mg` or `_mg_total`, express `valid_range` in the normalized
+    /// concentration units shown by `unit` (for example `mg N/L`), not in the
+    /// raw historical storage totals.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub valid_range: Option<[f64; 2]>,
 

@@ -263,13 +263,19 @@ fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), Si
         params.optimal_temp_max_c,
     )?;
     check_strictly_increasing(
+        "shrimp_params.optimal_temp_min_c",
         params.optimal_temp_min_c,
         "shrimp_params.optimal_temp_max_c",
         params.optimal_temp_max_c,
     )?;
     check_non_negative("shrimp_params.gh_min_d", params.gh_min_d)?;
     check_non_negative("shrimp_params.gh_max_d", params.gh_max_d)?;
-    check_strictly_increasing(params.gh_min_d, "shrimp_params.gh_max_d", params.gh_max_d)?;
+    check_strictly_increasing(
+        "shrimp_params.gh_min_d",
+        params.gh_min_d,
+        "shrimp_params.gh_max_d",
+        params.gh_max_d,
+    )?;
     check_unit_interval("shrimp_params.base_spawn_rate", params.base_spawn_rate)?;
     if params.egg_duration_days == 0 {
         return Err(SimError::InvariantViolation {
@@ -294,6 +300,7 @@ fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), Si
         params.high_temp_repro_penalty_full_c,
     )?;
     check_strictly_increasing(
+        "shrimp_params.high_temp_repro_penalty_start_c",
         params.high_temp_repro_penalty_start_c,
         "shrimp_params.high_temp_repro_penalty_full_c",
         params.high_temp_repro_penalty_full_c,
@@ -397,14 +404,17 @@ fn check_sum_close_to_one(field: &'static str, value: f64) -> Result<(), SimErro
 }
 
 fn check_strictly_increasing(
+    lower_field: &'static str,
     lower_value: f64,
     upper_field: &'static str,
     upper_value: f64,
 ) -> Result<(), SimError> {
     if lower_value >= upper_value {
-        Err(SimError::InvariantViolation {
-            field: upper_field,
-            value: upper_value,
+        Err(SimError::OrderingViolation {
+            lower_field,
+            lower_value,
+            upper_field,
+            upper_value,
         })
     } else {
         Ok(())
