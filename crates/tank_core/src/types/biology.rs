@@ -123,6 +123,12 @@ pub struct AnimalState {
     /// field is recorded so satiation and reserve routing use the same units.
     #[serde(default)]
     pub daily_food_consumed_g: f64,
+    /// Fractional carry for deterministic adult -> berried transfers.
+    #[serde(default)]
+    pub spawn_progress_accum: f64,
+    /// Fractional carry for deterministic clutch-resolution counts.
+    #[serde(default)]
+    pub hatch_success_carry: f64,
     /// Molt readiness index, in [0, 1].
     #[serde(default)]
     pub molt_readiness: f64,
@@ -290,6 +296,8 @@ impl Default for AnimalState {
             hourly_heat_stress_accum: 0.0,
             hourly_instability_stress_accum: 0.0,
             daily_food_consumed_g: 0.0,
+            spawn_progress_accum: 0.0,
+            hatch_success_carry: 0.0,
             molt_readiness: 0.0,
             failed_molt_accum: 0.0,
             inter_molt_timer_days: 14.0,

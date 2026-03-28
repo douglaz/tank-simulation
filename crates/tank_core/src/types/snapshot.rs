@@ -35,6 +35,7 @@ pub struct TankSnapshot {
     pub aeration_enabled: bool,
     pub aeration_intensity: f64,
     pub filter_cleanliness_index: f64,
+    pub total_shrimp_count: u32,
     pub adult_shrimp_count: u32,
     pub sub_adult_count: u32,
     pub juveniles_count: u32,
@@ -134,6 +135,7 @@ impl TankSnapshot {
             aeration_enabled: state.hardware.aeration.enabled,
             aeration_intensity: state.hardware.aeration.intensity,
             filter_cleanliness_index: state.hardware.filter.cleanliness_index,
+            total_shrimp_count: state.animal.total_count(),
             adult_shrimp_count: state.animal.adult.count,
             sub_adult_count: state.animal.sub_adult.count,
             juveniles_count: state.animal.juvenile.count,
@@ -222,5 +224,22 @@ mod tests {
             expected.co2_aq_mmol_per_l,
             1e-12,
         );
+    }
+
+    #[test]
+    fn snapshot_exposes_total_and_stage_shrimp_counts() {
+        let mut state = TankState::new(SimSeed(405));
+        state.animal.adult.count = 4;
+        state.animal.sub_adult.count = 3;
+        state.animal.juvenile.count = 2;
+        state.animal.berried_females_count = 1;
+
+        let snapshot = TankSnapshot::from_state(&state);
+
+        assert_eq!(snapshot.total_shrimp_count, 9);
+        assert_eq!(snapshot.adult_shrimp_count, 4);
+        assert_eq!(snapshot.sub_adult_count, 3);
+        assert_eq!(snapshot.juveniles_count, 2);
+        assert_eq!(snapshot.berried_females_count, 1);
     }
 }

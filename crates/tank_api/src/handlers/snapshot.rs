@@ -143,7 +143,9 @@ pub async fn get_chemistry(State(state): State<AppState>) -> Json<Value> {
 
 #[derive(Serialize)]
 pub struct BiologySnapshot {
+    pub total_shrimp_count: u32,
     pub adult_shrimp_count: u32,
+    pub sub_adult_count: u32,
     pub juveniles_count: u32,
     pub berried_females_count: u32,
     pub shrimp_condition_index: f64,
@@ -161,11 +163,11 @@ pub struct BiologySnapshot {
     pub microfauna_grazing_pressure_index: f64,
 }
 
-pub async fn get_biology(State(state): State<AppState>) -> Json<BiologySnapshot> {
-    let engine = state.engine.lock().unwrap();
-    let s = engine.snapshot();
-    Json(BiologySnapshot {
+fn biology_snapshot_from_snapshot(s: &TankSnapshot) -> BiologySnapshot {
+    BiologySnapshot {
+        total_shrimp_count: s.total_shrimp_count,
         adult_shrimp_count: s.adult_shrimp_count,
+        sub_adult_count: s.sub_adult_count,
         juveniles_count: s.juveniles_count,
         berried_females_count: s.berried_females_count,
         shrimp_condition_index: s.shrimp_condition_index,
@@ -181,7 +183,13 @@ pub async fn get_biology(State(state): State<AppState>) -> Json<BiologySnapshot>
         algae_nuisance_index: s.algae_nuisance_index,
         microfauna_population_index: s.microfauna_population_index,
         microfauna_grazing_pressure_index: s.microfauna_grazing_pressure_index,
-    })
+    }
+}
+
+pub async fn get_biology(State(state): State<AppState>) -> Json<BiologySnapshot> {
+    let engine = state.engine.lock().unwrap();
+    let s = engine.snapshot();
+    Json(biology_snapshot_from_snapshot(&s))
 }
 
 #[derive(Serialize)]
@@ -260,7 +268,10 @@ mod tests {
     use serde_json::json;
     use tank_core::{SimSeed, TankState};
 
-    use super::{chemistry_response_json, snapshot_response_json, TRACKED_TDS_IONS};
+    use super::{
+        biology_snapshot_from_snapshot, chemistry_response_json, snapshot_response_json,
+        TRACKED_TDS_IONS,
+    };
 
     #[test]
     fn snapshot_response_keeps_legacy_chemistry_aliases() {
@@ -308,5 +319,24 @@ mod tests {
             value["phosphate_mg_l"],
             json!(snapshot.phosphate_mg_p_per_l)
         );
+    }
+
+    #[test]
+    fn biology_snapshot_keeps_total_and_stage_breakdown() {
+        let mut state = TankState::new(SimSeed(7003));
+        state.animal.adult.count = 6;
+        state.animal.sub_adult.count = 4;
+        state.animal.juvenile.count = 3;
+        state.animal.berried_females_count = 2;
+
+        let snapshot = tank_core::TankSnapshot::from_state(&state);
+        let biology = serde_json::to_value(biology_snapshot_from_snapshot(&snapshot))
+            .expect("biology snapshot should serialize");
+
+        assert_eq!(biology["total_shrimp_count"], json!(13));
+        assert_eq!(biology["adult_shrimp_count"], json!(6));
+        assert_eq!(biology["sub_adult_count"], json!(4));
+        assert_eq!(biology["juveniles_count"], json!(3));
+        assert_eq!(biology["berried_females_count"], json!(2));
     }
 }

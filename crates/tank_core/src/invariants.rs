@@ -37,6 +37,8 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
     state.animal.molt_readiness = state.animal.molt_readiness.clamp(0.0, 1.0);
     state.animal.failed_molt_accum = state.animal.failed_molt_accum.clamp(0.0, 1.0);
     state.animal.daily_food_consumed_g = state.animal.daily_food_consumed_g.max(0.0);
+    state.animal.spawn_progress_accum = state.animal.spawn_progress_accum.clamp(0.0, 1.0);
+    state.animal.hatch_success_carry = state.animal.hatch_success_carry.clamp(0.0, 1.0);
     state.animal.clamp_berried_to_adults();
     state.animal.egg_progress_days = state.animal.egg_progress_days.max(0.0);
     state.animal.egg_cohorts.retain(|c| c.count > 0);
