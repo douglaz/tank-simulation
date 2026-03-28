@@ -53,7 +53,10 @@ fn nano_neglect_artifacts_on_violation() -> Result<(), Box<dyn std::error::Error
     let result = run.finish();
 
     // We expect failures from the strict envelope
-    assert!(result.is_err(), "strict envelope should produce violations after neglect");
+    assert!(
+        result.is_err(),
+        "strict envelope should produce violations after neglect"
+    );
     let err_msg = result.unwrap_err();
     assert!(
         err_msg.contains("assertion failure"),
@@ -98,9 +101,15 @@ fn nano_neglect_artifacts_on_violation() -> Result<(), Box<dyn std::error::Error
 
     // Verify trace.jsonl contains valid JSON lines
     let trace_raw = std::fs::read_to_string(artifact_dir.join("trace.jsonl"))?;
-    let first_line = trace_raw.lines().next().expect("trace should have at least one line");
+    let first_line = trace_raw
+        .lines()
+        .next()
+        .expect("trace should have at least one line");
     let tick: serde_json::Value = serde_json::from_str(first_line)?;
-    assert!(tick["tick_index"].is_number(), "trace line should have tick_index");
+    assert!(
+        tick["tick_index"].is_number(),
+        "trace line should have tick_index"
+    );
 
     // Deterministic path check: same seed+scenario = same path
     let expected_dir = std::env::temp_dir()

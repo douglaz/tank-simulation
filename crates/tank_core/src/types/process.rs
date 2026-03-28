@@ -338,7 +338,8 @@ impl Default for ProcessParams {
             microfauna_shrimp_pressure_threshold: 3.0,
 
             microfauna_assimilation_efficiency: default_microfauna_assimilation_efficiency(),
-            microfauna_respiration_fraction_of_assimilated: default_microfauna_respiration_fraction(),
+            microfauna_respiration_fraction_of_assimilated: default_microfauna_respiration_fraction(
+            ),
             microfauna_excretion_fraction_of_assimilated: default_microfauna_excretion_fraction(),
             microfauna_growth_fraction_of_assimilated: default_microfauna_growth_fraction(),
         }

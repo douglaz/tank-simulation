@@ -127,7 +127,10 @@ impl Envelope {
 
         if let Some((min, max)) = self.ph_bounds {
             if snap.ph < min || snap.ph > max {
-                violations.push(format!("pH {:.3} outside [{:.1}, {:.1}]", snap.ph, min, max));
+                violations.push(format!(
+                    "pH {:.3} outside [{:.1}, {:.1}]",
+                    snap.ph, min, max
+                ));
             }
         }
         if let Some((min, max)) = self.temperature_c_bounds {
@@ -291,8 +294,7 @@ impl HarnessRun {
         scenario_id: &str,
         overrides: StartupOverrides,
     ) -> Result<Self, HarnessError> {
-        let state =
-            tank_scenarios::seeded_state_with_full_overrides(seed, scenario_id, overrides)?;
+        let state = tank_scenarios::seeded_state_with_full_overrides(seed, scenario_id, overrides)?;
         let verbose = is_verbose();
         Ok(Self {
             seed,
