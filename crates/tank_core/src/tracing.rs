@@ -245,6 +245,7 @@ impl PoolSnapshot {
     }
 
     /// Count events added between this (before) and `after` snapshot.
+    #[allow(dead_code)]
     pub(crate) fn events_since(&self, after: &PoolSnapshot) -> usize {
         after.event_count.saturating_sub(self.event_count)
     }

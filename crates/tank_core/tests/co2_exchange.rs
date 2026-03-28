@@ -1,7 +1,7 @@
 use tank_core::{
     systems::chemistry::{co2_sat_mg_c_per_l, solve_carbonate_equilibrium},
     systems::dissolved_oxygen::compute_o2_kla,
-    Engine, ProcessParams, SimSeed, SimulationEngine, TankGeometry, TankState,
+    Engine, SimSeed, SimulationEngine, TankGeometry, TankState,
 };
 
 /// Helper: tank with elevated CO2 suitable for gas-exchange tests.

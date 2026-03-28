@@ -244,7 +244,7 @@ pub fn assert_o2_balanced(budget: &BudgetInspector, tolerance_mg: f64) {
     if accounting_error.abs() <= tolerance_mg
         && worst_tick
             .as_ref()
-            .map_or(true, |(_, error, _, _)| error.abs() <= tolerance_mg)
+            .is_none_or(|(_, error, _, _)| error.abs() <= tolerance_mg)
     {
         return;
     }

@@ -1,3 +1,4 @@
+use tank_core::systems::water_change::apply_water_change;
 use tank_core::{
     Engine, PlayerAction, SimError, SimSeed, SimulationEngine, SourceWaterProfile, TankState,
 };
@@ -13,20 +14,20 @@ fn state_with_ro_like(seed: SimSeed) -> TankState {
 
 #[test]
 fn water_change_50_percent_ro_like_halves_dissolved_totals() -> Result<(), tank_core::SimError> {
-    let state = state_with_ro_like(SimSeed(100));
-    let mut engine = Engine::from_parts(state, vec![]);
+    let mut state = state_with_ro_like(SimSeed(100));
+    let source = state
+        .source_water_catalog
+        .get("ro_like")
+        .cloned()
+        .expect("ro_like source profile should exist");
 
-    // Record pre-change totals
-    let before = engine.full_state().water.clone();
+    // Record pre-change totals, then apply the water-change action directly so
+    // later hourly systems (for example atmospheric CO2 exchange) cannot
+    // perturb the expected 50/50 mixing ratios.
+    let before = state.water.clone();
+    apply_water_change(&mut state, 50.0, &source);
 
-    // Apply 50% water change with zero-nutrient source
-    engine.apply_action(PlayerAction::WaterChangePercent {
-        percent: 50.0,
-        source_profile_id: "ro_like".to_string(),
-    })?;
-    engine.step_hours(1)?;
-
-    let after = &engine.full_state().water;
+    let after = &state.water;
 
     // Each dissolved total should be reduced by 50% ± 0.5%
     let tolerance = 0.005; // 0.5%

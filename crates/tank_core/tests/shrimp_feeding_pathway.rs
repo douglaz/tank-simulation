@@ -58,10 +58,13 @@ fn feeding_test_state() -> TankState {
     state.microfauna.grazing_pressure_index = 0.0;
 
     state.hardware.light.enabled = false;
-    state.hardware.aeration.enabled = true;
+    state.hardware.aeration.enabled = false;
     state.hardware.aeration.intensity = 0.3;
+    state.hardware.filter.enabled = false;
 
     state.process_params = ProcessParams::default();
+    // Keep the fixture closed-loop unless a test opts back into gas exchange.
+    state.process_params.reaeration_kla_base = 0.0;
     // Zero out background BOD so only shrimp feeding O2 demand shows
     state
         .process_params
