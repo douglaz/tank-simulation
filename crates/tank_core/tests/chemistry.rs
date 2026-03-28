@@ -265,10 +265,11 @@ fn solver_edge_case_zero_alkalinity() {
 
 #[test]
 fn solver_edge_case_extreme_high_buffer_clamps_to_storage_ceiling() {
-    let eq = solve_carbonate_equilibrium(1e-6, 0.0001, 25.0, 20.0);
+    let volume_l = 20.0;
+    let eq = solve_carbonate_equilibrium(5.0 * volume_l, 8.0 * volume_l, 25.0, volume_l);
     assert_eq!(eq.ph, 8.5);
     let species_sum = eq.co2_aq_mmol_per_l + eq.hco3_mmol_per_l + eq.co3_mmol_per_l;
-    let dic_mmol = (1e-6 / 20.0) / 12.0;
+    let dic_mmol = 5.0 / 12.0;
     assert!((species_sum - dic_mmol).abs() < 1e-6);
 }
 

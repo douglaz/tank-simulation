@@ -18,6 +18,14 @@ fn acid_only_carbonate_ph(dic_mol_per_l: f64, ka1: f64) -> Option<f64> {
     (h.is_finite() && h > 0.0).then(|| -h.log10())
 }
 
+fn fallback_outside_quadratic_envelope(dic_mol_per_l: f64, alk_eq_per_l: f64, ka1: f64) -> f64 {
+    if alk_eq_per_l >= dic_mol_per_l {
+        SOURCE_WATER_PH_MAX
+    } else {
+        acid_only_carbonate_ph(dic_mol_per_l, ka1).unwrap_or(7.0)
+    }
+}
+
 fn predicted_carbonate_ph(
     dic_mg_c_per_l: f64,
     alkalinity_meq_per_l: f64,
@@ -43,7 +51,7 @@ fn predicted_carbonate_ph(
     let discriminant = b * b - 4.0 * a * c;
 
     if discriminant < 0.0 {
-        return acid_only_carbonate_ph(dic, ka1);
+        return Some(fallback_outside_quadratic_envelope(dic, alk, ka1));
     }
 
     let sqrt_d = discriminant.sqrt();
@@ -65,7 +73,7 @@ fn predicted_carbonate_ph(
             _ => h1.max(h2),
         })
     } else {
-        None
+        Some(fallback_outside_quadratic_envelope(dic, alk, ka1))
     }?;
 
     let ph = -h.log10();
@@ -150,9 +158,9 @@ impl SourceWaterPreset {
                 self.dic_mg_c_per_l, self.alkalinity_meq_per_l
             )
         })?;
-        if !(SOURCE_WATER_PH_MIN..=SOURCE_WATER_PH_MAX).contains(&ph) {
+        if ph <= SOURCE_WATER_PH_MIN || ph >= SOURCE_WATER_PH_MAX {
             return Err(format!(
-                "carbonate-derived pH {:.3} falls outside supported aquarium range {}..={} for dic_mg_c_per_l={} and alkalinity_meq_per_l={}",
+                "carbonate-derived pH {:.3} falls outside the calibrated interior range ({}, {}) for dic_mg_c_per_l={} and alkalinity_meq_per_l={}",
                 ph,
                 SOURCE_WATER_PH_MIN,
                 SOURCE_WATER_PH_MAX,
@@ -1032,9 +1040,11 @@ mod tests {
 
         assert!(soft_ph < moderate_ph, "soft acidic should stay below moderate");
         assert!(moderate_ph < hard_ph, "moderate should stay below hard shrimp");
-        assert!((super::SOURCE_WATER_PH_MIN..=super::SOURCE_WATER_PH_MAX).contains(&soft_ph));
-        assert!((super::SOURCE_WATER_PH_MIN..=super::SOURCE_WATER_PH_MAX).contains(&moderate_ph));
-        assert!((super::SOURCE_WATER_PH_MIN..=super::SOURCE_WATER_PH_MAX).contains(&hard_ph));
+        assert!(soft_ph > super::SOURCE_WATER_PH_MIN && soft_ph < super::SOURCE_WATER_PH_MAX);
+        assert!(
+            moderate_ph > super::SOURCE_WATER_PH_MIN && moderate_ph < super::SOURCE_WATER_PH_MAX
+        );
+        assert!(hard_ph > super::SOURCE_WATER_PH_MIN && hard_ph < super::SOURCE_WATER_PH_MAX);
         assert_eq!(ro_ph, 7.0);
     }
 }

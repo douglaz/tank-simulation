@@ -426,7 +426,10 @@ fn very_old_schema_version_produces_clear_error() {
     }
 
     let msg = err.to_string();
-    assert!(msg.contains("too old"), "error should mention 'too old': {msg}");
+    assert!(
+        msg.contains("too old"),
+        "error should mention 'too old': {msg}"
+    );
     assert!(
         msg.contains("re-create this save"),
         "error should suggest re-creating the save: {msg}"
