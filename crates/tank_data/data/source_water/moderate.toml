@@ -21,4 +21,10 @@ sulfate_mg_per_l = 15.8
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "Balanced general-purpose freshwater profile. GH ~6.0, KH ~3.5, TDS ~160."
+notes = """
+Balanced general-purpose freshwater profile. GH ~6.0, KH ~3.5, TDS ~160. \
+Alkalinity 1.25 meq/L provides moderate buffering — better than soft_acidic \
+but still exhaustible under heavy nitrification load. Starts with 5 mg N/L \
+nitrate and 0.1 mg P/L phosphate, reflecting typical municipal water. \
+Post-normalization (6e5.2.6) the medium_planted and warm_room scenarios \
+use this profile and maintain a visible nitrate floor from water changes."""

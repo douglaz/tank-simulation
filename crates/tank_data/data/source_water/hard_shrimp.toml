@@ -21,4 +21,10 @@ sulfate_mg_per_l = 14.1
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "Mineral-rich profile targeted at Neocaridina husbandry. GH ~9.3, KH ~5.0, TDS ~220."
+notes = """
+Mineral-rich profile targeted at Neocaridina husbandry. GH ~9.3, KH ~5.0, \
+TDS ~220. Alkalinity 1.79 meq/L provides the strongest buffering of the \
+shipped profiles — essential for shrimp husbandry scenarios where pH \
+stability supports both nitrification and molt success. Higher Ca/Mg \
+supports shell/exoskeleton formation. 8 mg N/L nitrate and 0.15 mg P/L \
+phosphate reflect remineralized tap water."""

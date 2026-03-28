@@ -115,6 +115,14 @@ pub struct ProcessParams {
     /// Comammox decay rate per hour.
     pub comammox_decay_rate_per_hour: f64,
 
+    // -- Biofilter carrying capacity --
+    /// Base nitrifier density (g biomass / cm² colonizable area).
+    /// Multiplied by habitat area, flow, and oxygen exposure to compute
+    /// the biofilter carrying capacity for nitrifying bacteria.
+    /// Default 2.5e-4 g/cm² ≈ 0.5 g on the default 2000 cm² filter media.
+    #[serde(default = "default_nitrifier_base_density_g_per_cm2")]
+    pub nitrifier_base_density_g_per_cm2: f64,
+
     // -- Stoichiometric constants --
     /// mg O2 consumed per mg N fully nitrified to nitrate.
     pub o2_per_mg_n_nitrified: f64,
@@ -310,6 +318,8 @@ impl Default for ProcessParams {
             comammox_k_do_mg_per_l: 0.6,
             comammox_growth_yield: 0.03,
             comammox_decay_rate_per_hour: 0.004,
+
+            nitrifier_base_density_g_per_cm2: default_nitrifier_base_density_g_per_cm2(),
 
             o2_per_mg_n_nitrified: 4.57,
             alkalinity_meq_per_mg_n_nitrified: 0.1428,

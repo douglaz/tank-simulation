@@ -13,5 +13,9 @@ nutrient_charge_mg_p_total = 0.0
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "Low-reactivity fine sand."
+notes = """
+Low-reactivity fine sand. Zero nutrient charge means root-feeding rosettes \
+receive no substrate N/P — only water-column uptake is available. The low \
+colonizable_area_factor (0.5) limits biofilm habitat for nitrifiers and \
+periphyton. Used by nano_cycle to demonstrate cycling in minimal setups."""
 

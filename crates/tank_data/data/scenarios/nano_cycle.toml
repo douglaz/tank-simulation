@@ -15,5 +15,12 @@ ambient_temp_c = 24.0
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "Small starter tank with minimal bioload."
+notes = """
+Small starter tank with minimal bioload. Post-normalization (6e5.2.6) \
+expected behavior: soft acidic water provides limited buffering, TAN \
+accumulates to ~16 mg N/L by day 30 with 0.05 g/day feed, pH holds at \
+8.5 (carbonate equilibrium) early but depresses under alkalinity exhaustion \
+in later weeks. Shrimp stocked at day 30 die from acute TAN toxicity. \
+Plants (fast stems) decline slowly. This scenario tests the "pH crash in \
+low-buffer water stalls nitrification" story."""
 

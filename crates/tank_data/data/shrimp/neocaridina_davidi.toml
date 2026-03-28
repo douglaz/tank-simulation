@@ -25,4 +25,10 @@ min_clutch_condition = 0.3
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "Neocaridina davidi reproduction and thermal sensitivity profile."
+notes = """
+Neocaridina davidi reproduction and thermal sensitivity profile. \
+body_nitrogen (27.6 mg N/g wet) and body_carbon (172.4 mg C/g wet) are \
+stoichiometric constants used for N/C budget accounting when shrimp die — \
+they are not affected by the kinetics normalization. Thermal penalty starts \
+at 28°C, which drives the warm_room scenario's shrimp mortality story. \
+Unchanged in 6e5.2.6 retuning — no kinetic Ks values here."""

@@ -15,5 +15,13 @@ ambient_temp_c = 29.0
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "Warm-room baseline for temperature-sensitive tests."
+notes = """
+Warm-room baseline for temperature-sensitive tests. Post-normalization \
+(6e5.2.6) expected behavior: 29°C ambient causes rapid thermal equilibration \
+(32 L tank reaches half-delta in hours). DO saturation drops to ~7.5 mg/L. \
+Warm conditions accelerate all biological rates, producing faster nitrifier \
+growth and higher algae nuisance (0.5+ by week 12) than 24°C scenarios. \
+TAN accumulates to ~8 mg N/L by day 30 with 0.05 g/day feed. Shrimp die \
+from combined TAN and thermal stress (29°C exceeds the 22–26°C optimum). \
+Tests the "warm conditions favor algae over plants" story."""
 

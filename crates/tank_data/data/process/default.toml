@@ -1,48 +1,84 @@
 id = "default"
 name = "Default Process Pack"
+
+# ── Reserved parameters ──────────────────────────────────────────────
+# These two fields are NOT wired into the nitrogen cycle. The per-guild
+# vmax fields below are the effective rate controls. Changing these has
+# no effect; they are retained only for schema stability.
 mineralization_rate_per_day = 0.15
 nitrification_vmax = 0.08
+
 reaeration_kla_base = 0.35
 aeration_kla_boost = 0.9
 background_bod_mg_o2_per_g_biomass_per_hour = 0.05
 plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
+
+# DIC exchange rates for planted-tank carbon cycling.
+# Note: the Rust Default impl sets these to 0.0; these TOML values
+# override that default when scenarios load from presets.
 respiration_dic_rate_mg_c_per_g_per_hour = 0.08
 photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.12
+
 k_surface_w_per_m2_k = 10.0
 k_wall_w_per_m2_k = 5.0
 
-# Nitrogen cycle: feed leaching
+# ── Nitrogen cycle: feed leaching ────────────────────────────────────
 feed_leach_rate_per_hour = 0.12
 fine_detritus_dissolution_rate_per_hour = 0.08
 feed_n_to_c_ratio = 0.16
 
-# Decomposer mineralization
+# ── Decomposer mineralization ────────────────────────────────────────
 # Half-saturation constants are concentration-based (mg/L).
+#
+# Retuning note (tanksim-6e5.2.3 → 6e5.2.6):
+#   Old legacy values were whole-tank totals divided by a 20 L reference
+#   at runtime, yielding effective Ks ≈ 0.25 mg C/L and 0.10 mg O₂/L —
+#   unrealistically low, meaning decomposers were almost never substrate-
+#   limited. New values are set directly in concentration units within
+#   literature ranges. This is a unit-correction, not new science.
 decomposer_vmax_per_hour = 0.02
 decomposer_k_doc_mg_c_per_l = 3.0       # DOC Ks (mg C/L), literature 1–10
 decomposer_k_do_mg_per_l = 0.5          # DO Ks (mg O₂/L), literature 0.3–1.0
 decomposer_growth_yield = 0.3
 decomposer_decay_rate_per_hour = 0.002
 
-# AOB kinetics
+# ── AOB kinetics ─────────────────────────────────────────────────────
 # Half-saturation constants are concentration-based (mg/L).
+#
+# Retuning note (tanksim-6e5.2.3 → 6e5.2.6):
+#   Old effective Ks was 0.025 mg N/L (0.5 / 20 L) — far below any
+#   literature value and made AOB substrate-unlimited even at trace TAN.
+#   New value 1.0 mg N/L sits mid-range for mixed-community AOB and
+#   produces realistic TAN accumulation during fishless cycling (~16 mg
+#   N/L at day 30 in the nano_cycle scenario).
 aob_vmax_mg_n_per_g_per_hour = 1.5
 aob_k_tan_mg_n_per_l = 1.0              # TAN Ks (mg N/L), literature 0.5–2.0
 aob_k_do_mg_per_l = 0.5                 # DO Ks (mg O₂/L), literature 0.3–1.0
 aob_growth_yield = 0.05
 aob_decay_rate_per_hour = 0.003
 
-# NOB kinetics
+# ── NOB kinetics ─────────────────────────────────────────────────────
 # Half-saturation constants are concentration-based (mg/L).
 # NOB are more DO-sensitive than AOB: nob_k_do >= aob_k_do.
+#
+# Retuning note (tanksim-6e5.2.3 → 6e5.2.6):
+#   Old effective Ks was 0.015 mg N/L (0.3 / 20 L). New value 0.5 sits
+#   within the literature range and produces the expected nitrite
+#   intermediate accumulation during cycling (2–5 mg N/L at day 28).
 nob_vmax_mg_n_per_g_per_hour = 1.2
 nob_k_nitrite_mg_n_per_l = 0.5          # NO₂⁻ Ks (mg N/L), literature 0.2–1.0
 nob_k_do_mg_per_l = 0.8                 # DO Ks (mg O₂/L), literature 0.5–1.5
 nob_growth_yield = 0.04
 nob_decay_rate_per_hour = 0.003
 
-# Comammox kinetics
+# ── Comammox kinetics ────────────────────────────────────────────────
 # Comammox has lower TAN Ks than AOB (competitive at low ammonia).
+#
+# Retuning note (tanksim-6e5.2.3 → 6e5.2.6):
+#   Old effective Ks was 0.04 mg N/L (0.8 / 20 L). New value 0.2
+#   preserves the comammox low-ammonia niche while sitting within the
+#   literature range. Comammox naturally dominates late-cycle conditions
+#   when TAN drops below the AOB Ks.
 comammox_vmax_fraction = 0.4
 comammox_k_tan_mg_n_per_l = 0.2         # TAN Ks (mg N/L), literature 0.05–0.5
 comammox_k_do_mg_per_l = 0.6            # DO Ks (mg O₂/L), literature 0.3–1.0
@@ -53,10 +89,18 @@ comammox_decay_rate_per_hour = 0.004
 o2_per_mg_n_nitrified = 4.57
 alkalinity_meq_per_mg_n_nitrified = 0.1428
 
-# Daily plant growth
+# ── Daily plant growth ────────────────────────────────────────────────
 # Half-saturation constants are concentration-based:
 #   Water-column Ks: mg nutrient / L (volumetric)
 #   Substrate Ks:    mg nutrient / m² (areal density)
+#
+# Retuning note (tanksim-6e5.2.4 → 6e5.2.6):
+#   Plant Ks values were migrated from legacy total-based names to
+#   concentration-based names (e.g. plant_half_saturation_n_mg_total →
+#   plant_half_saturation_n_mg_n_per_l). Values were adjusted to
+#   literature-reasonable ranges. Substrate Ks (mg/m²) is new in 6e5.2.4;
+#   it governs root-feeding rosette limitation independently of water-
+#   column concentrations.
 plant_max_growth_rate_fast_stem_per_day = 0.08
 plant_max_growth_rate_root_rosette_per_day = 0.06
 plant_respiration_fraction_per_day = 0.01
@@ -73,7 +117,14 @@ plant_temp_optimum_c = 25.0
 plant_temp_sigma_c = 7.0
 plant_crowding_biomass_g_per_m2 = 250.0
 
-# Daily algae/periphyton growth
+# ── Daily algae/periphyton growth ─────────────────────────────────────
+# Retuning note (tanksim-6e5.2.5 → 6e5.2.6):
+#   Algae Ks values were migrated from legacy total-based names to
+#   concentration-based (e.g. algae_half_saturation_n_mg_total →
+#   algae_half_saturation_n_mg_n_per_l). Algae Ks(N) = 0.25 mg N/L
+#   is lower than plant Ks(N) = 0.4, reflecting algae's competitive
+#   advantage at low nutrient concentrations — this drives the expected
+#   algae dominance under nutrient-depleted or warm conditions.
 algae_max_growth_rate_per_day = 0.2
 periphyton_max_growth_rate_per_day = 0.15
 algae_respiration_fraction_per_day = 0.03
@@ -114,8 +165,12 @@ source_title = "Starter preset pack"
 source_year = 2026
 # Whole-file provenance confidence is intentionally coarse/free-form;
 # per-parameter [param_meta.*].confidence uses the validated enum.
-# For legacy `_mg` / `_mg_total` parameter names, any future
-# [param_meta.*].valid_range should use the normalized concentration unit
-# shown by `unit` (for example mg/L), not the raw historical storage total.
 confidence = "medium"
-notes = "Default process coefficients including heat-transfer parameters for the hourly thermal model."
+notes = """
+Default process coefficients retuned after Phase 1A normalization \
+(tanksim-6e5.2.3 through 6e5.2.6). All half-saturation constants are now \
+concentration-based (mg/L for water-column, mg/m² for substrate areal). \
+Values sit within published literature ranges and produce qualitatively \
+correct cycling stories in the nano_cycle, medium_planted, and warm_room \
+scenarios. These are temporary Phase 1 envelopes; later habitat and \
+carbonate work (Phase 2+) may shift individual parameters."""

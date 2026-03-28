@@ -21,4 +21,11 @@ sulfate_mg_per_l = 12.4
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "Low-mineral planted tank source water. GH ~3.0, KH ~3.0, TDS ~120. KH was kept at ~3 so cycling still has enough buffer to avoid an immediate acid crash."
+notes = """
+Low-mineral planted tank source water. GH ~3.0, KH ~3.0, TDS ~120. \
+Alkalinity 1.07 meq/L provides limited buffering: the nano_cycle scenario \
+demonstrates pH depression and nitrification stalls as alkalinity is \
+consumed (each mg N nitrified costs ~0.14 meq). Zero initial nitrogen \
+species means all TAN in cycling scenarios comes from feed decomposition. \
+Post-normalization (6e5.2.6) this profile still produces the expected \
+"soft water = poor cycling buffer" story."""

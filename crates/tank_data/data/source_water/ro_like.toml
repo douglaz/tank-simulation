@@ -21,4 +21,7 @@ sulfate_mg_per_l = 0.0
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "high"
-notes = "Zero-nutrient reference water for regression tests. All dissolved species at zero."
+notes = """
+Zero-nutrient reference water for regression tests. All dissolved species \
+at zero. Zero alkalinity means any nitrification will immediately crash pH \
+— this is intentional for isolation tests, not a realistic water profile."""

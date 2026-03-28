@@ -9,5 +9,11 @@ substrate_uptake_bias = 0.2
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "Water-column feeder for early stabilization."
+notes = """
+Water-column feeder for early stabilization. growth_rate_index (0.9) scales \
+the process-param max growth rate (plant_max_growth_rate_fast_stem_per_day). \
+water_column_uptake_bias (0.9) means 90% of nutrient uptake draws from \
+volumetric concentration (Ks in mg/L), 10% from substrate (Ks in mg/m²). \
+Post-normalization (6e5.2.4) fast stems dominate medium_planted because \
+their water-column bias gives them first access to dissolved N/P."""
 

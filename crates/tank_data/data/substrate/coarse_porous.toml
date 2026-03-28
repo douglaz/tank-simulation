@@ -13,5 +13,9 @@ nutrient_charge_mg_p_total = 3.0
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "High-surface porous media mix."
+notes = """
+High-surface porous media mix. Highest colonizable_area_factor (0.9) makes \
+this the best nitrifier habitat substrate. Moderate nutrient charge (10 mg \
+N, 3 mg P) supplements active_planted in the medium_planted scenario. High \
+detritus_trapping_index (0.7) captures organic matter for microfauna."""
 
