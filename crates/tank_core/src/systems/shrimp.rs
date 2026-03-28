@@ -1,4 +1,4 @@
-use crate::systems::chemistry::compute_nh3_mg_l;
+use crate::systems::chemistry::{compute_nh3_mg_l, resolve_carbonate_state};
 use crate::types::{
     algae_carbon_mg, algae_nitrogen_mg, detritus_carbon_mg, detritus_nitrogen_mg,
     live_biomass_carbon_mg, live_biomass_detrital_mass_g, live_biomass_nitrogen_mg, EggCohort,
@@ -82,6 +82,7 @@ pub fn step_daily_shrimp(state: &mut TankState) {
     egg_development(state);
     juvenile_recruitment(state);
     mortality(state);
+    refresh_carbonate_state(state);
     emit_molt_stress_warning(state);
 
     reset_hourly_accumulators(state);
@@ -653,6 +654,11 @@ fn fund_live_shrimp_biomass_from_water(state: &mut TankState, biomass_g: f64) ->
     );
 
     true
+}
+
+fn refresh_carbonate_state(state: &mut TankState) {
+    let volume_l = state.water_volume_l();
+    resolve_carbonate_state(&mut state.water, volume_l);
 }
 
 fn emit_molt_stress_warning(state: &mut TankState) {

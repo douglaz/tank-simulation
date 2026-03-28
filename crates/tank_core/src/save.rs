@@ -21,12 +21,16 @@ const MIN_SUPPORTED_SCHEMA: u32 = 2;
 // ---------------------------------------------------------------------------
 
 /// A migration function transforms a raw JSON `SaveFile` from version N to
-/// N+1.  The `&mut Value` is the top-level object; access state fields via
-/// `value["state"]["water"]["field_name"]` etc.
+/// N+1. The `&mut Value` is the top-level object; access state fields via JSON
+/// pointers such as `/state/water/field_name`.
 ///
 /// Operating on raw JSON means migrations can handle field renames, removals,
 /// additions, and value transforms regardless of the current Rust struct shape.
-type MigrationFn = fn(&mut Value);
+///
+/// Migrations must fail explicitly on malformed legacy payloads instead of
+/// silently returning early; later phases will need that for field renames and
+/// structural transforms.
+type MigrationFn = fn(&mut Value) -> Result<(), SimError>;
 
 /// Ordered list of migrations.  Index 0 migrates `MIN_SUPPORTED_SCHEMA` →
 /// `MIN_SUPPORTED_SCHEMA + 1`, index 1 migrates `MIN_SUPPORTED_SCHEMA + 1` →
@@ -36,7 +40,7 @@ type MigrationFn = fn(&mut Value);
 ///
 /// # Migration contract — how to add a new migration
 ///
-/// 1. Write a function `fn migrate_vN_to_vM(value: &mut Value)` that
+/// 1. Write a function `fn migrate_vN_to_vM(value: &mut Value) -> Result<(), SimError>` that
 ///    transforms the top-level JSON from schema N to M (where M = N + 1).
 ///    Access state via `value["state"]`.
 ///
@@ -46,6 +50,10 @@ type MigrationFn = fn(&mut Value);
 ///
 /// 4. Add a test that constructs a version-N JSON blob, calls
 ///    `SaveFile::from_json`, and asserts the migration applied correctly.
+///
+/// 5. Return a descriptive [`SimError::SchemaMigration`] when a required
+///    source field is missing or has the wrong type. Do not silently skip
+///    malformed legacy payloads.
 ///
 /// ## What migrations can do
 ///
@@ -157,16 +165,12 @@ impl SaveFile {
         // Apply migrations sequentially: file_version → file_version+1 → … → SCHEMA_VERSION
         for v in file_version..SCHEMA_VERSION {
             let idx = (v - MIN_SUPPORTED_SCHEMA) as usize;
-            MIGRATIONS[idx](&mut value);
+            MIGRATIONS[idx](&mut value)?;
+            set_schema_version(&mut value, v + 1)?;
         }
 
         // Stamp the migrated version so deserialization sees the current schema.
-        if let Some(obj) = value.as_object_mut() {
-            obj.insert(
-                "schema_version".to_string(),
-                Value::Number(SCHEMA_VERSION.into()),
-            );
-        }
+        set_schema_version(&mut value, SCHEMA_VERSION)?;
 
         // Detect whether the stability tracker was serialized before we
         // deserialize (it may be absent in old saves that predate the field).
@@ -175,7 +179,12 @@ impl SaveFile {
         let mut save: Self = serde_json::from_value(value)
             .map_err(|error| SimError::Deserialization(error.to_string()))?;
 
-        reseed_stability_tracker_if_missing(&mut save.state, stability_tracker_present);
+        let carbonate_cache_normalized = normalize_loaded_carbonate_state(&mut save.state);
+        reconcile_stability_tracker(
+            &mut save.state,
+            stability_tracker_present,
+            carbonate_cache_normalized,
+        );
 
         Ok(save)
     }
@@ -203,29 +212,30 @@ impl SaveFile {
 /// Schema 2 → 3: dissolved-chemistry totals were stored on a gross-volume
 /// basis.  Schema 3 uses net-water volume (after substrate displacement).
 /// This migration rescales every dissolved total by `net / gross`.
-fn migrate_v2_to_v3(value: &mut Value) {
-    let state = match value.get_mut("state") {
-        Some(s) => s,
-        None => return,
-    };
-
+fn migrate_v2_to_v3(value: &mut Value) -> Result<(), SimError> {
     // Compute gross and net volumes from geometry + substrate layers.
-    let geometry = &state["geometry"];
-    let length = geometry["length_cm"].as_f64().unwrap_or(0.0);
-    let width = geometry["width_cm"].as_f64().unwrap_or(0.0);
-    let fill_height = geometry["fill_height_cm"].as_f64().unwrap_or(0.0);
+    let length = required_f64_at(value, 2, 3, "/state/geometry/length_cm")?;
+    let width = required_f64_at(value, 2, 3, "/state/geometry/width_cm")?;
+    let fill_height = required_f64_at(value, 2, 3, "/state/geometry/fill_height_cm")?;
     let gross_volume_l = length * width * fill_height / 1000.0;
 
-    let substrate_depth: f64 = state["substrate_layers"]
-        .as_array()
-        .map(|layers| {
-            layers
-                .iter()
-                .filter_map(|l| l["depth_cm"].as_f64())
-                .map(|d| d.max(0.0))
-                .sum()
-        })
-        .unwrap_or(0.0);
+    let substrate_layers = required_array_at(value, 2, 3, "/state/substrate_layers")?;
+    let substrate_depth = substrate_layers
+        .iter()
+        .enumerate()
+        .try_fold(0.0, |sum, (index, layer)| {
+            let depth = layer
+                .get("depth_cm")
+                .and_then(Value::as_f64)
+                .ok_or_else(|| {
+                    schema_migration_error(
+                        2,
+                        3,
+                        format!("expected finite number at /state/substrate_layers/{index}/depth_cm"),
+                    )
+                })?;
+            Ok::<_, SimError>(sum + depth.max(0.0))
+        })?;
 
     let capped_depth = substrate_depth.clamp(0.0, fill_height.max(0.0));
     let displacement_l = length * width * capped_depth / 1000.0;
@@ -238,10 +248,7 @@ fn migrate_v2_to_v3(value: &mut Value) {
     };
 
     // Rescale every dissolved total field in the water object.
-    let water = match state.get_mut("water") {
-        Some(w) => w,
-        None => return,
-    };
+    let water = required_object_mut_at(value, 2, 3, "/state/water")?;
 
     let dissolved_fields = [
         "ammonia_total_mg_n_total",
@@ -263,20 +270,29 @@ fn migrate_v2_to_v3(value: &mut Value) {
     ];
 
     for field in &dissolved_fields {
-        if let Some(val) = water.get_mut(*field) {
-            if let Some(num) = val.as_f64() {
-                *val = serde_json::json!(num * scale);
-            }
-        }
+        let val = water
+            .get_mut(*field)
+            .ok_or_else(|| schema_migration_error(2, 3, format!("missing /state/water/{field}")))?;
+        let num = val.as_f64().ok_or_else(|| {
+            schema_migration_error(
+                2,
+                3,
+                format!("expected finite number at /state/water/{field}"),
+            )
+        })?;
+        *val = serde_json::json!(num * scale);
     }
+
+    Ok(())
 }
 
 /// Schema 3 → 4: add shrimp feeding pathway parameters (assimilation efficiency,
 /// respiration/excretion/growth fractions, O2:C quotient) and `animal.reserve_g`.
 /// All new fields use `#[serde(default)]`, so deserialization fills them in
 /// automatically. No raw JSON transformation needed.
-fn migrate_v3_to_v4(_value: &mut Value) {
+fn migrate_v3_to_v4(_value: &mut Value) -> Result<(), SimError> {
     // No-op: serde defaults handle all new fields.
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -290,8 +306,27 @@ fn has_serialized_stability_tracker(value: &Value) -> bool {
         .is_some()
 }
 
-fn reseed_stability_tracker_if_missing(state: &mut TankState, stability_tracker_present: bool) {
+fn normalize_loaded_carbonate_state(state: &mut TankState) -> bool {
+    let original_ph = state.water.ph;
+    let original_bicarbonate_mg_total = state.water.bicarbonate_mg_total;
+    let volume_l = state.water_volume_l();
+
+    crate::systems::chemistry::resolve_carbonate_state(&mut state.water, volume_l);
+
+    (state.water.ph - original_ph).abs() > 1e-9
+        || (state.water.bicarbonate_mg_total - original_bicarbonate_mg_total).abs() > 1e-6
+}
+
+fn reconcile_stability_tracker(
+    state: &mut TankState,
+    stability_tracker_present: bool,
+    carbonate_cache_normalized: bool,
+) {
     if !stability_tracker_present {
         state.reseed_stability_tracker();
+    } else if carbonate_cache_normalized {
+        // Avoid a fake load-time chemistry swing when we repaired stale
+        // cached pH/bicarbonate fields from the canonical carbonate inputs.
+        state.stability_tracker.prev_ph = state.water.ph;
     }
 }

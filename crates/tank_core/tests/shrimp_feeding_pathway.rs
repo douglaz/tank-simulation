@@ -1,3 +1,4 @@
+use tank_core::systems::chemistry::solve_carbonate_equilibrium;
 /// Tests for the shrimp ingestion → assimilation → excretion → feces → respiration loop.
 ///
 /// These tests verify the consumer routing contract from docs/ROUTING.md:
@@ -144,6 +145,43 @@ fn feeding_consumes_dissolved_oxygen() -> Result<(), SimError> {
         "DO should decrease from shrimp respiration: before={do_before}, after={}",
         after.water.dissolved_oxygen_mg_total
     );
+    Ok(())
+}
+
+#[test]
+fn daily_shrimp_refreshes_cached_carbonate_state() -> Result<(), SimError> {
+    let mut state = feeding_test_state();
+    let ph_before = state.water.ph;
+    state
+        .process_params
+        .respiration_dic_rate_mg_c_per_g_per_hour = 0.0;
+    state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.step_hours(24)?;
+
+    let after = engine.full_state();
+    let volume_l = after.water_volume_l();
+    let expected = solve_carbonate_equilibrium(
+        after.water.dissolved_inorganic_carbon_mg_c_total,
+        after.water.alkalinity_meq_total,
+        after.water.temperature_c,
+        volume_l,
+    );
+
+    assert!(
+        (expected.ph - ph_before).abs() > 1e-6,
+        "test setup must change carbonate equilibrium enough to catch stale pH caches"
+    );
+    assert_close(after.water.ph, expected.ph, 1e-9);
+    assert_close(
+        after.water.bicarbonate_mg_total,
+        expected.hco3_mmol_per_l * 61.0 * volume_l,
+        1e-6,
+    );
+
     Ok(())
 }
 

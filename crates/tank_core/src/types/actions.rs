@@ -79,6 +79,8 @@ pub enum SimError {
          minimum supported version is {min_supported}"
     )]
     SchemaVersionTooOld { actual: u32, min_supported: u32 },
+    #[error("save migration {from} -> {to} failed: {message}")]
+    SchemaMigration { from: u32, to: u32, message: String },
     #[error("serialization error: {0}")]
     Serialization(String),
     #[error("deserialization error: {0}")]

@@ -1,3 +1,4 @@
+use tank_core::systems::chemistry::solve_carbonate_equilibrium;
 use tank_core::{
     Engine, MicrobeState, PlayerAction, ProcessParams, SaveFile, SimError, SimSeed,
     SimulationEngine, SourceWaterProfile, TankState, WaterState, APP_VERSION, SCHEMA_VERSION,
@@ -384,6 +385,47 @@ fn malformed_v4_save_with_invalid_shrimp_partition_sum_is_rejected() -> Result<(
         }
         other => panic!("expected shrimp partition invariant violation, got: {other:?}"),
     }
+
+    Ok(())
+}
+
+#[test]
+fn current_schema_load_repairs_stale_carbonate_caches() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(103));
+    let volume_l = state.water_volume_l();
+    let expected = solve_carbonate_equilibrium(
+        state.water.dissolved_inorganic_carbon_mg_c_total,
+        state.water.alkalinity_meq_total,
+        state.water.temperature_c,
+        volume_l,
+    );
+
+    state.water.ph = 6.05;
+    state.water.bicarbonate_mg_total = 1.0;
+    state.stability_tracker.prev_ph = 6.05;
+    state.stability_tracker.instability_index = 0.42;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+
+    assert!((loaded.state.water.ph - expected.ph).abs() < 1e-9);
+    assert!(
+        (loaded.state.water.bicarbonate_mg_total - expected.hco3_mmol_per_l * 61.0 * volume_l)
+            .abs()
+            < 1e-6
+    );
+    assert!((loaded.state.stability_tracker.prev_ph - expected.ph).abs() < 1e-9);
+    assert!(
+        (loaded.state.stability_tracker.instability_index - 0.42).abs() < 1e-12,
+        "repairing stale caches should not wipe tracker history"
+    );
 
     Ok(())
 }
