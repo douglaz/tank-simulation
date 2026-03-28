@@ -235,32 +235,36 @@ fn water_change_shows_n_export_via_system_deltas() -> Result<(), SimError> {
 }
 
 // ---------------------------------------------------------------------------
-// Trim plants: closed-system action inspection
+// Trim plants with cuttings left in-tank: closed-system action inspection
 // ---------------------------------------------------------------------------
 
 #[test]
-fn trim_plants_is_closed_system_via_helpers() -> Result<(), SimError> {
+fn trim_plants_and_leave_cuttings_is_closed_system_via_helpers() -> Result<(), SimError> {
     let mut state = quiescent_budget_state(SimSeed(9_055));
     state.plant_guilds = vec![PlantGuildState::default(), PlantGuildState::default()];
     state.plant_guilds[0].biomass_g = 2.0;
     state.plant_guilds[1].biomass_g = 3.5;
     let mut engine = Engine::from_parts(state, vec![]);
 
-    engine.apply_action(PlayerAction::TrimPlantsAndRemove { fraction: 0.25 })?;
+    engine.apply_action(PlayerAction::TrimPlantsAndLeaveCuttings { fraction: 0.25 })?;
     let result = step_and_inspect(&mut engine, 1)?;
 
-    // Trim plants is closed-system: N and C should be conserved
+    // Leaving cuttings in the tank is closed-system: N and C should be conserved.
     assert_n_conserved(&result.budget, 1e-6);
     assert_c_conserved(&result.budget, 1e-6);
 
     // Verify the action shows gross in/out (redistribution, not net change)
     let trim_delta = result
         .budget
-        .system_delta_in_tick(0, "action:trim_plants", Element::Nitrogen)
-        .expect("trim_plants should appear in budget");
+        .system_delta_in_tick(
+            0,
+            "action:trim_plants_and_leave_cuttings",
+            Element::Nitrogen,
+        )
+        .expect("trim_plants_and_leave_cuttings should appear in budget");
     assert!(
         trim_delta.in_mg > 0.0 && trim_delta.out_mg > 0.0,
-        "trim_plants should redistribute nitrogen: {trim_delta:?}"
+        "trim_plants_and_leave_cuttings should redistribute nitrogen: {trim_delta:?}"
     );
 
     Ok(())

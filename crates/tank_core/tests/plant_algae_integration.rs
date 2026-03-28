@@ -192,7 +192,7 @@ fn algae_bloom_conditions_emit_events_and_overfeeding_raises_nuisance(
 }
 
 #[test]
-fn trim_plants_routes_mass_to_detritus() -> Result<(), tank_core::SimError> {
+fn trim_plants_and_leave_cuttings_routes_mass_to_detritus() -> Result<(), tank_core::SimError> {
     let mut state = base_growth_state(SimSeed(8103));
     state.process_params.fine_detritus_dissolution_rate_per_hour = 0.0;
     state.plant_guilds = vec![PlantGuildState {
@@ -205,7 +205,7 @@ fn trim_plants_routes_mass_to_detritus() -> Result<(), tank_core::SimError> {
     }];
 
     let mut engine = Engine::from_parts(state, vec![]);
-    engine.apply_action(PlayerAction::TrimPlantsAndRemove { fraction: 0.25 })?;
+    engine.apply_action(PlayerAction::TrimPlantsAndLeaveCuttings { fraction: 0.25 })?;
     engine.step_hours(1)?;
 
     let state = engine.full_state();

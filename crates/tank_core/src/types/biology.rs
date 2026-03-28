@@ -145,8 +145,9 @@ fn default_last_molt_success() -> bool {
     true
 }
 
-const SUB_ADULT_FEEDING_WEIGHT: f64 = 0.65;
-const JUVENILE_FEEDING_WEIGHT: f64 = 0.3;
+pub(crate) const ADULT_FEEDING_WEIGHT: f64 = 1.0;
+pub(crate) const SUB_ADULT_FEEDING_WEIGHT: f64 = 0.67;
+pub(crate) const JUVENILE_FEEDING_WEIGHT: f64 = 0.3;
 
 pub const DEFAULT_SHRIMP_BODY_NITROGEN_MG_PER_G_WET_MASS: f64 = 27.586206896551722;
 pub const DEFAULT_SHRIMP_BODY_CARBON_MG_PER_G_WET_MASS: f64 = 172.41379310344828;

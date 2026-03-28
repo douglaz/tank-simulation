@@ -21,6 +21,7 @@ pub use biology::{
     StageCohort, DEFAULT_SHRIMP_BODY_CARBON_MG_PER_G_WET_MASS,
     DEFAULT_SHRIMP_BODY_NITROGEN_MG_PER_G_WET_MASS,
 };
+pub(crate) use biology::{ADULT_FEEDING_WEIGHT, JUVENILE_FEEDING_WEIGHT, SUB_ADULT_FEEDING_WEIGHT};
 pub(crate) use budget::BudgetSnapshot;
 pub use budget::{
     algae_carbon_mg, algae_detrital_mass_g, algae_nitrogen_mg, carbon_budget_components,

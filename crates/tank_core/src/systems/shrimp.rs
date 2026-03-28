@@ -2,18 +2,14 @@ use crate::systems::chemistry::{compute_nh3_mg_n_per_l, resolve_carbonate_state}
 use crate::types::{
     algae_carbon_mg, algae_detrital_mass_g, algae_nitrogen_mg, detritus_carbon_mg,
     detritus_nitrogen_mg, shrimp_body_detrital_mass_g, EggCohort, EventCause, EventKind,
-    EventSeverity, ShrimpRuntimeParams, TankState, ADULT_SHRIMP_BIOMASS_G,
-    JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G, SUB_ADULT_SHRIMP_BIOMASS_G,
+    EventSeverity, ShrimpRuntimeParams, TankState, ADULT_FEEDING_WEIGHT, ADULT_SHRIMP_BIOMASS_G,
+    JUVENILE_FEEDING_WEIGHT, JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
+    SUB_ADULT_FEEDING_WEIGHT, SUB_ADULT_SHRIMP_BIOMASS_G,
 };
 
 const MG_N_PER_MEQ_AMMONIA: f64 = 14.007;
 const ROUTING_MASS_ASSERT_TOLERANCE_G: f64 = 1e-12;
 const DEATH_DETRITUS_FRACTION_TOLERANCE: f64 = 1e-9;
-
-// ── Feeding weight constants (relative to adult = 1.0) ────────────────────
-const ADULT_FEEDING_WEIGHT: f64 = 1.0;
-const SUB_ADULT_FEEDING_WEIGHT: f64 = 0.67;
-const JUVENILE_FEEDING_WEIGHT: f64 = 0.3;
 
 // ── Hourly ──────────────────────────────────────────────────────────────────
 
