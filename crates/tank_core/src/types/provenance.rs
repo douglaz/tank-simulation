@@ -1,3 +1,13 @@
+//! Provenance metadata lives alongside preset-layer values, not inside the
+//! runtime state structs in `tank_core`.
+//!
+//! `tank_data` preset types can attach `ParamMeta` to TOML-backed parameters,
+//! including values that fall back to deterministic code defaults during preset
+//! materialization. Calling `Default::default()` on runtime structs such as
+//! `ProcessParams` or `ShrimpRuntimeParams` yields numeric defaults only; those
+//! code-defined values do not carry inline provenance unless a preset or report
+//! stores matching `ParamMeta` next to them.
+
 use std::collections::BTreeMap;
 use std::fmt;
 

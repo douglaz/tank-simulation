@@ -6,8 +6,8 @@ use tank_core::systems::chemistry::{
     CARBONATE_PH_MIN,
 };
 use tank_core::types::{
-    check_all_ranges, format_param, ParamMeta, RangeWarning, LEGACY_KINETIC_REFERENCE_FOOTPRINT_M2,
-    LEGACY_KINETIC_REFERENCE_VOLUME_L,
+    check_all_ranges, format_param, ParamMeta, RangeWarning, ShrimpRuntimeParams,
+    LEGACY_KINETIC_REFERENCE_FOOTPRINT_M2, LEGACY_KINETIC_REFERENCE_VOLUME_L,
 };
 
 const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
@@ -57,8 +57,12 @@ trait ParamMetaPreset {
     }
 
     fn format_param(&self, name: &str) -> Option<String> {
-        let value = self.provenance_param_value(name)?;
-        Some(match self.param_meta_map().get(name) {
+        let meta = self.param_meta_map().get(name);
+        let value = match meta {
+            Some(_) => self.provenance_param_value(name)?,
+            None => self.lookup_param_value(name)?,
+        };
+        Some(match meta {
             Some(meta) => format_param(name, value, meta),
             None => format_param(name, value, &empty_param_meta()),
         })
@@ -68,6 +72,28 @@ trait ParamMetaPreset {
         check_all_ranges(self.param_meta_map(), &|name| {
             self.provenance_param_value(name)
         })
+    }
+}
+
+fn shrimp_runtime_default_param_value(name: &str) -> Option<f64> {
+    let defaults = ShrimpRuntimeParams::default();
+    match name {
+        "body_nitrogen_mg_per_g_wet_mass" => Some(defaults.body_nitrogen_mg_per_g_wet_mass),
+        "body_carbon_mg_per_g_wet_mass" => Some(defaults.body_carbon_mg_per_g_wet_mass),
+        "juvenile_to_subadult_days" => Some(defaults.juvenile_to_subadult_days),
+        "subadult_to_adult_days" => Some(defaults.subadult_to_adult_days),
+        "juvenile_maturation_condition_threshold" => {
+            Some(defaults.juvenile_maturation_condition_threshold)
+        }
+        "subadult_maturation_condition_threshold" => {
+            Some(defaults.subadult_maturation_condition_threshold)
+        }
+        "base_molt_interval_days" => Some(defaults.base_molt_interval_days),
+        "failed_molt_mortality_scale" => Some(defaults.failed_molt_mortality_scale),
+        "sub_adult_sensitivity" => Some(defaults.sub_adult_sensitivity),
+        "base_clutch_size" => Some(f64::from(defaults.base_clutch_size)),
+        "min_clutch_condition" => Some(defaults.min_clutch_condition),
+        _ => None,
     }
 }
 
@@ -232,6 +258,87 @@ pub struct SubstratePreset {
     pub nutrient_charge_mg_n_total: f64,
     pub nutrient_charge_mg_p_total: f64,
     pub provenance: Option<Provenance>,
+
+    /// Per-parameter provenance metadata keyed by parameter name.
+    /// Missing entries mean no provenance has been attached yet.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub param_meta: BTreeMap<String, ParamMeta>,
+}
+
+impl SubstratePreset {
+    fn unknown_param_meta_keys(&self) -> Vec<&str> {
+        ParamMetaPreset::unknown_param_meta_keys(self)
+    }
+
+    /// Look up a substrate parameter value by name. Returns `None` for
+    /// unknown names.
+    pub fn param_value(&self, name: &str) -> Option<f64> {
+        ParamMetaPreset::lookup_param_value(self, name)
+    }
+
+    pub fn format_param(&self, name: &str) -> Option<String> {
+        ParamMetaPreset::format_param(self, name)
+    }
+
+    /// Check all param_meta entries with valid_range against current values.
+    /// Returns warnings for out-of-range values (never errors).
+    pub fn check_ranges(&self) -> Vec<RangeWarning> {
+        ParamMetaPreset::check_ranges(self)
+    }
+
+    /// Validates that all substrate fields are finite and non-negative.
+    pub fn validate(&self) -> Result<(), String> {
+        let unknown_param_meta_keys = self.unknown_param_meta_keys();
+        if !unknown_param_meta_keys.is_empty() {
+            return Err(format!(
+                "unknown param_meta entries: {}",
+                unknown_param_meta_keys.join(", ")
+            ));
+        }
+
+        let fields: &[(&str, f64)] = &[
+            ("depth_cm", self.depth_cm),
+            (
+                "cation_exchange_capacity_index",
+                self.cation_exchange_capacity_index,
+            ),
+            ("detritus_trapping_index", self.detritus_trapping_index),
+            ("colonizable_area_factor", self.colonizable_area_factor),
+            ("low_oxygen_tendency_index", self.low_oxygen_tendency_index),
+            ("grazing_surface_index", self.grazing_surface_index),
+            ("nutrient_charge_mg_n_total", self.nutrient_charge_mg_n_total),
+            ("nutrient_charge_mg_p_total", self.nutrient_charge_mg_p_total),
+        ];
+        for (name, value) in fields {
+            if !value.is_finite() {
+                return Err(format!("field `{name}` must be finite, got {value}"));
+            }
+            if *value < 0.0 {
+                return Err(format!("field `{name}` must be non-negative, got {value}"));
+            }
+        }
+        Ok(())
+    }
+}
+
+impl ParamMetaPreset for SubstratePreset {
+    fn param_meta_map(&self) -> &BTreeMap<String, ParamMeta> {
+        &self.param_meta
+    }
+
+    fn lookup_param_value(&self, name: &str) -> Option<f64> {
+        match name {
+            "depth_cm" => Some(self.depth_cm),
+            "cation_exchange_capacity_index" => Some(self.cation_exchange_capacity_index),
+            "detritus_trapping_index" => Some(self.detritus_trapping_index),
+            "colonizable_area_factor" => Some(self.colonizable_area_factor),
+            "low_oxygen_tendency_index" => Some(self.low_oxygen_tendency_index),
+            "grazing_surface_index" => Some(self.grazing_surface_index),
+            "nutrient_charge_mg_n_total" => Some(self.nutrient_charge_mg_n_total),
+            "nutrient_charge_mg_p_total" => Some(self.nutrient_charge_mg_p_total),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -243,6 +350,74 @@ pub struct PlantPreset {
     pub water_column_uptake_bias: f64,
     pub substrate_uptake_bias: f64,
     pub provenance: Option<Provenance>,
+
+    /// Per-parameter provenance metadata keyed by parameter name.
+    /// Missing entries mean no provenance has been attached yet.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub param_meta: BTreeMap<String, ParamMeta>,
+}
+
+impl PlantPreset {
+    fn unknown_param_meta_keys(&self) -> Vec<&str> {
+        ParamMetaPreset::unknown_param_meta_keys(self)
+    }
+
+    /// Look up a plant parameter value by name. Returns `None` for unknown
+    /// names.
+    pub fn param_value(&self, name: &str) -> Option<f64> {
+        ParamMetaPreset::lookup_param_value(self, name)
+    }
+
+    pub fn format_param(&self, name: &str) -> Option<String> {
+        ParamMetaPreset::format_param(self, name)
+    }
+
+    /// Check all param_meta entries with valid_range against current values.
+    /// Returns warnings for out-of-range values (never errors).
+    pub fn check_ranges(&self) -> Vec<RangeWarning> {
+        ParamMetaPreset::check_ranges(self)
+    }
+
+    /// Validates that all plant fields are finite and non-negative.
+    pub fn validate(&self) -> Result<(), String> {
+        let unknown_param_meta_keys = self.unknown_param_meta_keys();
+        if !unknown_param_meta_keys.is_empty() {
+            return Err(format!(
+                "unknown param_meta entries: {}",
+                unknown_param_meta_keys.join(", ")
+            ));
+        }
+
+        let fields: &[(&str, f64)] = &[
+            ("growth_rate_index", self.growth_rate_index),
+            ("water_column_uptake_bias", self.water_column_uptake_bias),
+            ("substrate_uptake_bias", self.substrate_uptake_bias),
+        ];
+        for (name, value) in fields {
+            if !value.is_finite() {
+                return Err(format!("field `{name}` must be finite, got {value}"));
+            }
+            if *value < 0.0 {
+                return Err(format!("field `{name}` must be non-negative, got {value}"));
+            }
+        }
+        Ok(())
+    }
+}
+
+impl ParamMetaPreset for PlantPreset {
+    fn param_meta_map(&self) -> &BTreeMap<String, ParamMeta> {
+        &self.param_meta
+    }
+
+    fn lookup_param_value(&self, name: &str) -> Option<f64> {
+        match name {
+            "growth_rate_index" => Some(self.growth_rate_index),
+            "water_column_uptake_bias" => Some(self.water_column_uptake_bias),
+            "substrate_uptake_bias" => Some(self.substrate_uptake_bias),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -302,7 +477,8 @@ impl ShrimpPreset {
     }
 
     /// Look up a shrimp parameter value by name. Returns `None` for unknown
-    /// names or known optional parameters that are currently unset.
+    /// names. Optional preset fields fall back to the runtime defaults used by
+    /// `ShrimpRuntimeParams` so provenance on those defaults stays visible.
     pub fn param_value(&self, name: &str) -> Option<f64> {
         ParamMetaPreset::lookup_param_value(self, name)
     }
@@ -485,21 +661,42 @@ impl ParamMetaPreset for ShrimpPreset {
             "juvenile_sensitivity" => Some(self.juvenile_sensitivity),
             "high_temp_repro_penalty_start_c" => Some(self.high_temp_repro_penalty_start_c),
             "high_temp_repro_penalty_full_c" => Some(self.high_temp_repro_penalty_full_c),
-            "body_nitrogen_mg_per_g_wet_mass" => self.body_nitrogen_mg_per_g_wet_mass,
-            "body_carbon_mg_per_g_wet_mass" => self.body_carbon_mg_per_g_wet_mass,
-            "juvenile_to_subadult_days" => self.juvenile_to_subadult_days,
-            "subadult_to_adult_days" => self.subadult_to_adult_days,
+            "body_nitrogen_mg_per_g_wet_mass" => self
+                .body_nitrogen_mg_per_g_wet_mass
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "body_carbon_mg_per_g_wet_mass" => self
+                .body_carbon_mg_per_g_wet_mass
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "juvenile_to_subadult_days" => self
+                .juvenile_to_subadult_days
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "subadult_to_adult_days" => self
+                .subadult_to_adult_days
+                .or_else(|| shrimp_runtime_default_param_value(name)),
             "juvenile_maturation_condition_threshold" => {
                 self.juvenile_maturation_condition_threshold
+                    .or_else(|| shrimp_runtime_default_param_value(name))
             }
             "subadult_maturation_condition_threshold" => {
                 self.subadult_maturation_condition_threshold
+                    .or_else(|| shrimp_runtime_default_param_value(name))
             }
-            "base_molt_interval_days" => self.base_molt_interval_days,
-            "failed_molt_mortality_scale" => self.failed_molt_mortality_scale,
-            "sub_adult_sensitivity" => self.sub_adult_sensitivity,
-            "base_clutch_size" => self.base_clutch_size.map(f64::from),
-            "min_clutch_condition" => self.min_clutch_condition,
+            "base_molt_interval_days" => self
+                .base_molt_interval_days
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "failed_molt_mortality_scale" => self
+                .failed_molt_mortality_scale
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "sub_adult_sensitivity" => self
+                .sub_adult_sensitivity
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "base_clutch_size" => self
+                .base_clutch_size
+                .map(f64::from)
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "min_clutch_condition" => self
+                .min_clutch_condition
+                .or_else(|| shrimp_runtime_default_param_value(name)),
             _ => None,
         }
     }
@@ -872,10 +1069,10 @@ fn default_algae_respiration_fraction() -> f64 {
     0.03
 }
 fn default_algae_half_sat_n() -> f64 {
-    5.0
+    0.25
 }
 fn default_algae_half_sat_p() -> f64 {
-    0.8
+    0.04
 }
 fn default_algae_light_half_sat() -> f64 {
     0.35
@@ -1001,19 +1198,18 @@ fn legacy_process_param_normalization(name: &str, unit: Option<&str>) -> Provena
         | "nob_k_nitrite_mg"
         | "nob_k_do_mg"
         | "comammox_k_tan_mg"
-        | "comammox_k_do_mg"
-        | "algae_half_saturation_n_mg_total"
-        | "algae_half_saturation_p_mg_total" => ProvenanceNormalization::LegacyMgPerL,
-        // Plant half-saturation fields are now natively concentration-based;
-        // no legacy normalization needed.
-        "plant_half_saturation_n_mg_n_per_l"
+        | "comammox_k_do_mg" => ProvenanceNormalization::LegacyMgPerL,
+        // Algae and plant half-saturation fields are now natively
+        // concentration-based; no legacy normalization needed.
+        "algae_half_saturation_n_mg_n_per_l"
+        | "algae_half_saturation_p_mg_p_per_l"
+        | "plant_half_saturation_n_mg_n_per_l"
         | "plant_half_saturation_p_mg_p_per_l"
         | "plant_half_saturation_c_mg_c_per_l"
         | "plant_half_saturation_n_substrate_mg_n_per_m2"
         | "plant_half_saturation_p_substrate_mg_p_per_m2" => {
             let _ = unit;
             return ProvenanceNormalization::None;
-            }
         }
         _ => ProvenanceNormalization::None,
     }
@@ -1124,8 +1320,12 @@ impl ParamMetaPreset for ProcessParamsPreset {
             "algae_max_growth_rate_per_day" => Some(self.algae_max_growth_rate_per_day),
             "periphyton_max_growth_rate_per_day" => Some(self.periphyton_max_growth_rate_per_day),
             "algae_respiration_fraction_per_day" => Some(self.algae_respiration_fraction_per_day),
-            "algae_half_saturation_n_mg_total" => Some(self.algae_half_saturation_n_mg_total),
-            "algae_half_saturation_p_mg_total" => Some(self.algae_half_saturation_p_mg_total),
+            "algae_half_saturation_n_mg_n_per_l" => {
+                Some(self.algae_half_saturation_n_mg_n_per_l)
+            }
+            "algae_half_saturation_p_mg_p_per_l" => {
+                Some(self.algae_half_saturation_p_mg_p_per_l)
+            }
             "algae_light_half_saturation" => Some(self.algae_light_half_saturation),
             "algae_temp_optimum_c" => Some(self.algae_temp_optimum_c),
             "algae_temp_sigma_c" => Some(self.algae_temp_sigma_c),
@@ -1327,12 +1527,12 @@ impl ProcessParamsPreset {
                 self.algae_respiration_fraction_per_day,
             ),
             (
-                "algae_half_saturation_n_mg_total",
-                self.algae_half_saturation_n_mg_total,
+                "algae_half_saturation_n_mg_n_per_l",
+                self.algae_half_saturation_n_mg_n_per_l,
             ),
             (
-                "algae_half_saturation_p_mg_total",
-                self.algae_half_saturation_p_mg_total,
+                "algae_half_saturation_p_mg_p_per_l",
+                self.algae_half_saturation_p_mg_p_per_l,
             ),
             (
                 "algae_light_half_saturation",
@@ -1422,6 +1622,12 @@ impl ProcessParamsPreset {
             if *value < 0.0 {
                 return Err(format!("field `{name}` must be non-negative, got {value}"));
             }
+        }
+        if self.shrimp_juvenile_maturation_days <= 0.0 {
+            return Err(format!(
+                "shrimp_juvenile_maturation_days must be > 0.0, got {}",
+                self.shrimp_juvenile_maturation_days
+            ));
         }
         if self.shrimp_assimilation_efficiency <= 0.0 || self.shrimp_assimilation_efficiency >= 1.0
         {
@@ -1554,7 +1760,7 @@ pub struct ScenarioPreset {
 
 #[cfg(test)]
 mod tests {
-    use super::{ProcessParamsPreset, ShrimpPreset, SourceWaterPreset};
+    use super::{PlantPreset, ProcessParamsPreset, ShrimpPreset, SourceWaterPreset, SubstratePreset};
     use tank_core::types::provenance::{
         check_param_range, format_param, ConfidenceLevel, ParamMeta,
     };
@@ -1570,6 +1776,14 @@ mod tests {
 
     fn shrimp_preset(contents: &str) -> ShrimpPreset {
         toml::from_str(contents).expect("shrimp preset should parse")
+    }
+
+    fn plant_preset(contents: &str) -> PlantPreset {
+        toml::from_str(contents).expect("plant preset should parse")
+    }
+
+    fn substrate_preset(contents: &str) -> SubstratePreset {
+        toml::from_str(contents).expect("substrate preset should parse")
     }
 
     // ---- Provenance acceptance-criteria tests ----
@@ -1663,6 +1877,136 @@ unit = "mg N/L"
             .expect_err("unknown source-water param_meta key should fail");
         assert!(err.contains("unknown param_meta entries"));
         assert!(err.contains("nitrate_typo"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_substrate_param_meta_roundtrip_and_range_warning(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let toml_str = r#"
+id = "test_substrate"
+name = "Test Substrate"
+depth_cm = 5.0
+cation_exchange_capacity_index = 0.9
+detritus_trapping_index = 0.6
+colonizable_area_factor = 0.8
+low_oxygen_tendency_index = 0.4
+grazing_surface_index = 0.6
+nutrient_charge_mg_n_total = 60.0
+nutrient_charge_mg_p_total = 18.0
+
+[param_meta.nutrient_charge_mg_n_total]
+unit = "mg N total"
+source = "Starter preset pack"
+confidence = "expert"
+valid_range = [0.0, 40.0]
+notes = "Charged substrate can exceed inert baselines"
+"#;
+        let preset = substrate_preset(toml_str);
+        preset.validate().expect("substrate preset should validate");
+
+        let warnings = preset.check_ranges();
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].param_name, "nutrient_charge_mg_n_total");
+        assert_eq!(warnings[0].value, 60.0);
+
+        let display = preset
+            .format_param("nutrient_charge_mg_n_total")
+            .expect("parameter should format");
+        assert!(display.contains("Starter preset pack"));
+        assert!(display.contains("mg N total"));
+
+        let serialized = toml::to_string(&preset)?;
+        let roundtrip: SubstratePreset = toml::from_str(&serialized)?;
+        assert_eq!(roundtrip.param_meta, preset.param_meta);
+        Ok(())
+    }
+
+    #[test]
+    fn test_substrate_unknown_param_meta_keys_are_rejected(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let toml_str = r#"
+id = "test_substrate"
+name = "Test Substrate"
+depth_cm = 5.0
+cation_exchange_capacity_index = 0.9
+detritus_trapping_index = 0.6
+colonizable_area_factor = 0.8
+low_oxygen_tendency_index = 0.4
+grazing_surface_index = 0.6
+nutrient_charge_mg_n_total = 60.0
+nutrient_charge_mg_p_total = 18.0
+
+[param_meta.nutrient_charge_typo]
+unit = "mg N total"
+"#;
+        let preset = substrate_preset(toml_str);
+        let err = preset
+            .validate()
+            .expect_err("unknown substrate param_meta key should fail");
+        assert!(err.contains("unknown param_meta entries"));
+        assert!(err.contains("nutrient_charge_typo"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_plant_param_meta_roundtrip_and_range_warning(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let toml_str = r#"
+id = "test_plant"
+name = "Test Plant"
+guild = "FastStem"
+growth_rate_index = 0.9
+water_column_uptake_bias = 0.9
+substrate_uptake_bias = 0.2
+
+[param_meta.water_column_uptake_bias]
+unit = "relative weight"
+source = "Ecology tuning note"
+confidence = "heuristic"
+valid_range = [0.0, 0.7]
+notes = "Fast stems lean heavily on water-column nutrients"
+"#;
+        let preset = plant_preset(toml_str);
+        preset.validate().expect("plant preset should validate");
+
+        let warnings = preset.check_ranges();
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0].param_name, "water_column_uptake_bias");
+        assert_eq!(warnings[0].value, 0.9);
+
+        let display = preset
+            .format_param("water_column_uptake_bias")
+            .expect("parameter should format");
+        assert!(display.contains("Ecology tuning note"));
+        assert!(display.contains("relative weight"));
+
+        let serialized = toml::to_string(&preset)?;
+        let roundtrip: PlantPreset = toml::from_str(&serialized)?;
+        assert_eq!(roundtrip.param_meta, preset.param_meta);
+        Ok(())
+    }
+
+    #[test]
+    fn test_plant_unknown_param_meta_keys_are_rejected() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let toml_str = r#"
+id = "test_plant"
+name = "Test Plant"
+guild = "FastStem"
+growth_rate_index = 0.9
+water_column_uptake_bias = 0.9
+substrate_uptake_bias = 0.2
+
+[param_meta.uptake_bias_typo]
+unit = "relative weight"
+"#;
+        let preset = plant_preset(toml_str);
+        let err = preset
+            .validate()
+            .expect_err("unknown plant param_meta key should fail");
+        assert!(err.contains("unknown param_meta entries"));
+        assert!(err.contains("uptake_bias_typo"));
         Ok(())
     }
 

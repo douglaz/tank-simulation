@@ -118,6 +118,32 @@ fn current_schema_load_rebuilds_stale_habitat_registry() -> Result<(), tank_core
 }
 
 #[test]
+fn current_schema_save_roundtrip_preserves_serialized_substrate_factor(
+) -> Result<(), tank_core::SimError> {
+    let mut state = TankState::new(SimSeed(143));
+    state.substrate_layers[0].colonizable_area_factor = 0.73;
+    state.refresh_habitat_registry();
+
+    let json = serde_json::to_string(&SaveFile {
+        schema_version: SCHEMA_VERSION,
+        app_version: APP_VERSION.to_string(),
+        state,
+        queued_actions: vec![],
+    })
+    .expect("serialize current-schema save");
+
+    let loaded = SaveFile::from_json(&json)?;
+    assert!((loaded.state.substrate_layers[0].colonizable_area_factor - 0.73).abs() < 1e-9);
+
+    let expected = loaded.state.geometry.footprint_area_cm2()
+        * loaded.state.substrate_layers[0].depth_cm
+        * 0.73;
+    assert!((loaded.state.substrate_layers[0].colonizable_area_cm2 - expected).abs() < 0.01);
+
+    Ok(())
+}
+
+#[test]
 fn save_load_with_source_water_catalog() -> Result<(), tank_core::SimError> {
     let mut state = TankState::new(SimSeed(42));
     state
@@ -518,6 +544,39 @@ fn legacy_schema_v4_saves_preserve_trim_plants_as_leave_cuttings() -> Result<(),
     assert_eq!(
         actions[2],
         PlayerAction::TrimPlantsAndLeaveCuttings { fraction: 0.5 }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v6_saves_gain_explicit_substrate_area_factor() -> Result<(), SimError> {
+    let legacy_state = TankState::new(SimSeed(144));
+    let mut state_json = serde_json::to_value(&legacy_state).expect("serialize legacy state");
+    state_json
+        .pointer_mut("/substrate_layers/0")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("substrate layer object")
+        .remove("colonizable_area_factor");
+
+    let json = serde_json::json!({
+        "schema_version": 6,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert!(
+        (migrated.state.substrate_layers[0].colonizable_area_factor - 0.5).abs() < f64::EPSILON
+    );
+
+    let expected = migrated.state.substrate_layers[0]
+        .derived_colonizable_area_cm2(migrated.state.geometry.footprint_area_cm2());
+    assert!(
+        (migrated.state.substrate_layers[0].colonizable_area_cm2 - expected).abs() < 0.01
     );
 
     Ok(())

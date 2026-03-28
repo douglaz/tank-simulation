@@ -50,6 +50,7 @@ fn nano_cycle_materializes_correctly() {
         state.substrate_layers[0].kind,
         tank_core::SubstrateKind::InertSand
     );
+    assert!((state.substrate_layers[0].colonizable_area_factor - 0.5).abs() < f64::EPSILON);
 
     // Plants: single fast_stem
     assert_eq!(state.plant_guilds.len(), 1);
@@ -75,6 +76,8 @@ fn medium_planted_materializes_with_two_substrates_and_plants() {
         state.substrate_layers[1].kind,
         tank_core::SubstrateKind::CoarsePorous
     );
+    assert!((state.substrate_layers[0].colonizable_area_factor - 0.8).abs() < f64::EPSILON);
+    assert!((state.substrate_layers[1].colonizable_area_factor - 0.9).abs() < f64::EPSILON);
 
     // Two plant guilds
     assert_eq!(state.plant_guilds.len(), 2);

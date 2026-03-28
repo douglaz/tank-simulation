@@ -9,6 +9,8 @@ pub(crate) use tank_core::ESTIMATED_TDS_SCOPE_LINES;
 
 use crate::{Screen, TuiApp};
 
+pub(crate) const NH3_N_DISPLAY_UNIT: &str = "mg NH3-N/L";
+
 pub fn render_screen(screen: Screen, frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
     match screen {
         Screen::Overview => overview::render(frame, area, app),

@@ -182,6 +182,18 @@ fn substrate_surface_area_equals_footprint() -> Result<(), Box<dyn std::error::E
 }
 
 #[test]
+fn default_substrate_layer_starts_with_derived_area() {
+    let layer = SubstrateLayerState::default();
+    let expected = layer.derived_colonizable_area_cm2(TankGeometry::default().footprint_area_cm2());
+
+    assert!(
+        (layer.colonizable_area_cm2 - expected).abs() < 0.01,
+        "default substrate layer should store the derived area: expected {expected}, got {}",
+        layer.colonizable_area_cm2
+    );
+}
+
+#[test]
 fn substrate_surface_zero_without_positive_depth() -> Result<(), Box<dyn std::error::Error>> {
     let mut state = default_state();
     state.substrate_layers = vec![SubstrateLayerState {
@@ -242,6 +254,32 @@ fn substrate_deep_area_scales_with_depth_and_kind() -> Result<(), Box<dyn std::e
         "SubstrateDeep area should scale with depth and substrate kind: expected {expected}, got {}",
         entry.colonizable_area_cm2
     );
+    Ok(())
+}
+
+#[test]
+fn substrate_deep_area_uses_serialized_layer_factor() -> Result<(), Box<dyn std::error::Error>> {
+    let mut state = bare_state();
+    state.substrate_layers = vec![SubstrateLayerState {
+        kind: SubstrateKind::InertSand,
+        depth_cm: 2.0,
+        colonizable_area_factor: 0.73,
+        ..SubstrateLayerState::default()
+    }];
+    state.refresh_habitat_registry();
+
+    let entry = find(&state.habitat_registry, HabitatKind::SubstrateDeep);
+    let expected = state.geometry.footprint_area_cm2() * 2.0 * 0.73;
+    assert!(
+        (entry.colonizable_area_cm2 - expected).abs() < 0.01,
+        "SubstrateDeep area should use the serialized factor: expected {expected}, got {}",
+        entry.colonizable_area_cm2
+    );
+    assert!(
+        (state.substrate_layers[0].colonizable_area_cm2 - expected).abs() < 0.01,
+        "refresh should keep substrate layer area aligned with the serialized factor"
+    );
+
     Ok(())
 }
 

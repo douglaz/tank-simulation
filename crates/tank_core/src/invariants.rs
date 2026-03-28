@@ -147,6 +147,10 @@ fn validate_invariants_inner(state: &TankState) -> Result<(), SimError> {
             "substrate.nutrient_store_mg_p_total",
             layer.nutrient_store_mg_p_total,
         )?;
+        check_non_negative(
+            "substrate.colonizable_area_factor",
+            layer.colonizable_area_factor,
+        )?;
         check_non_negative("substrate.colonizable_area_cm2", layer.colonizable_area_cm2)?;
     }
     check_non_negative("water.temperature_c", state.water.temperature_c)?;

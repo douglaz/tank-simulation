@@ -215,11 +215,13 @@ fn average_guild_health_index(state: &TankState, guild: PlantGuild) -> Option<f6
 
 #[cfg(test)]
 mod tests {
-    use super::TankSnapshot;
+    use serde_json::{json, Map};
+
+    use super::{TankSnapshot, LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES};
     use crate::{
         rng::SimSeed,
         systems::chemistry::{bicarbonate_mg_total_from_mmol_per_l, solve_carbonate_equilibrium},
-        TankState,
+        ESTIMATED_TDS_OMITTED_CONTRIBUTORS, ESTIMATED_TDS_TRACKED_MAJOR_IONS, TankState,
     };
 
     fn assert_close(actual: f64, expected: f64, tolerance: f64) {
@@ -227,6 +229,25 @@ mod tests {
             (actual - expected).abs() <= tolerance,
             "expected {expected}, got {actual} (tolerance {tolerance})"
         );
+    }
+
+    fn canonical_snapshot_value(seed: SimSeed) -> serde_json::Value {
+        serde_json::to_value(TankSnapshot::from_state(&TankState::new(seed)))
+            .expect("snapshot should serialize")
+    }
+
+    fn legacy_snapshot_value(seed: SimSeed) -> serde_json::Value {
+        let mut value = canonical_snapshot_value(seed);
+        let object = value
+            .as_object_mut()
+            .expect("serialized snapshot should be an object");
+        for (legacy, canonical) in LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES {
+            let canonical_value = object
+                .remove(canonical)
+                .expect("compatibility test expects canonical chemistry field");
+            object.insert(legacy.to_string(), canonical_value);
+        }
+        value
     }
 
     #[test]
@@ -267,25 +288,26 @@ mod tests {
             state.water.temperature_c,
             volume_l,
         );
-        let fresh_bicarbonate_mg_total =
-            bicarbonate_mg_total_from_mmol_per_l(expected.hco3_mmol_per_l, volume_l);
-        let cached_tds = state.water.tds_mg_per_l(volume_l);
+        let fresh = state
+            .water
+            .estimated_dissolved_solids_with_carbonate_equilibrium(volume_l, expected);
         let snapshot = TankSnapshot::from_state(&state);
 
-        assert!(fresh_bicarbonate_mg_total > 0.0);
-        assert!(snapshot.estimated_tds_7_ion_mg_per_l > cached_tds);
+        assert!(fresh.bicarbonate_mg_total > 0.0);
         assert_close(
             snapshot.estimated_tds_7_ion_mg_per_l,
-            state
-                .water
-                .tds_mg_per_l_with_bicarbonate_total(volume_l, fresh_bicarbonate_mg_total),
+            fresh.tds_mg_per_l,
             1e-12,
         );
         assert_close(
             snapshot.estimated_conductivity_us_cm,
-            state
-                .water
-                .conductivity_us_cm_with_bicarbonate_total(volume_l, fresh_bicarbonate_mg_total),
+            fresh.conductivity_us_cm,
+            1e-12,
+        );
+        assert_close(snapshot.estimated_tds_7_ion_mg_per_l, state.tds_mg_per_l(), 1e-12);
+        assert_close(
+            snapshot.estimated_conductivity_us_cm,
+            state.conductivity_us_cm(),
             1e-12,
         );
     }
@@ -305,5 +327,55 @@ mod tests {
         assert_eq!(snapshot.sub_adult_count, 3);
         assert_eq!(snapshot.juveniles_count, 2);
         assert_eq!(snapshot.berried_females_count, 1);
+    }
+
+    #[test]
+    fn snapshot_deserializes_legacy_chemistry_aliases() {
+        let expected = TankSnapshot::from_state(&TankState::new(SimSeed(777)));
+        let value = legacy_snapshot_value(SimSeed(777));
+
+        let parsed: TankSnapshot =
+            serde_json::from_value(value).expect("legacy snapshot should deserialize");
+
+        assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn snapshot_deserializes_enriched_api_payload_with_canonical_precedence() {
+        let expected = TankSnapshot::from_state(&TankState::new(SimSeed(778)));
+        let mut value = canonical_snapshot_value(SimSeed(778));
+        let object = value
+            .as_object_mut()
+            .expect("serialized snapshot should be an object");
+        for (legacy, _canonical) in LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES {
+            object.insert(legacy.to_string(), json!(-999.0));
+        }
+        object.insert(
+            "chemistry_field_semantics".to_string(),
+            json!({
+                "tan_mg_n_per_l": "Total ammonia nitrogen, mg N/L.",
+                "estimated_tds_7_ion_mg_per_l": "Estimated TDS from 7 tracked major ions only, in mg/L."
+            }),
+        );
+        object.insert(
+            "estimated_tds_scope".to_string(),
+            json!({
+                "tracked_major_ions": ESTIMATED_TDS_TRACKED_MAJOR_IONS,
+                "omitted_contributors": ESTIMATED_TDS_OMITTED_CONTRIBUTORS,
+            }),
+        );
+        object.insert(
+            "legacy_chemistry_aliases".to_string(),
+            serde_json::Value::Object(Map::from_iter(
+                LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES
+                    .into_iter()
+                    .map(|(legacy, canonical)| (legacy.to_string(), json!(canonical))),
+            )),
+        );
+
+        let parsed: TankSnapshot =
+            serde_json::from_value(value).expect("enriched snapshot should deserialize");
+
+        assert_eq!(parsed, expected);
     }
 }

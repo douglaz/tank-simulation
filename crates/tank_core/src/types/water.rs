@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use super::{SourceWaterProfile, SubstrateLayerState, TankGeometry};
+use crate::systems::chemistry::{
+    bicarbonate_mg_total_from_mmol_per_l, solve_carbonate_equilibrium, CarbonateEquilibrium,
+};
 
 /// Equivalent weight of CaCO3 on the conventional alkalinity/hardness scale, in mg/meq.
 const MG_CACO3_PER_MEQ: f64 = 50.0;
@@ -20,7 +23,7 @@ const MAGNESIUM_AS_CACO3_FACTOR: f64 = MOLAR_MASS_CACO3_G_PER_MOL / MOLAR_MASS_M
 ///
 /// This is an approximate ppm-to-uS/cm conversion used for display only; it is
 /// not a physical conductivity solver and should be interpreted as an estimate.
-const ESTIMATED_TDS_TO_CONDUCTIVITY_DIVISOR: f64 = 0.65;
+pub(crate) const ESTIMATED_TDS_TO_CONDUCTIVITY_DIVISOR: f64 = 0.65;
 
 /// Major ions currently counted by the TDS/conductivity display estimate.
 pub const ESTIMATED_TDS_TRACKED_MAJOR_IONS: [&str; 7] =
@@ -71,6 +74,13 @@ pub struct WaterState {
 pub struct ConcentrationView<'a> {
     water: &'a WaterState,
     volume_l: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct EstimatedDissolvedSolids {
+    pub(crate) bicarbonate_mg_total: f64,
+    pub(crate) tds_mg_per_l: f64,
+    pub(crate) conductivity_us_cm: f64,
 }
 
 impl WaterState {
@@ -205,11 +215,45 @@ impl WaterState {
     }
 
     pub fn tds_mg_per_l(&self, volume_l: f64) -> f64 {
-        self.tds_mg_per_l_with_bicarbonate_total(volume_l, self.bicarbonate_mg_total)
+        self.estimated_dissolved_solids(volume_l).tds_mg_per_l
     }
 
     pub fn conductivity_us_cm(&self, volume_l: f64) -> f64 {
-        self.conductivity_us_cm_with_bicarbonate_total(volume_l, self.bicarbonate_mg_total)
+        self.estimated_dissolved_solids(volume_l).conductivity_us_cm
+    }
+
+    pub(crate) fn projected_carbonate_equilibrium(&self, volume_l: f64) -> CarbonateEquilibrium {
+        solve_carbonate_equilibrium(
+            self.dissolved_inorganic_carbon_mg_c_total,
+            self.alkalinity_meq_total,
+            self.temperature_c,
+            volume_l,
+        )
+    }
+
+    pub(crate) fn estimated_dissolved_solids(&self, volume_l: f64) -> EstimatedDissolvedSolids {
+        self.estimated_dissolved_solids_with_carbonate_equilibrium(
+            volume_l,
+            self.projected_carbonate_equilibrium(volume_l),
+        )
+    }
+
+    pub(crate) fn estimated_dissolved_solids_with_carbonate_equilibrium(
+        &self,
+        volume_l: f64,
+        carbonate_eq: CarbonateEquilibrium,
+    ) -> EstimatedDissolvedSolids {
+        let bicarbonate_mg_total =
+            bicarbonate_mg_total_from_mmol_per_l(carbonate_eq.hco3_mmol_per_l, volume_l);
+        let tds_mg_per_l = self.tds_mg_per_l_with_bicarbonate_total(volume_l, bicarbonate_mg_total);
+        let conductivity_us_cm =
+            (tds_mg_per_l / ESTIMATED_TDS_TO_CONDUCTIVITY_DIVISOR).max(0.0);
+
+        EstimatedDissolvedSolids {
+            bicarbonate_mg_total,
+            tds_mg_per_l,
+            conductivity_us_cm,
+        }
     }
 
     /// Computes the estimated 7-ion TDS using an explicitly supplied

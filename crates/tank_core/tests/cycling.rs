@@ -530,3 +530,343 @@ fn decomposer_monod_uses_concentration_instead_of_total_mass() {
         "Same DOC/DO concentrations should yield the same TAN production regardless of tank volume"
     );
 }
+
+/// Regression test: all nitrogen kinetics must be tank-size-independent.
+///
+/// Creates two tanks with different volumes (10L vs 100L) but identical
+/// concentrations of every dissolved species and volume-proportional biomass
+/// for all four guilds (decomposers, AOB, NOB, comammox). After one tick of
+/// `step_nitrogen_cycle`, both tanks must show:
+///   1. Equal Monod limitation factors (same concentrations → same S/(K+S)).
+///   2. Equal concentration changes per liter for TAN, NO2, NO3, DOC, and DON.
+///
+/// Any accidental use of total-mass pools where concentrations belong, or any
+/// volume leak in the rate-to-mass conversion, will cause this test to fail.
+/// Growth yields and decay rates are zeroed so that population dynamics do not
+/// confound the kinetic comparison.
+#[test]
+fn concentration_kinetics_are_volume_independent() {
+    // Builds a TankState at a specific volume with identical concentrations
+    // and volume-proportional biomass, isolating nitrogen kinetics.
+    let build_state = |fill_height_cm: f64| {
+        let mut state = TankState::new(SimSeed(9800));
+        state.geometry.fill_height_cm = fill_height_cm;
+        state.geometry.height_cm = fill_height_cm + 5.0;
+        state.substrate_layers.clear();
+        let vol = state.water_volume_l();
+
+        // Concentrations (mg/L) — totals are set proportional to volume.
+        state.water.ammonia_total_mg_n_total = 2.0 * vol;
+        state.water.nitrite_mg_n_total = 0.5 * vol;
+        state.water.nitrate_mg_n_total = 5.0 * vol;
+        state.water.dissolved_organic_carbon_mg_c_total = 4.0 * vol;
+        state.water.dissolved_organic_nitrogen_mg_n_total = 0.4 * vol;
+        state.water.dissolved_oxygen_mg_total = 6.0 * vol;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 20.0 * vol;
+        state.water.alkalinity_meq_total = 50.0 * vol;
+
+        // Biomass proportional to volume (same "biomass density" per liter).
+        let density_g_per_l = 0.02;
+        state.microbe.decomposer_biomass_g = density_g_per_l * vol;
+        state.microbe.ammonia_oxidizer_biomass_g = density_g_per_l * vol;
+        state.microbe.nitrite_oxidizer_biomass_g = density_g_per_l * vol;
+        state.microbe.comammox_biomass_g = density_g_per_l * vol;
+
+        // Zero growth/decay so population dynamics don't confound kinetics.
+        state.process_params.decomposer_growth_yield = 0.0;
+        state.process_params.aob_growth_yield = 0.0;
+        state.process_params.nob_growth_yield = 0.0;
+        state.process_params.comammox_growth_yield = 0.0;
+        state.process_params.decomposer_decay_rate_per_hour = 0.0;
+        state.process_params.aob_decay_rate_per_hour = 0.0;
+        state.process_params.nob_decay_rate_per_hour = 0.0;
+        state.process_params.comammox_decay_rate_per_hour = 0.0;
+
+        // Disable non-nitrogen systems.
+        state.process_params.reaeration_kla_base = 0.0;
+        state.process_params.aeration_kla_boost = 0.0;
+        state.microfauna.population_index = 0.0;
+        state.process_params.microfauna_mineralization_boost = 0.0;
+
+        // Fixed environmental factors.
+        state.filter_state.biofilter_maturity_index = 0.8;
+        state.filter_state.clogging_index = 0.0;
+        state.hardware.filter.enabled = true;
+        // Scale flow so flow_factor = min(flow_lph / vol, 1.0) is identical.
+        state.hardware.filter.flow_lph = vol * 10.0;
+
+        // No detritus — feed leaching/dissolution do not confound the test.
+        state.detritus.particulate_organics_g_total = 0.0;
+        state.detritus.fine_detritus_g_total = 0.0;
+        state.detritus.dissolved_feed_residue_g_total = 0.0;
+
+        state
+    };
+
+    // ---- Pair 1: 10 L vs 100 L (10× volume difference) ----
+    let mut small = build_state(10.0); // 40 × 25 × 10 / 1000 = 10 L
+    let mut large = build_state(100.0); // 40 × 25 × 100 / 1000 = 100 L
+
+    let sv = small.water_volume_l();
+    let lv = large.water_volume_l();
+    assert!(
+        (sv - 10.0).abs() < 0.01,
+        "small tank should be 10 L, got {sv}"
+    );
+    assert!(
+        (lv - 100.0).abs() < 0.01,
+        "large tank should be 100 L, got {lv}"
+    );
+
+    // Verify initial concentrations are identical.
+    let eps_conc = 1e-12;
+    assert!(
+        (small.water.tan_mg_n_per_l(sv) - large.water.tan_mg_n_per_l(lv)).abs() < eps_conc,
+        "initial TAN concentrations must match"
+    );
+    assert!(
+        (small.water.nitrite_mg_n_per_l(sv) - large.water.nitrite_mg_n_per_l(lv)).abs() < eps_conc,
+        "initial NO2 concentrations must match"
+    );
+
+    // ---- Verify Monod limitation factors are equal (pre-tick) ----
+    // monod(S, K) = S / (S + K); both S and K are in mg/L.
+    let monod = |s: f64, k: f64| s / (s + k.max(f64::MIN_POSITIVE));
+    let pp = &small.process_params;
+
+    let k_tan = legacy_total_param_to_mg_per_l(pp.aob_k_tan_mg).max(0.01);
+    let k_no2 = legacy_total_param_to_mg_per_l(pp.nob_k_nitrite_mg).max(0.01);
+    let k_doc = legacy_total_param_to_mg_per_l(pp.decomposer_k_doc_mg).max(0.01);
+    let k_do_aob = legacy_total_param_to_mg_per_l(pp.aob_k_do_mg).max(0.01);
+    let k_do_decomp = legacy_total_param_to_mg_per_l(pp.decomposer_k_do_mg).max(0.01);
+
+    let tan_conc = small.water.tan_mg_n_per_l(sv);
+    let no2_conc = small.water.nitrite_mg_n_per_l(sv);
+    let doc_conc = small.water.doc_mg_c_per_l(sv);
+    let do_conc = small.water.do_mg_per_l(sv);
+
+    // Monod factors computed from small tank (concentration-based).
+    let m_tan_s = monod(tan_conc, k_tan);
+    let m_no2_s = monod(no2_conc, k_no2);
+    let m_doc_s = monod(doc_conc, k_doc);
+    let m_do_aob_s = monod(do_conc, k_do_aob);
+    let m_do_decomp_s = monod(do_conc, k_do_decomp);
+
+    // Same computation from large tank — must be identical.
+    let m_tan_l = monod(large.water.tan_mg_n_per_l(lv), k_tan);
+    let m_no2_l = monod(large.water.nitrite_mg_n_per_l(lv), k_no2);
+    let m_doc_l = monod(large.water.doc_mg_c_per_l(lv), k_doc);
+    let m_do_aob_l = monod(large.water.do_mg_per_l(lv), k_do_aob);
+    let m_do_decomp_l = monod(large.water.do_mg_per_l(lv), k_do_decomp);
+
+    assert!(
+        (m_tan_s - m_tan_l).abs() < eps_conc,
+        "Monod TAN factor: small={m_tan_s}, large={m_tan_l}"
+    );
+    assert!(
+        (m_no2_s - m_no2_l).abs() < eps_conc,
+        "Monod NO2 factor: small={m_no2_s}, large={m_no2_l}"
+    );
+    assert!(
+        (m_doc_s - m_doc_l).abs() < eps_conc,
+        "Monod DOC factor: small={m_doc_s}, large={m_doc_l}"
+    );
+    assert!(
+        (m_do_aob_s - m_do_aob_l).abs() < eps_conc,
+        "Monod DO-AOB factor: small={m_do_aob_s}, large={m_do_aob_l}"
+    );
+    assert!(
+        (m_do_decomp_s - m_do_decomp_l).abs() < eps_conc,
+        "Monod DO-decomp factor: small={m_do_decomp_s}, large={m_do_decomp_l}"
+    );
+
+    // ---- Record pre-tick concentrations ----
+    let before = |st: &TankState, v: f64| {
+        (
+            st.water.tan_mg_n_per_l(v),
+            st.water.nitrite_mg_n_per_l(v),
+            st.water.nitrate_mg_n_per_l(v),
+            st.water.doc_mg_c_per_l(v),
+            st.water.don_mg_n_per_l(v),
+        )
+    };
+    let (s_tan0, s_no2_0, s_no3_0, s_doc0, s_don0) = before(&small, sv);
+    let (l_tan0, l_no2_0, l_no3_0, l_doc0, l_don0) = before(&large, lv);
+
+    // ---- Run one tick of nitrogen kinetics ----
+    step_nitrogen_cycle(&mut small);
+    step_nitrogen_cycle(&mut large);
+
+    // ---- Assert per-liter concentration deltas are equal ----
+    let tol = 1e-9;
+    let s_tan_d = small.water.tan_mg_n_per_l(sv) - s_tan0;
+    let l_tan_d = large.water.tan_mg_n_per_l(lv) - l_tan0;
+    assert!(
+        (s_tan_d - l_tan_d).abs() <= tol,
+        "TAN Δ mg/L must be volume-independent: small={s_tan_d:.12}, large={l_tan_d:.12}"
+    );
+
+    let s_no2_d = small.water.nitrite_mg_n_per_l(sv) - s_no2_0;
+    let l_no2_d = large.water.nitrite_mg_n_per_l(lv) - l_no2_0;
+    assert!(
+        (s_no2_d - l_no2_d).abs() <= tol,
+        "NO2 Δ mg/L must be volume-independent: small={s_no2_d:.12}, large={l_no2_d:.12}"
+    );
+
+    let s_no3_d = small.water.nitrate_mg_n_per_l(sv) - s_no3_0;
+    let l_no3_d = large.water.nitrate_mg_n_per_l(lv) - l_no3_0;
+    assert!(
+        (s_no3_d - l_no3_d).abs() <= tol,
+        "NO3 Δ mg/L must be volume-independent: small={s_no3_d:.12}, large={l_no3_d:.12}"
+    );
+
+    let s_doc_d = small.water.doc_mg_c_per_l(sv) - s_doc0;
+    let l_doc_d = large.water.doc_mg_c_per_l(lv) - l_doc0;
+    assert!(
+        (s_doc_d - l_doc_d).abs() <= tol,
+        "DOC Δ mg/L must be volume-independent: small={s_doc_d:.12}, large={l_doc_d:.12}"
+    );
+
+    let s_don_d = small.water.don_mg_n_per_l(sv) - s_don0;
+    let l_don_d = large.water.don_mg_n_per_l(lv) - l_don0;
+    assert!(
+        (s_don_d - l_don_d).abs() <= tol,
+        "DON Δ mg/L must be volume-independent: small={s_don_d:.12}, large={l_don_d:.12}"
+    );
+
+    // Sanity: verify kinetics actually did something (non-zero deltas).
+    assert!(
+        s_tan_d.abs() > 1e-12,
+        "TAN should change during one tick (got zero delta)"
+    );
+    assert!(
+        s_doc_d.abs() > 1e-12,
+        "DOC should change during one tick (got zero delta)"
+    );
+}
+
+/// Stress-test volume independence at extreme scales: 1 L vs 1000 L.
+///
+/// Same logic as [`concentration_kinetics_are_volume_independent`] but with a
+/// 1000× volume ratio to flush out any subtle floating-point or scaling issues.
+#[test]
+fn concentration_kinetics_volume_independent_extreme_scales() {
+    let build_state = |length_cm: f64, width_cm: f64, fill_height_cm: f64| {
+        let mut state = TankState::new(SimSeed(9801));
+        state.geometry.length_cm = length_cm;
+        state.geometry.width_cm = width_cm;
+        state.geometry.fill_height_cm = fill_height_cm;
+        state.geometry.height_cm = fill_height_cm + 5.0;
+        state.substrate_layers.clear();
+        let vol = state.water_volume_l();
+
+        state.water.ammonia_total_mg_n_total = 2.0 * vol;
+        state.water.nitrite_mg_n_total = 0.5 * vol;
+        state.water.nitrate_mg_n_total = 5.0 * vol;
+        state.water.dissolved_organic_carbon_mg_c_total = 4.0 * vol;
+        state.water.dissolved_organic_nitrogen_mg_n_total = 0.4 * vol;
+        state.water.dissolved_oxygen_mg_total = 6.0 * vol;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 20.0 * vol;
+        state.water.alkalinity_meq_total = 50.0 * vol;
+
+        let density = 0.02;
+        state.microbe.decomposer_biomass_g = density * vol;
+        state.microbe.ammonia_oxidizer_biomass_g = density * vol;
+        state.microbe.nitrite_oxidizer_biomass_g = density * vol;
+        state.microbe.comammox_biomass_g = density * vol;
+
+        state.process_params.decomposer_growth_yield = 0.0;
+        state.process_params.aob_growth_yield = 0.0;
+        state.process_params.nob_growth_yield = 0.0;
+        state.process_params.comammox_growth_yield = 0.0;
+        state.process_params.decomposer_decay_rate_per_hour = 0.0;
+        state.process_params.aob_decay_rate_per_hour = 0.0;
+        state.process_params.nob_decay_rate_per_hour = 0.0;
+        state.process_params.comammox_decay_rate_per_hour = 0.0;
+
+        state.process_params.reaeration_kla_base = 0.0;
+        state.process_params.aeration_kla_boost = 0.0;
+        state.microfauna.population_index = 0.0;
+        state.process_params.microfauna_mineralization_boost = 0.0;
+
+        state.filter_state.biofilter_maturity_index = 0.8;
+        state.filter_state.clogging_index = 0.0;
+        state.hardware.filter.enabled = true;
+        state.hardware.filter.flow_lph = vol * 10.0;
+
+        state.detritus.particulate_organics_g_total = 0.0;
+        state.detritus.fine_detritus_g_total = 0.0;
+        state.detritus.dissolved_feed_residue_g_total = 0.0;
+
+        state
+    };
+
+    // 1 L: 20 × 10 × 5 / 1000 = 1 L
+    let mut tiny = build_state(20.0, 10.0, 5.0);
+    // 1000 L: 200 × 100 × 50 / 1000 = 1000 L
+    let mut huge = build_state(200.0, 100.0, 50.0);
+
+    let tv = tiny.water_volume_l();
+    let hv = huge.water_volume_l();
+    assert!((tv - 1.0).abs() < 0.01, "tiny tank should be 1 L, got {tv}");
+    assert!(
+        (hv - 1000.0).abs() < 0.01,
+        "huge tank should be 1000 L, got {hv}"
+    );
+
+    let concs = |st: &TankState, v: f64| {
+        (
+            st.water.tan_mg_n_per_l(v),
+            st.water.nitrite_mg_n_per_l(v),
+            st.water.nitrate_mg_n_per_l(v),
+            st.water.doc_mg_c_per_l(v),
+            st.water.don_mg_n_per_l(v),
+        )
+    };
+    let (t0_tan, t0_no2, t0_no3, t0_doc, t0_don) = concs(&tiny, tv);
+    let (h0_tan, h0_no2, h0_no3, h0_doc, h0_don) = concs(&huge, hv);
+
+    step_nitrogen_cycle(&mut tiny);
+    step_nitrogen_cycle(&mut huge);
+
+    let tol = 1e-9;
+    let pairs = [
+        (
+            "TAN",
+            tiny.water.tan_mg_n_per_l(tv) - t0_tan,
+            huge.water.tan_mg_n_per_l(hv) - h0_tan,
+        ),
+        (
+            "NO2",
+            tiny.water.nitrite_mg_n_per_l(tv) - t0_no2,
+            huge.water.nitrite_mg_n_per_l(hv) - h0_no2,
+        ),
+        (
+            "NO3",
+            tiny.water.nitrate_mg_n_per_l(tv) - t0_no3,
+            huge.water.nitrate_mg_n_per_l(hv) - h0_no3,
+        ),
+        (
+            "DOC",
+            tiny.water.doc_mg_c_per_l(tv) - t0_doc,
+            huge.water.doc_mg_c_per_l(hv) - h0_doc,
+        ),
+        (
+            "DON",
+            tiny.water.don_mg_n_per_l(tv) - t0_don,
+            huge.water.don_mg_n_per_l(hv) - h0_don,
+        ),
+    ];
+    for (name, tiny_d, huge_d) in &pairs {
+        assert!(
+            (tiny_d - huge_d).abs() <= tol,
+            "{name} Δ mg/L must be volume-independent at 1 L vs 1000 L: tiny={tiny_d:.12}, huge={huge_d:.12}"
+        );
+    }
+
+    // Sanity: kinetics are active.
+    assert!(
+        pairs[0].1.abs() > 1e-12,
+        "TAN should change during one tick at extreme scale"
+    );
+}
