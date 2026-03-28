@@ -745,8 +745,52 @@ fn gh_mineral_factor(gh_d: f64, params: &ShrimpRuntimeParams) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::shrimp_feeding;
-    use crate::{algae_detrital_mass_g, SimSeed, TankState};
+    use super::{
+        refresh_carbonate_state, route_consumed_food, shrimp_feeding, step_daily_shrimp,
+        update_condition,
+    };
+    use crate::{algae_detrital_mass_g, SimSeed, TankState, WaterState};
+
+    fn assert_close(actual: f64, expected: f64, tolerance: f64) {
+        assert!(
+            (actual - expected).abs() <= tolerance,
+            "expected {expected}, got {actual} (tolerance {tolerance})"
+        );
+    }
+
+    fn carbonate_condition_test_state() -> TankState {
+        let mut state = TankState::new(SimSeed(10_001));
+        state.geometry.length_cm = 40.0;
+        state.geometry.width_cm = 30.0;
+        state.geometry.height_cm = 35.0;
+        state.geometry.fill_height_cm = 30.0;
+        state.water = WaterState::default_for_volume_l(state.water_volume_l());
+        state.water.temperature_c = 24.0;
+        state.environment.ambient_temp_c = 24.0;
+
+        let volume_l = state.water_volume_l();
+        state.water.dissolved_oxygen_mg_total = 8.0 * volume_l;
+        state.water.ammonia_total_mg_n_total = 2.0 * volume_l;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 0.4 * volume_l;
+        state.water.alkalinity_meq_total = 0.3 * volume_l;
+        state.water.calcium_mg_total = 40.0 * volume_l;
+        state.water.magnesium_mg_total = 10.0 * volume_l;
+        state.algae.periphyton_biomass_g = 5.0;
+
+        state.animal.adults_count = 10;
+        state.animal.condition_index = 0.0;
+        state.animal.molt_stress_index = 0.0;
+        state.animal.reproductive_readiness_index = 0.0;
+
+        state.process_params.shrimp_condition_smoothing = 1.0;
+        state.process_params.shrimp_base_mortality_per_day = 0.0;
+        state.process_params.shrimp_stress_mortality_scale = 0.0;
+        state.shrimp_params.base_spawn_rate = 0.0;
+
+        refresh_carbonate_state(&mut state);
+        state.reseed_stability_tracker();
+        state
+    }
 
     #[test]
     fn shrimp_feeding_tracks_daily_food_on_routing_mass_basis() {
@@ -773,6 +817,72 @@ mod tests {
             "expected {}, got {}",
             expected_consumed_g,
             state.animal.daily_food_consumed_g
+        );
+    }
+
+    #[test]
+    fn oxygen_limited_respiration_scales_dissolved_fluxes_and_retains_shortfall() {
+        let mut state = TankState::new(SimSeed(10_002));
+        state.water.dissolved_oxygen_mg_total = 10.0;
+
+        let consumed_n_mg = 16.0;
+        let consumed_c_mg = 100.0;
+        let params = &state.process_params;
+        let ae = params.shrimp_assimilation_efficiency;
+        let excr_frac = params.shrimp_excretion_fraction_of_assimilated;
+        let growth_frac = params.shrimp_growth_fraction_of_assimilated;
+        let resp_frac = params.shrimp_respiration_fraction_of_assimilated;
+        let assimilated_n_mg = consumed_n_mg * ae;
+        let assimilated_c_mg = consumed_c_mg * ae;
+        let target_respired_n_mg = assimilated_n_mg * resp_frac;
+        let target_respired_c_mg = assimilated_c_mg * resp_frac;
+        let o2_demand_mg = target_respired_c_mg * params.shrimp_o2_per_mg_c_respired;
+        let respiration_scale = state.water.dissolved_oxygen_mg_total / o2_demand_mg;
+
+        route_consumed_food(&mut state, consumed_n_mg, consumed_c_mg);
+
+        assert_close(state.water.dissolved_oxygen_mg_total, 0.0, 1e-12);
+        assert_close(
+            state.water.dissolved_inorganic_carbon_mg_c_total,
+            target_respired_c_mg * respiration_scale,
+            1e-12,
+        );
+        assert_close(
+            state.water.ammonia_total_mg_n_total,
+            assimilated_n_mg * excr_frac + target_respired_n_mg * respiration_scale,
+            1e-12,
+        );
+        assert_close(
+            state.animal.reserve_g,
+            (
+                assimilated_n_mg * growth_frac
+                    + (target_respired_n_mg - target_respired_n_mg * respiration_scale)
+                    + assimilated_c_mg * growth_frac
+                    + (target_respired_c_mg - target_respired_c_mg * respiration_scale)
+            ) / 1000.0,
+            1e-12,
+        );
+    }
+
+    #[test]
+    fn step_daily_shrimp_refreshes_carbonate_before_condition() {
+        let mut expected = carbonate_condition_test_state();
+        shrimp_feeding(&mut expected);
+        refresh_carbonate_state(&mut expected);
+        update_condition(&mut expected);
+
+        let mut actual = carbonate_condition_test_state();
+        step_daily_shrimp(&mut actual);
+
+        assert!(
+            (actual.water.ph - carbonate_condition_test_state().water.ph).abs() > 1e-6,
+            "test setup must shift carbonate state during feeding"
+        );
+        assert_close(actual.water.ph, expected.water.ph, 1e-9);
+        assert_close(
+            actual.animal.condition_index,
+            expected.animal.condition_index,
+            1e-9,
         );
     }
 }
