@@ -6,12 +6,33 @@ use crate::{
     types::{BudgetDelta, ElementBudget, TankState},
 };
 
-/// Computes the raw volumetric gas-transfer coefficient K_LA (h⁻¹) for O₂
-/// based on surface exchange, aeration, and filter agitation.
+/// Reference surface-area-to-volume ratio (cm²/L) matching the default tank
+/// geometry (40×25 cm footprint, 22 L gross − 3 cm substrate ≈ 19 L net).
+///
+/// The base K_LA process parameters (`reaeration_kla_base`, `aeration_kla_boost`)
+/// are calibrated for this ratio.  `compute_o2_kla` normalises by the actual
+/// tank's SA/V so that *surface flux* (mg exchanged at the air–water interface)
+/// scales with exposed area rather than water volume.
+const REFERENCE_SA_V_CM2_PER_L: f64 = 1000.0 / 19.0;
+
+/// Computes the volumetric gas-transfer coefficient K_LA (h⁻¹) for O₂
+/// based on surface exchange, aeration, filter agitation, and the tank's
+/// surface-area-to-volume ratio.
+///
+/// The hardware-derived base coefficient is normalised by the ratio of the
+/// tank's actual SA/V to the reference SA/V so that total gas flux depends on
+/// exposed surface area, not water volume.  Two tanks with the same footprint
+/// and hardware but different fill heights exchange the same mass per hour;
+/// the shallower tank simply sees a faster concentration change.
 ///
 /// Callers should cap the returned value (e.g., `.min(1.0)`) before using it
 /// in an explicit Euler step to prevent overshooting equilibrium.
 pub fn compute_o2_kla(state: &TankState) -> f64 {
+    let volume_l = state.water_volume_l();
+    if volume_l <= f64::EPSILON {
+        return 0.0;
+    }
+
     let aeration_intensity = if state.hardware.aeration.enabled {
         state.hardware.aeration.intensity
     } else {
@@ -22,9 +43,14 @@ pub fn compute_o2_kla(state: &TankState) -> f64 {
     } else {
         0.0
     };
-    (state.process_params.reaeration_kla_base * state.geometry.top_exchange_factor())
+    let raw_kla = (state.process_params.reaeration_kla_base * state.geometry.top_exchange_factor())
         + (state.process_params.aeration_kla_boost * aeration_intensity)
-        + filter_kla_boost
+        + filter_kla_boost;
+
+    // Normalise by SA/V so surface flux is area-proportional, not
+    // volume-proportional.  For the default geometry this ratio is 1.0.
+    let sa_v = state.geometry.surface_area_cm2() / volume_l;
+    raw_kla * (sa_v / REFERENCE_SA_V_CM2_PER_L)
 }
 
 pub fn step_dissolved_oxygen(state: &mut TankState, light_on: bool) {

@@ -209,13 +209,18 @@ fn test_temperature_affects_equilibrium() {
 }
 
 // ---------------------------------------------------------------------------
-// 6. CO2 exchange concentration dynamics are volume-independent
+// 6. Surface flux is area-proportional, not volume-proportional
 // ---------------------------------------------------------------------------
 
 #[test]
 fn test_co2_exchange_independent_of_tank_volume() -> Result<(), tank_core::SimError> {
-    // Two tanks with same K_LA parameters but different fill heights (volumes).
-    // Concentration change per hour should be the same.
+    // Two tanks with the same footprint (same air-water interface) and hardware
+    // but different fill heights (different water volumes).
+    //
+    // Physical expectation:
+    //   - Total mass exchanged per hour (surface flux) should be the same.
+    //   - Concentration change should be FASTER in the shallower tank because
+    //     the same mass dissolves into / escapes from less water.
     let make_state = |fill_height_cm: f64| -> TankState {
         let mut state = TankState::new(SimSeed(7400));
         state.geometry = TankGeometry {
@@ -253,8 +258,10 @@ fn test_co2_exchange_independent_of_tank_volume() -> Result<(), tank_core::SimEr
 
     let shallow = make_state(20.0);
     let deep = make_state(35.0);
+    let v_shallow = shallow.water_volume_l();
+    let v_deep = deep.water_volume_l();
     assert!(
-        (shallow.water_volume_l() - deep.water_volume_l()).abs() > 1.0,
+        (v_shallow - v_deep).abs() > 1.0,
         "test setup: volumes should differ"
     );
 
@@ -265,23 +272,45 @@ fn test_co2_exchange_independent_of_tank_volume() -> Result<(), tank_core::SimEr
         "test setup: same initial CO2 concentration"
     );
 
+    let dic_shallow_before = shallow.water.dissolved_inorganic_carbon_mg_c_total;
+    let dic_deep_before = deep.water.dissolved_inorganic_carbon_mg_c_total;
+
     let mut shallow_engine = Engine::from_parts(shallow, vec![]);
     let mut deep_engine = Engine::from_parts(deep, vec![]);
 
     shallow_engine.step_hours(1)?;
     deep_engine.step_hours(1)?;
 
-    let co2_shallow = snapshot_co2_mg_per_l(shallow_engine.full_state());
-    let co2_deep = snapshot_co2_mg_per_l(deep_engine.full_state());
+    let dic_shallow_after = shallow_engine
+        .full_state()
+        .water
+        .dissolved_inorganic_carbon_mg_c_total;
+    let dic_deep_after = deep_engine
+        .full_state()
+        .water
+        .dissolved_inorganic_carbon_mg_c_total;
 
-    // Concentration change should be nearly identical (K_LA-based model).
-    let delta_shallow = co2_conc_shallow_before - co2_shallow;
-    let delta_deep = co2_conc_deep_before - co2_deep;
-    let relative_diff = (delta_shallow - delta_deep).abs() / delta_shallow.abs().max(1e-6);
+    // Surface flux: total DIC mass change should be approximately equal
+    // because both tanks share the same footprint and hardware.
+    let mass_delta_shallow = (dic_shallow_before - dic_shallow_after).abs();
+    let mass_delta_deep = (dic_deep_before - dic_deep_after).abs();
+    let flux_relative_diff =
+        (mass_delta_shallow - mass_delta_deep).abs() / mass_delta_shallow.max(1e-6);
     assert!(
-        relative_diff < 0.05,
-        "CO2 concentration change should be volume-independent: \
-         shallow delta={delta_shallow:.4}, deep delta={delta_deep:.4}, relative diff={relative_diff:.4}"
+        flux_relative_diff < 0.10,
+        "surface flux (total mass exchanged) should be similar for same footprint: \
+         shallow={mass_delta_shallow:.4} mg, deep={mass_delta_deep:.4} mg, rel_diff={flux_relative_diff:.4}"
+    );
+
+    // Concentration change should be faster in the shallower tank.
+    let co2_shallow_after = snapshot_co2_mg_per_l(shallow_engine.full_state());
+    let co2_deep_after = snapshot_co2_mg_per_l(deep_engine.full_state());
+    let conc_delta_shallow = co2_conc_shallow_before - co2_shallow_after;
+    let conc_delta_deep = co2_conc_deep_before - co2_deep_after;
+    assert!(
+        conc_delta_shallow > conc_delta_deep * 1.1,
+        "shallow tank should see faster concentration change: \
+         shallow={conc_delta_shallow:.4}, deep={conc_delta_deep:.4}"
     );
 
     Ok(())
