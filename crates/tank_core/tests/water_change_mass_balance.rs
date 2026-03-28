@@ -361,3 +361,36 @@ fn invalid_resolved_profile_out_of_calibrated_carbonate_range_returns_error() ->
 
     Ok(())
 }
+
+#[test]
+fn invalid_resolved_profile_nonfinite_carbonate_fallback_returns_error() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(851));
+    let mut bad_profile = SourceWaterProfile::zero();
+    bad_profile.dic_mg_c_per_l = 1.0e308;
+    bad_profile.alkalinity_meq_per_l = 1.0;
+    state
+        .source_water_catalog
+        .insert("overflowed".to_string(), bad_profile);
+
+    let mut engine = Engine::from_parts(state, vec![]);
+
+    match engine.apply_action(PlayerAction::WaterChangePercent {
+        percent: 25.0,
+        source_profile_id: "overflowed".to_string(),
+    }) {
+        Err(SimError::InvalidSourceProfile {
+            field: "carbonate_derived_ph",
+            value,
+            ..
+        }) => assert!(
+            value.is_nan(),
+            "non-finite carbonate fallback should surface as NaN, got {value}"
+        ),
+        other => {
+            panic!("Expected InvalidSourceProfile for non-finite carbonate fallback, got {other:?}")
+        }
+    }
+    assert!(engine.queued_actions().is_empty());
+
+    Ok(())
+}

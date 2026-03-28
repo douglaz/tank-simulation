@@ -48,6 +48,49 @@ pub struct CarbonateEquilibrium {
     pub co3_mmol_per_l: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CarbonateSolveStatus {
+    Stable,
+    NonFiniteNeutralFallback,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct CarbonateSolveOutcome {
+    equilibrium: CarbonateEquilibrium,
+    status: CarbonateSolveStatus,
+}
+
+impl CarbonateSolveOutcome {
+    fn stable(equilibrium: CarbonateEquilibrium) -> Self {
+        Self {
+            equilibrium,
+            status: CarbonateSolveStatus::Stable,
+        }
+    }
+
+    fn non_finite_neutral_fallback(equilibrium: CarbonateEquilibrium) -> Self {
+        Self {
+            equilibrium,
+            status: CarbonateSolveStatus::NonFiniteNeutralFallback,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SourceWaterCarbonateValidationError {
+    OutOfRangePh(f64),
+    NonFiniteNeutralFallback,
+}
+
+impl SourceWaterCarbonateValidationError {
+    pub fn invalid_value(self) -> f64 {
+        match self {
+            Self::OutOfRangePh(ph) => ph,
+            Self::NonFiniteNeutralFallback => f64::NAN,
+        }
+    }
+}
+
 const NEUTRAL_FALLBACK: CarbonateEquilibrium = CarbonateEquilibrium {
     ph: 7.0,
     co2_aq_mmol_per_l: 0.0,
@@ -55,11 +98,11 @@ const NEUTRAL_FALLBACK: CarbonateEquilibrium = CarbonateEquilibrium {
     co3_mmol_per_l: 0.0,
 };
 
-fn clamp_carbonate_ph(ph: f64) -> f64 {
+fn clamp_carbonate_ph(ph: f64) -> (f64, bool) {
     if ph.is_finite() {
-        ph.clamp(CARBONATE_PH_MIN, CARBONATE_PH_MAX)
+        (ph.clamp(CARBONATE_PH_MIN, CARBONATE_PH_MAX), false)
     } else {
-        7.0
+        (7.0, true)
     }
 }
 
@@ -72,14 +115,14 @@ fn carbonate_species_for_ph(dic_mol_per_l: f64, ph: f64, ka1: f64, ka2: f64) -> 
     (co2 * 1000.0, hco3 * 1000.0, co3 * 1000.0)
 }
 
-fn acid_only_fallback_ph(dic_mol_per_l: f64, ka1: f64) -> f64 {
+fn acid_only_fallback_ph(dic_mol_per_l: f64, ka1: f64) -> (f64, bool) {
     let discriminant = ka1 * ka1 + 4.0 * ka1 * dic_mol_per_l.max(0.0);
     let h = (-ka1 + discriminant.sqrt()) / 2.0;
 
     if h.is_finite() && h > 0.0 {
         clamp_carbonate_ph(-h.log10())
     } else {
-        7.0
+        (7.0, true)
     }
 }
 
@@ -110,8 +153,8 @@ fn fallback_acid_dominated(
     ka1: f64,
     ka2: f64,
     trigger: &'static str,
-) -> CarbonateEquilibrium {
-    let ph = acid_only_fallback_ph(dic_mol_per_l, ka1);
+) -> CarbonateSolveOutcome {
+    let (ph, used_non_finite_fallback) = acid_only_fallback_ph(dic_mol_per_l, ka1);
     let (co2_aq_mmol_per_l, hco3_mmol_per_l, co3_mmol_per_l) =
         carbonate_species_for_ph(dic_mol_per_l, ph, ka1, ka2);
     emit_carbonate_fallback_diagnostic(
@@ -123,11 +166,17 @@ fn fallback_acid_dominated(
         ph,
     );
 
-    CarbonateEquilibrium {
+    let equilibrium = CarbonateEquilibrium {
         ph,
         co2_aq_mmol_per_l,
         hco3_mmol_per_l,
         co3_mmol_per_l,
+    };
+
+    if used_non_finite_fallback {
+        CarbonateSolveOutcome::non_finite_neutral_fallback(equilibrium)
+    } else {
+        CarbonateSolveOutcome::stable(equilibrium)
     }
 }
 
@@ -138,7 +187,7 @@ fn fallback_high_buffer(
     ka1: f64,
     ka2: f64,
     trigger: &'static str,
-) -> CarbonateEquilibrium {
+) -> CarbonateSolveOutcome {
     let ph = CARBONATE_PH_MAX;
     let (co2_aq_mmol_per_l, hco3_mmol_per_l, co3_mmol_per_l) =
         carbonate_species_for_ph(dic_mol_per_l, ph, ka1, ka2);
@@ -151,17 +200,17 @@ fn fallback_high_buffer(
         ph,
     );
 
-    CarbonateEquilibrium {
+    CarbonateSolveOutcome::stable(CarbonateEquilibrium {
         ph,
         co2_aq_mmol_per_l,
         hco3_mmol_per_l,
         co3_mmol_per_l,
-    }
+    })
 }
 
-fn fallback_zero_dic(alk_eq_per_l: f64, temperature_c: f64) -> CarbonateEquilibrium {
+fn fallback_zero_dic(alk_eq_per_l: f64, temperature_c: f64) -> CarbonateSolveOutcome {
     if alk_eq_per_l <= 1e-9 {
-        return NEUTRAL_FALLBACK;
+        return CarbonateSolveOutcome::stable(NEUTRAL_FALLBACK);
     }
 
     emit_carbonate_fallback_diagnostic(
@@ -173,10 +222,10 @@ fn fallback_zero_dic(alk_eq_per_l: f64, temperature_c: f64) -> CarbonateEquilibr
         CARBONATE_PH_MAX,
     );
 
-    CarbonateEquilibrium {
+    CarbonateSolveOutcome::stable(CarbonateEquilibrium {
         ph: CARBONATE_PH_MAX,
         ..NEUTRAL_FALLBACK
-    }
+    })
 }
 
 fn fallback_outside_quadratic_envelope(
@@ -185,7 +234,7 @@ fn fallback_outside_quadratic_envelope(
     temperature_c: f64,
     ka1: f64,
     ka2: f64,
-) -> CarbonateEquilibrium {
+) -> CarbonateSolveOutcome {
     if alk_eq_per_l >= dic_mol_per_l {
         fallback_high_buffer(
             dic_mol_per_l,
@@ -218,14 +267,14 @@ fn fallback_outside_quadratic_envelope(
 /// quadratic in \[H+\]. See `docs/carbonate_state_contract.md` for derivation.
 ///
 /// The solver is deterministic, O(1), and uses no iteration.
-pub fn solve_carbonate_equilibrium(
+fn solve_carbonate_equilibrium_outcome(
     dic_mg_c_total: f64,
     alkalinity_meq_total: f64,
     temperature_c: f64,
     volume_l: f64,
-) -> CarbonateEquilibrium {
+) -> CarbonateSolveOutcome {
     if volume_l <= f64::EPSILON {
-        return NEUTRAL_FALLBACK;
+        return CarbonateSolveOutcome::stable(NEUTRAL_FALLBACK);
     }
 
     // Convert stored totals to molar concentrations.
@@ -287,16 +336,39 @@ pub fn solve_carbonate_equilibrium(
 
     // Reproject the species fractions at the storage pH bounds so pH and the
     // cached carbonate species remain idempotent across snapshots and save-load.
-    let ph = clamp_carbonate_ph(-h.log10());
+    // This preserves DIC exactly, but once the pH clamp engages the projected
+    // HCO3-/CO3-- no longer imply the original alkalinity at the boundary.
+    let (ph, used_non_finite_fallback) = clamp_carbonate_ph(-h.log10());
     let (co2_aq_mmol_per_l, hco3_mmol_per_l, co3_mmol_per_l) =
         carbonate_species_for_ph(dic, ph, ka1, ka2);
 
-    CarbonateEquilibrium {
+    let equilibrium = CarbonateEquilibrium {
         ph,
         co2_aq_mmol_per_l,
         hco3_mmol_per_l,
         co3_mmol_per_l,
+    };
+
+    if used_non_finite_fallback {
+        CarbonateSolveOutcome::non_finite_neutral_fallback(equilibrium)
+    } else {
+        CarbonateSolveOutcome::stable(equilibrium)
     }
+}
+
+pub fn solve_carbonate_equilibrium(
+    dic_mg_c_total: f64,
+    alkalinity_meq_total: f64,
+    temperature_c: f64,
+    volume_l: f64,
+) -> CarbonateEquilibrium {
+    solve_carbonate_equilibrium_outcome(
+        dic_mg_c_total,
+        alkalinity_meq_total,
+        temperature_c,
+        volume_l,
+    )
+    .equilibrium
 }
 
 /// Predicts the carbonate equilibrium for source-water inputs expressed per
@@ -306,7 +378,8 @@ pub fn preview_source_water_carbonate_equilibrium(
     alkalinity_meq_per_l: f64,
     temperature_c: f64,
 ) -> CarbonateEquilibrium {
-    solve_carbonate_equilibrium(dic_mg_c_per_l, alkalinity_meq_per_l, temperature_c, 1.0)
+    solve_carbonate_equilibrium_outcome(dic_mg_c_per_l, alkalinity_meq_per_l, temperature_c, 1.0)
+        .equilibrium
 }
 
 /// Validates that a source-water profile resolves to a carbonate pH inside the
@@ -315,15 +388,24 @@ pub fn validate_source_water_carbonate_profile(
     dic_mg_c_per_l: f64,
     alkalinity_meq_per_l: f64,
     temperature_c: f64,
-) -> Result<CarbonateEquilibrium, f64> {
-    let eq = preview_source_water_carbonate_equilibrium(
+) -> Result<CarbonateEquilibrium, SourceWaterCarbonateValidationError> {
+    let outcome = solve_carbonate_equilibrium_outcome(
         dic_mg_c_per_l,
         alkalinity_meq_per_l,
         temperature_c,
+        1.0,
     );
+    if matches!(
+        outcome.status,
+        CarbonateSolveStatus::NonFiniteNeutralFallback
+    ) {
+        return Err(SourceWaterCarbonateValidationError::NonFiniteNeutralFallback);
+    }
+
+    let eq = outcome.equilibrium;
 
     if eq.ph <= CARBONATE_PH_MIN || eq.ph >= CARBONATE_PH_MAX {
-        Err(eq.ph)
+        Err(SourceWaterCarbonateValidationError::OutOfRangePh(eq.ph))
     } else {
         Ok(eq)
     }

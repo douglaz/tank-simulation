@@ -1,5 +1,8 @@
 use tank_core::{
-    systems::chemistry::{compute_nh3_mg_l, resolve_carbonate_state, solve_carbonate_equilibrium},
+    systems::chemistry::{
+        compute_nh3_mg_l, resolve_carbonate_state, solve_carbonate_equilibrium,
+        validate_source_water_carbonate_profile, SourceWaterCarbonateValidationError,
+    },
     Engine, ProcessParams, SimSeed, SimulationEngine, TankState, WaterState,
 };
 
@@ -88,6 +91,17 @@ fn ph_formula_uses_state_storage_bounds() {
     assert!(
         low < high,
         "low pH ({low}) should be less than high pH ({high})"
+    );
+}
+
+#[test]
+fn source_water_validation_rejects_nonfinite_neutral_fallback() {
+    let err = validate_source_water_carbonate_profile(1.0e308, 1.0, 25.0)
+        .expect_err("overflowed carbonate solve should be rejected");
+
+    assert_eq!(
+        err,
+        SourceWaterCarbonateValidationError::NonFiniteNeutralFallback
     );
 }
 

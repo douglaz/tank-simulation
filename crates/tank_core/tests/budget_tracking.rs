@@ -142,6 +142,16 @@ fn clean_filter_budget_state(seed: SimSeed) -> TankState {
     state
 }
 
+fn siphon_detritus_budget_state(seed: SimSeed) -> TankState {
+    let mut state = quiescent_budget_state(seed);
+    state.detritus.particulate_organics_g_total = 1.2;
+    state.detritus.fine_detritus_g_total = 0.6;
+    state.process_params.fine_detritus_dissolution_rate_per_hour = 0.0;
+    state.process_params.decomposer_vmax_per_hour = 0.0;
+    state.process_params.decomposer_decay_rate_per_hour = 0.0;
+    state
+}
+
 fn shrimp_mortality_budget_state(seed: SimSeed) -> TankState {
     let mut state = quiescent_budget_state(seed);
     state.animal.adults_count = 5;
@@ -792,6 +802,57 @@ fn test_water_change_tracks_gross_n_import_and_export() -> Result<(), SimError> 
         expected_import_mg,
         1e-6,
     );
+
+    Ok(())
+}
+
+#[test]
+fn test_siphon_detritus_n_and_c_export_tracked() -> Result<(), SimError> {
+    let siphon_fraction = 0.25;
+    let state = siphon_detritus_budget_state(SimSeed(9_017));
+    let ratio = state.process_params.feed_n_to_c_ratio;
+    let removed_detritus_g = (state.detritus.particulate_organics_g_total
+        + state.detritus.fine_detritus_g_total)
+        * siphon_fraction;
+    let expected_n_export = manual_organic_nitrogen_mg(removed_detritus_g, ratio);
+    let expected_c_export = manual_organic_carbon_mg(removed_detritus_g, ratio);
+    let initial_total_n = state.total_nitrogen();
+    let initial_total_c = state.total_carbon();
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_budget_tracking();
+
+    engine.apply_action(PlayerAction::SiphonDetritus {
+        fraction: siphon_fraction,
+    })?;
+    engine.step_hours(1)?;
+
+    assert_close(
+        initial_total_n - engine.full_state().total_nitrogen(),
+        expected_n_export,
+        1e-6,
+    );
+    assert_close(
+        initial_total_c - engine.full_state().total_carbon(),
+        expected_c_export,
+        1e-6,
+    );
+
+    let ledger = engine.budget_ledger().expect("budget tracking enabled");
+    let siphon_entry = ledger.ticks[0]
+        .entries
+        .iter()
+        .find(|entry| entry.label == "action:siphon_detritus")
+        .expect("siphon detritus entry should be recorded");
+    assert_close(siphon_entry.delta.nitrogen.in_mg, 0.0, 1e-9);
+    assert_close(siphon_entry.delta.nitrogen.out_mg, expected_n_export, 1e-6);
+    assert_close(
+        siphon_entry.delta.nitrogen.net_mg(),
+        -expected_n_export,
+        1e-6,
+    );
+    assert_close(siphon_entry.delta.carbon.in_mg, 0.0, 1e-9);
+    assert_close(siphon_entry.delta.carbon.out_mg, expected_c_export, 1e-6);
+    assert_close(siphon_entry.delta.carbon.net_mg(), -expected_c_export, 1e-6);
 
     Ok(())
 }

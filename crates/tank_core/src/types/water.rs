@@ -207,6 +207,11 @@ impl WaterState {
         crate::systems::chemistry::resolve_carbonate_state(self, new_volume_l.max(0.0));
     }
 
+    /// Returns the ion-total cache used for TDS/conductivity.
+    ///
+    /// `bicarbonate_mg_total` is solver-derived, so callers must ensure
+    /// `resolve_carbonate_state()` has run after the most recent DIC or
+    /// alkalinity mutation before reading this aggregate.
     pub fn total_tracked_ions_mg(&self) -> f64 {
         self.calcium_mg_total
             + self.magnesium_mg_total

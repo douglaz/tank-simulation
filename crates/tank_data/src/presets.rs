@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tank_core::systems::chemistry::{
-    validate_source_water_carbonate_profile, CARBONATE_PH_MAX, CARBONATE_PH_MIN,
+    validate_source_water_carbonate_profile, SourceWaterCarbonateValidationError, CARBONATE_PH_MAX,
+    CARBONATE_PH_MIN,
 };
 
 const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
@@ -77,15 +78,24 @@ impl SourceWaterPreset {
             self.alkalinity_meq_per_l,
             self.temperature_c,
         )
-        .map_err(|ph| {
-            format!(
-                "carbonate-derived pH {:.3} falls outside the calibrated interior range ({}, {}) for dic_mg_c_per_l={} and alkalinity_meq_per_l={}",
-                ph,
-                CARBONATE_PH_MIN,
-                CARBONATE_PH_MAX,
-                self.dic_mg_c_per_l,
-                self.alkalinity_meq_per_l
-            )
+        .map_err(|err| match err {
+            SourceWaterCarbonateValidationError::OutOfRangePh(ph) => {
+                format!(
+                    "carbonate-derived pH {:.3} falls outside the calibrated interior range ({}, {}) for dic_mg_c_per_l={} and alkalinity_meq_per_l={}",
+                    ph,
+                    CARBONATE_PH_MIN,
+                    CARBONATE_PH_MAX,
+                    self.dic_mg_c_per_l,
+                    self.alkalinity_meq_per_l
+                )
+            }
+            SourceWaterCarbonateValidationError::NonFiniteNeutralFallback => {
+                format!(
+                    "carbonate-derived pH used the non-finite neutral fallback for dic_mg_c_per_l={} and alkalinity_meq_per_l={}",
+                    self.dic_mg_c_per_l,
+                    self.alkalinity_meq_per_l
+                )
+            }
         })?;
         Ok(())
     }
@@ -919,6 +929,16 @@ mod tests {
 
         let err = preset.validate().expect_err("preset should be rejected");
         assert!(err.contains("carbonate-derived pH"));
+    }
+
+    #[test]
+    fn source_water_preset_rejects_nonfinite_carbonate_fallback() {
+        let mut preset = source_preset(include_str!("../data/source_water/moderate.toml"));
+        preset.dic_mg_c_per_l = 1.0e308;
+        preset.alkalinity_meq_per_l = 1.0;
+
+        let err = preset.validate().expect_err("preset should be rejected");
+        assert!(err.contains("non-finite neutral fallback"));
     }
 
     #[test]
