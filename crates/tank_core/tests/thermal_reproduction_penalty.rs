@@ -55,6 +55,7 @@ fn stocked_scenario(seed: SimSeed, ambient_temp_c: f64) -> TankState {
     state.animal.condition_index = 0.8;
     state.animal.molt_stress_index = 0.1;
     state.animal.reproductive_readiness_index = 0.8;
+    state.animal.reserve_g = 5.0;
 
     state.process_params = ProcessParams::default();
     state.process_params.aob_vmax_mg_n_per_g_per_hour = 10.0;

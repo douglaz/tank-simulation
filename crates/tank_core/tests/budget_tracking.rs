@@ -179,6 +179,7 @@ fn shrimp_reproduction_budget_state(seed: SimSeed) -> TankState {
     state.animal.condition_index = 0.95;
     state.animal.molt_stress_index = 0.02;
     state.animal.reproductive_readiness_index = 0.95;
+    state.animal.reserve_g = 2.0;
     state.process_params.aob_vmax_mg_n_per_g_per_hour = 5.0;
     state.process_params.nob_vmax_mg_n_per_g_per_hour = 8.0;
     state.process_params.comammox_vmax_fraction = 0.8;

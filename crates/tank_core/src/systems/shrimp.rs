@@ -771,7 +771,7 @@ mod tests {
         let volume_l = state.water_volume_l();
         state.water.dissolved_oxygen_mg_total = 8.0 * volume_l;
         state.water.ammonia_total_mg_n_total = 2.0 * volume_l;
-        state.water.dissolved_inorganic_carbon_mg_c_total = 0.4 * volume_l;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * volume_l;
         state.water.alkalinity_meq_total = 0.3 * volume_l;
         state.water.calcium_mg_total = 40.0 * volume_l;
         state.water.magnesium_mg_total = 10.0 * volume_l;
@@ -789,6 +789,7 @@ mod tests {
 
         refresh_carbonate_state(&mut state);
         state.reseed_stability_tracker();
+        state.water.ph = 8.5;
         state
     }
 
@@ -824,6 +825,10 @@ mod tests {
     fn oxygen_limited_respiration_scales_dissolved_fluxes_and_retains_shortfall() {
         let mut state = TankState::new(SimSeed(10_002));
         state.water.dissolved_oxygen_mg_total = 10.0;
+        state.water.ammonia_total_mg_n_total = 0.0;
+        state.water.dissolved_organic_carbon_mg_c_total = 0.0;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 0.0;
+        state.animal.reserve_g = 0.0;
 
         let consumed_n_mg = 16.0;
         let consumed_c_mg = 100.0;
@@ -871,11 +876,12 @@ mod tests {
         update_condition(&mut expected);
 
         let mut actual = carbonate_condition_test_state();
+        let stale_ph = actual.water.ph;
         step_daily_shrimp(&mut actual);
 
         assert!(
-            (actual.water.ph - carbonate_condition_test_state().water.ph).abs() > 1e-6,
-            "test setup must shift carbonate state during feeding"
+            (actual.water.ph - stale_ph).abs() > 1e-6,
+            "test setup must start from a stale carbonate cache"
         );
         assert_close(actual.water.ph, expected.water.ph, 1e-9);
         assert_close(
