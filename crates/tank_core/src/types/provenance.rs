@@ -103,6 +103,21 @@ pub struct RangeWarning {
 
 impl fmt::Display for RangeWarning {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if !self.range[0].is_finite() || !self.range[1].is_finite() || self.range[0] > self.range[1]
+        {
+            return write!(
+                f,
+                "parameter `{}` declares invalid valid_range [{}, {}]",
+                self.param_name, self.range[0], self.range[1]
+            );
+        }
+        if !self.value.is_finite() {
+            return write!(
+                f,
+                "parameter `{}` value {} is non-finite and cannot be checked against valid range [{}, {}]",
+                self.param_name, self.value, self.range[0], self.range[1]
+            );
+        }
         write!(
             f,
             "parameter `{}` value {} is outside valid range [{}, {}]",
@@ -115,6 +130,20 @@ impl fmt::Display for RangeWarning {
 /// Returns `Some(RangeWarning)` if the value is outside the range.
 pub fn check_param_range(name: &str, value: f64, meta: &ParamMeta) -> Option<RangeWarning> {
     if let Some([lo, hi]) = meta.valid_range {
+        if !lo.is_finite() || !hi.is_finite() || lo > hi {
+            return Some(RangeWarning {
+                param_name: name.to_string(),
+                value,
+                range: [lo, hi],
+            });
+        }
+        if !value.is_finite() {
+            return Some(RangeWarning {
+                param_name: name.to_string(),
+                value,
+                range: [lo, hi],
+            });
+        }
         if value < lo || value > hi {
             return Some(RangeWarning {
                 param_name: name.to_string(),
@@ -236,6 +265,35 @@ mod tests {
         let w = check_param_range("k", 10.0, &meta).expect("should warn");
         assert_eq!(w.param_name, "k");
         assert_eq!(w.value, 10.0);
+    }
+
+    #[test]
+    fn test_range_check_non_finite_value_warns() {
+        let meta = ParamMeta {
+            unit: None,
+            source: None,
+            confidence: None,
+            valid_range: Some([0.1, 5.0]),
+            notes: None,
+        };
+        let w = check_param_range("k", f64::NAN, &meta).expect("should warn");
+        assert!(w.value.is_nan());
+        assert_eq!(w.range, [0.1, 5.0]);
+        assert!(w.to_string().contains("non-finite"));
+    }
+
+    #[test]
+    fn test_range_check_invalid_range_warns() {
+        let meta = ParamMeta {
+            unit: None,
+            source: None,
+            confidence: None,
+            valid_range: Some([5.0, 0.1]),
+            notes: None,
+        };
+        let w = check_param_range("k", 1.0, &meta).expect("should warn");
+        assert_eq!(w.range, [5.0, 0.1]);
+        assert!(w.to_string().contains("invalid valid_range"));
     }
 
     #[test]
