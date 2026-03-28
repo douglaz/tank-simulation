@@ -95,6 +95,7 @@ fn nano_neglect_artifacts_on_violation() -> Result<(), Box<dyn std::error::Error
     let meta: serde_json::Value = serde_json::from_str(&meta_raw)?;
     assert_eq!(meta["seed"], 77);
     assert_eq!(meta["scenario_id"], "nano_cycle");
+    assert_eq!(meta["artifact_label"], "nano_cycle_neglect");
     assert!(
         !meta["assertion_failures"].as_array().unwrap().is_empty(),
         "metadata should record assertion failures"
@@ -115,7 +116,7 @@ fn nano_neglect_artifacts_on_violation() -> Result<(), Box<dyn std::error::Error
     // Deterministic path check: same seed+scenario = same path
     let expected_dir = std::env::temp_dir()
         .join("tank_harness")
-        .join("nano_cycle_seed77");
+        .join("nano_cycle_nano_cycle_neglect_seed77");
     assert_eq!(artifact_dir, expected_dir);
 
     // Clean up artifacts

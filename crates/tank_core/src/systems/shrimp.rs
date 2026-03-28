@@ -1118,39 +1118,52 @@ mod tests {
 
     #[test]
     fn update_condition_treats_full_accessible_ration_as_satiated() {
-        let mut state = TankState::new(SimSeed(10_004));
-        state.geometry.length_cm = 40.0;
-        state.geometry.width_cm = 30.0;
-        state.geometry.height_cm = 35.0;
-        state.geometry.fill_height_cm = 30.0;
-        state.water = WaterState::default_for_volume_l(state.water_volume_l());
-        state.water.temperature_c = 24.0;
-        state.environment.ambient_temp_c = 24.0;
-        state.algae.periphyton_biomass_g = 5.0;
-        state.animal.adult.count = 10;
-        state.animal.adult.condition_index = 0.0;
-        state.process_params.shrimp_condition_smoothing = 1.0;
-        for layer in &mut state.substrate_layers {
+        let mut low_access = TankState::new(SimSeed(10_004));
+        low_access.geometry.length_cm = 40.0;
+        low_access.geometry.width_cm = 30.0;
+        low_access.geometry.height_cm = 35.0;
+        low_access.geometry.fill_height_cm = 30.0;
+        low_access.water = WaterState::default_for_volume_l(low_access.water_volume_l());
+        low_access.water.temperature_c = 24.0;
+        low_access.environment.ambient_temp_c = 24.0;
+        low_access.algae.periphyton_biomass_g = 10.0;
+        low_access.animal.adult.count = 10;
+        low_access.animal.adult.condition_index = 0.0;
+        low_access.process_params.shrimp_condition_smoothing = 1.0;
+
+        let volume_l = low_access.water_volume_l();
+        low_access.water.dissolved_oxygen_mg_total = 8.0 * volume_l;
+        low_access.water.calcium_mg_total = 40.0 * volume_l;
+        low_access.water.magnesium_mg_total = 10.0 * volume_l;
+
+        let mut full_access = low_access.clone();
+        for layer in &mut low_access.substrate_layers {
             layer.grazing_surface_index = 0.0;
         }
+        for layer in &mut full_access.substrate_layers {
+            layer.grazing_surface_index = 1.0;
+        }
 
-        let volume_l = state.water_volume_l();
-        state.water.dissolved_oxygen_mg_total = 8.0 * volume_l;
-        state.water.calcium_mg_total = 40.0 * volume_l;
-        state.water.magnesium_mg_total = 10.0 * volume_l;
-        refresh_carbonate_state(&mut state);
-        state.reseed_stability_tracker();
+        refresh_carbonate_state(&mut low_access);
+        low_access.reseed_stability_tracker();
+        refresh_carbonate_state(&mut full_access);
+        full_access.reseed_stability_tracker();
 
-        shrimp_feeding(&mut state);
-        assert_close(
-            state.animal.daily_food_consumed_g,
-            shrimp_target_food_route_g(&state),
-            1e-12,
+        low_access.animal.daily_food_consumed_g = shrimp_target_food_route_g(&low_access);
+        full_access.animal.daily_food_consumed_g = shrimp_target_food_route_g(&full_access);
+        assert!(
+            full_access.animal.daily_food_consumed_g > low_access.animal.daily_food_consumed_g,
+            "test setup expects the accessible ration to differ by grazing access"
         );
 
-        update_condition(&mut state);
+        update_condition(&mut low_access);
+        update_condition(&mut full_access);
 
-        assert_close(state.animal.adult.condition_index, 1.0, 1e-12);
+        assert_close(
+            low_access.animal.adult.condition_index,
+            full_access.animal.adult.condition_index,
+            1e-12,
+        );
     }
 
     #[test]

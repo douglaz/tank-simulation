@@ -1065,77 +1065,111 @@ fn nob_is_at_least_as_do_sensitive_as_aob() {
     );
 }
 
-/// Verify that each guild's Monod limitation uses concentration inputs
-/// from the B2 helper layer by checking that the same concentration in
-/// different volumes produces the same per-guild limitation factor.
+/// Verify that each guild's activity through the production nitrogen-cycle
+/// path depends on concentration, not raw total mass.  Two states hold the
+/// same *total* nutrient mass but different volumes (10 L vs 100 L), so the
+/// smaller tank has 10× higher concentrations and must show proportionally
+/// stronger Monod-driven oxidation deltas per unit biomass.
 #[test]
 fn per_guild_monod_uses_concentration_not_total() -> Result<(), tank_core::SimError> {
-    let monod = |s: f64, k: f64| s / (s + k.max(f64::MIN_POSITIVE));
+    let build = |length_cm: f64, width_cm: f64, fill_cm: f64| {
+        let mut state = TankState::new(SimSeed(7742));
+        state.geometry.length_cm = length_cm;
+        state.geometry.width_cm = width_cm;
+        state.geometry.fill_height_cm = fill_cm;
+        state.geometry.height_cm = fill_cm + 5.0;
+        state.substrate_layers.clear();
 
-    let pp = tank_core::ProcessParams::default();
-    let tan_conc = 1.5; // mg N/L
-    let no2_conc = 0.3; // mg N/L
-    let doc_conc = 5.0; // mg C/L
-    let do_conc = 4.0; // mg O₂/L
+        // Fixed *total* mass — concentration will differ by volume ratio.
+        // High TAN + minimal DOC so nitrification dominates TAN production.
+        state.water.ammonia_total_mg_n_total = 30.0;
+        state.water.nitrite_mg_n_total = 5.0;
+        state.water.nitrate_mg_n_total = 30.0;
+        state.water.dissolved_organic_carbon_mg_c_total = 1.0;
+        state.water.dissolved_organic_nitrogen_mg_n_total = 0.1;
+        state.water.dissolved_oxygen_mg_total = 80.0;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 200.0;
+        state.water.alkalinity_meq_total = 40.0;
 
-    // All guilds: Monod factor depends only on concentration, not on volume.
-    for volume_l in [1.0, 10.0, 100.0, 1000.0] {
-        let tan_total = tan_conc * volume_l;
-        let no2_total = no2_conc * volume_l;
-        let doc_total = doc_conc * volume_l;
-        let do_total = do_conc * volume_l;
+        // Identical biomass (not scaled to volume) to isolate Monod effect.
+        state.microbe.decomposer_biomass_g = 0.1;
+        state.microbe.ammonia_oxidizer_biomass_g = 0.1;
+        state.microbe.nitrite_oxidizer_biomass_g = 0.1;
+        state.microbe.comammox_biomass_g = 0.1;
 
-        // Re-derive concentration from total (mimics the B2 helper).
-        let tan_c = tan_total / volume_l;
-        let no2_c = no2_total / volume_l;
-        let doc_c = doc_total / volume_l;
-        let do_c = do_total / volume_l;
+        // Disable growth/decay so biomass stays constant.
+        state.process_params.decomposer_growth_yield = 0.0;
+        state.process_params.aob_growth_yield = 0.0;
+        state.process_params.nob_growth_yield = 0.0;
+        state.process_params.comammox_growth_yield = 0.0;
+        state.process_params.decomposer_decay_rate_per_hour = 0.0;
+        state.process_params.aob_decay_rate_per_hour = 0.0;
+        state.process_params.nob_decay_rate_per_hour = 0.0;
+        state.process_params.comammox_decay_rate_per_hour = 0.0;
 
-        // Monod factors must be identical for all volumes.
-        let eps = 1e-12;
-        assert!(
-            (monod(tan_c, pp.aob_k_tan_mg_n_per_l) - monod(tan_conc, pp.aob_k_tan_mg_n_per_l))
-                .abs()
-                < eps,
-            "AOB TAN Monod factor should be volume-independent at {volume_l} L"
-        );
-        assert!(
-            (monod(no2_c, pp.nob_k_nitrite_mg_n_per_l)
-                - monod(no2_conc, pp.nob_k_nitrite_mg_n_per_l))
-            .abs()
-                < eps,
-            "NOB NO2 Monod factor should be volume-independent at {volume_l} L"
-        );
-        assert!(
-            (monod(tan_c, pp.comammox_k_tan_mg_n_per_l)
-                - monod(tan_conc, pp.comammox_k_tan_mg_n_per_l))
-            .abs()
-                < eps,
-            "Comammox TAN Monod factor should be volume-independent at {volume_l} L"
-        );
-        assert!(
-            (monod(doc_c, pp.decomposer_k_doc_mg_c_per_l)
-                - monod(doc_conc, pp.decomposer_k_doc_mg_c_per_l))
-            .abs()
-                < eps,
-            "Decomposer DOC Monod factor should be volume-independent at {volume_l} L"
-        );
-        assert!(
-            (monod(do_c, pp.aob_k_do_mg_per_l) - monod(do_conc, pp.aob_k_do_mg_per_l)).abs() < eps,
-            "AOB DO Monod factor should be volume-independent at {volume_l} L"
-        );
-        assert!(
-            (monod(do_c, pp.nob_k_do_mg_per_l) - monod(do_conc, pp.nob_k_do_mg_per_l)).abs() < eps,
-            "NOB DO Monod factor should be volume-independent at {volume_l} L"
-        );
-        assert!(
-            (monod(do_c, pp.decomposer_k_do_mg_per_l)
-                - monod(do_conc, pp.decomposer_k_do_mg_per_l))
-            .abs()
-                < eps,
-            "Decomposer DO Monod factor should be volume-independent at {volume_l} L"
-        );
-    }
+        state.process_params.reaeration_kla_base = 0.0;
+        state.process_params.aeration_kla_boost = 0.0;
+        state.microfauna.population_index = 0.0;
+        state.process_params.microfauna_mineralization_boost = 0.0;
+
+        state.filter_state.biofilter_maturity_index = 0.8;
+        state.filter_state.clogging_index = 0.0;
+        state.hardware.filter.enabled = true;
+        state.hardware.filter.flow_lph = 100.0;
+
+        state.detritus.particulate_organics_g_total = 0.0;
+        state.detritus.fine_detritus_g_total = 0.0;
+        state.detritus.dissolved_feed_residue_g_total = 0.0;
+
+        state
+    };
+
+    // 10 L tank: concentrations are 10× those of the 100 L tank.
+    let mut small = build(20.0, 10.0, 50.0); // 20×10×50/1000 = 10 L
+    let mut large = build(100.0, 10.0, 100.0); // 100×10×100/1000 = 100 L
+
+    let sv = small.water_volume_l();
+    let lv = large.water_volume_l();
+    assert!(
+        (sv - 10.0).abs() < 0.1,
+        "small tank should be ~10 L, got {sv}"
+    );
+    assert!(
+        (lv - 100.0).abs() < 0.1,
+        "large tank should be ~100 L, got {lv}"
+    );
+
+    // Concentrations must differ: small has 10× higher concentration.
+    let small_tan_conc = small.water.tan_mg_n_per_l(sv);
+    let large_tan_conc = large.water.tan_mg_n_per_l(lv);
+    assert!(
+        (small_tan_conc / large_tan_conc - 10.0).abs() < 0.1,
+        "concentration ratio should be ~10, got {}",
+        small_tan_conc / large_tan_conc
+    );
+
+    // Record pre-tick TAN totals.
+    let small_tan_before = small.water.ammonia_total_mg_n_total;
+    let large_tan_before = large.water.ammonia_total_mg_n_total;
+
+    step_nitrogen_cycle(&mut small);
+    step_nitrogen_cycle(&mut large);
+
+    // The small tank's higher concentration means stronger Monod limitation
+    // (closer to Vmax), so it should consume more TAN in absolute terms despite
+    // equal biomass and equal total mass.
+    let small_tan_consumed = small_tan_before - small.water.ammonia_total_mg_n_total;
+    let large_tan_consumed = large_tan_before - large.water.ammonia_total_mg_n_total;
+
+    assert!(
+        small_tan_consumed > 0.0 && large_tan_consumed > 0.0,
+        "both tanks should oxidize some TAN: small={small_tan_consumed}, large={large_tan_consumed}"
+    );
+    assert!(
+        small_tan_consumed > large_tan_consumed * 1.5,
+        "higher concentration should drive faster oxidation: \
+         small consumed {small_tan_consumed:.6} mg vs large {large_tan_consumed:.6} mg"
+    );
 
     Ok(())
 }

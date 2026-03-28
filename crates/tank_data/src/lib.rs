@@ -331,7 +331,26 @@ valid_range = [0.1, 5.0]
             )?;
 
         assert_eq!(diagnostics.len(), 1);
-        assert!(diagnostics[0].contains("warning: preset `test` in category `process`"));
+        assert!(
+            diagnostics[0].contains("warning: preset `test` in category `process`"),
+            "diagnostic should identify the preset: {}",
+            diagnostics[0]
+        );
+        assert!(
+            diagnostics[0].contains("aob_k_tan_mg_n_per_l"),
+            "diagnostic should name the offending parameter: {}",
+            diagnostics[0]
+        );
+        assert!(
+            diagnostics[0].contains("200"),
+            "diagnostic should include the out-of-range value: {}",
+            diagnostics[0]
+        );
+        assert!(
+            diagnostics[0].contains("0.1") && diagnostics[0].contains("5"),
+            "diagnostic should include the valid range bounds: {}",
+            diagnostics[0]
+        );
         Ok(())
     }
 

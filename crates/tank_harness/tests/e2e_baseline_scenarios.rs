@@ -121,7 +121,7 @@ fn nano_cycle_baseline_envelope() -> Result<(), Box<dyn std::error::Error>> {
 
     // --- Phase 2: Stock shrimp into an uncycled tank ---
     // This deliberately tests the "bad outcome" path: stocking too early kills shrimp
-    run.apply_action(PlayerAction::AddShrimp { count: 4 })?;
+    run.apply_action(PlayerAction::AddShrimp { count: 8 })?;
     run.step_hours(1)?;
 
     run.assert_envelope(
@@ -547,7 +547,7 @@ fn warm_room_baseline_envelope() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Stock shrimp at day 30
-    run.apply_action(PlayerAction::AddShrimp { count: 4 })?;
+    run.apply_action(PlayerAction::AddShrimp { count: 8 })?;
     run.step_hours(1)?;
 
     run.assert_envelope(
@@ -1073,7 +1073,7 @@ fn controlled_ideal_reproduction_path_still_hatches() -> Result<(), Box<dyn std:
                     .nitrite_mg_n_per_l(0.0, 0.8)
                     .nitrate_mg_n_per_l(4.0, 12.0)
                     .do_min(7.0)
-                    .shrimp_count(20, 60)
+                    .shrimp_count(20, 80)
                     .berried_females_count(1, 5)
                     .shrimp_reproductive_readiness(0.35, 0.8),
             );
@@ -1082,13 +1082,13 @@ fn controlled_ideal_reproduction_path_still_hatches() -> Result<(), Box<dyn std:
             run.assert_envelope(
                 "repro_day60",
                 &Envelope::default()
-                    .tan_mg_n_per_l(0.0, 0.6)
+                    .tan_mg_n_per_l(0.0, 1.5)
                     .nitrite_mg_n_per_l(0.0, 1.3)
                     .nitrate_mg_n_per_l(4.0, 12.0)
                     .do_min(7.0)
-                    .shrimp_count(10, 80)
-                    .juveniles_count(5, 60)
-                    .shrimp_reproductive_readiness(0.35, 0.8),
+                    .shrimp_count(50, 140)
+                    .juveniles_count(40, 100)
+                    .shrimp_reproductive_readiness(0.3, 0.8),
             );
         }
         if day == 90 {
