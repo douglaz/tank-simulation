@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-1-32fa1988",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 1,
+  "body": "Several NO3 envelope bounds in medium_planted and warm_room scenarios are extremely narrow — e.g., (4.0, 5.5), (4.5, 5.5), (4.5, 6.0) — representing only 1–1.5 mg N/L of range. These track the source water nitrate concentration (moderate.toml: 5.0 mg N/L) rather than meaningful biological behavior. Downstream beads (tanksim-6e5.2.3, 2.4, 2.5) will normalize nitrogen-cycle kinetics and plant uptake, which will shift NO3 dynamics. Widen these bounds to at least ±2–3 mg/L (e.g., (2.0, 8.0)) so they catch real regressions without breaking on every parameter tune. Document that NO3 bounds for moderate/warm_room scenarios include a source-water contribution of ~5 mg N/L.",
+  "created_at": "2026-03-28T15:41:00.868447515Z",
+  "batch_sequence": 1,
+  "source": "workflow_stage",
+  "dedup_key": "42a047102913f06172bb9edd1e4def5b7364316e574b0a721a6e34afe6b2425c"
+}

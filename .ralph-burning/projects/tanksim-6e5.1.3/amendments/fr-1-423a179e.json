@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-1-423a179e",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 1,
+  "body": "Envelope::check silently passes NaN values in all f64 fields (pH, DO, TAN, NO2, NO3, reproductive_readiness, plant_biomass, algae_nuisance, biofilter_maturity, periphyton_biomass, fast_stem_biomass) because NaN comparisons return false in IEEE 754. Add a NaN/Inf guard at the top of the check method: for every constrained f64 field, if the snapshot value is not finite, push a violation like 'pH is NaN (expected [{min}, {max}])'. The existing final_finite assertions only catch NaN at the end of multi-hour runs, not at intermediate checkpoints where the root cause would be easier to diagnose.",
+  "created_at": "2026-03-28T15:41:00.868451653Z",
+  "batch_sequence": 2,
+  "source": "workflow_stage",
+  "dedup_key": "82254958355e9d1dd8867b353fdd17b69b88b2cad5872b66ffaecdfc5f03ead8"
+}

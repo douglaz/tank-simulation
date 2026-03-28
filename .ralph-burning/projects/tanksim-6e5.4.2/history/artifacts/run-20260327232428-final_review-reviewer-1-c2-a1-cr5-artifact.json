@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327232428-final_review-reviewer-1-c2-a1-cr5-artifact",
+  "payload_id": "run-20260327232428-final_review-reviewer-1-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T02:46:02.449151177Z",
+  "content": "# Final Review Proposal\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nReviewed the new death-routing/process-param changes plus related plumbing updates. I found two correctness/robustness issues in the new `death_biomass_to_detritus_fraction` path. `cargo test -p tank_core --test save_load` and `cargo test -p tank_core --test validation` passed during the review.\n\n## Amendments\n\n1. Fix hidden N/C loss in shrimp mortality routing. `crates/tank_core/src/systems/shrimp.rs:624-642` multiplies corpse and reserve routing by `death_biomass_to_detritus_fraction` and silently drops the remainder, but there is no explicit export pool/action/budget entry to balance that removed mass. Because live shrimp biomass and reserve are still counted in `crates/tank_core/src/types/budget.rs:239-248` and `crates/tank_core/src/types/budget.rs:324-344`, any value below `1.0` makes total nitrogen/carbon disappear during mortality. Keep the fraction fixed at `1.0` until an explicit export path exists, or add real export accounting.\n   Rationale: This currently turns a closed-system mortality step into an untracked sink and breaks conservation as soon as the new parameter is set below 1.0.\n2. Validate `death_biomass_to_detritus_fraction` instead of silently clamping it. The new serialized field is introduced in `crates/tank_core/src/types/process.rs:211-217`, but `crates/tank_core/src/invariants.rs:198-223` never checks it and `crates/tank_core/src/systems/shrimp.rs:624-626` coerces out-of-range values into `[0, 1]` at use time. A save can therefore persist `-5.0` or `2.0`, yet runtime behavior becomes `0.0` or `1.0`, so the inspectable state no longer matches the simulation. Add a unit-interval invariant and validation coverage, and remove the runtime clamp.\n   Rationale: Malformed saves/config should be rejected, not silently normalized into different runtime behavior.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 5
+}

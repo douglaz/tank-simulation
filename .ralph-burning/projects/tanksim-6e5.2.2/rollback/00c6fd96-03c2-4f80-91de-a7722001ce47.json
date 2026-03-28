@@ -1,0 +1,92 @@
+{
+  "rollback_id": "00c6fd96-03c2-4f80-91de-a7722001ce47",
+  "created_at": "2026-03-27T19:56:32.324735281Z",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "git_sha": "e432e84fa04939641f7f602972c9589f1516fddc",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260327155320",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 1,
+        "attempt": 1,
+        "completion_round": 9
+      },
+      "started_at": "2026-03-27T15:53:20.905298253Z",
+      "prompt_hash_at_cycle_start": "d154f7ee00b28f10",
+      "prompt_hash_at_stage_start": "d154f7ee00b28f10",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 8
+    },
+    "status": "running",
+    "cycle_history": [],
+    "completion_rounds": 9,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-8-cd41c2dd",
+          "source_stage": "final_review",
+          "source_cycle": 1,
+          "source_completion_round": 8,
+          "body": "In `nitrogen_cycle.rs`, the `monod_rate` helper now receives concentration-based substrate values but its doc comment and parameter name (`substrate`) give no indication of expected units. Add a brief doc comment to `monod_rate` and `monod_factor` noting that `substrate` and `k_substrate` must be in the same units (mg/L after the concentration migration) so future maintainers don't accidentally pass totals.",
+          "created_at": "2026-03-27T19:56:32.238913263Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "45b6129b9cac23016e0be03d96f602303ca702c4c4262b16be6a5f99ac46ba1b"
+        },
+        {
+          "amendment_id": "fr-8-b5b1b923",
+          "source_stage": "final_review",
+          "source_cycle": 1,
+          "source_completion_round": 8,
+          "body": "The `substrate_displacement_l` function in `geometry.rs` assumes 0% substrate porosity — the entire substrate volume is subtracted from water volume. Real aquarium substrates have ~30-40% porosity, so 60-70% of the substrate column is solid. Consider adding a `porosity_index` field to `SubstrateKind` or `SubstrateLayerState` and multiplying displacement by `(1.0 - porosity)`. At minimum, add a doc comment noting the 100% displacement assumption so dependents (especially the `water_volume_l_with_substrate_depth` callers) are aware.",
+          "created_at": "2026-03-27T19:56:32.238917180Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "568993310593eaa430a86d7b1b8b58d625148c013b4c21b5bf9c930ec70bd899"
+        },
+        {
+          "amendment_id": "fr-8-91607365",
+          "source_stage": "final_review",
+          "source_cycle": 1,
+          "source_completion_round": 8,
+          "body": "crates/tank_core/src/types/geometry.rs:19 still defines `TankGeometry::water_volume_l()` as gross filled volume, and crates/tank_core/src/types/geometry.rs:56 plus crates/tank_core/src/types/geometry.rs:65 build ratio helpers on that same gross basis, while crates/tank_core/src/types/state.rs:177 defines `TankState::water_volume_l()` as the new canonical net-water volume. Leaving both public APIs under the same `water_volume_l` name preserves two incompatible meanings of water volume and makes future concentration/normalization code easy to wire back to gross volume. Rename the geometry-side gross helpers or move the canonical name there so callers only have one public `water_volume_l` semantics.",
+          "created_at": "2026-03-27T19:56:32.238921368Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "df8a3d332a3db63cb55612288c8ccce6f0ff49f61e27d74ae480ab5b64f1909d"
+        }
+      ],
+      "processed_count": 23
+    },
+    "status_summary": "running: final review restart round 9 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-27T19:39:47.479457755Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      },
+      "final_review_arbiter": {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      }
+    }
+  }
+}

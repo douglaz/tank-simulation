@@ -1,0 +1,7 @@
+id = "tanksim-6e5.1.1"
+name = "Inventory current scientific semantics"
+flow = "docs_change"
+prompt_reference = "prompt.md"
+prompt_hash = "d2682363fe31bb5e"
+created_at = "2026-03-27T14:21:19.824002977Z"
+status_summary = "created"

@@ -1,0 +1,1 @@
+{"amendments":[],"summary":"No correctness, safety, or robustness issues found in the plant-trimming split. I reviewed the relevant diff and key implementation files end-to-end (`crates/tank_core/src/engine.rs`, `crates/tank_core/src/types/actions.rs`, `crates/tank_core/src/save.rs`, `crates/tank_tui/src/screens/actions.rs`) and the targeted `tank_core` trim/save tests pass."}

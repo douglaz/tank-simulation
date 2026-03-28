@@ -1,0 +1,40 @@
+{
+  "payload_id": "run-20260328125548-review-c2-a1-cr5",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T15:41:26.424880354Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All 6 acceptance-criteria tests pass in tank_data (28 tests total, 0 failures): test_provenance_schema_roundtrip, test_provenance_optional_fields, test_confidence_levels_enum, test_valid_range_enforcement, test_backward_compatible_loading, test_provenance_display — plus 22 additional tests covering plant/substrate/shrimp/source-water param_meta, loader diagnostics, DIC-rate validation, and legacy formatting.",
+        "11 provenance unit tests pass in tank_core covering ConfidenceLevel roundtrip/rejection, ParamMeta display (full/empty/notes), range check (in-range, out-of-range, no-range, non-finite, invalid range), and format_param (with and without notes).",
+        "49 tank_core lib tests pass, 4 tank_scenarios lib tests pass, 19 shrimp_population integration tests pass, 12 validation integration tests pass — no regressions detected.",
+        "Amendment fr-4-5f46d44d addressed: PlantPreset (presets.rs:351-363) and SubstratePreset (presets.rs:249-265) now have param_meta fields with ParamMetaPreset implementations, unknown-key validation, and loader diagnostic support.",
+        "Amendment fr-4-6586f129 addressed: provenance.rs:1-9 contains explicit module-level documentation explaining that provenance metadata lives in the preset layer, that Default::default() on runtime structs yields numeric defaults without inline provenance, and that code-defined values only carry provenance when a preset stores matching ParamMeta.",
+        "Amendment fr-4-fae98202 addressed: ShrimpPreset::lookup_param_value (presets.rs:670-703) chains .or_else(|| shrimp_runtime_default_param_value(name)) for all optional fields, falling back to ShrimpRuntimeParams::default() so format_param and check_ranges operate on effective runtime values.",
+        "Amendment fr-4-66f7e16d addressed: format_param (presets.rs:59-68) now branches on metadata presence — uses provenance_param_value (normalizing legacy fields) only when param_meta exists, otherwise uses lookup_param_value (raw value). Confirmed by test_process_preset_format_param_without_meta_keeps_raw_legacy_value.",
+        "Amendment fr-4-c056464d addressed: ProcessParamsPreset::validate() (presets.rs:1600-1605) rejects shrimp_juvenile_maturation_days <= 0.0 with explicit error. Confirmed by test process_preset_rejects_non_positive_shrimp_juvenile_maturation_days.",
+        "ParamMeta uses #[serde(deny_unknown_fields)] (provenance.rs:50) to catch metadata typos. ProcessParamsPreset, SourceWaterPreset, ShrimpPreset, PlantPreset, and SubstratePreset all validate unknown param_meta keys.",
+        "All 5 preset loaders (process, source_water, shrimp, plant, substrate) have diagnostic-aware variants (load_*_with_diagnostics) that surface range warnings via structured diagnostics. Standard loaders emit warnings to stderr.",
+        "Pre-existing clippy dead_code error in tank_core (water.rs:276 conductivity_us_cm_with_bicarbonate_total) is caused by uncommitted snapshot.rs changes from another bead — not introduced by this provenance work."
+      ],
+      "findings_or_gaps": [
+        "No shipped TOML data files currently contain [param_meta.*] sections — the infrastructure is ready but actual metadata enrichment is deferred to downstream bead tanksim-6e5.7.2. This is by design per the bead scope.",
+        "Preset-level Provenance.confidence remains Option<String> rather than Option<ConfidenceLevel>. This is documented as intentional in presets.rs:16-20 (preset-level serves a different granularity than per-parameter), and covered by test_preset_level_provenance_confidence_is_freeform.",
+        "Pre-existing clippy failures in tank_core (dead_code from uncommitted snapshot.rs refactor) and tank_scenarios (redundant field name from tanksim-6e5.4.3-v2) are NOT introduced by this bead but will block clean cargo clippy -p tank_core -- -D warnings until those other beads' changes are committed.",
+        "check_ranges() in the ParamMetaPreset trait (presets.rs:71-74) still routes through provenance_param_value() for all metadata-backed parameters, which means legacy _mg fields get normalized before range comparison. This is correct behavior (ranges should be in normalized units) and is documented, but callers who specify valid_range on legacy _mg fields must use normalized concentration units, not raw stored units."
+      ],
+      "follow_up_or_amendments": [],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 5
+}

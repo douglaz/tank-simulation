@@ -1,0 +1,125 @@
+{
+  "payload_id": "run-20260327192401-final_review-aggregate-c1-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T21:30:22.233109673Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-3-05e25271",
+      "fr-3-77e36c27",
+      "fr-3-a030e641"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-3-d068d62d",
+        "normalized_body": "CleanFilter action in engine.rs:346-368 silently destroys nitrogen and carbon: microbe biomass is reduced by `intensity * 0.5` but the removed mass is not routed to any pool (fine_detritus, DON/DOC, etc.). This is an N/C conservation violation. The removed biomass should be routed to `fine_detritus_g_total` via `live_biomass_detrital_mass_g()` (same pattern used for shrimp mortality at shrimp.rs:483-491), or alternatively tracked as an explicit budget export if the intent is that filter-rinsing removes matter from the system entirely.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-05e25271",
+        "normalized_body": "Conservation tests (test_closed_system_c_conservation, test_closed_system_n_conservation) only exercise the code-default ProcessParams which sets `respiration_dic_rate_mg_c_per_g_per_hour = 0.0` and `photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0` (process.rs:187-188). The actual data preset (default.toml:9-10) sets these to 0.08 and 0.12 respectively. When loaded from presets, the chemistry system (chemistry.rs:31-47) adds/removes DIC without a compensating organic-C change, breaking carbon conservation by milligrams per tick. Add a comment or separate test acknowledging that the hourly DIC respiration/photosynthesis flux is an intentional atmospheric-exchange simplification and that closed-system carbon conservation holds only when these rates are zero.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-c9458760",
+        "normalized_body": "SiphonDetritus action in engine.rs:342-346 silently destroys nitrogen and carbon: `particulate_organics_g_total` and `fine_detritus_g_total` are reduced by `fraction` without routing the removed mass anywhere. Like CleanFilter, this is a physical export that should either be routed explicitly or return a BudgetDelta with the export amount so the ledger records a classified outflow rather than an unexplained mass loss.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-77e36c27",
+        "normalized_body": "Fix closed-system mass creation in `system:daily_shrimp`. In `crates/tank_core/src/systems/shrimp.rs:354` and `crates/tank_core/src/systems/shrimp.rs:371`, a resolved clutch adds `25` juveniles per successful berried female without debiting any explicit nitrogen/carbon source, so the new ledger violates the acceptance criterion once reproduction is enabled. Repro: starting from the existing shrimp fixture in `crates/tank_core/tests/shrimp_population.rs:8`, a 60-day no-feed/no-water-change run with budget tracking ends with positive mass drift (`delta_n ~= 65.38 mg`, `delta_c ~= 408.62 mg`), and the first non-zero closed tick is `system:daily_shrimp` at about `+34.48 mg N / +215.52 mg C` per hatch. Model clutch/egg biomass as an explicit pool and include it in the canonical totals, or debit another explicit source on spawn/hatch, and add a regression in `crates/tank_core/tests/budget_tracking.rs:404` covering a reproducing shrimp tank with no feed/export.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-a030e641",
+        "normalized_body": "Add an actual end-of-tick conservation guard when budget tracking is enabled. `crates/tank_core/src/engine.rs:164` and `crates/tank_core/src/engine.rs:168` only record and store the tick, while `crates/tank_core/src/types/budget.rs:141` uses only a `debug_assert!` for per-stage bookkeeping consistency. In release builds the ledger is passive, so non-conserving paths like the shrimp hatch case ship silently. Wire a tick-level closed-system check after invariants (or at least a test-only assert hooked into the tracked tick path) so a mass leak fails immediately instead of depending on ad hoc test coverage.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [
+      "fr-3-d068d62d",
+      "fr-3-c9458760"
+    ],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-3-05e25271",
+        "normalized_body": "Conservation tests (test_closed_system_c_conservation, test_closed_system_n_conservation) only exercise the code-default ProcessParams which sets `respiration_dic_rate_mg_c_per_g_per_hour = 0.0` and `photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0` (process.rs:187-188). The actual data preset (default.toml:9-10) sets these to 0.08 and 0.12 respectively. When loaded from presets, the chemistry system (chemistry.rs:31-47) adds/removes DIC without a compensating organic-C change, breaking carbon conservation by milligrams per tick. Add a comment or separate test acknowledging that the hourly DIC respiration/photosynthesis flux is an intentional atmospheric-exchange simplification and that closed-system carbon conservation holds only when these rates are zero.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-77e36c27",
+        "normalized_body": "Fix closed-system mass creation in `system:daily_shrimp`. In `crates/tank_core/src/systems/shrimp.rs:354` and `crates/tank_core/src/systems/shrimp.rs:371`, a resolved clutch adds `25` juveniles per successful berried female without debiting any explicit nitrogen/carbon source, so the new ledger violates the acceptance criterion once reproduction is enabled. Repro: starting from the existing shrimp fixture in `crates/tank_core/tests/shrimp_population.rs:8`, a 60-day no-feed/no-water-change run with budget tracking ends with positive mass drift (`delta_n ~= 65.38 mg`, `delta_c ~= 408.62 mg`), and the first non-zero closed tick is `system:daily_shrimp` at about `+34.48 mg N / +215.52 mg C` per hatch. Model clutch/egg biomass as an explicit pool and include it in the canonical totals, or debit another explicit source on spawn/hatch, and add a regression in `crates/tank_core/tests/budget_tracking.rs:404` covering a reproducing shrimp tank with no feed/export.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-a030e641",
+        "normalized_body": "Add an actual end-of-tick conservation guard when budget tracking is enabled. `crates/tank_core/src/engine.rs:164` and `crates/tank_core/src/engine.rs:168` only record and store the tick, while `crates/tank_core/src/types/budget.rs:141` uses only a `debug_assert!` for per-stage bookkeeping consistency. In release builds the ledger is passive, so non-conserving paths like the shrimp hatch case ship silently. Wire a tick-level closed-system check after invariants (or at least a test-only assert hooked into the tracked tick path) so a mass leak fails immediately instead of depending on ad hoc test coverage.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 3,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [],
+    "restart_required": true,
+    "summary": "Final review accepted 3 amendment(s); restart required.",
+    "total_proposed_amendments": 5,
+    "total_reviewers": 2,
+    "unique_amendment_count": 5
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 3
+}

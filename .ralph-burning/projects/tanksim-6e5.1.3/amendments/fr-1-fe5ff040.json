@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-1-fe5ff040",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 1,
+  "body": "`enforce_invariants` now repairs shrimp egg bookkeeping on every simulation step by calling `reconcile_egg_cohort_counts()` (`crates/tank_core/src/invariants.rs:42-48`; `crates/tank_core/src/engine.rs:789-794`). When `berried_females_count` is larger than the cohort sum, that helper fabricates a new `EggCohort` at the current `egg_progress_days` (`crates/tank_core/src/types/biology.rs:600-620`), and the new validation test explicitly blesses that behavior (`crates/tank_core/tests/validation.rs:263-300`). This means a transient bookkeeping bug or partially migrated state can silently create near-hatching clutches instead of surfacing an invariant violation, which changes live simulation outcomes and can duplicate births. Please keep this kind of repair at load/migration boundaries only, or fail runtime invariant enforcement on mismatches instead of synthesizing eggs.",
+  "created_at": "2026-03-28T15:41:00.868460790Z",
+  "batch_sequence": 4,
+  "source": "workflow_stage",
+  "dedup_key": "ba8b1c8036ddd4f0b9bd445b535751bbf45606a61a73ca91c00366bfbe0641f4"
+}

@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260328132625-final_review-aggregate-c1-a1-cr3-artifact",
+  "payload_id": "run-20260328132625-final_review-aggregate-c1-a1-cr3-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T14:24:19.716392793Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 1 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 1\n**Final Review Restarts:** 3/20\n\n## Accepted\n\n- `fr-3-95d007dd`\n\n## Rejected\n\nNone.\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-3-95d007dd`\n\nFix gas-exchange scaling so total O2/CO2 surface flux depends on exposed area instead of water volume. `crates/tank_core/src/systems/dissolved_oxygen.rs:14-28` computes `K_LA` from lid/aeration/filter settings only, and `crates/tank_core/src/systems/chemistry.rs:55-58` / `crates/tank_core/src/systems/chemistry.rs:571-580` reuse that coefficient in `delta = k_la * (c_eq - c) * volume_l`. With that math, two tanks that share the same footprint and hardware but have different fill heights exchange different total CO2 masses; the deeper tank strips proportionally more CO2 even though the air-water interface is unchanged. The new regression at `crates/tank_core/tests/co2_exchange.rs:215-285` locks in that incorrect behavior by asserting equal concentration change instead of equal surface flux. Use a surface-area/volume term when deriving gas-transfer rates (for both O2 and CO2); `crates/tank_core/src/types/geometry.rs:64-72` already exposes a ratio helper you can build from.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 3
+}
