@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-1-2a6a0aaf",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 1,
+  "body": "The manual `Clone` implementation for `Engine` (engine.rs:42-51) silently drops the tracer by setting it to `None` in the clone. There is no documentation on this behavior — neither a doc comment on the `Clone` impl, nor a note on `enable_tracing`. Downstream beads that clone engines (e.g., for forking scenarios or speculative rollbacks) will silently lose their tracing configuration. Add a doc comment on the `Clone` impl explaining that tracer is not cloned because `Box<dyn TraceSink>` is not `Clone`, so callers must re-enable tracing on cloned engines.",
+  "created_at": "2026-03-28T03:23:32.498317501Z",
+  "batch_sequence": 2,
+  "source": "workflow_stage",
+  "dedup_key": "1a997f5885baad02a0a57b608b525c9767c41a496669cbb694d3539e9c677910"
+}

@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327155320-final_review-arbiter-c1-a1-cr5-artifact",
+  "payload_id": "run-20260327155320-final_review-arbiter-c1-a1-cr5-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-27T18:50:28.042381291Z",
+  "content": "# Final Review Arbiter\n**Producer:** agent:claude/claude-opus-4-6\n\n## Summary\n\nAmendment fr-5-4a64f0c3 accepted. Both sides correctly verified the code: algae_growth.rs uses direct WaterState calls while 4 other systems use ConcentrationView, and nitrogen_cycle.rs is also inconsistent. The dissenting reviewer's objection that this doesn't fix all inconsistencies (nitrogen_cycle.rs remains) is valid but does not justify rejecting partial progress. Fixing algae_growth.rs is a low-risk, mechanical improvement that moves the codebase toward uniform read-access patterns.\n\n## Rulings\n\n- `fr-5-4a64f0c3`: Accept\n  Verified: algae_growth.rs (lines 14-16) directly calls state.water.tan_mg_n_per_l(volume_l) etc., while plant_growth.rs, shrimp.rs, events.rs, and snapshot.rs all use state.concentrations(). The dissenting reviewer raises a valid point that nitrogen_cycle.rs also uses the direct pattern, meaning this amendment alone doesn't achieve full consistency. However, that is an argument for a second amendment covering nitrogen_cycle.rs, not for leaving algae_growth.rs inconsistent. Fixing 1 of 2 inconsistent files is strictly better than fixing 0 of 2. The refactor is mechanical, low-risk, reduces coupling to WaterState internals in algae_growth.rs, and moves the codebase closer to uniform ConcentrationView usage for reads. The dissenting reviewer's other point — that volume_l is already computed canonically — is true but beside the point: the benefit is API uniformity and reduced parameter threading, not correctness of the volume computation itself.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 5
+}

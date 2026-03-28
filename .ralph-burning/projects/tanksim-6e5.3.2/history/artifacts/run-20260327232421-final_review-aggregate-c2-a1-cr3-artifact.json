@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260327232421-final_review-aggregate-c2-a1-cr3-artifact",
+  "payload_id": "run-20260327232421-final_review-aggregate-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T01:38:02.819571166Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 2 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 8\n**Final Review Restarts:** 3/20\n\n## Accepted\n\n- `fr-3-694949da`\n- `fr-3-c4d41a63`\n\n## Rejected\n\n- `fr-3-e0885878`\n- `fr-3-769ef011`\n- `fr-3-35499590`\n- `fr-3-61de90b7`\n- `fr-3-eac07306`\n- `fr-3-96fc0cd7`\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-3-694949da`\n\nThe v3→v4 save migration for `reserve_g` should seed the reserve proportionally to the existing shrimp population instead of defaulting to 0.0. When an old save with an established colony (e.g. 30 adults, 20 juveniles) is loaded, `reserve_g = 0.0` causes all hatching (`fund_hatched_clutch_biomass`) and juvenile maturation (`fund_live_shrimp_biomass`) to fail until enough feeding cycles accumulate reserve. The migration function `migrate_v3_to_v4` should compute a reasonable initial reserve — e.g. `reserve_g = shrimp_biomass_g(adults, juveniles) * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G` — so established populations don't experience a transient reproduction/growth block on upgrade.\n\n### `fr-3-c4d41a63`\n\nAdd an alkalinity adjustment when TAN is produced by shrimp excretion and respiration in `route_consumed_food`. When amino acids are catabolized, each mole of NH3/NH4+ released increases alkalinity by approximately 1 meq. The current code adds TAN to `ammonia_total_mg_n_total` but does not adjust `alkalinity_meq_total`. At the excretion+respiration rates in this model (excr_frac=0.10, resp_frac=0.70 of assimilated N), omitting this coupling will cause pH to drift lower than it should over time because the DIC increase from respiration suppresses pH without the counterbalancing alkalinity increase from ammonia release. Add: `state.water.alkalinity_meq_total += (excreted_n_mg + respired_n_mg) / 14.007` (converting mg N to meq NH3).\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 3
+}

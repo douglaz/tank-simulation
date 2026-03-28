@@ -1,0 +1,46 @@
+{
+  "payload_id": "run-20260327232428-review-c2-a1-cr5",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T02:30:32.451791638Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All 197 tests pass across tank_core, tank_data, and tank_scenarios with 0 failures.",
+        "`cargo clippy -p tank_core -p tank_data -p tank_scenarios --all-targets -- -D warnings` produces zero warnings.",
+        "`cargo fmt --all --check` produces no output — formatting is clean.",
+        "Old pH shortcut (`6.3 + log10(alk) - log10(DIC)`) is completely absent from the codebase; grep confirms no matches.",
+        "Solver is a closed-form O(1) quadratic in [H+] (chemistry.rs:270-357) using temperature-corrected pKa1 via Harned & Davis (1943). Deterministic with no iteration.",
+        "TankSnapshot (snapshot.rs:87) now reads `ph` from `carbonate_eq.ph` — the same freshly solved equilibrium used for `co2_aq_mmol_per_l` (line 120). Unit test `snapshot_uses_one_carbonate_solution_for_ph_and_co2` (snapshot.rs:202-223) locks in the self-consistency property.",
+        "`SourceWaterProfile::bicarbonate_mg_per_l` (source_water.rs:25-28) now has a doc comment: 'Display/documentation field only. Runtime carbonate chemistry uses DIC, alkalinity, and temperature as the authoritative inputs.'",
+        "Save migration v3→v4 (save.rs:324-331) is a deliberate no-op relying on serde defaults, with a comment explaining that legacy saves do not gain synthetic reserve. `migrate_v3_to_v4` does `let _ = value; Ok(())`.",
+        "Regression test `legacy_schema_v3_saves_leave_missing_reserve_at_default_zero` (save_load.rs:274-333) constructs a v3 save with 30 adults and 20 juveniles, removes `reserve_g`, migrates, and asserts `migrated.state.animal.reserve_g == 0.0`.",
+        "Shrimp feeding (shrimp.rs:140-164) now computes appetite and consumption on a consistent routing-mass basis: `food_demand_route_g` and `periph_consumed_route_g` are both converted via `algae_detrital_mass_g()`, and `detritus_demand_route_g` is derived from their difference. `daily_food_consumed_g` sums two routing-gram quantities.",
+        "Regression test `shrimp_feeding_caps_total_intake_on_routing_mass_basis` (shrimp.rs:834-877) verifies total intake equals the routing-mass daily cap and `daily_food_consumed_g` matches the sum of routing-gram components.",
+        "The old mixed-unit test `shrimp_feeding_uses_detritus_only_for_unmet_demand` is absent — replaced by the corrected routing-mass test.",
+        "All three solver fallback paths (acid_dominated, high_buffer, outside_quadratic_envelope) reproject species via `carbonate_species_for_ph()` and emit structured `tracing::debug!` diagnostics.",
+        "Source-water validation is unified: both `SourceWaterPreset::validate()` and `SourceWaterProfile::validate()` route through `validate_source_water_carbonate_profile()` (chemistry.rs:387-412) using the same solver.",
+        "Clamp-boundary documentation at chemistry.rs:337-340 explains the DIC conservation vs alkalinity consistency trade-off.",
+        "48-point parameter sweep, 5 extreme edge cases, and directional temperature response tests provide broad numerical stability coverage.",
+        "normalize_loaded_carbonate_state() (save.rs:345-354) unconditionally re-solves from canonical DIC/alkalinity/temperature on load, repairing stale caches; reconcile_stability_tracker() prevents false instability spikes."
+      ],
+      "findings_or_gaps": [
+        "Ka2 is fixed at 10.33 without temperature correction. Documented as acceptable for freshwater pH 5.5-8.5 where CO3-- is minor, but should be revisited if extended to marine or high-pH regimes.",
+        "The `fallback_zero_dic` path does not emit a tracing diagnostic when both DIC and alkalinity are negligible (returning NEUTRAL_FALLBACK directly at chemistry.rs:212-213). Defensible since deionized-water equilibrium is not operationally interesting, but it breaks the blanket fallback diagnostic pattern.",
+        "Legacy saves with custom out-of-range source-water catalog entries still deserialize but water-change actions against those profiles now fail at runtime with InvalidSourceProfile. Correct behavior but could surprise users with old custom profiles.",
+        "The source-water carbonate validator (chemistry.rs:407) still uses strict inequality on both bounds. As identified in final-review amendment fr-4-8b7458ba, this means the fallback_zero_dic path that intentionally produces pH=8.5 would fail validation if a source-water profile triggered it. No shipped preset does, but it remains an internal contract inconsistency between the solver and the validator."
+      ],
+      "follow_up_or_amendments": [],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 5
+}

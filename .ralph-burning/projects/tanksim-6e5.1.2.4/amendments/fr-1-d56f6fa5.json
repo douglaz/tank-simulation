@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-1-d56f6fa5",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 1,
+  "body": "Fix `SimTracer` so tick numbering is monotonic even after `drain_ticks()`. In `crates/tank_core/src/tracing.rs:336-345`, `tick_index` is derived from `self.ticks.len()`, so draining the in-memory buffer causes later ticks to restart at 0. A long-running harness that periodically drains memory will therefore emit duplicate tick ids in its JSONL stream even though the simulation kept advancing. Keep a separate counter for the next tick id instead of tying ids to the retained buffer length.",
+  "created_at": "2026-03-28T03:23:32.498324745Z",
+  "batch_sequence": 4,
+  "source": "workflow_stage",
+  "dedup_key": "83d145f6e4845e05f5df3e857cb387dfcbac9370ad61af02bb6f16cc9184eb83"
+}

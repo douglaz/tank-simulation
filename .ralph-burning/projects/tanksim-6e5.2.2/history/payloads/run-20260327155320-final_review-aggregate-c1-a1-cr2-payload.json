@@ -1,0 +1,100 @@
+{
+  "payload_id": "run-20260327155320-final_review-aggregate-c1-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T17:13:11.916519793Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-2-7ec97029",
+      "fr-2-b9d261ac",
+      "fr-2-7a74aad7"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-2-7ec97029",
+        "normalized_body": "In shrimp.rs, four private helper functions (shrimp_feeding, update_condition, update_molt_stress, emit_molt_stress_warning) still accept a `_volume_l: f64` parameter that is now dead code — each function either calls `state.water_volume_l()` or uses TankState concentration helpers internally. Remove the unused parameter from these private functions to avoid confusion and dead-code drift. The caller `step_daily_shrimp` already computes `volume_l` but it is only used as a zero-check guard; the helpers no longer need it passed in.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-b9d261ac",
+        "normalized_body": "In nitrogen_cycle.rs line 83, the decomposer DO Monod term uses a hardcoded half-saturation constant (`do_total / (do_total + 2.0)`) with a comment '// half-sat ~2 mg total'. This constant should be extracted into ProcessParams (e.g., `decomposer_k_do_mg`) alongside the existing `decomposer_k_doc_mg`, so it is tunable and consistently documented. Currently it is the only hardcoded Monod K constant in the nitrogen cycle; all other guilds (AOB, NOB, comammox) have their K values in ProcessParams.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-7a74aad7",
+        "normalized_body": "Fix the zero-volume startup override path in `crates/tank_scenarios/src/lib.rs:546-600`. When `source_water_profile_id` is `None`, substrate-only overrides rescale the existing totals instead of rebuilding from the scenario’s source water. That breaks as soon as the original materialized state has `old_volume_l <= f64::EPSILON`: `WaterState::rescale_totals_for_volume` in `crates/tank_core/src/types/water.rs:179-184` returns a zero scale in that case, so switching to a shallower substrate after a low-fill materialization leaves a positive `water_volume_l()` but zero nitrate/alkalinity/calcium/etc. Repro: `medium_planted` with `fill_ratio=0.1`, `source_water_profile_id=None`, `substrate_preset=InertSand` produces ~0.36 L of water with all dissolved totals still at 0. Rebuild from the effective source-water profile (or at least special-case `0 -> positive` volume changes) and add a regression test for this path.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-2-7ec97029",
+        "normalized_body": "In shrimp.rs, four private helper functions (shrimp_feeding, update_condition, update_molt_stress, emit_molt_stress_warning) still accept a `_volume_l: f64` parameter that is now dead code — each function either calls `state.water_volume_l()` or uses TankState concentration helpers internally. Remove the unused parameter from these private functions to avoid confusion and dead-code drift. The caller `step_daily_shrimp` already computes `volume_l` but it is only used as a zero-check guard; the helpers no longer need it passed in.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-b9d261ac",
+        "normalized_body": "In nitrogen_cycle.rs line 83, the decomposer DO Monod term uses a hardcoded half-saturation constant (`do_total / (do_total + 2.0)`) with a comment '// half-sat ~2 mg total'. This constant should be extracted into ProcessParams (e.g., `decomposer_k_do_mg`) alongside the existing `decomposer_k_doc_mg`, so it is tunable and consistently documented. Currently it is the only hardcoded Monod K constant in the nitrogen cycle; all other guilds (AOB, NOB, comammox) have their K values in ProcessParams.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-7a74aad7",
+        "normalized_body": "Fix the zero-volume startup override path in `crates/tank_scenarios/src/lib.rs:546-600`. When `source_water_profile_id` is `None`, substrate-only overrides rescale the existing totals instead of rebuilding from the scenario’s source water. That breaks as soon as the original materialized state has `old_volume_l <= f64::EPSILON`: `WaterState::rescale_totals_for_volume` in `crates/tank_core/src/types/water.rs:179-184` returns a zero scale in that case, so switching to a shallower substrate after a low-fill materialization leaves a positive `water_volume_l()` but zero nitrate/alkalinity/calcium/etc. Repro: `medium_planted` with `fill_ratio=0.1`, `source_water_profile_id=None`, `substrate_preset=InertSand` produces ~0.36 L of water with all dissolved totals still at 0. Rebuild from the effective source-water profile (or at least special-case `0 -> positive` volume changes) and add a regression test for this path.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 2,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [],
+    "restart_required": true,
+    "summary": "Final review accepted 3 amendment(s); restart required.",
+    "total_proposed_amendments": 3,
+    "total_reviewers": 2,
+    "unique_amendment_count": 3
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 2
+}
