@@ -767,3 +767,37 @@ fn gh_mineral_factor(gh_d: f64, params: &ShrimpRuntimeParams) -> f64 {
         (1.0 - (gh_d - params.gh_max_d) / 10.0).clamp(0.3, 1.0)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::shrimp_feeding;
+    use crate::{algae_detrital_mass_g, SimSeed, TankState};
+
+    #[test]
+    fn shrimp_feeding_tracks_daily_food_on_routing_mass_basis() {
+        let mut state = TankState::new(SimSeed(9999));
+        state.algae.periphyton_biomass_g = 5.0;
+        state.detritus.fine_detritus_g_total = 0.0;
+        state.animal.adults_count = 10;
+
+        let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
+        let grazing_access_factor =
+            0.5 + (0.5 * state.avg_substrate_index(|layer| layer.grazing_surface_index));
+        let expected_periphyton_biomass_removed = 10.0
+            * state
+                .process_params
+                .shrimp_periphyton_grazing_g_per_shrimp_per_day
+            * grazing_access_factor;
+        let expected_consumed_g =
+            algae_detrital_mass_g(expected_periphyton_biomass_removed, n_to_c_ratio);
+
+        shrimp_feeding(&mut state);
+
+        assert!(
+            (state.animal.daily_food_consumed_g - expected_consumed_g).abs() <= 1e-12,
+            "expected {}, got {}",
+            expected_consumed_g,
+            state.animal.daily_food_consumed_g
+        );
+    }
+}

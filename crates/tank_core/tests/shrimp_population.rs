@@ -109,25 +109,36 @@ fn spawning_creates_berried_females() -> Result<(), SimError> {
 
 #[test]
 fn hatch_produces_juveniles() -> Result<(), SimError> {
-    let mut engine = Engine::from_parts(shrimp_test_state(SimSeed(7100)), vec![]);
+    let mut state = shrimp_test_state(SimSeed(7100));
+    state
+        .process_params
+        .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.shrimp_params.hatch_success_base = 1.0;
+    state.animal.berried_females_count = 1;
+    state.animal.egg_progress_days = 20.0;
+    state.animal.egg_cohorts = vec![EggCohort {
+        count: 1,
+        progress_days: 20.0,
+    }];
+    state.animal.reserve_g =
+        f64::from(25) * JUVENILE_SHRIMP_BIOMASS_G * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
 
-    // Run for 60 days - enough for spawning + egg development (21 days) + hatching
-    for _ in 0..60 {
-        engine.apply_action(PlayerAction::Feed { grams: 0.1 })?;
-        engine.step_hours(24)?;
-    }
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.step_hours(24)?;
 
     let snap = engine.snapshot();
     let final_state = engine.full_state();
     let final_view = final_state.concentrations();
-    // In good conditions over 60 days, at least some juveniles should appear
-    // (10 adults, 21-day egg cycle, good conditions)
     assert!(
-        snap.juveniles_count > 0 || snap.adult_shrimp_count > 10,
-        "After 60 days in good conditions, population should have grown. \
-         Adults: {}, Juveniles: {}, TAN={:.3} mg/L, NH3={:.4} mg/L, NO2={:.3} mg/L, DO={:.3} mg/L, GH={:.3} dGH, condition={:.3}, instability={:.3}, periphyton={:.3} g",
+        snap.juveniles_count >= 25,
+        "A healthy near-hatch clutch with enough reserve should produce juveniles. \
+         Adults: {}, Juveniles: {}, Reserve={:.3}, TAN={:.3} mg/L, NH3={:.4} mg/L, NO2={:.3} mg/L, DO={:.3} mg/L, GH={:.3} dGH, condition={:.3}, instability={:.3}, periphyton={:.3} g",
         snap.adult_shrimp_count,
         snap.juveniles_count,
+        final_state.animal.reserve_g,
         final_view.tan_mg_n_per_l(),
         compute_nh3_mg_l(
             final_view.tan_mg_n_per_l(),
@@ -141,6 +152,7 @@ fn hatch_produces_juveniles() -> Result<(), SimError> {
         final_state.stability_tracker.instability_index,
         final_state.algae.periphyton_biomass_g
     );
+    assert_close(final_state.animal.reserve_g, 0.0, 1e-9);
 
     Ok(())
 }
