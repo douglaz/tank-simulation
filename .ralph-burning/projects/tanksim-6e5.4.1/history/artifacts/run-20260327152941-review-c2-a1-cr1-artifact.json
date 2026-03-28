@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327152941-review-c2-a1-cr1-artifact",
+  "payload_id": "run-20260327152941-review-c2-a1-cr1",
+  "stage_id": "review",
+  "created_at": "2026-03-27T15:49:26.405553392Z",
+  "content": "# Review\n\n## Outcome\n\n**Approved**\n\n## Evidence\n\n- `docs/carbonate_state_contract.md` now specifies the Harned & Davis (1943) `pKa1(T) = 3404.71 / (T + 273.15) + 0.032786 * (T + 273.15) - 14.8435` formula and documents the corrected `-0.0055` linear fallback, removing the prior temperature-coefficient error.\n- Numerical spot-checks confirm the corrected formula is consistent with the stated target values: `pKa1(25 C) = 6.351099`; the old `-0.0238` slope would have produced materially wrong values at 15 C and 35 C (`6.59` and `6.114` versus `6.419542` and `6.308378`).\n- The authoritative backlog export in `.beads/issues.jsonl` now carries the same corrected temperature reference as the design note, so future implementation work will not re-import the bad coefficient from bead context.\n- Repository search `rg -n \"0\\.0238\" .` returns no matches in the current tree, so no stale copies of the incorrect coefficient remain in tracked project content.\n- `br lint` passes (`No template warnings found`), so the bead/backlog state remains structurally valid after the documentation update.\n- The checkpoint commit `89cf0b6` is limited to the intended tracked files (`docs/carbonate_state_contract.md` and `.beads/issues.jsonl`), with no unrelated tracked regressions introduced by this stage.\n\n## Findings and Gaps\n\nNone identified.\n\n## Follow-up and Amendments\n\nNone.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

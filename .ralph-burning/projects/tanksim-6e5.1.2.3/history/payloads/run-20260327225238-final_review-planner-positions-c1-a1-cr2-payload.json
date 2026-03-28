@@ -1,0 +1,34 @@
+{
+  "payload_id": "run-20260327225238-final_review-planner-positions-c1-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T23:32:21.123648848Z",
+  "payload": {
+    "summary": "Evaluated three amendments against the actual codebase. All three identify real defects: (1) missing alk_budget decrement is a consistency bug with latent risk, (2) silent zero-volume migration produces corrupt state, (3) TUI bypasses migration-aware SaveFile loading causing incorrect stability tracker initialization.",
+    "votes": [
+      {
+        "amendment_id": "fr-2-a8d59226",
+        "decision": "accept",
+        "rationale": "Verified in nitrogen_cycle.rs: alk_budget is used at lines 193 and 248 to limit AOB and comammox rates respectively, and is decremented after AOB (line 219), but NOT after comammox (lines 270-275). The variable comammox_alk_cost is computed at line 272 but never subtracted from alk_budget. While alk_budget is not read after line 248 in the current code (NOB does not use it), the comment at line 270 explicitly says 'Debit shared budgets for comammox' and only DO is debited. This is an inconsistency bug — the code does not match its documented intent, and any future guild added after comammox that checks alk_budget would see a stale value. The fix (adding one line) is trivial, safe, and makes the code correct by its own stated contract."
+      },
+      {
+        "amendment_id": "fr-2-8bd2540e",
+        "decision": "accept",
+        "rationale": "Verified in save.rs migrate_v2_to_v3: lines 210-213 use unwrap_or(0.0) for length, width, and fill_height. If any geometry field is missing, gross_volume_l = 0.0, and the scale calculation at lines 230-233 explicitly returns 0.0 when gross_volume_l <= EPSILON. This silently zeros out ALL dissolved totals (ammonia, nitrite, nitrate, phosphate, DO, DIC, DOC, etc.) — effectively wiping the water chemistry to empty. This is a data-corrupting silent failure in a migration path. A v2 save with malformed geometry would appear to load successfully but produce a completely invalid water state. The migration should either error out or log a warning rather than silently producing a zeroed state."
+      },
+      {
+        "amendment_id": "fr-2-e30f07ff",
+        "decision": "accept",
+        "rationale": "Verified in tank_tui/src/lib.rs:237: load_from_disk uses serde_json::from_str::<SaveFile>(&raw) directly, bypassing SaveFile::from_json/from_value which handles schema version validation, migration chain execution, and stability_tracker reseeding. While the subsequent post_load sends the SaveFile to the API (which does use from_value), the damage is already done: (1) serde_json::from_str will deserialize stability_tracker with Default zeros (since the field has #[serde(default)]) instead of computing proper baselines from water chemistry via reseed_stability_tracker, and (2) when this struct is serialized and sent to the API, has_serialized_stability_tracker returns true because the key exists (with zeros), so reseeding is skipped. The result: old saves loaded via TUI get all-zero stability tracking instead of properly computed baselines. Additionally, if a future schema change adds a required field without #[serde(default)], the TUI path will hard-fail while from_json would migrate correctly. The fix should route through SaveFile::from_json."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}
