@@ -18,7 +18,7 @@
 //! Each envelope bound includes a comment explaining *why* that range is expected,
 //! so future developers don't cargo-cult widen tolerances when numbers change.
 
-use tank_core::{PlayerAction, SimSeed};
+use tank_core::{systems::light::is_light_on, PlayerAction, SimSeed};
 use tank_harness::{Envelope, HarnessRun};
 use tank_scenarios::{
     ScenarioGeometryOverrides, StartupHeaterPreset, StartupLightPreset, StartupOverrides,
@@ -795,10 +795,9 @@ fn do_dips_at_night_in_planted_tank() -> Result<(), Box<dyn std::error::Error>> 
         run.step_hours(1)?;
         let post_snap = run.snapshot();
 
-        // Medium planted uses default 8h photoperiod (hours 0-7 are lit)
-        if hour < 8 {
+        if is_light_on(hour, snap.photoperiod_hours) {
             lit_peak = lit_peak.max(post_snap.do_mg_l);
-        } else if hour >= 20 {
+        } else if !is_light_on((hour + 1) % 24, snap.photoperiod_hours) {
             late_dark_trough = late_dark_trough.min(post_snap.do_mg_l);
         }
     }

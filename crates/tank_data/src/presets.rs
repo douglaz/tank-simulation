@@ -646,10 +646,16 @@ pub struct ProcessParamsPreset {
     pub periphyton_max_growth_rate_per_day: f64,
     #[serde(default = "default_algae_respiration_fraction")]
     pub algae_respiration_fraction_per_day: f64,
-    #[serde(default = "default_algae_half_sat_n")]
-    pub algae_half_saturation_n_mg_total: f64,
-    #[serde(default = "default_algae_half_sat_p")]
-    pub algae_half_saturation_p_mg_total: f64,
+    #[serde(
+        default = "default_algae_half_sat_n",
+        alias = "algae_half_saturation_n_mg_total"
+    )]
+    pub algae_half_saturation_n_mg_n_per_l: f64,
+    #[serde(
+        default = "default_algae_half_sat_p",
+        alias = "algae_half_saturation_p_mg_total"
+    )]
+    pub algae_half_saturation_p_mg_p_per_l: f64,
     #[serde(default = "default_algae_light_half_sat")]
     pub algae_light_half_saturation: f64,
     #[serde(default = "default_algae_temp_optimum")]
@@ -998,13 +1004,15 @@ fn legacy_process_param_normalization(name: &str, unit: Option<&str>) -> Provena
         | "comammox_k_do_mg"
         | "algae_half_saturation_n_mg_total"
         | "algae_half_saturation_p_mg_total" => ProvenanceNormalization::LegacyMgPerL,
-        "plant_half_saturation_n_mg_total"
-        | "plant_half_saturation_p_mg_total"
-        | "plant_half_saturation_c_mg_total" => {
-            if unit_requests_area_normalization(unit) {
-                ProvenanceNormalization::LegacyMgPerM2
-            } else {
-                ProvenanceNormalization::LegacyMgPerL
+        // Plant half-saturation fields are now natively concentration-based;
+        // no legacy normalization needed.
+        "plant_half_saturation_n_mg_n_per_l"
+        | "plant_half_saturation_p_mg_p_per_l"
+        | "plant_half_saturation_c_mg_c_per_l"
+        | "plant_half_saturation_n_substrate_mg_n_per_m2"
+        | "plant_half_saturation_p_substrate_mg_p_per_m2" => {
+            let _ = unit;
+            return ProvenanceNormalization::None;
             }
         }
         _ => ProvenanceNormalization::None,
@@ -1094,9 +1102,21 @@ impl ParamMetaPreset for ProcessParamsPreset {
             "plant_senescence_fraction_per_day" => Some(self.plant_senescence_fraction_per_day),
             "plant_health_recovery_per_day" => Some(self.plant_health_recovery_per_day),
             "plant_health_decline_per_day" => Some(self.plant_health_decline_per_day),
-            "plant_half_saturation_n_mg_total" => Some(self.plant_half_saturation_n_mg_total),
-            "plant_half_saturation_p_mg_total" => Some(self.plant_half_saturation_p_mg_total),
-            "plant_half_saturation_c_mg_total" => Some(self.plant_half_saturation_c_mg_total),
+            "plant_half_saturation_n_mg_n_per_l" => {
+                Some(self.plant_half_saturation_n_mg_n_per_l)
+            }
+            "plant_half_saturation_p_mg_p_per_l" => {
+                Some(self.plant_half_saturation_p_mg_p_per_l)
+            }
+            "plant_half_saturation_c_mg_c_per_l" => {
+                Some(self.plant_half_saturation_c_mg_c_per_l)
+            }
+            "plant_half_saturation_n_substrate_mg_n_per_m2" => {
+                Some(self.plant_half_saturation_n_substrate_mg_n_per_m2)
+            }
+            "plant_half_saturation_p_substrate_mg_p_per_m2" => {
+                Some(self.plant_half_saturation_p_substrate_mg_p_per_m2)
+            }
             "plant_light_half_saturation" => Some(self.plant_light_half_saturation),
             "plant_temp_optimum_c" => Some(self.plant_temp_optimum_c),
             "plant_temp_sigma_c" => Some(self.plant_temp_sigma_c),
@@ -1265,16 +1285,24 @@ impl ProcessParamsPreset {
                 self.plant_health_decline_per_day,
             ),
             (
-                "plant_half_saturation_n_mg_total",
-                self.plant_half_saturation_n_mg_total,
+                "plant_half_saturation_n_mg_n_per_l",
+                self.plant_half_saturation_n_mg_n_per_l,
             ),
             (
-                "plant_half_saturation_p_mg_total",
-                self.plant_half_saturation_p_mg_total,
+                "plant_half_saturation_p_mg_p_per_l",
+                self.plant_half_saturation_p_mg_p_per_l,
             ),
             (
-                "plant_half_saturation_c_mg_total",
-                self.plant_half_saturation_c_mg_total,
+                "plant_half_saturation_c_mg_c_per_l",
+                self.plant_half_saturation_c_mg_c_per_l,
+            ),
+            (
+                "plant_half_saturation_n_substrate_mg_n_per_m2",
+                self.plant_half_saturation_n_substrate_mg_n_per_m2,
+            ),
+            (
+                "plant_half_saturation_p_substrate_mg_p_per_m2",
+                self.plant_half_saturation_p_substrate_mg_p_per_m2,
             ),
             (
                 "plant_light_half_saturation",

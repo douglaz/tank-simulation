@@ -52,18 +52,20 @@ o2_per_mg_n_nitrified = 4.57
 alkalinity_meq_per_mg_n_nitrified = 0.1428
 
 # Daily plant growth
-# Legacy `_mg_total` field names below are normalized against the historical
-# 20 L reference tank so the runtime uses water-column concentration limits;
-# the rename is deferred for save/preset compatibility.
+# Half-saturation constants are concentration-based:
+#   Water-column Ks: mg nutrient / L (volumetric)
+#   Substrate Ks:    mg nutrient / m² (areal density)
 plant_max_growth_rate_fast_stem_per_day = 0.08
 plant_max_growth_rate_root_rosette_per_day = 0.06
 plant_respiration_fraction_per_day = 0.01
 plant_senescence_fraction_per_day = 0.005
 plant_health_recovery_per_day = 0.03
 plant_health_decline_per_day = 0.08
-plant_half_saturation_n_mg_total = 8.0
-plant_half_saturation_p_mg_total = 1.2
-plant_half_saturation_c_mg_total = 20.0
+plant_half_saturation_n_mg_n_per_l = 0.4
+plant_half_saturation_p_mg_p_per_l = 0.06
+plant_half_saturation_c_mg_c_per_l = 1.0
+plant_half_saturation_n_substrate_mg_n_per_m2 = 80.0
+plant_half_saturation_p_substrate_mg_p_per_m2 = 12.0
 plant_light_half_saturation = 0.45
 plant_temp_optimum_c = 25.0
 plant_temp_sigma_c = 7.0

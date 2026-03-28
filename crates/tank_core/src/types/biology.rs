@@ -594,6 +594,11 @@ impl AnimalState {
             let excess = self.berried_females_count - self.adult.count;
             self.berried_females_count = self.adult.count;
             trim_egg_cohorts(&mut self.egg_cohorts, excess);
+            // If all egg cohorts were removed, clear the hatch carry so a
+            // future clutch does not inherit stale fractional progress.
+            if self.egg_cohorts.is_empty() {
+                self.hatch_success_carry = 0.0;
+            }
         }
     }
 

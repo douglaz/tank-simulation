@@ -13,7 +13,7 @@ use crate::{
 ///
 /// When you bump from N to N+1, you **must** also append a migration function
 /// to [`MIGRATIONS`]. See the migration contract below.
-pub const SCHEMA_VERSION: u32 = 6;
+pub const SCHEMA_VERSION: u32 = 7;
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Oldest schema version that the migration chain can handle.
@@ -102,6 +102,10 @@ const MIGRATIONS: &[MigrationFn] = &[
     // All new fields use #[serde(default)]; habitat registry is populated in the
     // post-migration fixup.
     migrate_v5_to_v6,
+    // Index 4: schema 6 → 7
+    // Persist substrate colonizable_area_factor explicitly on each layer so
+    // habitat refreshes preserve preset/custom substrate area scaling.
+    migrate_v6_to_v7,
 ];
 
 // Compile-time check: MIGRATIONS length must equal SCHEMA_VERSION - MIN_SUPPORTED_SCHEMA.
@@ -607,6 +611,55 @@ fn migrate_v4_to_v5(value: &mut Value) -> Result<(), SimError> {
 /// filter.media_area_cm2. All new fields carry `#[serde(default)]` so no
 /// JSON transform is required.
 fn migrate_v5_to_v6(_value: &mut Value) -> Result<(), SimError> {
+    Ok(())
+}
+
+/// Schema 6 → 7: persist substrate.colonizable_area_factor explicitly.
+fn migrate_v6_to_v7(value: &mut Value) -> Result<(), SimError> {
+    let substrate_layers = value
+        .pointer_mut("/state/substrate_layers")
+        .and_then(Value::as_array_mut)
+        .ok_or_else(|| schema_migration_error(6, 7, "expected array at /state/substrate_layers"))?;
+
+    for (index, layer) in substrate_layers.iter_mut().enumerate() {
+        let layer_obj = layer.as_object_mut().ok_or_else(|| {
+            schema_migration_error(
+                6,
+                7,
+                format!("expected object at /state/substrate_layers/{index}"),
+            )
+        })?;
+        let kind = layer_obj
+            .get("kind")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                schema_migration_error(
+                    6,
+                    7,
+                    format!("expected string at /state/substrate_layers/{index}/kind"),
+                )
+            })?;
+        let factor = match kind {
+            "InertSand" => 0.5,
+            "InertGravel" => 0.6,
+            "ActivePlanted" => 0.8,
+            "CoarsePorous" => 0.9,
+            other => {
+                return Err(schema_migration_error(
+                    6,
+                    7,
+                    format!(
+                        "unsupported substrate kind `{other}` at /state/substrate_layers/{index}/kind"
+                    ),
+                ));
+            }
+        };
+        layer_obj.insert(
+            "colonizable_area_factor".to_string(),
+            Value::from(factor),
+        );
+    }
+
     Ok(())
 }
 

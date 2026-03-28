@@ -1,6 +1,6 @@
 use tank_core::{
-    systems::nitrogen_cycle::step_nitrogen_cycle, Engine, EventKind, PlayerAction, SimSeed,
-    SimulationEngine, TankState,
+    legacy_total_param_to_mg_per_l, systems::nitrogen_cycle::step_nitrogen_cycle, Engine,
+    EventKind, PlayerAction, SimSeed, SimulationEngine, TankState,
 };
 
 /// Feed the engine a small pellet each day for the given number of days.
