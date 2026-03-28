@@ -229,6 +229,110 @@ fn legacy_schema_v2_saves_without_tracker_reseed_stability_baselines(
 }
 
 #[test]
+fn legacy_schema_v3_saves_fill_defaulted_fields_via_noop_migration() -> Result<(), SimError> {
+    let legacy_state = TankState::new(SimSeed(103));
+    let mut state_json = serde_json::to_value(&legacy_state).expect("serialize legacy state");
+    let state_obj = state_json.as_object_mut().expect("state json object");
+
+    state_obj
+        .get_mut("animal")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("animal object")
+        .remove("reserve_g");
+
+    let process_obj = state_obj
+        .get_mut("process_params")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("process params object");
+    for field in [
+        "shrimp_assimilation_efficiency",
+        "shrimp_respiration_fraction_of_assimilated",
+        "shrimp_excretion_fraction_of_assimilated",
+        "shrimp_growth_fraction_of_assimilated",
+        "shrimp_o2_per_mg_c_respired",
+    ] {
+        process_obj.remove(field);
+    }
+
+    let json = serde_json::json!({
+        "schema_version": 3,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+    let defaults = ProcessParams::default();
+
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert_eq!(migrated.state.animal.reserve_g, 0.0);
+    assert_eq!(
+        migrated.state.process_params.shrimp_assimilation_efficiency,
+        defaults.shrimp_assimilation_efficiency
+    );
+    assert_eq!(
+        migrated
+            .state
+            .process_params
+            .shrimp_respiration_fraction_of_assimilated,
+        defaults.shrimp_respiration_fraction_of_assimilated
+    );
+    assert_eq!(
+        migrated
+            .state
+            .process_params
+            .shrimp_excretion_fraction_of_assimilated,
+        defaults.shrimp_excretion_fraction_of_assimilated
+    );
+    assert_eq!(
+        migrated
+            .state
+            .process_params
+            .shrimp_growth_fraction_of_assimilated,
+        defaults.shrimp_growth_fraction_of_assimilated
+    );
+    assert_eq!(
+        migrated.state.process_params.shrimp_o2_per_mg_c_respired,
+        defaults.shrimp_o2_per_mg_c_respired
+    );
+
+    let _engine = migrated.into_engine()?;
+    Ok(())
+}
+
+#[test]
+fn malformed_legacy_schema_v2_save_reports_migration_failure() {
+    let mut state_json =
+        serde_json::to_value(TankState::new(SimSeed(104))).expect("serialize legacy state");
+    state_json
+        .as_object_mut()
+        .expect("state json object")
+        .remove("water");
+
+    let json = serde_json::json!({
+        "schema_version": 2,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let err = SaveFile::from_json(&json).unwrap_err();
+    match err {
+        SimError::SchemaMigration { from, to, message } => {
+            assert_eq!(from, 2);
+            assert_eq!(to, 3);
+            assert!(
+                message.contains("/state/water"),
+                "error should identify missing path: {message}"
+            );
+        }
+        other => panic!("expected SchemaMigration, got: {other:?}"),
+    }
+}
+
+#[test]
 fn future_schema_version_produces_clear_error() {
     let state = TankState::new(SimSeed(1));
     let json = serde_json::json!({

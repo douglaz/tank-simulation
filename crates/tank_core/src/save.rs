@@ -220,10 +220,9 @@ fn migrate_v2_to_v3(value: &mut Value) -> Result<(), SimError> {
     let gross_volume_l = length * width * fill_height / 1000.0;
 
     let substrate_layers = required_array_at(value, 2, 3, "/state/substrate_layers")?;
-    let substrate_depth = substrate_layers
-        .iter()
-        .enumerate()
-        .try_fold(0.0, |sum, (index, layer)| {
+    let substrate_depth = substrate_layers.iter().enumerate().try_fold(
+        0.0,
+        |sum, (index, layer)| {
             let depth = layer
                 .get("depth_cm")
                 .and_then(Value::as_f64)
@@ -231,11 +230,14 @@ fn migrate_v2_to_v3(value: &mut Value) -> Result<(), SimError> {
                     schema_migration_error(
                         2,
                         3,
-                        format!("expected finite number at /state/substrate_layers/{index}/depth_cm"),
+                        format!(
+                            "expected finite number at /state/substrate_layers/{index}/depth_cm"
+                        ),
                     )
                 })?;
             Ok::<_, SimError>(sum + depth.max(0.0))
-        })?;
+        },
+    )?;
 
     let capped_depth = substrate_depth.clamp(0.0, fill_height.max(0.0));
     let displacement_l = length * width * capped_depth / 1000.0;
@@ -328,5 +330,59 @@ fn reconcile_stability_tracker(
         // Avoid a fake load-time chemistry swing when we repaired stale
         // cached pH/bicarbonate fields from the canonical carbonate inputs.
         state.stability_tracker.prev_ph = state.water.ph;
+    }
+}
+
+fn set_schema_version(value: &mut Value, version: u32) -> Result<(), SimError> {
+    let obj = value.as_object_mut().ok_or_else(|| {
+        schema_migration_error(version, version, "top-level save payload must be an object")
+    })?;
+    obj.insert("schema_version".to_string(), Value::Number(version.into()));
+    Ok(())
+}
+
+fn required_f64_at(
+    value: &Value,
+    from: u32,
+    to: u32,
+    pointer: &'static str,
+) -> Result<f64, SimError> {
+    value
+        .pointer(pointer)
+        .and_then(Value::as_f64)
+        .ok_or_else(|| {
+            schema_migration_error(from, to, format!("expected finite number at {pointer}"))
+        })
+}
+
+fn required_array_at<'a>(
+    value: &'a Value,
+    from: u32,
+    to: u32,
+    pointer: &'static str,
+) -> Result<&'a Vec<Value>, SimError> {
+    value
+        .pointer(pointer)
+        .and_then(Value::as_array)
+        .ok_or_else(|| schema_migration_error(from, to, format!("expected array at {pointer}")))
+}
+
+fn required_object_mut_at<'a>(
+    value: &'a mut Value,
+    from: u32,
+    to: u32,
+    pointer: &'static str,
+) -> Result<&'a mut serde_json::Map<String, Value>, SimError> {
+    value
+        .pointer_mut(pointer)
+        .and_then(Value::as_object_mut)
+        .ok_or_else(|| schema_migration_error(from, to, format!("expected object at {pointer}")))
+}
+
+fn schema_migration_error(from: u32, to: u32, message: impl Into<String>) -> SimError {
+    SimError::SchemaMigration {
+        from,
+        to,
+        message: message.into(),
     }
 }
