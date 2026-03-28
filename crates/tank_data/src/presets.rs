@@ -8,7 +8,6 @@ use tank_core::systems::chemistry::{
 use tank_core::types::{
     check_all_ranges, format_param, legacy_total_param_to_mg_per_l,
     legacy_total_param_to_mg_per_m2, ParamMeta, RangeWarning, ShrimpRuntimeParams,
-    LEGACY_KINETIC_REFERENCE_VOLUME_L,
 };
 
 const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
