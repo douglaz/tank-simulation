@@ -281,6 +281,17 @@ coherent with the budget tracker's recovery functions.
    (e.g., filter clogging pressure) but is not a mass pool in the
    conservation budget.
 
+7. **Decomposer mineralization does not debit O₂**: The decomposer
+   DOC→DIC remineralization step converts dissolved organic carbon to
+   dissolved inorganic carbon but does not consume dissolved oxygen
+   stoichiometrically.  Dissolved oxygen acts only as a Monod modulation
+   factor (`f_do_decomp`) that slows mineralization under low-DO
+   conditions.  The `background_bod_mg_o2_per_g_biomass_per_hour`
+   parameter in the dissolved oxygen system provides an aggregate
+   respiration demand that implicitly covers decomposer activity.  A
+   future phase may add explicit stoichiometric O₂ coupling
+   (2.67 mg O₂ per mg C remineralized) to the decomposer section.
+
 ## Budget Coverage
 
 The budget tracker (budget.rs) enumerates 19 nitrogen components and

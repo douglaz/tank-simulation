@@ -337,6 +337,10 @@ fn consume_algae_nutrients(
     (ammonia_removed, nitrate_removed, phosphate_removed)
 }
 
+/// C7 death/senescence interface for algae: respiration, microfauna
+/// grazing, and excess shedding all enter fine_detritus_g_total,
+/// joining feed-derived waste in the same downstream dissolution ->
+/// mineralization path.  See docs/MASS_FLOW.md, section 9.
 fn route_algae_loss_to_fine_detritus(state: &mut TankState, biomass_g: f64, n_to_c_ratio: f64) {
     state.detritus.fine_detritus_g_total += algae_detrital_mass_g(biomass_g, n_to_c_ratio);
 }

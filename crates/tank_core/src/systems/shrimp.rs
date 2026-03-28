@@ -817,6 +817,14 @@ fn mortality(state: &mut TankState) {
     state.animal.clamp_berried_to_adults();
 }
 
+/// Routes dead shrimp body biomass and reserve into fine_detritus_g_total.
+///
+/// C7 death/senescence interface for shrimp. Dead body mass and the
+/// proportional reserve share enter the same fine_detritus_g_total pool
+/// as feed-derived waste, plant senescence, and algae loss. From there,
+/// the hourly nitrogen cycle (dissolution -> mineralization) processes
+/// it identically to any other fine detritus.
+/// See docs/MASS_FLOW.md, section 9.
 fn route_dead_shrimp_to_detritus(
     state: &mut TankState,
     adult_deaths: u32,

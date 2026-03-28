@@ -226,8 +226,26 @@ impl Engine {
         // This runs between light-state resolution and chemistry/DO/event phases.
         // Nitrification O2 consumption and alkalinity depletion are handled
         // internally by the nitrogen cycle system.
-        self.maybe_record_stage(&mut ctx, "system:nitrogen_cycle", |engine, _stage_trace| {
-            let _ = systems::nitrogen_cycle::step_nitrogen_cycle(&mut engine.state);
+        self.maybe_record_stage(&mut ctx, "system:nitrogen_cycle", |engine, stage_trace| {
+            let output = systems::nitrogen_cycle::step_nitrogen_cycle(&mut engine.state);
+            if stage_trace.is_enabled() {
+                stage_trace.note(format!(
+                    "nitrogen_cycle.total_n_nitrified_mg={:.6}",
+                    output.total_mg_n_nitrified
+                ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.alk_consumed_meq={:.6}",
+                    output.total_alk_consumed_meq
+                ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.aob_n_oxidized_mg={:.6}",
+                    output.aob_n_oxidized_mg
+                ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.comammox_n_oxidized_mg={:.6}",
+                    output.comammox_n_oxidized_mg
+                ));
+            }
         });
 
         // Step 9: update DIC, alkalinity, and pH.

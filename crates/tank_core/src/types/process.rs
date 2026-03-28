@@ -3,6 +3,25 @@ use serde::{Deserialize, Serialize};
 pub const LEGACY_KINETIC_REFERENCE_VOLUME_L: f64 = 20.0;
 pub const LEGACY_KINETIC_REFERENCE_FOOTPRINT_M2: f64 = 0.1;
 
+/// Stoichiometric alkalinity consumption for complete nitrification (NH₄⁺ → NO₃⁻).
+///
+/// 2 meq per 14.007 mg N ≈ 0.1428 meq/mg N. The full charge belongs to the
+/// TAN-oxidation step (AOB + comammox); NOB (NO₂⁻ → NO₃⁻) does not consume
+/// additional alkalinity.
+///
+/// Source: Stumm & Morgan, *Aquatic Chemistry*, 3rd ed.
+pub const NITRIFICATION_ALK_MEQ_PER_MG_N: f64 = 2.0 / 14.007;
+
+/// Stoichiometric alkalinity production during denitrification (NO₃⁻ → N₂).
+///
+/// 1 meq per 14.007 mg N ≈ 0.0714 meq/mg N. Approximately half the
+/// nitrification consumption is returned when nitrate is fully reduced.
+///
+/// Reserved for E4b (denitrification implementation). When wiring, add
+/// `alk_produced = n_denitrified_mg * DENITRIFICATION_ALK_MEQ_PER_MG_N`
+/// symmetrically to the nitrification deduction path.
+pub const DENITRIFICATION_ALK_MEQ_PER_MG_N: f64 = 1.0 / 14.007;
+
 pub fn legacy_total_param_to_mg_per_l(value: f64) -> f64 {
     if value.is_finite() {
         (value / LEGACY_KINETIC_REFERENCE_VOLUME_L).max(0.0)
@@ -322,7 +341,7 @@ impl Default for ProcessParams {
             nitrifier_base_density_g_per_cm2: default_nitrifier_base_density_g_per_cm2(),
 
             o2_per_mg_n_nitrified: 4.57,
-            alkalinity_meq_per_mg_n_nitrified: 0.1428,
+            alkalinity_meq_per_mg_n_nitrified: NITRIFICATION_ALK_MEQ_PER_MG_N,
 
             plant_max_growth_rate_fast_stem_per_day: 0.08,
             plant_max_growth_rate_root_rosette_per_day: 0.06,

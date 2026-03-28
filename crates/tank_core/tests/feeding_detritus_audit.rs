@@ -505,3 +505,171 @@ fn plant_senescence_enters_detritus_and_conserves() -> Result<(), SimError> {
 
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Test 4: Quantitative DOC pathway rate verification
+// ---------------------------------------------------------------------------
+
+/// Verifies the DOC pathway quantitatively:
+///   1. With no decomposers: DOC produced ≈ dissolution of fine detritus
+///      (rate × pool × time accumulates into the DOC pool).
+///   2. With decomposers but no dissolution source: DOC consumed ≈
+///      decomposer activity (pool decreases toward zero).
+///   3. With both: DOC pool change = DOC produced − DOC consumed
+///      (verified via N/C conservation per tick).
+#[test]
+fn doc_pathway_quantitative_rates() -> Result<(), SimError> {
+    // ── Phase A: dissolution only (no decomposer consumption) ──
+    let mut state_a = doc_pathway_state();
+    state_a.detritus.fine_detritus_g_total = 2.0;
+    state_a.detritus.particulate_organics_g_total = 0.0;
+    state_a.microbe.decomposer_biomass_g = 0.0; // no consumption
+    state_a.water.dissolved_organic_carbon_mg_c_total = 0.0;
+    state_a.water.dissolved_organic_nitrogen_mg_n_total = 0.0;
+
+    let diss_rate = state_a
+        .process_params
+        .fine_detritus_dissolution_rate_per_hour;
+    let n_to_c = state_a.process_params.feed_n_to_c_ratio;
+    let initial_fine_detritus_a = state_a.detritus.fine_detritus_g_total;
+
+    let mut engine_a = Engine::from_parts(state_a, vec![]);
+    let hours_a = 12u32;
+    let result_a = step_and_inspect(&mut engine_a, hours_a)?;
+    let after_a = engine_a.full_state();
+
+    // After N hours of dissolution at rate r, fine_detritus decays
+    // geometrically: remaining = initial × (1 − r)^N.
+    // Total dissolved = initial − remaining.
+    let expected_remaining_a = initial_fine_detritus_a * (1.0 - diss_rate).powi(hours_a as i32);
+    let expected_dissolved_g = initial_fine_detritus_a - expected_remaining_a;
+    let expected_doc_mg = expected_dissolved_g * 1000.0 / (1.0 + n_to_c);
+
+    // Verify fine detritus matches geometric decay
+    assert_close(
+        after_a.detritus.fine_detritus_g_total,
+        expected_remaining_a,
+        1e-6,
+    );
+    // Verify DOC produced matches expected from dissolution
+    assert_close(
+        after_a.water.dissolved_organic_carbon_mg_c_total,
+        expected_doc_mg,
+        1e-6,
+    );
+    assert_n_conserved(&result_a.budget, 1e-6);
+    assert_c_conserved(&result_a.budget, 1e-6);
+
+    // ── Phase B: decomposer consumption only (no dissolution source) ──
+    let mut state_b = doc_pathway_state();
+    state_b.detritus.fine_detritus_g_total = 0.0; // no dissolution source
+    state_b.detritus.particulate_organics_g_total = 0.0;
+    state_b.water.dissolved_organic_carbon_mg_c_total = 50.0; // pre-loaded DOC
+    state_b.water.dissolved_organic_nitrogen_mg_n_total = 50.0 * n_to_c;
+    state_b.microbe.decomposer_biomass_g = 0.2;
+
+    let initial_doc_b = state_b.water.dissolved_organic_carbon_mg_c_total;
+
+    let mut engine_b = Engine::from_parts(state_b, vec![]);
+    let hours_b = 24u32;
+    let result_b = step_and_inspect(&mut engine_b, hours_b)?;
+    let after_b = engine_b.full_state();
+
+    // Decomposer should have consumed DOC (pool should decrease)
+    assert!(
+        after_b.water.dissolved_organic_carbon_mg_c_total < initial_doc_b,
+        "decomposers should consume DOC: initial={initial_doc_b}, after={}",
+        after_b.water.dissolved_organic_carbon_mg_c_total
+    );
+    // TAN should increase from DON remineralization
+    let initial_tan_b = 0.5; // from doc_pathway_state
+    assert!(
+        after_b.water.ammonia_total_mg_n_total > initial_tan_b,
+        "TAN should increase from DON remineralization"
+    );
+    // DIC should increase from DOC remineralization
+    let vol_b = after_b.water_volume_l();
+    let initial_dic_b = 5.0 * vol_b; // from doc_pathway_state
+    assert!(
+        after_b.water.dissolved_inorganic_carbon_mg_c_total > initial_dic_b,
+        "DIC should increase from DOC remineralization"
+    );
+    // DOC consumed ≈ DIC produced + decomposer growth C
+    // (verified indirectly via conservation)
+    assert_n_conserved(&result_b.budget, 1e-6);
+    assert_c_conserved(&result_b.budget, 1e-6);
+
+    // ── Phase C: both dissolution and consumption ──
+    // With both active, DOC pool change = produced − consumed.
+    // We verify this via per-tick N and C conservation: every mg of DOC
+    // that appears from dissolution or disappears into decomposer
+    // consumption is accounted for exactly.
+    let state_c = doc_pathway_state(); // has both fine_detritus and decomposers
+    let mut engine_c = Engine::from_parts(state_c, vec![]);
+    let result_c = step_and_inspect(&mut engine_c, 48)?;
+
+    assert_n_conserved(&result_c.budget, 1e-6);
+    assert_c_conserved(&result_c.budget, 1e-6);
+    assert_per_tick_balanced(&result_c.budget, Element::Nitrogen, 1e-6);
+    assert_per_tick_balanced(&result_c.budget, Element::Carbon, 1e-6);
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Test 5: Algae loss enters same downstream path and conserves
+// ---------------------------------------------------------------------------
+
+#[test]
+fn algae_loss_enters_detritus_and_conserves() -> Result<(), SimError> {
+    let mut state = audit_tank_state();
+    // Large algae for visible loss
+    state.algae.suspended_biomass_g = 3.0;
+    state.algae.periphyton_biomass_g = 4.0;
+    // No shrimp to avoid interaction noise
+    state.animal.adult.count = 0;
+
+    let initial_fine_detritus = state.detritus.fine_detritus_g_total;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    let result = step_and_inspect(&mut engine, 120)?;
+    let after = engine.full_state();
+
+    // Fine detritus should increase from algae respiration + grazing loss
+    assert!(
+        after.detritus.fine_detritus_g_total > initial_fine_detritus
+            || after.water.dissolved_organic_carbon_mg_c_total > 1.0,
+        "algae loss should produce detritus or DOC: fine_detritus={}, DOC={}",
+        after.detritus.fine_detritus_g_total,
+        after.water.dissolved_organic_carbon_mg_c_total,
+    );
+
+    assert_n_conserved(&result.budget, 1e-6);
+    assert_c_conserved(&result.budget, 1e-6);
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Test 6: Microfauna routing conserves N and C
+// ---------------------------------------------------------------------------
+
+#[test]
+fn microfauna_routing_conserves_with_feed() -> Result<(), SimError> {
+    let mut state = audit_tank_state();
+    state.microfauna.population_index = 0.6;
+    state.microfauna.grazing_pressure_index = 0.5;
+    // No shrimp to isolate microfauna effect
+    state.animal.adult.count = 0;
+    // Pre-load detritus
+    state.detritus.fine_detritus_g_total += 1.0;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    let result = step_and_inspect(&mut engine, 120)?;
+
+    assert_n_conserved(&result.budget, 1e-6);
+    assert_c_conserved(&result.budget, 1e-6);
+    assert_per_tick_balanced(&result.budget, Element::Nitrogen, 1e-6);
+
+    Ok(())
+}

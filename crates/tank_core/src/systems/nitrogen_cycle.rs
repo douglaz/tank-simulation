@@ -12,6 +12,15 @@ const SMALL_NEGATIVE_ROUNDING_TOLERANCE_MG: f64 = 1e-9;
 pub struct NitrogenCycleOutput {
     /// Total mg N oxidized to nitrate this tick (AOB + NOB + comammox pathway).
     pub total_mg_n_nitrified: f64,
+    /// Total alkalinity consumed this tick by nitrification (meq).
+    ///
+    /// Only AOB and comammox consume alkalinity (TAN oxidation step).
+    /// NOB (NO₂⁻ → NO₃⁻) does not consume additional alkalinity.
+    pub total_alk_consumed_meq: f64,
+    /// mg N oxidized by AOB (TAN → NO₂⁻) this tick.
+    pub aob_n_oxidized_mg: f64,
+    /// mg N oxidized by comammox (TAN → NO₃⁻) this tick.
+    pub comammox_n_oxidized_mg: f64,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -52,6 +61,25 @@ fn clamp_post_growth_residual_mg(value_mg: f64, pool: &'static str) -> f64 {
 /// Order: feed leaching -> detritus breakdown/mineralization -> nitrification + guild growth/decay.
 ///
 /// Returns coupling values for downstream DO and alkalinity systems.
+///
+/// ## Mass-flow context (see docs/MASS_FLOW.md)
+///
+/// This function owns the hourly cascade from coarse feed to dissolved
+/// inorganic pools:
+///
+/// 1. Feed leaching: particulate_organics -> fine_detritus
+/// 2. Dissolution: fine_detritus -> DOC + DON + P
+/// 3. Decomposer mineralization: DOC/DON -> TAN + DIC (with growth)
+/// 4. Nitrification: TAN -> NO2 -> NO3 (AOB/NOB/comammox)
+///
+/// Death/senescence inputs from C7 (shrimp mortality, plant senescence,
+/// algae loss) enter fine_detritus_g_total through their respective
+/// daily systems.  Once in fine detritus, they follow the same
+/// dissolution and mineralization path as feed-derived material, with
+/// no separate treatment or double-counting.
+///
+/// Microbe decay (decomposers + nitrifiers) bypasses fine detritus and
+/// routes directly to DOC/DON via route_live_biomass_to_dissolved_organics.
 pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let volume_l = state.water_volume_l();
     if volume_l <= f64::EPSILON {
@@ -87,7 +115,12 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     // Track flow through dissolved_feed_residue (bookkeeping, decremented by mineralization)
     state.detritus.dissolved_feed_residue_g_total += dissolved;
 
-    // ---- 3. Decomposer mineralization: DOC/DON -> TAN ----
+    // ---- 3. Decomposer mineralization: DOC/DON -> TAN + DIC ----
+    //
+    // Simplification: decomposer remineralization does not debit dissolved
+    // oxygen stoichiometrically.  DO modulates the rate via a Monod factor
+    // (f_do_decomp) but is not consumed.  Background BOD in the DO system
+    // provides an aggregate respiration demand.  See docs/MASS_FLOW.md §7.
     let decomposer_biomass = state.microbe.decomposer_biomass_g;
     let doc_total = state.water.dissolved_organic_carbon_mg_c_total;
     let don_total = state.water.dissolved_organic_nitrogen_mg_n_total;
@@ -378,6 +411,9 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
 
     NitrogenCycleOutput {
         total_mg_n_nitrified,
+        total_alk_consumed_meq: total_alk_consumed,
+        aob_n_oxidized_mg: aob_step.oxidized_n_mg,
+        comammox_n_oxidized_mg: comammox_step.oxidized_n_mg,
     }
 }
 

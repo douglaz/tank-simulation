@@ -58,7 +58,9 @@ fn state_at_volume_with_concentrations(
     state.process_params.base_extinction_coeff_per_cm = 0.0;
     state.process_params.algae_extinction_coeff_per_cm_per_g_l = 0.0;
     state.process_params.doc_extinction_coeff_per_cm_per_mg_c_l = 0.0;
-    state.process_params.detritus_extinction_coeff_per_cm_per_g_l = 0.0;
+    state
+        .process_params
+        .detritus_extinction_coeff_per_cm_per_g_l = 0.0;
 
     state
 }

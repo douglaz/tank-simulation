@@ -395,6 +395,10 @@ fn remove_substrate_pool(state: &mut TankState, target_mg: f64, is_nitrogen: boo
     removed_total
 }
 
+/// C7 death/senescence interface for plants: respiration and senescence
+/// loss enters fine_detritus_g_total, joining feed-derived waste in the
+/// same downstream dissolution -> mineralization path.
+/// See docs/MASS_FLOW.md, section 9.
 fn route_plant_loss_to_fine_detritus(state: &mut TankState, biomass_g: f64, n_to_c_ratio: f64) {
     state.detritus.fine_detritus_g_total += plant_detrital_mass_g(biomass_g, n_to_c_ratio);
 }
