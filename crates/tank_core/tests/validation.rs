@@ -260,10 +260,36 @@ fn step_hours_read_only_validation_does_not_preserve_partial_clamps() {
 }
 
 #[test]
-fn enforce_invariants_repairs_shrimp_cohort_bookkeeping() -> Result<(), SimError> {
+fn step_hours_rejects_mismatched_shrimp_cohort_bookkeeping() {
     let mut state = tank_core::TankState::new(SimSeed(22));
     state.animal.adult.count = 4;
     state.animal.berried_females_count = 3;
+    state.animal.egg_progress_days = 6.0;
+    state.animal.egg_cohorts = vec![EggCohort {
+        count: 2,
+        progress_days: 4.0,
+    }];
+    let expected = state.clone();
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    let result = engine.step_hours(1);
+
+    assert_eq!(
+        result,
+        Err(SimError::InvariantViolation {
+            field: "animal.egg_cohort_count_total",
+            value: 2.0,
+        })
+    );
+    assert_eq!(engine.full_state(), &expected);
+}
+
+#[test]
+fn enforce_invariants_still_trims_zero_count_cohorts_and_clamps_stage_progress(
+) -> Result<(), SimError> {
+    let mut state = tank_core::TankState::new(SimSeed(23));
+    state.animal.adult.count = 4;
+    state.animal.berried_females_count = 2;
     state.animal.egg_progress_days = 6.0;
     state.animal.egg_cohorts = vec![
         EggCohort {
@@ -281,20 +307,8 @@ fn enforce_invariants_repairs_shrimp_cohort_bookkeeping() -> Result<(), SimError
 
     enforce_invariants(&mut state)?;
 
-    assert_eq!(
-        state
-            .animal
-            .egg_cohorts
-            .iter()
-            .map(|cohort| cohort.count)
-            .sum::<u32>(),
-        3
-    );
-    assert!(state
-        .animal
-        .egg_cohorts
-        .iter()
-        .any(|cohort| cohort.count == 1 && (cohort.progress_days - 6.0).abs() < 1e-12));
+    assert_eq!(state.animal.egg_cohorts.len(), 1);
+    assert_eq!(state.animal.egg_cohort_count_total(), 2);
     assert_eq!(state.animal.egg_progress_days, 6.0);
     assert_eq!(state.animal.juvenile.maturation_accum, 2.0);
     assert_eq!(state.animal.sub_adult.maturation_accum, 0.0);

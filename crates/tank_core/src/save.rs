@@ -4,7 +4,8 @@ use serde_json::Value;
 use crate::{
     engine::{Engine, SimulationEngine},
     types::{
-        shrimp_biomass_g, PlayerAction, ShrimpRuntimeParams, SimError, StabilityTracker, TankState,
+        legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2, shrimp_biomass_g,
+        PlayerAction, ShrimpRuntimeParams, SimError, StabilityTracker, TankState,
         LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
     },
 };
@@ -13,7 +14,7 @@ use crate::{
 ///
 /// When you bump from N to N+1, you **must** also append a migration function
 /// to [`MIGRATIONS`]. See the migration contract below.
-pub const SCHEMA_VERSION: u32 = 7;
+pub const SCHEMA_VERSION: u32 = 10;
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Oldest schema version that the migration chain can handle.
@@ -106,6 +107,21 @@ const MIGRATIONS: &[MigrationFn] = &[
     // Persist substrate colonizable_area_factor explicitly on each layer so
     // habitat refreshes preserve preset/custom substrate area scaling.
     migrate_v6_to_v7,
+    // Index 5: schema 7 → 8
+    // Rename plant half-saturation fields from legacy total-mass names to
+    // explicit concentration/areal semantics, and seed the new substrate Ks
+    // from the old total-style N/P values.
+    migrate_v7_to_v8,
+    // Index 6: schema 8 → 9
+    // Rename algae half-saturation fields away from legacy total-mass names
+    // and preserve saved tuning by converting the old values onto the new
+    // concentration basis.
+    migrate_v8_to_v9,
+    // Index 7: schema 9 → 10
+    // Rename nitrogen-cycle half-saturation parameters from legacy total-mass
+    // names to concentration-based names and convert saved values by dividing
+    // by the 20 L reference volume.
+    migrate_v9_to_v10,
 ];
 
 // Compile-time check: MIGRATIONS length must equal SCHEMA_VERSION - MIN_SUPPORTED_SCHEMA.
@@ -193,6 +209,9 @@ impl SaveFile {
             set_schema_version(&mut value, v + 1)?;
         }
 
+        normalize_legacy_algae_half_saturation_fields_in_save(&mut value)
+            .map_err(|message| SimError::Deserialization(message.to_string()))?;
+
         // Detect whether the stability tracker was serialized before we
         // deserialize (it may be absent in old saves that predate the field).
         let stability_tracker_present = has_serialized_stability_tracker(&value);
@@ -200,6 +219,7 @@ impl SaveFile {
         let mut save: Self = serde_json::from_value(value)
             .map_err(|error| SimError::Deserialization(error.to_string()))?;
 
+        normalize_loaded_shrimp_reproduction_state(&mut save.state);
         let carbonate_cache_normalized = normalize_loaded_carbonate_state(&mut save.state);
         reconcile_stability_tracker(
             &mut save.state,
@@ -660,9 +680,149 @@ fn migrate_v6_to_v7(value: &mut Value) -> Result<(), SimError> {
     Ok(())
 }
 
+/// Schema 7 → 8: rename plant half-saturation fields away from legacy
+/// total-style names and preserve saved tuning by converting the old values
+/// onto the explicit water-column and substrate semantics introduced in the
+/// normalized plant model.
+fn migrate_v7_to_v8(value: &mut Value) -> Result<(), SimError> {
+    let process_params = required_object_mut_at(value, 7, 8, "/state/process_params")?;
+
+    let legacy_n = take_optional_f64_from_object(
+        process_params,
+        7,
+        8,
+        "/state/process_params/plant_half_saturation_n_mg_total",
+    )?;
+    let legacy_p = take_optional_f64_from_object(
+        process_params,
+        7,
+        8,
+        "/state/process_params/plant_half_saturation_p_mg_total",
+    )?;
+    let legacy_c = take_optional_f64_from_object(
+        process_params,
+        7,
+        8,
+        "/state/process_params/plant_half_saturation_c_mg_total",
+    )?;
+
+    if let Some(legacy_n) = legacy_n {
+        process_params
+            .entry("plant_half_saturation_n_mg_n_per_l".to_string())
+            .or_insert_with(|| Value::from(legacy_total_param_to_mg_per_l(legacy_n)));
+        process_params
+            .entry("plant_half_saturation_n_substrate_mg_n_per_m2".to_string())
+            .or_insert_with(|| Value::from(legacy_total_param_to_mg_per_m2(legacy_n)));
+    }
+
+    if let Some(legacy_p) = legacy_p {
+        process_params
+            .entry("plant_half_saturation_p_mg_p_per_l".to_string())
+            .or_insert_with(|| Value::from(legacy_total_param_to_mg_per_l(legacy_p)));
+        process_params
+            .entry("plant_half_saturation_p_substrate_mg_p_per_m2".to_string())
+            .or_insert_with(|| Value::from(legacy_total_param_to_mg_per_m2(legacy_p)));
+    }
+
+    if let Some(legacy_c) = legacy_c {
+        process_params
+            .entry("plant_half_saturation_c_mg_c_per_l".to_string())
+            .or_insert_with(|| Value::from(legacy_total_param_to_mg_per_l(legacy_c)));
+    }
+
+    Ok(())
+}
+
+/// Schema 8 → 9: rename algae half-saturation fields away from legacy
+/// total-style names and preserve saved tuning by converting the old values
+/// onto the explicit concentration semantics introduced in the normalized
+/// algae model.
+fn migrate_v8_to_v9(value: &mut Value) -> Result<(), SimError> {
+    normalize_legacy_algae_half_saturation_fields_in_save(value)
+        .map_err(|message| schema_migration_error(8, 9, message))
+        .map(|_| ())
+}
+
+/// Schema 9 → 10: rename nitrogen-cycle half-saturation parameters from
+/// legacy total-mass names to concentration-based names and convert saved
+/// values by dividing by the 20 L reference volume.
+fn migrate_v9_to_v10(value: &mut Value) -> Result<(), SimError> {
+    let process_params = required_object_mut_at(value, 9, 10, "/state/process_params")?;
+
+    let renames: &[(&str, &str)] = &[
+        ("decomposer_k_doc_mg", "decomposer_k_doc_mg_c_per_l"),
+        ("decomposer_k_do_mg", "decomposer_k_do_mg_per_l"),
+        ("aob_k_tan_mg", "aob_k_tan_mg_n_per_l"),
+        ("aob_k_do_mg", "aob_k_do_mg_per_l"),
+        ("nob_k_nitrite_mg", "nob_k_nitrite_mg_n_per_l"),
+        ("nob_k_do_mg", "nob_k_do_mg_per_l"),
+        ("comammox_k_tan_mg", "comammox_k_tan_mg_n_per_l"),
+        ("comammox_k_do_mg", "comammox_k_do_mg_per_l"),
+    ];
+    for &(legacy, canonical) in renames {
+        if let Some(legacy_value) = process_params.remove(legacy) {
+            if !process_params.contains_key(canonical) {
+                let converted = legacy_value
+                    .as_f64()
+                    .map(legacy_total_param_to_mg_per_l)
+                    .map(Value::from)
+                    .unwrap_or(legacy_value);
+                process_params.insert(canonical.to_string(), converted);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+fn normalize_legacy_algae_half_saturation_fields_in_save(
+    value: &mut Value,
+) -> Result<bool, &'static str> {
+    let process_params = value
+        .pointer_mut("/state/process_params")
+        .and_then(Value::as_object_mut)
+        .ok_or("expected object at /state/process_params")?;
+
+    let normalized_n = normalize_legacy_process_param_field(
+        process_params,
+        "algae_half_saturation_n_mg_total",
+        "algae_half_saturation_n_mg_n_per_l",
+    )?;
+    let normalized_p = normalize_legacy_process_param_field(
+        process_params,
+        "algae_half_saturation_p_mg_total",
+        "algae_half_saturation_p_mg_p_per_l",
+    )?;
+
+    Ok(normalized_n || normalized_p)
+}
+
+fn normalize_legacy_process_param_field(
+    process_params: &mut serde_json::Map<String, Value>,
+    legacy_field: &'static str,
+    current_field: &'static str,
+) -> Result<bool, &'static str> {
+    let Some(legacy_value) = process_params.remove(legacy_field) else {
+        return Ok(false);
+    };
+
+    if process_params.contains_key(current_field) {
+        return Ok(true);
+    }
+
+    let legacy_value = legacy_value
+        .as_f64()
+        .ok_or("expected finite number in legacy algae half-saturation field")?;
+    process_params.insert(
+        current_field.to_string(),
+        Value::from(legacy_total_param_to_mg_per_l(legacy_value)),
+    );
+    Ok(true)
+}
 
 fn has_serialized_stability_tracker(value: &Value) -> bool {
     value
@@ -680,6 +840,12 @@ fn normalize_loaded_carbonate_state(state: &mut TankState) -> bool {
 
     (state.water.ph - original_ph).abs() > 1e-9
         || (state.water.bicarbonate_mg_total - original_bicarbonate_mg_total).abs() > 1e-6
+}
+
+fn normalize_loaded_shrimp_reproduction_state(state: &mut TankState) {
+    state.animal.egg_cohorts.retain(|cohort| cohort.count > 0);
+    state.animal.clamp_berried_to_adults();
+    state.animal.repair_egg_cohort_counts_for_load();
 }
 
 fn reconcile_stability_tracker(
@@ -738,6 +904,20 @@ fn set_schema_version(value: &mut Value, version: u32) -> Result<(), SimError> {
     })?;
     obj.insert("schema_version".to_string(), Value::Number(version.into()));
     Ok(())
+}
+
+fn take_optional_f64_from_object(
+    object: &mut serde_json::Map<String, Value>,
+    from: u32,
+    to: u32,
+    field_path: &'static str,
+) -> Result<Option<f64>, SimError> {
+    let Some(value) = object.remove(field_path.rsplit('/').next().expect("field name")) else {
+        return Ok(None);
+    };
+    value.as_f64().map(Some).ok_or_else(|| {
+        schema_migration_error(from, to, format!("expected finite number at {field_path}"))
+    })
 }
 
 fn required_f64_at(

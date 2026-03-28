@@ -6,7 +6,8 @@ use tank_core::systems::chemistry::{
     CARBONATE_PH_MIN,
 };
 use tank_core::types::{
-    check_all_ranges, format_param, ParamMeta, RangeWarning, ShrimpRuntimeParams,
+    check_all_ranges, format_param, legacy_total_param_to_mg_per_l,
+    legacy_total_param_to_mg_per_m2, ParamMeta, RangeWarning, ShrimpRuntimeParams,
     LEGACY_KINETIC_REFERENCE_VOLUME_L,
 };
 
@@ -759,10 +760,10 @@ pub struct ProcessParamsPreset {
     // Decomposer mineralization
     #[serde(default = "default_decomposer_vmax")]
     pub decomposer_vmax_per_hour: f64,
-    #[serde(default = "default_decomposer_k_doc")]
-    pub decomposer_k_doc_mg: f64,
-    #[serde(default = "default_decomposer_k_do")]
-    pub decomposer_k_do_mg: f64,
+    #[serde(default = "default_decomposer_k_doc", alias = "decomposer_k_doc_mg")]
+    pub decomposer_k_doc_mg_c_per_l: f64,
+    #[serde(default = "default_decomposer_k_do", alias = "decomposer_k_do_mg")]
+    pub decomposer_k_do_mg_per_l: f64,
     #[serde(default = "default_decomposer_growth_yield")]
     pub decomposer_growth_yield: f64,
     #[serde(default = "default_decomposer_decay_rate")]
@@ -771,10 +772,10 @@ pub struct ProcessParamsPreset {
     // AOB kinetics
     #[serde(default = "default_aob_vmax")]
     pub aob_vmax_mg_n_per_g_per_hour: f64,
-    #[serde(default = "default_aob_k_tan")]
-    pub aob_k_tan_mg: f64,
-    #[serde(default = "default_aob_k_do")]
-    pub aob_k_do_mg: f64,
+    #[serde(default = "default_aob_k_tan", alias = "aob_k_tan_mg_n_per_l")]
+    pub aob_k_tan_mg_n_per_l: f64,
+    #[serde(default = "default_aob_k_do", alias = "aob_k_do_mg")]
+    pub aob_k_do_mg_per_l: f64,
     #[serde(default = "default_aob_growth_yield")]
     pub aob_growth_yield: f64,
     #[serde(default = "default_aob_decay_rate")]
@@ -783,10 +784,10 @@ pub struct ProcessParamsPreset {
     // NOB kinetics
     #[serde(default = "default_nob_vmax")]
     pub nob_vmax_mg_n_per_g_per_hour: f64,
-    #[serde(default = "default_nob_k_nitrite")]
-    pub nob_k_nitrite_mg: f64,
-    #[serde(default = "default_nob_k_do")]
-    pub nob_k_do_mg: f64,
+    #[serde(default = "default_nob_k_nitrite", alias = "nob_k_nitrite_mg")]
+    pub nob_k_nitrite_mg_n_per_l: f64,
+    #[serde(default = "default_nob_k_do", alias = "nob_k_do_mg")]
+    pub nob_k_do_mg_per_l: f64,
     #[serde(default = "default_nob_growth_yield")]
     pub nob_growth_yield: f64,
     #[serde(default = "default_nob_decay_rate")]
@@ -795,10 +796,10 @@ pub struct ProcessParamsPreset {
     // Comammox kinetics
     #[serde(default = "default_comammox_vmax_fraction")]
     pub comammox_vmax_fraction: f64,
-    #[serde(default = "default_comammox_k_tan")]
-    pub comammox_k_tan_mg: f64,
-    #[serde(default = "default_comammox_k_do")]
-    pub comammox_k_do_mg: f64,
+    #[serde(default = "default_comammox_k_tan", alias = "comammox_k_tan_mg")]
+    pub comammox_k_tan_mg_n_per_l: f64,
+    #[serde(default = "default_comammox_k_do", alias = "comammox_k_do_mg")]
+    pub comammox_k_do_mg_per_l: f64,
     #[serde(default = "default_comammox_growth_yield")]
     pub comammox_growth_yield: f64,
     #[serde(default = "default_comammox_decay_rate")]
@@ -956,10 +957,10 @@ fn default_decomposer_vmax() -> f64 {
     0.02
 }
 fn default_decomposer_k_doc() -> f64 {
-    5.0
+    3.0
 }
 fn default_decomposer_k_do() -> f64 {
-    2.0
+    0.5
 }
 fn default_decomposer_growth_yield() -> f64 {
     0.3
@@ -971,10 +972,10 @@ fn default_aob_vmax() -> f64 {
     1.5
 }
 fn default_aob_k_tan() -> f64 {
-    0.5
+    1.0
 }
 fn default_aob_k_do() -> f64 {
-    1.0
+    0.5
 }
 fn default_aob_growth_yield() -> f64 {
     0.05
@@ -986,10 +987,10 @@ fn default_nob_vmax() -> f64 {
     1.2
 }
 fn default_nob_k_nitrite() -> f64 {
-    0.3
+    0.5
 }
 fn default_nob_k_do() -> f64 {
-    1.0
+    0.8
 }
 fn default_nob_growth_yield() -> f64 {
     0.04
@@ -1001,10 +1002,10 @@ fn default_comammox_vmax_fraction() -> f64 {
     0.4
 }
 fn default_comammox_k_tan() -> f64 {
-    0.8
+    0.2
 }
 fn default_comammox_k_do() -> f64 {
-    1.5
+    0.6
 }
 fn default_comammox_growth_yield() -> f64 {
     0.03
@@ -1174,6 +1175,187 @@ fn default_microfauna_growth_fraction() -> f64 {
     0.20
 }
 
+pub(crate) fn parse_process_params_preset(
+    raw: &str,
+) -> Result<ProcessParamsPreset, toml::de::Error> {
+    let mut value: toml::Value = toml::from_str(raw)?;
+    normalize_legacy_process_params_preset(&mut value);
+    value.try_into()
+}
+
+fn normalize_legacy_process_params_preset(value: &mut toml::Value) {
+    let Some(table) = value.as_table_mut() else {
+        return;
+    };
+
+    let legacy_n = table.remove("plant_half_saturation_n_mg_total");
+    if let Some(legacy_n) = legacy_n.as_ref() {
+        if !table.contains_key("plant_half_saturation_n_mg_n_per_l") {
+            insert_legacy_concentration_param_value(
+                table,
+                "plant_half_saturation_n_mg_n_per_l",
+                legacy_n,
+                legacy_total_param_to_mg_per_l,
+            );
+        }
+        if !table.contains_key("plant_half_saturation_n_substrate_mg_n_per_m2") {
+            if let Some(legacy_n) = toml_numeric_value(legacy_n) {
+                table.insert(
+                    "plant_half_saturation_n_substrate_mg_n_per_m2".to_string(),
+                    toml::Value::from(legacy_total_param_to_mg_per_m2(legacy_n)),
+                );
+            }
+        }
+    }
+
+    let legacy_p = table.remove("plant_half_saturation_p_mg_total");
+    if let Some(legacy_p) = legacy_p.as_ref() {
+        if !table.contains_key("plant_half_saturation_p_mg_p_per_l") {
+            insert_legacy_concentration_param_value(
+                table,
+                "plant_half_saturation_p_mg_p_per_l",
+                legacy_p,
+                legacy_total_param_to_mg_per_l,
+            );
+        }
+        if !table.contains_key("plant_half_saturation_p_substrate_mg_p_per_m2") {
+            if let Some(legacy_p) = toml_numeric_value(legacy_p) {
+                table.insert(
+                    "plant_half_saturation_p_substrate_mg_p_per_m2".to_string(),
+                    toml::Value::from(legacy_total_param_to_mg_per_m2(legacy_p)),
+                );
+            }
+        }
+    }
+
+    if let Some(legacy_c) = table.remove("plant_half_saturation_c_mg_total").as_ref() {
+        if !table.contains_key("plant_half_saturation_c_mg_c_per_l") {
+            insert_legacy_concentration_param_value(
+                table,
+                "plant_half_saturation_c_mg_c_per_l",
+                legacy_c,
+                legacy_total_param_to_mg_per_l,
+            );
+        }
+    }
+
+    if let Some(legacy_n) = table.remove("algae_half_saturation_n_mg_total").as_ref() {
+        if !table.contains_key("algae_half_saturation_n_mg_n_per_l") {
+            insert_legacy_concentration_param_value(
+                table,
+                "algae_half_saturation_n_mg_n_per_l",
+                legacy_n,
+                legacy_total_param_to_mg_per_l,
+            );
+        }
+    }
+
+    if let Some(legacy_p) = table.remove("algae_half_saturation_p_mg_total").as_ref() {
+        if !table.contains_key("algae_half_saturation_p_mg_p_per_l") {
+            insert_legacy_concentration_param_value(
+                table,
+                "algae_half_saturation_p_mg_p_per_l",
+                legacy_p,
+                legacy_total_param_to_mg_per_l,
+            );
+        }
+    }
+
+    // Nitrogen-cycle Ks parameters: convert legacy total-style values
+    // (scaled for 20L reference) to native concentration (mg/L).
+    let nitrogen_legacy_renames: &[(&str, &str)] = &[
+        ("decomposer_k_doc_mg", "decomposer_k_doc_mg_c_per_l"),
+        ("decomposer_k_do_mg", "decomposer_k_do_mg_per_l"),
+        ("aob_k_tan_mg", "aob_k_tan_mg_n_per_l"),
+        ("aob_k_do_mg", "aob_k_do_mg_per_l"),
+        ("nob_k_nitrite_mg", "nob_k_nitrite_mg_n_per_l"),
+        ("nob_k_do_mg", "nob_k_do_mg_per_l"),
+        ("comammox_k_tan_mg", "comammox_k_tan_mg_n_per_l"),
+        ("comammox_k_do_mg", "comammox_k_do_mg_per_l"),
+    ];
+    for &(legacy, canonical) in nitrogen_legacy_renames {
+        if let Some(legacy_val) = table.remove(legacy) {
+            if !table.contains_key(canonical) {
+                insert_legacy_concentration_param_value(
+                    table,
+                    canonical,
+                    &legacy_val,
+                    legacy_total_param_to_mg_per_l,
+                );
+            }
+        }
+    }
+
+    if let Some(param_meta) = table
+        .get_mut("param_meta")
+        .and_then(toml::Value::as_table_mut)
+    {
+        move_legacy_process_param_meta_key(
+            param_meta,
+            "plant_half_saturation_n_mg_total",
+            "plant_half_saturation_n_mg_n_per_l",
+        );
+        move_legacy_process_param_meta_key(
+            param_meta,
+            "plant_half_saturation_p_mg_total",
+            "plant_half_saturation_p_mg_p_per_l",
+        );
+        move_legacy_process_param_meta_key(
+            param_meta,
+            "plant_half_saturation_c_mg_total",
+            "plant_half_saturation_c_mg_c_per_l",
+        );
+        move_legacy_process_param_meta_key(
+            param_meta,
+            "algae_half_saturation_n_mg_total",
+            "algae_half_saturation_n_mg_n_per_l",
+        );
+        move_legacy_process_param_meta_key(
+            param_meta,
+            "algae_half_saturation_p_mg_total",
+            "algae_half_saturation_p_mg_p_per_l",
+        );
+        // Also move nitrogen-cycle param_meta keys.
+        for &(legacy, canonical) in nitrogen_legacy_renames {
+            move_legacy_process_param_meta_key(param_meta, legacy, canonical);
+        }
+    }
+}
+
+fn insert_legacy_concentration_param_value(
+    table: &mut toml::map::Map<String, toml::Value>,
+    canonical_key: &str,
+    legacy_value: &toml::Value,
+    transform: fn(f64) -> f64,
+) {
+    let canonical_value = toml_numeric_value(legacy_value)
+        .map(transform)
+        .map(toml::Value::from)
+        .unwrap_or_else(|| legacy_value.clone());
+    table.insert(canonical_key.to_string(), canonical_value);
+}
+
+fn toml_numeric_value(value: &toml::Value) -> Option<f64> {
+    match value {
+        toml::Value::Float(value) => Some(*value),
+        toml::Value::Integer(value) => Some(*value as f64),
+        _ => None,
+    }
+}
+
+fn move_legacy_process_param_meta_key(
+    table: &mut toml::map::Map<String, toml::Value>,
+    legacy_key: &'static str,
+    canonical_key: &'static str,
+) {
+    let Some(legacy_value) = table.remove(legacy_key) else {
+        return;
+    };
+    table
+        .entry(canonical_key.to_string())
+        .or_insert(legacy_value);
+}
+
 fn normalize_process_param_for_provenance(name: &str, value: f64, unit: Option<&str>) -> f64 {
     match legacy_process_param_normalization(name, unit) {
         ProvenanceNormalization::None => value,
@@ -1191,17 +1373,17 @@ enum ProvenanceNormalization {
 
 fn legacy_process_param_normalization(name: &str, _unit: Option<&str>) -> ProvenanceNormalization {
     match name {
-        "decomposer_k_doc_mg"
-        | "decomposer_k_do_mg"
-        | "aob_k_tan_mg"
-        | "aob_k_do_mg"
-        | "nob_k_nitrite_mg"
-        | "nob_k_do_mg"
-        | "comammox_k_tan_mg"
-        | "comammox_k_do_mg" => ProvenanceNormalization::LegacyMgPerL,
-        // Algae and plant half-saturation fields are now natively
-        // concentration-based; no legacy normalization needed.
-        "algae_half_saturation_n_mg_n_per_l"
+        // All nitrogen-cycle, plant, and algae half-saturation fields are now
+        // natively concentration-based; no legacy normalization needed.
+        "decomposer_k_doc_mg_c_per_l"
+        | "decomposer_k_do_mg_per_l"
+        | "aob_k_tan_mg_n_per_l"
+        | "aob_k_do_mg_per_l"
+        | "nob_k_nitrite_mg_n_per_l"
+        | "nob_k_do_mg_per_l"
+        | "comammox_k_tan_mg_n_per_l"
+        | "comammox_k_do_mg_per_l"
+        | "algae_half_saturation_n_mg_n_per_l"
         | "algae_half_saturation_p_mg_p_per_l"
         | "plant_half_saturation_n_mg_n_per_l"
         | "plant_half_saturation_p_mg_p_per_l"
@@ -1251,23 +1433,23 @@ impl ParamMetaPreset for ProcessParamsPreset {
             }
             "feed_n_to_c_ratio" => Some(self.feed_n_to_c_ratio),
             "decomposer_vmax_per_hour" => Some(self.decomposer_vmax_per_hour),
-            "decomposer_k_doc_mg" => Some(self.decomposer_k_doc_mg),
-            "decomposer_k_do_mg" => Some(self.decomposer_k_do_mg),
+            "decomposer_k_doc_mg_c_per_l" => Some(self.decomposer_k_doc_mg_c_per_l),
+            "decomposer_k_do_mg_per_l" => Some(self.decomposer_k_do_mg_per_l),
             "decomposer_growth_yield" => Some(self.decomposer_growth_yield),
             "decomposer_decay_rate_per_hour" => Some(self.decomposer_decay_rate_per_hour),
             "aob_vmax_mg_n_per_g_per_hour" => Some(self.aob_vmax_mg_n_per_g_per_hour),
-            "aob_k_tan_mg" => Some(self.aob_k_tan_mg),
-            "aob_k_do_mg" => Some(self.aob_k_do_mg),
+            "aob_k_tan_mg_n_per_l" => Some(self.aob_k_tan_mg_n_per_l),
+            "aob_k_do_mg_per_l" => Some(self.aob_k_do_mg_per_l),
             "aob_growth_yield" => Some(self.aob_growth_yield),
             "aob_decay_rate_per_hour" => Some(self.aob_decay_rate_per_hour),
             "nob_vmax_mg_n_per_g_per_hour" => Some(self.nob_vmax_mg_n_per_g_per_hour),
-            "nob_k_nitrite_mg" => Some(self.nob_k_nitrite_mg),
-            "nob_k_do_mg" => Some(self.nob_k_do_mg),
+            "nob_k_nitrite_mg_n_per_l" => Some(self.nob_k_nitrite_mg_n_per_l),
+            "nob_k_do_mg_per_l" => Some(self.nob_k_do_mg_per_l),
             "nob_growth_yield" => Some(self.nob_growth_yield),
             "nob_decay_rate_per_hour" => Some(self.nob_decay_rate_per_hour),
             "comammox_vmax_fraction" => Some(self.comammox_vmax_fraction),
-            "comammox_k_tan_mg" => Some(self.comammox_k_tan_mg),
-            "comammox_k_do_mg" => Some(self.comammox_k_do_mg),
+            "comammox_k_tan_mg_n_per_l" => Some(self.comammox_k_tan_mg_n_per_l),
+            "comammox_k_do_mg_per_l" => Some(self.comammox_k_do_mg_per_l),
             "comammox_growth_yield" => Some(self.comammox_growth_yield),
             "comammox_decay_rate_per_hour" => Some(self.comammox_decay_rate_per_hour),
             "o2_per_mg_n_nitrified" => Some(self.o2_per_mg_n_nitrified),
@@ -1398,8 +1580,11 @@ impl ProcessParamsPreset {
             ),
             ("feed_n_to_c_ratio", self.feed_n_to_c_ratio),
             ("decomposer_vmax_per_hour", self.decomposer_vmax_per_hour),
-            ("decomposer_k_doc_mg", self.decomposer_k_doc_mg),
-            ("decomposer_k_do_mg", self.decomposer_k_do_mg),
+            (
+                "decomposer_k_doc_mg_c_per_l",
+                self.decomposer_k_doc_mg_c_per_l,
+            ),
+            ("decomposer_k_do_mg_per_l", self.decomposer_k_do_mg_per_l),
             ("decomposer_growth_yield", self.decomposer_growth_yield),
             (
                 "decomposer_decay_rate_per_hour",
@@ -1409,21 +1594,21 @@ impl ProcessParamsPreset {
                 "aob_vmax_mg_n_per_g_per_hour",
                 self.aob_vmax_mg_n_per_g_per_hour,
             ),
-            ("aob_k_tan_mg", self.aob_k_tan_mg),
-            ("aob_k_do_mg", self.aob_k_do_mg),
+            ("aob_k_tan_mg_n_per_l", self.aob_k_tan_mg_n_per_l),
+            ("aob_k_do_mg_per_l", self.aob_k_do_mg_per_l),
             ("aob_growth_yield", self.aob_growth_yield),
             ("aob_decay_rate_per_hour", self.aob_decay_rate_per_hour),
             (
                 "nob_vmax_mg_n_per_g_per_hour",
                 self.nob_vmax_mg_n_per_g_per_hour,
             ),
-            ("nob_k_nitrite_mg", self.nob_k_nitrite_mg),
-            ("nob_k_do_mg", self.nob_k_do_mg),
+            ("nob_k_nitrite_mg_n_per_l", self.nob_k_nitrite_mg_n_per_l),
+            ("nob_k_do_mg_per_l", self.nob_k_do_mg_per_l),
             ("nob_growth_yield", self.nob_growth_yield),
             ("nob_decay_rate_per_hour", self.nob_decay_rate_per_hour),
             ("comammox_vmax_fraction", self.comammox_vmax_fraction),
-            ("comammox_k_tan_mg", self.comammox_k_tan_mg),
-            ("comammox_k_do_mg", self.comammox_k_do_mg),
+            ("comammox_k_tan_mg_n_per_l", self.comammox_k_tan_mg_n_per_l),
+            ("comammox_k_do_mg_per_l", self.comammox_k_do_mg_per_l),
             ("comammox_growth_yield", self.comammox_growth_yield),
             (
                 "comammox_decay_rate_per_hour",
@@ -1735,14 +1920,16 @@ pub struct ScenarioPreset {
 #[cfg(test)]
 mod tests {
     use super::{
-        PlantPreset, ProcessParamsPreset, ShrimpPreset, SourceWaterPreset, SubstratePreset,
+        parse_process_params_preset, PlantPreset, ProcessParamsPreset, ShrimpPreset,
+        SourceWaterPreset, SubstratePreset,
     };
     use tank_core::types::provenance::{
         check_param_range, format_param, ConfidenceLevel, ParamMeta,
     };
+    use tank_core::{legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2};
 
     fn default_process_preset() -> ProcessParamsPreset {
-        toml::from_str(include_str!("../data/process/default.toml"))
+        parse_process_params_preset(include_str!("../data/process/default.toml"))
             .expect("default process preset should parse")
     }
 
@@ -2003,7 +2190,7 @@ photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0
 k_surface_w_per_m2_k = 10.0
 k_wall_w_per_m2_k = 5.0
 
-[param_meta.aob_k_tan_mg]
+[param_meta.aob_k_tan_mg_n_per_l]
 unit = "mg N/L"
 source = "EPA 2013 ammonia criteria"
 confidence = "literature"
@@ -2013,7 +2200,7 @@ notes = "K_s for AOB in biofilter context; may differ for free-living AOB"
         let preset: ProcessParamsPreset = toml::from_str(toml_str)?;
         let meta = preset
             .param_meta
-            .get("aob_k_tan_mg")
+            .get("aob_k_tan_mg_n_per_l")
             .expect("metadata should exist");
         assert_eq!(meta.unit.as_deref(), Some("mg N/L"));
         assert_eq!(meta.source.as_deref(), Some("EPA 2013 ammonia criteria"));
@@ -2025,8 +2212,8 @@ notes = "K_s for AOB in biofilter context; may differ for free-living AOB"
         let serialized = toml::to_string(&preset)?;
         let roundtrip: ProcessParamsPreset = toml::from_str(&serialized)?;
         assert_eq!(
-            roundtrip.param_meta.get("aob_k_tan_mg"),
-            preset.param_meta.get("aob_k_tan_mg")
+            roundtrip.param_meta.get("aob_k_tan_mg_n_per_l"),
+            preset.param_meta.get("aob_k_tan_mg_n_per_l")
         );
         Ok(())
     }
@@ -2085,7 +2272,7 @@ photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0
 k_surface_w_per_m2_k = 10.0
 k_wall_w_per_m2_k = 5.0
 
-[param_meta.aob_k_tan_mg]
+[param_meta.aob_k_tan_mg_n_per_l]
 confidence = "{level}"
 "#
             );
@@ -2112,7 +2299,7 @@ photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0
 k_surface_w_per_m2_k = 10.0
 k_wall_w_per_m2_k = 5.0
 
-[param_meta.aob_k_tan_mg]
+[param_meta.aob_k_tan_mg_n_per_l]
 confidence = "medium"
 "#;
         let result: Result<ProcessParamsPreset, _> = toml::from_str(bad_toml);
@@ -2148,9 +2335,9 @@ respiration_dic_rate_mg_c_per_g_per_hour = 0.0
 photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0
 k_surface_w_per_m2_k = 10.0
 k_wall_w_per_m2_k = 5.0
-aob_k_tan_mg = 200.0
+aob_k_tan_mg_n_per_l = 200.0
 
-[param_meta.aob_k_tan_mg]
+[param_meta.aob_k_tan_mg_n_per_l]
 unit = "mg N/L"
 valid_range = [0.1, 5.0]
 "#;
@@ -2162,8 +2349,8 @@ valid_range = [0.1, 5.0]
         // But range check should produce a warning.
         let warnings = preset.check_ranges();
         assert_eq!(warnings.len(), 1);
-        assert_eq!(warnings[0].param_name, "aob_k_tan_mg");
-        assert_eq!(warnings[0].value, 10.0);
+        assert_eq!(warnings[0].param_name, "aob_k_tan_mg_n_per_l");
+        assert_eq!(warnings[0].value, 200.0);
         assert_eq!(warnings[0].range, [0.1, 5.0]);
 
         // In-range value → no warning.
@@ -2174,16 +2361,16 @@ valid_range = [0.1, 5.0]
             valid_range: Some([0.1, 5.0]),
             notes: None,
         };
-        assert!(check_param_range("aob_k_tan_mg", 0.5, &meta).is_none());
+        assert!(check_param_range("aob_k_tan_mg_n_per_l", 0.5, &meta).is_none());
         Ok(())
     }
 
     #[test]
     fn test_valid_range_warns_for_invalid_range_or_non_finite_value() {
         let mut preset = default_process_preset();
-        preset.aob_k_tan_mg = f64::INFINITY;
+        preset.aob_k_tan_mg_n_per_l = f64::INFINITY;
         preset.param_meta.insert(
-            "aob_k_tan_mg".to_string(),
+            "aob_k_tan_mg_n_per_l".to_string(),
             ParamMeta {
                 unit: Some("mg N/L".into()),
                 source: None,
@@ -2199,7 +2386,7 @@ valid_range = [0.1, 5.0]
 
         preset
             .param_meta
-            .get_mut("aob_k_tan_mg")
+            .get_mut("aob_k_tan_mg_n_per_l")
             .expect("param_meta entry should exist")
             .valid_range = Some([0.1, 5.0]);
         let warnings = preset.check_ranges();
@@ -2247,6 +2434,140 @@ k_wall_w_per_m2_k = 5.0
         Ok(())
     }
 
+    #[test]
+    fn test_process_preset_parser_migrates_legacy_plant_half_saturation_keys(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let legacy_n_total = 13.0;
+        let legacy_p_total = 2.8;
+        let legacy_c_total = 34.0;
+        let toml_str = format!(
+            r#"
+id = "legacy"
+name = "Legacy"
+mineralization_rate_per_day = 0.15
+nitrification_vmax = 0.08
+reaeration_kla_base = 0.35
+aeration_kla_boost = 0.9
+background_bod_mg_o2_per_g_biomass_per_hour = 0.05
+plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
+respiration_dic_rate_mg_c_per_g_per_hour = 0.0
+photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0
+k_surface_w_per_m2_k = 10.0
+k_wall_w_per_m2_k = 5.0
+plant_half_saturation_n_mg_total = {legacy_n_total}
+plant_half_saturation_p_mg_total = {legacy_p_total}
+plant_half_saturation_c_mg_total = {legacy_c_total}
+"#
+        );
+
+        let preset = parse_process_params_preset(&toml_str)?;
+        assert_eq!(
+            preset.plant_half_saturation_n_mg_n_per_l,
+            legacy_total_param_to_mg_per_l(legacy_n_total)
+        );
+        assert_eq!(
+            preset.plant_half_saturation_p_mg_p_per_l,
+            legacy_total_param_to_mg_per_l(legacy_p_total)
+        );
+        assert_eq!(
+            preset.plant_half_saturation_c_mg_c_per_l,
+            legacy_total_param_to_mg_per_l(legacy_c_total)
+        );
+        assert_eq!(
+            preset.plant_half_saturation_n_substrate_mg_n_per_m2,
+            legacy_total_param_to_mg_per_m2(legacy_n_total)
+        );
+        assert_eq!(
+            preset.plant_half_saturation_p_substrate_mg_p_per_m2,
+            legacy_total_param_to_mg_per_m2(legacy_p_total)
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_process_preset_parser_migrates_legacy_algae_half_saturation_keys(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let legacy_n_total = 5.0;
+        let legacy_p_total = 0.8;
+        let toml_str = format!(
+            r#"
+id = "legacy"
+name = "Legacy"
+mineralization_rate_per_day = 0.15
+nitrification_vmax = 0.08
+reaeration_kla_base = 0.35
+aeration_kla_boost = 0.9
+background_bod_mg_o2_per_g_biomass_per_hour = 0.05
+plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
+respiration_dic_rate_mg_c_per_g_per_hour = 0.0
+photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0
+k_surface_w_per_m2_k = 10.0
+k_wall_w_per_m2_k = 5.0
+algae_half_saturation_n_mg_total = {legacy_n_total}
+algae_half_saturation_p_mg_total = {legacy_p_total}
+"#
+        );
+
+        let preset = parse_process_params_preset(&toml_str)?;
+        assert_eq!(
+            preset.algae_half_saturation_n_mg_n_per_l,
+            legacy_total_param_to_mg_per_l(legacy_n_total)
+        );
+        assert_eq!(
+            preset.algae_half_saturation_p_mg_p_per_l,
+            legacy_total_param_to_mg_per_l(legacy_p_total)
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_process_preset_parser_migrates_legacy_algae_half_saturation_param_meta_keys(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let legacy_n_total = 5.0;
+        let legacy_p_total = 0.8;
+        let toml_str = format!(
+            r#"
+id = "legacy"
+name = "Legacy"
+mineralization_rate_per_day = 0.15
+nitrification_vmax = 0.08
+reaeration_kla_base = 0.35
+aeration_kla_boost = 0.9
+background_bod_mg_o2_per_g_biomass_per_hour = 0.05
+plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
+respiration_dic_rate_mg_c_per_g_per_hour = 0.0
+photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0
+k_surface_w_per_m2_k = 10.0
+k_wall_w_per_m2_k = 5.0
+algae_half_saturation_n_mg_total = {legacy_n_total}
+algae_half_saturation_p_mg_total = {legacy_p_total}
+
+[param_meta.algae_half_saturation_n_mg_total]
+unit = "mg N total"
+"#
+        );
+
+        let preset = parse_process_params_preset(&toml_str)?;
+        assert_eq!(
+            preset.algae_half_saturation_n_mg_n_per_l,
+            legacy_total_param_to_mg_per_l(legacy_n_total)
+        );
+        assert_eq!(
+            preset.algae_half_saturation_p_mg_p_per_l,
+            legacy_total_param_to_mg_per_l(legacy_p_total)
+        );
+        assert!(preset
+            .param_meta
+            .contains_key("algae_half_saturation_n_mg_n_per_l"));
+        assert!(!preset
+            .param_meta
+            .contains_key("algae_half_saturation_n_mg_total"));
+
+        Ok(())
+    }
+
     /// AC 6: Provenance metadata can be formatted for developer display.
     #[test]
     fn test_provenance_display() {
@@ -2278,35 +2599,35 @@ k_wall_w_per_m2_k = 5.0
     }
 
     #[test]
-    fn test_process_preset_format_param_normalizes_legacy_total_units() {
+    fn test_process_preset_format_param_shows_concentration_value() {
         let mut preset = default_process_preset();
         preset.param_meta.insert(
-            "aob_k_tan_mg".to_string(),
+            "aob_k_tan_mg_n_per_l".to_string(),
             ParamMeta {
                 unit: Some("mg N/L".into()),
                 source: Some("EPA 2013".into()),
                 confidence: Some(ConfidenceLevel::Literature),
-                valid_range: Some([0.01, 0.1]),
+                valid_range: Some([0.1, 5.0]),
                 notes: None,
             },
         );
 
         let display = preset
-            .format_param("aob_k_tan_mg")
+            .format_param("aob_k_tan_mg_n_per_l")
             .expect("parameter should format");
-        assert!(display.starts_with("aob_k_tan_mg: 0.025 "));
+        assert!(display.starts_with("aob_k_tan_mg_n_per_l: 1 "));
         assert!(display.contains("mg N/L"));
-        assert!(display.contains("range [0.01, 0.1]"));
+        assert!(display.contains("range [0.1, 5.0]"));
     }
 
     #[test]
-    fn test_process_preset_format_param_without_meta_keeps_raw_legacy_value() {
+    fn test_process_preset_format_param_without_meta_shows_raw_value() {
         let preset = default_process_preset();
 
         let display = preset
-            .format_param("aob_k_tan_mg")
+            .format_param("aob_k_tan_mg_n_per_l")
             .expect("parameter should format");
-        assert_eq!(display, "aob_k_tan_mg: 0.5");
+        assert_eq!(display, "aob_k_tan_mg_n_per_l: 1");
     }
 
     #[test]

@@ -1,3 +1,26 @@
+/// Beer-Lambert attenuation factor at depth z (cm) given extinction
+/// coefficient k (1/cm).
+///
+/// Returns exp(−k × z), the fraction of surface light intensity
+/// remaining at depth z.
+pub fn beer_lambert_at_depth(k: f64, z: f64) -> f64 {
+    (-k * z).exp()
+}
+
+/// Column-average attenuation factor for a water column of height h (cm)
+/// with extinction coefficient k (1/cm).
+///
+/// Returns (1 − exp(−k×H)) / (k×H), the mean fraction of surface light
+/// across the entire water column.  For k×H → 0 (clear/shallow),
+/// returns 1.0.
+pub fn column_average_attenuation_factor(k: f64, h: f64) -> f64 {
+    let kh = k * h;
+    if kh < 1e-9 {
+        return 1.0;
+    }
+    ((1.0 - (-kh).exp()) / kh).clamp(0.0, 1.0)
+}
+
 pub fn is_light_on(hour_of_day: u8, photoperiod_hours: f64) -> bool {
     if photoperiod_hours <= 0.0 {
         return false;

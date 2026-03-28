@@ -27,7 +27,8 @@ fn medium_planted_weekly_maintenance_envelope() -> Result<(), Box<dyn std::error
         initial_adult_shrimp_count: Some(10),
     };
 
-    let mut run = HarnessRun::with_overrides(SimSeed(42), "medium_planted", overrides)?;
+    let mut run = HarnessRun::with_overrides(SimSeed(42), "medium_planted", overrides)?
+        .with_artifact_label("medium_planted_weekly_maintenance");
     run.enable_instrumentation();
 
     // Phase 1: Fishless cycle (30 days, no feeding, no shrimp yet)
@@ -109,7 +110,8 @@ fn medium_planted_determinism() -> Result<(), Box<dyn std::error::Error>> {
 fn run_short_scenario(
     seed: SimSeed,
 ) -> Result<Vec<tank_harness::Checkpoint>, Box<dyn std::error::Error>> {
-    let mut run = HarnessRun::new(seed, "medium_planted")?;
+    let mut run =
+        HarnessRun::new(seed, "medium_planted")?.with_artifact_label("medium_planted_determinism");
     run.enable_instrumentation();
 
     for day in 1..=14 {

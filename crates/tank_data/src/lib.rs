@@ -1,5 +1,6 @@
 mod presets;
 
+use presets::parse_process_params_preset;
 use serde::de::DeserializeOwned;
 use thiserror::Error;
 
@@ -107,13 +108,28 @@ pub fn load_shrimp_with_diagnostics(id: &str) -> Result<(ShrimpPreset, Vec<Strin
 pub fn load_process_params_with_diagnostics(
     id: &str,
 ) -> Result<(ProcessParamsPreset, Vec<String>), PresetError> {
-    load_validated_with_range_diagnostics(
-        "process",
-        id,
-        PROCESS_PRESETS,
-        ProcessParamsPreset::validate,
-        ProcessParamsPreset::check_ranges,
-    )
+    let Some((_, raw)) = PROCESS_PRESETS.iter().find(|(entry_id, _)| *entry_id == id) else {
+        return Err(PresetError::UnknownPreset {
+            category: "process",
+            id: id.to_string(),
+        });
+    };
+
+    let preset = parse_process_params_preset(raw).map_err(|error| PresetError::Parse {
+        category: "process",
+        id: id.to_string(),
+        message: error.to_string(),
+    })?;
+
+    ProcessParamsPreset::validate(&preset).map_err(|message| PresetError::Validation {
+        category: "process",
+        id: id.to_string(),
+        message,
+    })?;
+
+    let diagnostics =
+        format_range_diagnostics("process", id, &ProcessParamsPreset::check_ranges(&preset));
+    Ok((preset, diagnostics))
 }
 
 pub fn load_scenario(id: &str) -> Result<ScenarioPreset, PresetError> {
@@ -297,9 +313,9 @@ respiration_dic_rate_mg_c_per_g_per_hour = 0.08
 photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.12
 k_surface_w_per_m2_k = 10.0
 k_wall_w_per_m2_k = 5.0
-aob_k_tan_mg = 200.0
+aob_k_tan_mg_n_per_l = 200.0
 
-[param_meta.aob_k_tan_mg]
+[param_meta.aob_k_tan_mg_n_per_l]
 unit = "mg N/L"
 valid_range = [0.1, 5.0]
 "#,
@@ -316,7 +332,7 @@ valid_range = [0.1, 5.0]
 
         assert_eq!(diagnostics.len(), 1);
         assert!(diagnostics[0].contains("warning: preset `test` in category `process`"));
-        assert!(diagnostics[0].contains("parameter `aob_k_tan_mg` value 10"));
+        assert!(diagnostics[0].contains("parameter `aob_k_tan_mg_n_per_l` value 10"));
         Ok(())
     }
 

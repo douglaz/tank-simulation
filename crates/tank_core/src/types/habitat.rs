@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{PlantGuild, TankState};
+use crate::systems::light::{beer_lambert_at_depth, column_average_attenuation_factor};
 
 /// Specific leaf area for FastStem guild (cm² of colonizable surface per gram).
 const FAST_STEM_SPECIFIC_LEAF_AREA_CM2_PER_G: f64 = 40.0;
@@ -66,7 +67,10 @@ struct HabitatEnv {
     avg_crowding: f64,
     avg_low_o2: f64,
     root_zone_o2_boost: f64,
-    depth_attenuation: f64,
+    /// Beer-Lambert: fraction of surface light reaching the substrate surface.
+    substrate_light_fraction: f64,
+    /// Beer-Lambert: mean fraction of surface light across the water column.
+    column_avg_light_fraction: f64,
 }
 
 /// Recompute the full habitat registry from current tank state.
@@ -87,6 +91,9 @@ pub fn compute_habitat_registry(state: &TankState) -> Vec<HabitatEntry> {
         .iter()
         .any(|p| matches!(p.guild, PlantGuild::RootFeedingRosette) && p.biomass_g > 0.1);
 
+    let k = state.extinction_coefficient();
+    let h = state.water_depth_above_substrate_cm();
+
     let env = HabitatEnv {
         // Turnover rate normalized: 10 turnovers/hour maps to 1.0
         normalized_flow: (flow_lph / volume_l / 10.0).clamp(0.0, 1.0),
@@ -103,7 +110,8 @@ pub fn compute_habitat_registry(state: &TankState) -> Vec<HabitatEntry> {
         avg_crowding: state.derived_plant_crowding_index(),
         avg_low_o2: state.avg_substrate_index(|l| l.low_oxygen_tendency_index),
         root_zone_o2_boost: if has_rooted_plants { 0.1 } else { 0.0 },
-        depth_attenuation: (1.0 - state.water_depth_above_substrate_cm() / 60.0).clamp(0.1, 1.0),
+        substrate_light_fraction: beer_lambert_at_depth(k, h),
+        column_avg_light_fraction: column_average_attenuation_factor(k, h),
     };
 
     HabitatKind::ALL
@@ -165,7 +173,8 @@ fn compute_glass_hardscape(state: &TankState, env: &HabitatEnv) -> (f64, f64, f6
 
     let flow = 0.15 + 0.45 * env.normalized_flow;
     let oxygen = 0.6 + 0.25 * env.aeration_boost + 0.1 * env.normalized_flow;
-    let light = 0.4 * env.light_intensity * (1.0 - 0.3 * env.avg_crowding);
+    let light =
+        0.4 * env.light_intensity * env.column_avg_light_fraction * (1.0 - 0.3 * env.avg_crowding);
 
     (area, flow, oxygen, light)
 }
@@ -185,7 +194,8 @@ fn compute_plant_surfaces(state: &TankState, env: &HabitatEnv) -> (f64, f64, f64
 
     let flow = 0.1 + 0.3 * env.normalized_flow;
     let oxygen = 0.65 + 0.2 * env.aeration_boost + 0.1 * env.normalized_flow;
-    let light = 0.7 * env.light_intensity * (1.0 - 0.3 * env.avg_crowding);
+    let light =
+        0.7 * env.light_intensity * env.column_avg_light_fraction * (1.0 - 0.3 * env.avg_crowding);
 
     (area, flow, oxygen, light)
 }
@@ -201,7 +211,8 @@ fn compute_substrate_surface(state: &TankState, env: &HabitatEnv) -> (f64, f64, 
     let oxygen = 0.3 + 0.15 * env.normalized_flow - 0.15 * env.avg_low_o2
         + 0.1 * env.aeration_boost
         + env.root_zone_o2_boost;
-    let light = 0.25 * env.light_intensity * env.depth_attenuation * (1.0 - 0.5 * env.avg_crowding);
+    let light =
+        0.25 * env.light_intensity * env.substrate_light_fraction * (1.0 - 0.5 * env.avg_crowding);
 
     (area, flow, oxygen, light)
 }

@@ -1,10 +1,10 @@
 use tank_core::systems::chemistry::solve_carbonate_equilibrium;
 use tank_core::systems::shrimp::update_stability_tracker;
 use tank_core::{
-    compute_habitat_registry, shrimp_biomass_g, Engine, MicrobeState, PlayerAction, ProcessParams,
-    SaveFile, ShrimpRuntimeParams, SimError, SimSeed, SimulationEngine, SourceWaterProfile,
-    StabilityTracker, TankState, WaterState, APP_VERSION, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
-    SCHEMA_VERSION,
+    compute_habitat_registry, legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2,
+    shrimp_biomass_g, Engine, MicrobeState, PlayerAction, ProcessParams, SaveFile,
+    ShrimpRuntimeParams, SimError, SimSeed, SimulationEngine, SourceWaterProfile, StabilityTracker,
+    TankState, WaterState, APP_VERSION, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G, SCHEMA_VERSION,
 };
 
 fn legacy_pre_stage_state_json(
@@ -69,6 +69,27 @@ fn legacy_pre_stage_state_json(
     state_obj.insert("animal".to_string(), serde_json::Value::Object(animal));
 
     state_json
+}
+
+fn rewrite_algae_half_saturation_fields_to_legacy_totals(
+    state_json: &mut serde_json::Value,
+    legacy_n_mg_total: f64,
+    legacy_p_mg_total: f64,
+) {
+    let process_params = state_json
+        .pointer_mut("/process_params")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("process params object");
+    process_params.remove("algae_half_saturation_n_mg_n_per_l");
+    process_params.remove("algae_half_saturation_p_mg_p_per_l");
+    process_params.insert(
+        "algae_half_saturation_n_mg_total".to_string(),
+        serde_json::json!(legacy_n_mg_total),
+    );
+    process_params.insert(
+        "algae_half_saturation_p_mg_total".to_string(),
+        serde_json::json!(legacy_p_mg_total),
+    );
 }
 
 #[test]
@@ -139,6 +160,87 @@ fn current_schema_save_roundtrip_preserves_serialized_substrate_factor(
         * loaded.state.substrate_layers[0].depth_cm
         * 0.73;
     assert!((loaded.state.substrate_layers[0].colonizable_area_cm2 - expected).abs() < 0.01);
+
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v8_saves_convert_algae_half_saturation_totals_to_concentrations(
+) -> Result<(), tank_core::SimError> {
+    let legacy_state = TankState::new(SimSeed(1440));
+    let mut state_json = serde_json::to_value(&legacy_state).expect("serialize legacy state");
+    rewrite_algae_half_saturation_fields_to_legacy_totals(&mut state_json, 5.0, 0.8);
+
+    let json = serde_json::json!({
+        "schema_version": 8,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert!(
+        (migrated
+            .state
+            .process_params
+            .algae_half_saturation_n_mg_n_per_l
+            - 0.25)
+            .abs()
+            < 1e-9
+    );
+    assert!(
+        (migrated
+            .state
+            .process_params
+            .algae_half_saturation_p_mg_p_per_l
+            - 0.04)
+            .abs()
+            < 1e-9
+    );
+
+    let _engine = migrated.into_engine()?;
+    Ok(())
+}
+
+#[test]
+fn current_schema_payloads_accept_legacy_algae_half_saturation_keys(
+) -> Result<(), tank_core::SimError> {
+    let state = TankState::new(SimSeed(1441));
+    let mut state_json = serde_json::to_value(&state).expect("serialize current state");
+    rewrite_algae_half_saturation_fields_to_legacy_totals(&mut state_json, 5.0, 0.8);
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+
+    assert_eq!(loaded.schema_version, SCHEMA_VERSION);
+    assert!(
+        (loaded
+            .state
+            .process_params
+            .algae_half_saturation_n_mg_n_per_l
+            - 0.25)
+            .abs()
+            < 1e-9
+    );
+    assert!(
+        (loaded
+            .state
+            .process_params
+            .algae_half_saturation_p_mg_p_per_l
+            - 0.04)
+            .abs()
+            < 1e-9
+    );
 
     Ok(())
 }
@@ -581,6 +683,112 @@ fn legacy_schema_v6_saves_gain_explicit_substrate_area_factor() -> Result<(), Si
 }
 
 #[test]
+fn legacy_schema_v7_saves_migrate_renamed_plant_half_saturation_fields() -> Result<(), SimError> {
+    let mut legacy_state = TankState::new(SimSeed(145));
+    legacy_state
+        .process_params
+        .plant_half_saturation_n_mg_n_per_l = 999.0;
+    legacy_state
+        .process_params
+        .plant_half_saturation_p_mg_p_per_l = 999.0;
+    legacy_state
+        .process_params
+        .plant_half_saturation_c_mg_c_per_l = 999.0;
+    legacy_state
+        .process_params
+        .plant_half_saturation_n_substrate_mg_n_per_m2 = 999.0;
+    legacy_state
+        .process_params
+        .plant_half_saturation_p_substrate_mg_p_per_m2 = 999.0;
+
+    let legacy_n_total = 13.0;
+    let legacy_p_total = 2.8;
+    let legacy_c_total = 34.0;
+
+    let mut state_json = serde_json::to_value(&legacy_state).expect("serialize legacy state");
+    let process_params = state_json
+        .pointer_mut("/process_params")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("process params object");
+    process_params.remove("plant_half_saturation_n_mg_n_per_l");
+    process_params.remove("plant_half_saturation_p_mg_p_per_l");
+    process_params.remove("plant_half_saturation_c_mg_c_per_l");
+    process_params.remove("plant_half_saturation_n_substrate_mg_n_per_m2");
+    process_params.remove("plant_half_saturation_p_substrate_mg_p_per_m2");
+    process_params.insert(
+        "plant_half_saturation_n_mg_total".to_string(),
+        serde_json::json!(legacy_n_total),
+    );
+    process_params.insert(
+        "plant_half_saturation_p_mg_total".to_string(),
+        serde_json::json!(legacy_p_total),
+    );
+    process_params.insert(
+        "plant_half_saturation_c_mg_total".to_string(),
+        serde_json::json!(legacy_c_total),
+    );
+
+    let json = serde_json::json!({
+        "schema_version": 7,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert!(
+        (migrated
+            .state
+            .process_params
+            .plant_half_saturation_n_mg_n_per_l
+            - legacy_total_param_to_mg_per_l(legacy_n_total))
+        .abs()
+            < 1e-12
+    );
+    assert!(
+        (migrated
+            .state
+            .process_params
+            .plant_half_saturation_p_mg_p_per_l
+            - legacy_total_param_to_mg_per_l(legacy_p_total))
+        .abs()
+            < 1e-12
+    );
+    assert!(
+        (migrated
+            .state
+            .process_params
+            .plant_half_saturation_c_mg_c_per_l
+            - legacy_total_param_to_mg_per_l(legacy_c_total))
+        .abs()
+            < 1e-12
+    );
+    assert!(
+        (migrated
+            .state
+            .process_params
+            .plant_half_saturation_n_substrate_mg_n_per_m2
+            - legacy_total_param_to_mg_per_m2(legacy_n_total))
+        .abs()
+            < 1e-12
+    );
+    assert!(
+        (migrated
+            .state
+            .process_params
+            .plant_half_saturation_p_substrate_mg_p_per_m2
+            - legacy_total_param_to_mg_per_m2(legacy_p_total))
+        .abs()
+            < 1e-12
+    );
+
+    let _engine = migrated.into_engine()?;
+    Ok(())
+}
+
+#[test]
 fn legacy_schema_v4_saves_split_legacy_maturation_days_into_stage_params() -> Result<(), SimError> {
     let mut legacy_state = TankState::new(SimSeed(111));
     legacy_state.process_params.shrimp_juvenile_maturation_days = 75.0;
@@ -903,6 +1111,53 @@ fn malformed_current_save_with_inverted_shrimp_thermal_penalty_range_is_rejected
         }
     );
 
+    Ok(())
+}
+
+#[test]
+fn current_schema_load_repairs_missing_shrimp_egg_cohort_bookkeeping() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(114));
+    state.animal.adult.count = 4;
+    state.animal.berried_females_count = 3;
+    state.animal.egg_progress_days = 6.0;
+    state.animal.egg_cohorts = vec![
+        tank_core::EggCohort {
+            count: 2,
+            progress_days: 4.0,
+        },
+        tank_core::EggCohort {
+            count: 0,
+            progress_days: 9.0,
+        },
+    ];
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+
+    assert_eq!(loaded.state.animal.berried_females_count, 3);
+    assert_eq!(loaded.state.animal.egg_cohort_count_total(), 3);
+    assert_eq!(loaded.state.animal.egg_cohorts.len(), 2);
+    assert!(loaded
+        .state
+        .animal
+        .egg_cohorts
+        .iter()
+        .all(|cohort| cohort.count > 0));
+    assert!(loaded
+        .state
+        .animal
+        .egg_cohorts
+        .iter()
+        .any(|cohort| cohort.count == 1 && (cohort.progress_days - 6.0).abs() < 1e-12));
+
+    let _engine = loaded.into_engine()?;
     Ok(())
 }
 

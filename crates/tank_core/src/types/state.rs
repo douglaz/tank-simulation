@@ -202,6 +202,24 @@ impl TankState {
             .clamp(0.0, self.geometry.fill_height_cm.max(0.0))
     }
 
+    /// Extinction coefficient k (1/cm) for Beer-Lambert light attenuation.
+    ///
+    /// k = k_water + k_algae × \[algae\] + k_doc × \[DOC\] + k_detritus × \[detritus\]
+    ///
+    /// where brackets denote concentrations derived from biomass totals and
+    /// water volume.
+    pub fn extinction_coefficient(&self) -> f64 {
+        let volume_l = self.water_volume_l().max(f64::EPSILON);
+        let algae_conc = self.algae.suspended_biomass_g / volume_l;
+        let doc_conc = self.water.dissolved_organic_carbon_mg_c_total / volume_l;
+        let detritus_conc = self.detritus.fine_detritus_g_total / volume_l;
+        (self.process_params.base_extinction_coeff_per_cm
+            + self.process_params.algae_extinction_coeff_per_cm_per_g_l * algae_conc
+            + self.process_params.doc_extinction_coeff_per_cm_per_mg_c_l * doc_conc
+            + self.process_params.detritus_extinction_coeff_per_cm_per_g_l * detritus_conc)
+            .max(0.0)
+    }
+
     pub fn derived_plant_crowding_index(&self) -> f64 {
         let surface_area_m2 = self.geometry.footprint_area_m2().max(f64::MIN_POSITIVE);
         let total_plant_biomass_g: f64 =

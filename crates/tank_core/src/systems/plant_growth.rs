@@ -199,8 +199,11 @@ fn plant_light_factor(state: &TankState) -> f64 {
     }
 
     let photoperiod_factor = (state.hardware.light.photoperiod_hours / 10.0).clamp(0.0, 1.0);
+    let k = state.extinction_coefficient();
+    let h = state.water_depth_above_substrate_cm();
+    let depth_factor = super::light::column_average_attenuation_factor(k, h);
     half_saturation(
-        state.hardware.light.intensity_index * photoperiod_factor,
+        state.hardware.light.intensity_index * photoperiod_factor * depth_factor,
         state.process_params.plant_light_half_saturation,
     )
 }

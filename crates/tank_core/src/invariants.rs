@@ -42,7 +42,6 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
     state.animal.clamp_berried_to_adults();
     state.animal.egg_progress_days = state.animal.egg_progress_days.max(0.0);
     state.animal.egg_cohorts.retain(|c| c.count > 0);
-    state.animal.reconcile_egg_cohort_counts();
     state.animal.adult.clamp_maturation_accum_to_count();
     state.animal.sub_adult.clamp_maturation_accum_to_count();
     state.animal.juvenile.clamp_maturation_accum_to_count();
@@ -184,6 +183,19 @@ fn validate_invariants_inner(state: &TankState) -> Result<(), SimError> {
         state.animal.sub_adult.reserve_g,
     )?;
     check_non_negative("animal.juvenile.reserve_g", state.animal.juvenile.reserve_g)?;
+    if state.animal.berried_females_count > state.animal.adult.count {
+        return Err(SimError::InvariantViolation {
+            field: "animal.berried_females_count",
+            value: f64::from(state.animal.berried_females_count),
+        });
+    }
+    let egg_cohort_total = state.animal.egg_cohort_count_total();
+    if egg_cohort_total != state.animal.berried_females_count {
+        return Err(SimError::InvariantViolation {
+            field: "animal.egg_cohort_count_total",
+            value: f64::from(egg_cohort_total),
+        });
+    }
 
     // Process parameters: reject negative coefficients that would produce
     // nonsensical physics (negative heat transfer, negative reaeration, etc.).

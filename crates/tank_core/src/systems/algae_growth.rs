@@ -29,15 +29,22 @@ const ALGAE_P_MG_PER_G_GROWTH: f64 = 5.0;
 /// - **Carbon**: DIC availability caps realised growth after gross growth
 ///   is computed (post-hoc nutrient cap), ensuring carbon mass balance.
 ///
-/// # Intentionally abstracted (acceptable for Phase 1)
+/// # Light attenuation
+///
+/// Light available to algae is attenuated by depth and turbidity using
+/// Beer-Lambert: I(z) = I₀ × exp(−k×z).  The extinction coefficient k
+/// combines pure-water PAR absorption, suspended algae self-shading,
+/// dissolved organic carbon (tannins), and fine detritus.  Suspended
+/// algae use the column-average PAR; this creates a self-shading feedback
+/// where denser blooms reduce their own light supply.
+///
+/// # Intentionally abstracted
 ///
 /// - Planktonic and periphyton algae share the same nutrient/light/temperature
 ///   limitation factors.  Phase 3 (tanksim-6e5.5.3) will split them with
 ///   habitat-specific light exposure and nutrient access.
 /// - P cycling is not fully closed; the model over-indexes on N limitation.
 ///   This is acceptable until the P cycle is closed in a later phase.
-/// - Light attenuation by depth and turbidity is not yet modelled; it will
-///   be added in tanksim-6e5.5.5.
 /// - CO₂/DIC interaction with photosynthesis and pH is deferred to
 ///   tanksim-6e5.4.4.
 pub fn step_daily_algae(state: &mut TankState) {
@@ -267,25 +274,26 @@ pub fn step_daily_algae(state: &mut TankState) {
 
 /// Compute the effective light limitation factor for algae growth.
 ///
-/// Combines two dimensionless drivers into a single [0, 1] factor:
+/// Combines three dimensionless drivers into a single [0, 1] factor:
 /// 1. **Photoperiod**: hours of light per day normalised to a 9-hour
 ///    reference (longer days → more growth, capped at 1.0).
-/// 2. **Intensity**: hardware light intensity index (0–1) passed through
-///    Monod half-saturation kinetics.
+/// 2. **Intensity**: hardware light intensity index (0–1).
+/// 3. **Depth/turbidity attenuation**: Beer-Lambert column-average factor
+///    that reduces effective PAR in deeper or more turbid water.
 ///
-/// The product of photoperiod fraction and intensity index is the effective
-/// light dose; a half-saturation curve then converts it to a limitation
-/// factor.  This is a simplification—real algae integrate PAR over the
-/// water column, which depends on depth and turbidity.  Depth/turbidity
-/// attenuation will be added in tanksim-6e5.5.5.
+/// The product of these three is the effective light dose; a
+/// half-saturation curve then converts it to a limitation factor.
 fn algae_light_factor(state: &TankState) -> f64 {
     if !state.hardware.light.enabled {
         return 0.0;
     }
 
     let photoperiod_factor = (state.hardware.light.photoperiod_hours / 9.0).clamp(0.0, 1.0);
+    let k = state.extinction_coefficient();
+    let h = state.water_depth_above_substrate_cm();
+    let depth_factor = super::light::column_average_attenuation_factor(k, h);
     half_saturation(
-        state.hardware.light.intensity_index * photoperiod_factor,
+        state.hardware.light.intensity_index * photoperiod_factor * depth_factor,
         state.process_params.algae_light_half_saturation,
     )
 }

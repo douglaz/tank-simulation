@@ -1,7 +1,6 @@
 use crate::types::{
-    concentration_from_total, legacy_total_param_to_mg_per_l, live_biomass_carbon_mg,
-    live_biomass_nitrogen_mg, TankState, ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G,
-    SUB_ADULT_SHRIMP_BIOMASS_G,
+    concentration_from_total, live_biomass_carbon_mg, live_biomass_nitrogen_mg, TankState,
+    ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G, SUB_ADULT_SHRIMP_BIOMASS_G,
 };
 
 const FEED_P_TO_N_MASS_RATIO: f64 = 0.10;
@@ -98,9 +97,8 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     // Environmental factors for decomposers
     let temp = state.water.temperature_c;
     let f_temp_decomp = temperature_factor(temp);
-    let decomposer_k_do_mg_per_l = legacy_total_param_to_mg_per_l(pp.decomposer_k_do_mg).max(0.01);
-    let decomposer_k_doc_mg_c_per_l =
-        legacy_total_param_to_mg_per_l(pp.decomposer_k_doc_mg).max(0.01);
+    let decomposer_k_do_mg_per_l = pp.decomposer_k_do_mg_per_l.max(0.01);
+    let decomposer_k_doc_mg_c_per_l = pp.decomposer_k_doc_mg_c_per_l.max(0.01);
     let f_do_decomp = monod_factor(do_mg_per_l, decomposer_k_do_mg_per_l);
 
     // Microfauna modestly improve mineralization efficiency
@@ -166,12 +164,12 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let o2_for_aob = 3.43_f64; // TAN -> nitrite
     let o2_for_comammox = pp.o2_per_mg_n_nitrified; // TAN -> nitrate (4.57)
     let o2_for_nob = 1.14_f64; // nitrite -> nitrate
-    let aob_k_tan_mg_n_per_l = legacy_total_param_to_mg_per_l(pp.aob_k_tan_mg).max(0.01);
-    let aob_k_do_mg_per_l = legacy_total_param_to_mg_per_l(pp.aob_k_do_mg).max(0.01);
-    let comammox_k_tan_mg_n_per_l = legacy_total_param_to_mg_per_l(pp.comammox_k_tan_mg).max(0.01);
-    let comammox_k_do_mg_per_l = legacy_total_param_to_mg_per_l(pp.comammox_k_do_mg).max(0.01);
-    let nob_k_nitrite_mg_n_per_l = legacy_total_param_to_mg_per_l(pp.nob_k_nitrite_mg).max(0.01);
-    let nob_k_do_mg_per_l = legacy_total_param_to_mg_per_l(pp.nob_k_do_mg).max(0.01);
+    let aob_k_tan_mg_n_per_l = pp.aob_k_tan_mg_n_per_l.max(0.01);
+    let aob_k_do_mg_per_l = pp.aob_k_do_mg_per_l.max(0.01);
+    let comammox_k_tan_mg_n_per_l = pp.comammox_k_tan_mg_n_per_l.max(0.01);
+    let comammox_k_do_mg_per_l = pp.comammox_k_do_mg_per_l.max(0.01);
+    let nob_k_nitrite_mg_n_per_l = pp.nob_k_nitrite_mg_n_per_l.max(0.01);
+    let nob_k_do_mg_per_l = pp.nob_k_do_mg_per_l.max(0.01);
 
     // Shared logistic factor for nitrifier growth bookkeeping.
     // Growth is suppressed as total biomass approaches the carrying capacity.

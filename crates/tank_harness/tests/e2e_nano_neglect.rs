@@ -28,7 +28,8 @@ fn nano_neglect_artifacts_on_violation() -> Result<(), Box<dyn std::error::Error
         initial_adult_shrimp_count: Some(5),
     };
 
-    let mut run = HarnessRun::with_overrides(SimSeed(77), "nano_cycle", overrides)?;
+    let mut run = HarnessRun::with_overrides(SimSeed(77), "nano_cycle", overrides)?
+        .with_artifact_label("nano_cycle_neglect");
     run.enable_instrumentation();
 
     // Overfeed for a week, then abandon
@@ -125,7 +126,8 @@ fn nano_neglect_artifacts_on_violation() -> Result<(), Box<dyn std::error::Error
 
 #[test]
 fn nano_healthy_no_violations() -> Result<(), Box<dyn std::error::Error>> {
-    let mut run = HarnessRun::new(SimSeed(55), "nano_cycle")?;
+    let mut run =
+        HarnessRun::new(SimSeed(55), "nano_cycle")?.with_artifact_label("nano_cycle_do_guardrail");
     run.enable_instrumentation();
 
     // Gentle care for 14 days

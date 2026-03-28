@@ -38,7 +38,8 @@ fn run_standard_lifecycle(
 ) -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("\n=== SCENARIO: {scenario_id} (seed={seed}) ===");
 
-    let mut run = HarnessRun::new(SimSeed(seed), scenario_id)?;
+    let mut run = HarnessRun::new(SimSeed(seed), scenario_id)?
+        .with_artifact_label(format!("{scenario_id}_discovery"));
 
     print_checkpoint("initial", &run);
 

@@ -53,14 +53,15 @@ pub struct ProcessParams {
     // -- Decomposer mineralization --
     /// Max mineralization rate per g decomposer biomass per hour (g DOC consumed).
     pub decomposer_vmax_per_hour: f64,
-    /// Legacy compatibility name for the decomposer DOC half-saturation.
-    /// Runtime code normalizes this total-style value onto a 20 L reference
-    /// tank so the effective Monod constant stays concentration-based.
-    pub decomposer_k_doc_mg: f64,
-    /// Legacy compatibility name for the decomposer DO half-saturation.
-    /// Runtime code normalizes this total-style value onto a 20 L reference
-    /// tank so the effective Monod constant stays concentration-based.
-    pub decomposer_k_do_mg: f64,
+    /// Decomposer DOC half-saturation constant (mg C / L).
+    /// Monod-style: limitation = [DOC] / ([DOC] + K_s).
+    /// Literature range: 1–10 mg C/L.
+    #[serde(alias = "decomposer_k_doc_mg")]
+    pub decomposer_k_doc_mg_c_per_l: f64,
+    /// Decomposer dissolved-oxygen half-saturation constant (mg O₂ / L).
+    /// Literature range: 0.3–1.0 mg O₂/L.
+    #[serde(alias = "decomposer_k_do_mg")]
+    pub decomposer_k_do_mg_per_l: f64,
     /// Growth yield of decomposer biomass per g DOC consumed.
     pub decomposer_growth_yield: f64,
     /// Hourly decay rate of decomposer biomass under starvation.
@@ -69,14 +70,14 @@ pub struct ProcessParams {
     // -- Nitrifier guild kinetics --
     /// AOB vmax: max mg N oxidized per g AOB biomass per hour.
     pub aob_vmax_mg_n_per_g_per_hour: f64,
-    /// Legacy compatibility name for the AOB TAN half-saturation.
-    /// Runtime code normalizes this total-style value onto a 20 L reference
-    /// tank so the effective Monod constant stays concentration-based.
-    pub aob_k_tan_mg: f64,
-    /// Legacy compatibility name for the AOB DO half-saturation.
-    /// Runtime code normalizes this total-style value onto a 20 L reference
-    /// tank so the effective Monod constant stays concentration-based.
-    pub aob_k_do_mg: f64,
+    /// AOB total-ammonia-nitrogen half-saturation constant (mg N / L).
+    /// Literature range: 0.5–2.0 mg N/L.
+    #[serde(alias = "aob_k_tan_mg")]
+    pub aob_k_tan_mg_n_per_l: f64,
+    /// AOB dissolved-oxygen half-saturation constant (mg O₂ / L).
+    /// Literature range: 0.3–1.0 mg O₂/L.
+    #[serde(alias = "aob_k_do_mg")]
+    pub aob_k_do_mg_per_l: f64,
     /// AOB growth yield (g biomass per mg N oxidized).
     pub aob_growth_yield: f64,
     /// AOB decay rate per hour.
@@ -84,14 +85,15 @@ pub struct ProcessParams {
 
     /// NOB vmax: max mg N oxidized per g NOB biomass per hour.
     pub nob_vmax_mg_n_per_g_per_hour: f64,
-    /// Legacy compatibility name for the NOB nitrite half-saturation.
-    /// Runtime code normalizes this total-style value onto a 20 L reference
-    /// tank so the effective Monod constant stays concentration-based.
-    pub nob_k_nitrite_mg: f64,
-    /// Legacy compatibility name for the NOB DO half-saturation.
-    /// Runtime code normalizes this total-style value onto a 20 L reference
-    /// tank so the effective Monod constant stays concentration-based.
-    pub nob_k_do_mg: f64,
+    /// NOB nitrite half-saturation constant (mg N / L).
+    /// Literature range: 0.2–1.0 mg N/L.
+    #[serde(alias = "nob_k_nitrite_mg")]
+    pub nob_k_nitrite_mg_n_per_l: f64,
+    /// NOB dissolved-oxygen half-saturation constant (mg O₂ / L).
+    /// NOB are more DO-sensitive than AOB; K_s(DO) >= AOB K_s(DO).
+    /// Literature range: 0.5–1.5 mg O₂/L.
+    #[serde(alias = "nob_k_do_mg")]
+    pub nob_k_do_mg_per_l: f64,
     /// NOB growth yield (g biomass per mg N oxidized).
     pub nob_growth_yield: f64,
     /// NOB decay rate per hour.
@@ -99,14 +101,15 @@ pub struct ProcessParams {
 
     /// Comammox vmax multiplier relative to AOB (must be < 1.0).
     pub comammox_vmax_fraction: f64,
-    /// Legacy compatibility name for the comammox TAN half-saturation.
-    /// Runtime code normalizes this total-style value onto a 20 L reference
-    /// tank so the effective Monod constant stays concentration-based.
-    pub comammox_k_tan_mg: f64,
-    /// Legacy compatibility name for the comammox DO half-saturation.
-    /// Runtime code normalizes this total-style value onto a 20 L reference
-    /// tank so the effective Monod constant stays concentration-based.
-    pub comammox_k_do_mg: f64,
+    /// Comammox TAN half-saturation constant (mg N / L).
+    /// Comammox has a lower K_s(TAN) than AOB (competitive advantage at low ammonia).
+    /// Literature range: 0.05–0.5 mg N/L.
+    #[serde(alias = "comammox_k_tan_mg")]
+    pub comammox_k_tan_mg_n_per_l: f64,
+    /// Comammox dissolved-oxygen half-saturation constant (mg O₂ / L).
+    /// Literature range: 0.3–1.0 mg O₂/L.
+    #[serde(alias = "comammox_k_do_mg")]
+    pub comammox_k_do_mg_per_l: f64,
     /// Comammox growth yield (g biomass per mg N oxidized).
     pub comammox_growth_yield: f64,
     /// Comammox decay rate per hour.
@@ -164,6 +167,21 @@ pub struct ProcessParams {
     pub periphyton_capacity_g_per_m2: f64,
     pub algae_bloom_threshold_g_per_l: f64,
     pub algae_nuisance_biomass_g_per_m2: f64,
+
+    // -- Light attenuation (Beer-Lambert) --
+    /// Base extinction coefficient for pure water (1/cm).
+    /// Pure freshwater PAR: ~0.04/m = 0.0004/cm.
+    #[serde(default = "default_base_extinction_coeff_per_cm")]
+    pub base_extinction_coeff_per_cm: f64,
+    /// Specific extinction coefficient for suspended algae (1/cm per g/L).
+    #[serde(default = "default_algae_extinction_coeff")]
+    pub algae_extinction_coeff_per_cm_per_g_l: f64,
+    /// Specific extinction coefficient for dissolved organic carbon (1/cm per mg C/L).
+    #[serde(default = "default_doc_extinction_coeff")]
+    pub doc_extinction_coeff_per_cm_per_mg_c_l: f64,
+    /// Specific extinction coefficient for fine detritus (1/cm per g/L).
+    #[serde(default = "default_detritus_extinction_coeff")]
+    pub detritus_extinction_coeff_per_cm_per_g_l: f64,
 
     // -- Shrimp dynamics --
     pub shrimp_base_mortality_per_day: f64,
@@ -270,26 +288,26 @@ impl Default for ProcessParams {
             feed_n_to_c_ratio: 0.16,
 
             decomposer_vmax_per_hour: 0.02,
-            decomposer_k_doc_mg: 5.0,
-            decomposer_k_do_mg: 2.0,
+            decomposer_k_doc_mg_c_per_l: 3.0,
+            decomposer_k_do_mg_per_l: 0.5,
             decomposer_growth_yield: 0.3,
             decomposer_decay_rate_per_hour: 0.002,
 
             aob_vmax_mg_n_per_g_per_hour: 1.5,
-            aob_k_tan_mg: 0.5,
-            aob_k_do_mg: 1.0,
+            aob_k_tan_mg_n_per_l: 1.0,
+            aob_k_do_mg_per_l: 0.5,
             aob_growth_yield: 0.05,
             aob_decay_rate_per_hour: 0.003,
 
             nob_vmax_mg_n_per_g_per_hour: 1.2,
-            nob_k_nitrite_mg: 0.3,
-            nob_k_do_mg: 1.0,
+            nob_k_nitrite_mg_n_per_l: 0.5,
+            nob_k_do_mg_per_l: 0.8,
             nob_growth_yield: 0.04,
             nob_decay_rate_per_hour: 0.003,
 
             comammox_vmax_fraction: 0.4,
-            comammox_k_tan_mg: 0.8,
-            comammox_k_do_mg: 1.5,
+            comammox_k_tan_mg_n_per_l: 0.2,
+            comammox_k_do_mg_per_l: 0.6,
             comammox_growth_yield: 0.03,
             comammox_decay_rate_per_hour: 0.004,
 
@@ -323,6 +341,11 @@ impl Default for ProcessParams {
             periphyton_capacity_g_per_m2: 6.0,
             algae_bloom_threshold_g_per_l: 0.08,
             algae_nuisance_biomass_g_per_m2: 10.0,
+
+            base_extinction_coeff_per_cm: default_base_extinction_coeff_per_cm(),
+            algae_extinction_coeff_per_cm_per_g_l: default_algae_extinction_coeff(),
+            doc_extinction_coeff_per_cm_per_mg_c_l: default_doc_extinction_coeff(),
+            detritus_extinction_coeff_per_cm_per_g_l: default_detritus_extinction_coeff(),
 
             shrimp_base_mortality_per_day: 0.002,
             shrimp_stress_mortality_scale: 0.15,
@@ -394,4 +417,25 @@ fn default_microfauna_excretion_fraction() -> f64 {
 }
 fn default_microfauna_growth_fraction() -> f64 {
     0.20
+}
+
+// -- Light attenuation defaults (Beer-Lambert) --
+
+/// Pure freshwater PAR extinction: ~0.04/m = 0.0004/cm.
+fn default_base_extinction_coeff_per_cm() -> f64 {
+    0.0004
+}
+/// Suspended algae specific extinction. Typical range 1–4 /cm per g/L
+/// for green microalgae at PAR wavelengths.
+fn default_algae_extinction_coeff() -> f64 {
+    2.0
+}
+/// Dissolved organic carbon (humic/tannin) specific extinction.
+/// Typical range 0.001–0.005 /cm per mg C/L for freshwater DOC.
+fn default_doc_extinction_coeff() -> f64 {
+    0.002
+}
+/// Fine detritus (suspended particulates) specific extinction.
+fn default_detritus_extinction_coeff() -> f64 {
+    0.5
 }

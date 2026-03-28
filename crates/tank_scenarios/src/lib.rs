@@ -345,6 +345,7 @@ fn source_water_to_profile(preset: &tank_data::SourceWaterPreset) -> SourceWater
 
 /// Converts a `tank_data::ProcessParamsPreset` into `tank_core::ProcessParams`.
 fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessParams {
+    let defaults = ProcessParams::default();
     ProcessParams {
         mineralization_rate_per_day: preset.mineralization_rate_per_day,
         nitrification_vmax: preset.nitrification_vmax,
@@ -364,26 +365,26 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
         feed_n_to_c_ratio: preset.feed_n_to_c_ratio,
 
         decomposer_vmax_per_hour: preset.decomposer_vmax_per_hour,
-        decomposer_k_doc_mg: preset.decomposer_k_doc_mg,
-        decomposer_k_do_mg: preset.decomposer_k_do_mg,
+        decomposer_k_doc_mg_c_per_l: preset.decomposer_k_doc_mg_c_per_l,
+        decomposer_k_do_mg_per_l: preset.decomposer_k_do_mg_per_l,
         decomposer_growth_yield: preset.decomposer_growth_yield,
         decomposer_decay_rate_per_hour: preset.decomposer_decay_rate_per_hour,
 
         aob_vmax_mg_n_per_g_per_hour: preset.aob_vmax_mg_n_per_g_per_hour,
-        aob_k_tan_mg: preset.aob_k_tan_mg,
-        aob_k_do_mg: preset.aob_k_do_mg,
+        aob_k_tan_mg_n_per_l: preset.aob_k_tan_mg_n_per_l,
+        aob_k_do_mg_per_l: preset.aob_k_do_mg_per_l,
         aob_growth_yield: preset.aob_growth_yield,
         aob_decay_rate_per_hour: preset.aob_decay_rate_per_hour,
 
         nob_vmax_mg_n_per_g_per_hour: preset.nob_vmax_mg_n_per_g_per_hour,
-        nob_k_nitrite_mg: preset.nob_k_nitrite_mg,
-        nob_k_do_mg: preset.nob_k_do_mg,
+        nob_k_nitrite_mg_n_per_l: preset.nob_k_nitrite_mg_n_per_l,
+        nob_k_do_mg_per_l: preset.nob_k_do_mg_per_l,
         nob_growth_yield: preset.nob_growth_yield,
         nob_decay_rate_per_hour: preset.nob_decay_rate_per_hour,
 
         comammox_vmax_fraction: preset.comammox_vmax_fraction,
-        comammox_k_tan_mg: preset.comammox_k_tan_mg,
-        comammox_k_do_mg: preset.comammox_k_do_mg,
+        comammox_k_tan_mg_n_per_l: preset.comammox_k_tan_mg_n_per_l,
+        comammox_k_do_mg_per_l: preset.comammox_k_do_mg_per_l,
         comammox_growth_yield: preset.comammox_growth_yield,
         comammox_decay_rate_per_hour: preset.comammox_decay_rate_per_hour,
 
@@ -420,6 +421,10 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
         periphyton_capacity_g_per_m2: preset.periphyton_capacity_g_per_m2,
         algae_bloom_threshold_g_per_l: preset.algae_bloom_threshold_g_per_l,
         algae_nuisance_biomass_g_per_m2: preset.algae_nuisance_biomass_g_per_m2,
+        base_extinction_coeff_per_cm: defaults.base_extinction_coeff_per_cm,
+        algae_extinction_coeff_per_cm_per_g_l: defaults.algae_extinction_coeff_per_cm_per_g_l,
+        doc_extinction_coeff_per_cm_per_mg_c_l: defaults.doc_extinction_coeff_per_cm_per_mg_c_l,
+        detritus_extinction_coeff_per_cm_per_g_l: defaults.detritus_extinction_coeff_per_cm_per_g_l,
 
         shrimp_base_mortality_per_day: preset.shrimp_base_mortality_per_day,
         shrimp_stress_mortality_scale: preset.shrimp_stress_mortality_scale,

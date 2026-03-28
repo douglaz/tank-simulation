@@ -168,52 +168,58 @@ impl Envelope {
         let mut violations = Vec::new();
 
         if let Some((min, max)) = self.ph_bounds {
-            if snap.ph < min || snap.ph > max {
-                violations.push(format!(
-                    "pH {:.3} outside [{:.1}, {:.1}]",
-                    snap.ph, min, max
-                ));
-            }
+            check_f64_bounds(
+                &mut violations,
+                "pH",
+                snap.ph,
+                (min, max),
+                |value, min, max| format!("pH {value:.3} outside [{min:.1}, {max:.1}]"),
+            );
         }
         if let Some((min, max)) = self.temperature_c_bounds {
-            if snap.water_temp_c < min || snap.water_temp_c > max {
-                violations.push(format!(
-                    "temp {:.2}C outside [{:.1}, {:.1}]",
-                    snap.water_temp_c, min, max
-                ));
-            }
+            check_f64_bounds(
+                &mut violations,
+                "temperature",
+                snap.water_temp_c,
+                (min, max),
+                |value, min, max| format!("temp {value:.2}C outside [{min:.1}, {max:.1}]"),
+            );
         }
         if let Some((min, max)) = self.tan_mg_n_per_l_bounds {
-            if snap.tan_mg_n_per_l < min || snap.tan_mg_n_per_l > max {
-                violations.push(format!(
-                    "TAN {:.4} mg N/L outside [{:.3}, {:.3}]",
-                    snap.tan_mg_n_per_l, min, max
-                ));
-            }
+            check_f64_bounds(
+                &mut violations,
+                "TAN",
+                snap.tan_mg_n_per_l,
+                (min, max),
+                |value, min, max| format!("TAN {value:.4} mg N/L outside [{min:.3}, {max:.3}]"),
+            );
         }
         if let Some((min, max)) = self.nitrite_mg_n_per_l_bounds {
-            if snap.nitrite_mg_n_per_l < min || snap.nitrite_mg_n_per_l > max {
-                violations.push(format!(
-                    "NO2 {:.4} mg N/L outside [{:.3}, {:.3}]",
-                    snap.nitrite_mg_n_per_l, min, max
-                ));
-            }
+            check_f64_bounds(
+                &mut violations,
+                "NO2",
+                snap.nitrite_mg_n_per_l,
+                (min, max),
+                |value, min, max| format!("NO2 {value:.4} mg N/L outside [{min:.3}, {max:.3}]"),
+            );
         }
         if let Some((min, max)) = self.nitrate_mg_n_per_l_bounds {
-            if snap.nitrate_mg_n_per_l < min || snap.nitrate_mg_n_per_l > max {
-                violations.push(format!(
-                    "NO3 {:.4} mg N/L outside [{:.3}, {:.3}]",
-                    snap.nitrate_mg_n_per_l, min, max
-                ));
-            }
+            check_f64_bounds(
+                &mut violations,
+                "NO3",
+                snap.nitrate_mg_n_per_l,
+                (min, max),
+                |value, min, max| format!("NO3 {value:.4} mg N/L outside [{min:.3}, {max:.3}]"),
+            );
         }
         if let Some((min, max)) = self.do_mg_l_bounds {
-            if snap.do_mg_l < min || snap.do_mg_l > max {
-                violations.push(format!(
-                    "DO {:.3} mg/L outside [{:.1}, {:.1}]",
-                    snap.do_mg_l, min, max
-                ));
-            }
+            check_f64_bounds(
+                &mut violations,
+                "DO",
+                snap.do_mg_l,
+                (min, max),
+                |value, min, max| format!("DO {value:.3} mg/L outside [{min:.1}, {max:.1}]"),
+            );
         }
         if let Some((min, max)) = self.shrimp_count_bounds {
             let total = snap.total_shrimp_count;
@@ -238,53 +244,66 @@ impl Envelope {
             }
         }
         if let Some((min, max)) = self.shrimp_reproductive_readiness_bounds {
-            if snap.shrimp_reproductive_readiness < min || snap.shrimp_reproductive_readiness > max
-            {
-                violations.push(format!(
-                    "shrimp reproductive readiness {:.3} outside [{:.2}, {:.2}]",
-                    snap.shrimp_reproductive_readiness, min, max
-                ));
-            }
+            check_f64_bounds(
+                &mut violations,
+                "shrimp reproductive readiness",
+                snap.shrimp_reproductive_readiness,
+                (min, max),
+                |value, min, max| {
+                    format!("shrimp reproductive readiness {value:.3} outside [{min:.2}, {max:.2}]")
+                },
+            );
         }
         if let Some((min, max)) = self.plant_biomass_g_bounds {
-            if snap.total_plant_biomass_g < min || snap.total_plant_biomass_g > max {
-                violations.push(format!(
-                    "plant biomass {:.3}g outside [{:.2}, {:.2}]",
-                    snap.total_plant_biomass_g, min, max
-                ));
-            }
+            check_f64_bounds(
+                &mut violations,
+                "plant biomass",
+                snap.total_plant_biomass_g,
+                (min, max),
+                |value, min, max| format!("plant biomass {value:.3}g outside [{min:.2}, {max:.2}]"),
+            );
         }
         if let Some((min, max)) = self.algae_nuisance_bounds {
-            if snap.algae_nuisance_index < min || snap.algae_nuisance_index > max {
-                violations.push(format!(
-                    "algae nuisance {:.3} outside [{:.2}, {:.2}]",
-                    snap.algae_nuisance_index, min, max
-                ));
-            }
+            check_f64_bounds(
+                &mut violations,
+                "algae nuisance",
+                snap.algae_nuisance_index,
+                (min, max),
+                |value, min, max| format!("algae nuisance {value:.3} outside [{min:.2}, {max:.2}]"),
+            );
         }
         if let Some((min, max)) = self.biofilter_maturity_bounds {
-            if snap.biofilter_maturity_index < min || snap.biofilter_maturity_index > max {
-                violations.push(format!(
-                    "biofilter maturity {:.3} outside [{:.2}, {:.2}]",
-                    snap.biofilter_maturity_index, min, max
-                ));
-            }
+            check_f64_bounds(
+                &mut violations,
+                "biofilter maturity",
+                snap.biofilter_maturity_index,
+                (min, max),
+                |value, min, max| {
+                    format!("biofilter maturity {value:.3} outside [{min:.2}, {max:.2}]")
+                },
+            );
         }
         if let Some((min, max)) = self.fast_stem_biomass_g_bounds {
-            if snap.fast_stem_biomass_g < min || snap.fast_stem_biomass_g > max {
-                violations.push(format!(
-                    "fast stem biomass {:.3}g outside [{:.2}, {:.2}]",
-                    snap.fast_stem_biomass_g, min, max
-                ));
-            }
+            check_f64_bounds(
+                &mut violations,
+                "fast stem biomass",
+                snap.fast_stem_biomass_g,
+                (min, max),
+                |value, min, max| {
+                    format!("fast stem biomass {value:.3}g outside [{min:.2}, {max:.2}]")
+                },
+            );
         }
         if let Some((min, max)) = self.periphyton_biomass_g_bounds {
-            if snap.periphyton_biomass_g < min || snap.periphyton_biomass_g > max {
-                violations.push(format!(
-                    "periphyton biomass {:.4}g outside [{:.3}, {:.3}]",
-                    snap.periphyton_biomass_g, min, max
-                ));
-            }
+            check_f64_bounds(
+                &mut violations,
+                "periphyton biomass",
+                snap.periphyton_biomass_g,
+                (min, max),
+                |value, min, max| {
+                    format!("periphyton biomass {value:.4}g outside [{min:.3}, {max:.3}]")
+                },
+            );
         }
 
         violations
@@ -313,6 +332,7 @@ pub struct AssertionFailure {
 pub struct ArtifactMetadata {
     pub seed: u64,
     pub scenario_id: String,
+    pub artifact_label: String,
     pub simulated_day: u32,
     pub simulated_hour: u8,
     pub checkpoint_count: usize,
@@ -364,6 +384,7 @@ impl From<tank_data::PresetError> for HarnessError {
 pub struct HarnessRun {
     seed: SimSeed,
     scenario_id: String,
+    artifact_label: Option<String>,
     engine: Engine,
     checkpoints: Vec<Checkpoint>,
     failures: Vec<AssertionFailure>,
@@ -380,6 +401,7 @@ impl HarnessRun {
         Ok(Self {
             seed,
             scenario_id: scenario_id.to_owned(),
+            artifact_label: None,
             engine: Engine::from_parts(state, vec![]),
             checkpoints: Vec::new(),
             failures: Vec::new(),
@@ -398,6 +420,7 @@ impl HarnessRun {
         Ok(Self {
             seed,
             scenario_id: scenario_id.to_owned(),
+            artifact_label: None,
             engine: Engine::from_parts(state, vec![]),
             checkpoints: Vec::new(),
             failures: Vec::new(),
@@ -411,11 +434,21 @@ impl HarnessRun {
         Self {
             seed,
             scenario_id: scenario_id.to_owned(),
+            artifact_label: None,
             engine: Engine::from_parts(state, vec![]),
             checkpoints: Vec::new(),
             failures: Vec::new(),
             verbose,
         }
+    }
+
+    /// Override the artifact label used in failure metadata and temp paths.
+    ///
+    /// This is useful when multiple tests run the same scenario with the same
+    /// seed but need distinct failure artifacts.
+    pub fn with_artifact_label(mut self, label: impl Into<String>) -> Self {
+        self.artifact_label = Some(label.into());
+        self
     }
 
     /// Enable budget tracking and tracing on the engine.
@@ -548,9 +581,18 @@ impl HarnessRun {
     /// Path is derived solely from scenario_id and seed, so the same inputs
     /// always produce the same artifact path.
     pub fn artifact_dir(&self) -> PathBuf {
-        std::env::temp_dir()
-            .join("tank_harness")
-            .join(format!("{}_seed{}", self.scenario_id, self.seed.0))
+        let scenario_component = sanitize_artifact_component(&self.scenario_id);
+        let dir_name = if self.artifact_label() == self.scenario_id {
+            format!("{}_seed{}", scenario_component, self.seed.0)
+        } else {
+            format!(
+                "{}_{}_seed{}",
+                scenario_component,
+                sanitize_artifact_component(self.artifact_label()),
+                self.seed.0
+            )
+        };
+        std::env::temp_dir().join("tank_harness").join(dir_name)
     }
 
     /// Finalize the run.
@@ -569,12 +611,22 @@ impl HarnessRun {
         }
 
         let artifact_path = self.write_artifacts();
-        let mut msg = format!(
-            "scenario '{}' seed={}: {} assertion failure(s)\n",
-            self.scenario_id,
-            self.seed.0,
-            self.failures.len()
-        );
+        let mut msg = if self.artifact_label() == self.scenario_id {
+            format!(
+                "scenario '{}' seed={}: {} assertion failure(s)\n",
+                self.scenario_id,
+                self.seed.0,
+                self.failures.len()
+            )
+        } else {
+            format!(
+                "scenario '{}' [{}] seed={}: {} assertion failure(s)\n",
+                self.scenario_id,
+                self.artifact_label(),
+                self.seed.0,
+                self.failures.len()
+            )
+        };
         for f in &self.failures {
             msg.push_str(&format!(
                 "  [{} d{}h{}] {}\n",
@@ -597,6 +649,7 @@ impl HarnessRun {
         let meta = ArtifactMetadata {
             seed: self.seed.0,
             scenario_id: self.scenario_id.clone(),
+            artifact_label: self.artifact_label().to_owned(),
             simulated_day: state.environment.day,
             simulated_hour: state.environment.hour_of_day,
             checkpoint_count: self.checkpoints.len(),
@@ -637,8 +690,9 @@ impl HarnessRun {
     fn dump_verbose_trace(&self) {
         if let Some(tracer) = self.engine.tracer() {
             eprintln!(
-                "--- TANK_E2E_VERBOSE trace for '{}' seed={} ({} ticks) ---",
+                "--- TANK_E2E_VERBOSE trace for '{}' [{}] seed={} ({} ticks) ---",
                 self.scenario_id,
+                self.artifact_label(),
                 self.seed.0,
                 tracer.tick_count()
             );
@@ -649,6 +703,12 @@ impl HarnessRun {
             eprintln!("--- end trace ---");
         }
     }
+
+    fn artifact_label(&self) -> &str {
+        self.artifact_label
+            .as_deref()
+            .unwrap_or(self.scenario_id.as_str())
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -657,6 +717,55 @@ impl HarnessRun {
 
 fn is_verbose() -> bool {
     std::env::var("TANK_E2E_VERBOSE").is_ok_and(|v| v == "1")
+}
+
+fn sanitize_artifact_component(value: &str) -> String {
+    let sanitized = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    let trimmed = sanitized.trim_matches('_');
+    if trimmed.is_empty() {
+        "run".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn non_finite_label(value: f64) -> &'static str {
+    if value.is_nan() {
+        "NaN"
+    } else if value.is_sign_negative() {
+        "-inf"
+    } else {
+        "inf"
+    }
+}
+
+fn check_f64_bounds(
+    violations: &mut Vec<String>,
+    label: &str,
+    value: f64,
+    bounds: (f64, f64),
+    on_out_of_range: impl FnOnce(f64, f64, f64) -> String,
+) {
+    let (min, max) = bounds;
+    if !value.is_finite() {
+        violations.push(format!(
+            "{label} is {} (expected [{min:.3}, {max:.3}])",
+            non_finite_label(value)
+        ));
+        return;
+    }
+    if value < min || value > max {
+        violations.push(on_out_of_range(value, min, max));
+    }
 }
 
 fn write_json(path: &std::path::Path, value: &impl serde::Serialize) {
@@ -670,7 +779,7 @@ fn write_json(path: &std::path::Path, value: &impl serde::Serialize) {
 
 #[cfg(test)]
 mod tests {
-    use super::Envelope;
+    use super::{Envelope, HarnessRun};
     use tank_core::{SimSeed, TankSnapshot, TankState};
 
     #[test]
@@ -707,5 +816,29 @@ mod tests {
             violations.is_empty(),
             "unexpected violations: {violations:?}"
         );
+    }
+
+    #[test]
+    fn envelope_reports_non_finite_values() {
+        let mut state = TankState::new(SimSeed(8_003));
+        state.water.ph = f64::NAN;
+        let snapshot = TankSnapshot::from_state(&state);
+
+        let violations = Envelope::default().ph(6.0, 8.0).check(&snapshot);
+
+        assert_eq!(violations, vec!["pH is NaN (expected [6.000, 8.000])"]);
+    }
+
+    #[test]
+    fn explicit_artifact_label_changes_artifact_dir() {
+        let state = TankState::new(SimSeed(8_004));
+        let unlabeled = HarnessRun::from_state(SimSeed(8_004), "medium_planted", state.clone());
+        let labeled = HarnessRun::from_state(SimSeed(8_004), "medium_planted", state)
+            .with_artifact_label("do-night-cycle");
+
+        assert_ne!(unlabeled.artifact_dir(), labeled.artifact_dir());
+        assert!(labeled
+            .artifact_dir()
+            .ends_with("medium_planted_do_night_cycle_seed8004"));
     }
 }

@@ -1,6 +1,6 @@
 use tank_core::{
-    legacy_total_param_to_mg_per_l, systems::nitrogen_cycle::step_nitrogen_cycle, Engine,
-    EventKind, PlayerAction, SimSeed, SimulationEngine, TankState,
+    systems::nitrogen_cycle::step_nitrogen_cycle, Engine, EventKind, PlayerAction, SimSeed,
+    SimulationEngine, TankState,
 };
 
 /// Feed the engine a small pellet each day for the given number of days.
@@ -464,7 +464,7 @@ fn decomposer_do_half_saturation_is_tunable() {
         state.water.dissolved_organic_nitrogen_mg_n_total = 10.0;
         state.water.dissolved_oxygen_mg_total = 1.0;
         state.process_params.decomposer_vmax_per_hour = 0.05;
-        state.process_params.decomposer_k_do_mg = k_do_mg;
+        state.process_params.decomposer_k_do_mg_per_l = k_do_mg;
         state.process_params.microfauna_mineralization_boost = 0.0;
         state
     };
@@ -502,8 +502,8 @@ fn decomposer_monod_uses_concentration_instead_of_total_mass() {
         state.water.dissolved_organic_nitrogen_mg_n_total = 0.4 * volume_l;
         state.water.dissolved_oxygen_mg_total = 2.0 * volume_l;
         state.process_params.decomposer_vmax_per_hour = 0.05;
-        state.process_params.decomposer_k_doc_mg = 5.0;
-        state.process_params.decomposer_k_do_mg = 1.0;
+        state.process_params.decomposer_k_doc_mg_c_per_l = 5.0;
+        state.process_params.decomposer_k_do_mg_per_l = 1.0;
         state.process_params.microfauna_mineralization_boost = 0.0;
         state
     };
@@ -634,11 +634,11 @@ fn concentration_kinetics_are_volume_independent() {
     let monod = |s: f64, k: f64| s / (s + k.max(f64::MIN_POSITIVE));
     let pp = &small.process_params;
 
-    let k_tan = legacy_total_param_to_mg_per_l(pp.aob_k_tan_mg).max(0.01);
-    let k_no2 = legacy_total_param_to_mg_per_l(pp.nob_k_nitrite_mg).max(0.01);
-    let k_doc = legacy_total_param_to_mg_per_l(pp.decomposer_k_doc_mg).max(0.01);
-    let k_do_aob = legacy_total_param_to_mg_per_l(pp.aob_k_do_mg).max(0.01);
-    let k_do_decomp = legacy_total_param_to_mg_per_l(pp.decomposer_k_do_mg).max(0.01);
+    let k_tan = pp.aob_k_tan_mg_n_per_l.max(0.01);
+    let k_no2 = pp.nob_k_nitrite_mg_n_per_l.max(0.01);
+    let k_doc = pp.decomposer_k_doc_mg_c_per_l.max(0.01);
+    let k_do_aob = pp.aob_k_do_mg_per_l.max(0.01);
+    let k_do_decomp = pp.decomposer_k_do_mg_per_l.max(0.01);
 
     let tan_conc = small.water.tan_mg_n_per_l(sv);
     let no2_conc = small.water.nitrite_mg_n_per_l(sv);

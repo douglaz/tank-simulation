@@ -602,9 +602,9 @@ impl AnimalState {
         }
     }
 
-    /// Repairs egg cohort bookkeeping so clutch cohorts never imply more or
-    /// fewer berried females than the top-level adult subset count.
-    pub fn reconcile_egg_cohort_counts(&mut self) {
+    /// Repairs egg cohort bookkeeping for load/migration boundaries so clutch
+    /// cohorts line up with the serialized `berried_females_count`.
+    pub fn repair_egg_cohort_counts_for_load(&mut self) {
         let cohort_total = self.egg_cohort_count_total();
         if cohort_total > self.berried_females_count {
             trim_egg_cohorts(
