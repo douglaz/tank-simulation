@@ -217,24 +217,25 @@ fn migrate_v2_to_v3(value: &mut Value) -> Result<(), SimError> {
     let gross_volume_l = length * width * fill_height / 1000.0;
 
     let substrate_layers = required_array_at(value, 2, 3, "/state/substrate_layers")?;
-    let substrate_depth = substrate_layers.iter().enumerate().try_fold(
-        0.0,
-        |sum, (index, layer)| {
-            let depth = layer
-                .get("depth_cm")
-                .and_then(Value::as_f64)
-                .ok_or_else(|| {
-                    schema_migration_error(
-                        2,
-                        3,
-                        format!(
+    let substrate_depth =
+        substrate_layers
+            .iter()
+            .enumerate()
+            .try_fold(0.0, |sum, (index, layer)| {
+                let depth = layer
+                    .get("depth_cm")
+                    .and_then(Value::as_f64)
+                    .ok_or_else(|| {
+                        schema_migration_error(
+                            2,
+                            3,
+                            format!(
                             "expected finite number at /state/substrate_layers/{index}/depth_cm"
                         ),
-                    )
-                })?;
-            Ok::<_, SimError>(sum + depth.max(0.0))
-        },
-    )?;
+                        )
+                    })?;
+                Ok::<_, SimError>(sum + depth.max(0.0))
+            })?;
 
     let capped_depth = substrate_depth.clamp(0.0, fill_height.max(0.0));
     let displacement_l = length * width * capped_depth / 1000.0;

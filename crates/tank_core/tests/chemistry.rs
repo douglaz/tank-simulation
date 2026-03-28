@@ -1,7 +1,5 @@
 use tank_core::{
-    systems::chemistry::{
-        compute_nh3_mg_l, resolve_carbonate_state, solve_carbonate_equilibrium,
-    },
+    systems::chemistry::{compute_nh3_mg_l, resolve_carbonate_state, solve_carbonate_equilibrium},
     Engine, ProcessParams, SimSeed, SimulationEngine, TankState, WaterState,
 };
 
@@ -316,12 +314,8 @@ fn solver_no_nan_or_inf_in_sweep() {
         (0.001, 0.001, 25.0),
     ];
     for (dic_mg_l, alk_meq_l, temp) in extremes {
-        let eq = solve_carbonate_equilibrium(
-            dic_mg_l * volume_l,
-            alk_meq_l * volume_l,
-            temp,
-            volume_l,
-        );
+        let eq =
+            solve_carbonate_equilibrium(dic_mg_l * volume_l, alk_meq_l * volume_l, temp, volume_l);
         assert!(
             eq.ph.is_finite(),
             "pH NaN/Inf at DIC={dic_mg_l}, Alk={alk_meq_l}"
