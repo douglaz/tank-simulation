@@ -78,6 +78,7 @@ fn guild_differentiated_uptake_prefers_expected_pools() -> Result<(), tank_core:
         nutrient_store_mg_p_total: 12.0,
         cation_exchange_capacity_index: 0.8,
         detritus_trapping_index: 0.4,
+        colonizable_area_factor: SubstrateKind::ActivePlanted.default_colonizable_area_factor(),
         colonizable_area_cm2: 500.0,
         low_oxygen_tendency_index: 0.3,
         grazing_surface_index: 0.4,
@@ -318,6 +319,7 @@ fn plant_substrate_limitation_drops_when_areal_store_is_depleted() {
             nutrient_store_mg_p_total: substrate_p_mg_total,
             cation_exchange_capacity_index: 0.9,
             detritus_trapping_index: 0.4,
+            colonizable_area_factor: SubstrateKind::ActivePlanted.default_colonizable_area_factor(),
             colonizable_area_cm2: state.geometry.footprint_area_cm2(),
             low_oxygen_tendency_index: 0.4,
             grazing_surface_index: 0.5,
@@ -362,6 +364,7 @@ fn algae_water_column_limitation_is_volume_invariant_at_fixed_concentration() {
             nutrient_store_mg_p_total: 0.0,
             cation_exchange_capacity_index: 0.1,
             detritus_trapping_index: 0.3,
+            colonizable_area_factor: SubstrateKind::InertSand.default_colonizable_area_factor(),
             colonizable_area_cm2: 500.0,
             low_oxygen_tendency_index: 0.2,
             grazing_surface_index: 0.4,
@@ -388,5 +391,234 @@ fn algae_water_column_limitation_is_volume_invariant_at_fixed_concentration() {
     assert!(
         (shallow.algae.periphyton_biomass_g - deep.algae.periphyton_biomass_g).abs() <= 1e-9,
         "Same nutrient concentrations should yield the same periphyton growth regardless of tank volume"
+    );
+}
+
+/// Tank-size-independence: identical concentrations in geometrically different
+/// tanks (different fill heights → different volumes) produce identical
+/// suspended-algae limitation factors and growth.
+#[test]
+fn algae_size_independence_different_geometries() {
+    let build_state = |fill_height_cm: f64| {
+        let mut state = base_growth_state(SimSeed(8201));
+        state.geometry.fill_height_cm = fill_height_cm;
+        state.plant_guilds.clear();
+        state.substrate_layers.clear();
+        state.microfauna.population_index = 0.0;
+        state.microfauna.grazing_pressure_index = 0.0;
+        let volume_l = state.water_volume_l();
+        state.algae.suspended_biomass_g = 0.5;
+        state.algae.periphyton_biomass_g = 0.0;
+        state.water.ammonia_total_mg_n_total = 0.4 * volume_l;
+        state.water.nitrate_mg_n_total = 1.5 * volume_l;
+        state.water.phosphate_mg_p_total = 0.2 * volume_l;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 20.0 * volume_l;
+        state
+    };
+
+    let mut small = build_state(8.0);
+    let mut large = build_state(20.0);
+    assert!(
+        (small.water_volume_l() - large.water_volume_l()).abs() > 1.0,
+        "tanks must differ in volume for this test to be meaningful"
+    );
+
+    step_daily_algae(&mut small);
+    step_daily_algae(&mut large);
+
+    assert!(
+        (small.algae.suspended_biomass_g - large.algae.suspended_biomass_g).abs() <= 1e-9,
+        "Identical concentrations in {:.1}L and {:.1}L tanks must yield \
+         equal suspended-algae growth",
+        small.water_volume_l(),
+        large.water_volume_l(),
+    );
+}
+
+/// Verify suspended-algae growth from known inputs matches hand-computed
+/// values derived from the model formulas:
+///   light_factor    = half_sat(intensity × clamp(photoperiod/9, 0, 1), light_ks)
+///   temp_factor     = exp(-(T − T_opt)² / (2σ²))
+///   nutrient_factor = min(half_sat(DIN, N_ks), half_sat(PO₄, P_ks))
+///   gross_growth    = seed × max_rate × light × temp × nutrient
+#[test]
+fn algae_growth_matches_hand_computed_limitation_product() {
+    let mut state = base_growth_state(SimSeed(8202));
+    state.plant_guilds.clear();
+    state.substrate_layers.clear();
+    state.microfauna.population_index = 0.0;
+    state.microfauna.grazing_pressure_index = 0.0;
+
+    let volume_l = state.water_volume_l();
+    let tan_conc = 0.5_f64;
+    let no3_conc = 2.0_f64;
+    let po4_conc = 0.3_f64;
+    let dic_conc = 20.0_f64;
+    state.water.ammonia_total_mg_n_total = tan_conc * volume_l;
+    state.water.nitrate_mg_n_total = no3_conc * volume_l;
+    state.water.phosphate_mg_p_total = po4_conc * volume_l;
+    state.water.dissolved_inorganic_carbon_mg_c_total = dic_conc * volume_l;
+
+    let initial_biomass = 1.0;
+    state.algae.suspended_biomass_g = initial_biomass;
+    state.algae.periphyton_biomass_g = 0.0;
+
+    state.hardware.light.enabled = true;
+    state.hardware.light.intensity_index = 0.8;
+    state.hardware.light.photoperiod_hours = 10.0;
+
+    state.water.temperature_c = 27.0;
+    state.process_params.algae_temp_optimum_c = 27.0;
+    state.process_params.algae_temp_sigma_c = 8.0;
+    state.process_params.algae_half_saturation_n_mg_n_per_l = 0.25;
+    state.process_params.algae_half_saturation_p_mg_p_per_l = 0.04;
+    state.process_params.algae_light_half_saturation = 0.35;
+    state.process_params.algae_max_growth_rate_per_day = 0.2;
+    state.process_params.algae_respiration_fraction_per_day = 0.03;
+
+    // Hand-computed limitation factors.
+    let photoperiod_norm = (10.0_f64 / 9.0).min(1.0); // 1.0
+    let eff_light = 0.8 * photoperiod_norm;
+    let light_factor = eff_light / (eff_light + 0.35);
+    let temp_factor = 1.0_f64; // at optimum
+    let din = tan_conc + no3_conc;
+    let n_factor = din / (din + 0.25);
+    let p_factor = po4_conc / (po4_conc + 0.04);
+    let nutrient_factor = n_factor.min(p_factor);
+
+    let gross = initial_biomass * 0.2 * light_factor * temp_factor * nutrient_factor;
+    let respiration = initial_biomass * 0.03;
+    let expected = initial_biomass + gross - respiration;
+
+    step_daily_algae(&mut state);
+
+    assert!(
+        (state.algae.suspended_biomass_g - expected).abs() < 1e-6,
+        "Growth must match hand-computed product of limitation factors: \
+         expected {expected:.6}, got {:.6} \
+         (light={light_factor:.4}, temp={temp_factor:.4}, \
+          nutrient={nutrient_factor:.4})",
+        state.algae.suspended_biomass_g,
+    );
+}
+
+/// Temperature one sigma below optimum should reduce gross growth by
+/// exp(−0.5) relative to growth at the optimum.
+#[test]
+fn algae_temperature_one_sigma_below_reduces_growth() {
+    let build = |temperature_c: f64| {
+        let mut state = base_growth_state(SimSeed(8203));
+        state.plant_guilds.clear();
+        state.substrate_layers.clear();
+        state.microfauna.population_index = 0.0;
+        state.microfauna.grazing_pressure_index = 0.0;
+        let volume_l = state.water_volume_l();
+        state.water.ammonia_total_mg_n_total = 1.0 * volume_l;
+        state.water.nitrate_mg_n_total = 5.0 * volume_l;
+        state.water.phosphate_mg_p_total = 0.5 * volume_l;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 25.0 * volume_l;
+        state.algae.suspended_biomass_g = 1.0;
+        state.algae.periphyton_biomass_g = 0.0;
+        state.water.temperature_c = temperature_c;
+        state.process_params.algae_temp_optimum_c = 27.0;
+        state.process_params.algae_temp_sigma_c = 8.0;
+        state
+    };
+
+    let mut at_optimum = build(27.0);
+    let mut one_sigma_below = build(19.0); // 27 − 8
+
+    step_daily_algae(&mut at_optimum);
+    step_daily_algae(&mut one_sigma_below);
+
+    let growth_opt = at_optimum.algae.suspended_biomass_g - 1.0;
+    let growth_cold = one_sigma_below.algae.suspended_biomass_g - 1.0;
+
+    assert!(growth_opt > 0.0, "growth at optimum should be positive");
+    assert!(
+        growth_cold > 0.0,
+        "growth one sigma below should still be positive"
+    );
+
+    // Gross growth scales linearly with temp_factor; respiration is identical.
+    // Recover the gross values: gross = net_growth + respiration.
+    let resp = 1.0 * at_optimum.process_params.algae_respiration_fraction_per_day;
+    let gross_opt = growth_opt + resp;
+    let gross_cold = growth_cold + resp;
+    let ratio = gross_cold / gross_opt;
+    let expected_ratio = (-0.5_f64).exp();
+
+    assert!(
+        (ratio - expected_ratio).abs() < 1e-6,
+        "Gross-growth ratio should equal exp(−0.5) ≈ {expected_ratio:.6}, \
+         got {ratio:.6}"
+    );
+}
+
+/// Light off → no gross growth; only respiration loss.
+#[test]
+fn algae_light_off_causes_biomass_decline() {
+    let mut state = base_growth_state(SimSeed(8204));
+    state.plant_guilds.clear();
+    state.substrate_layers.clear();
+    state.microfauna.population_index = 0.0;
+    state.microfauna.grazing_pressure_index = 0.0;
+    let volume_l = state.water_volume_l();
+    state.water.ammonia_total_mg_n_total = 1.0 * volume_l;
+    state.water.nitrate_mg_n_total = 5.0 * volume_l;
+    state.water.phosphate_mg_p_total = 0.5 * volume_l;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 25.0 * volume_l;
+    state.algae.suspended_biomass_g = 1.0;
+    state.algae.periphyton_biomass_g = 0.0;
+    state.hardware.light.enabled = false;
+    state.process_params.algae_respiration_fraction_per_day = 0.03;
+
+    let expected = 1.0 - (1.0 * 0.03); // only respiration loss
+
+    step_daily_algae(&mut state);
+
+    assert!(
+        (state.algae.suspended_biomass_g - expected).abs() < 1e-9,
+        "With light off, biomass should decline by exactly the respiration \
+         fraction: expected {expected:.6}, got {:.6}",
+        state.algae.suspended_biomass_g,
+    );
+}
+
+/// Phosphorus depletion makes P the limiting nutrient, reducing growth
+/// well below what nitrogen availability alone would allow.
+#[test]
+fn algae_phosphorus_limits_growth_below_nitrogen_potential() {
+    let build = |po4_conc: f64| {
+        let mut state = base_growth_state(SimSeed(8205));
+        state.plant_guilds.clear();
+        state.substrate_layers.clear();
+        state.microfauna.population_index = 0.0;
+        state.microfauna.grazing_pressure_index = 0.0;
+        let volume_l = state.water_volume_l();
+        state.water.ammonia_total_mg_n_total = 1.0 * volume_l;
+        state.water.nitrate_mg_n_total = 5.0 * volume_l;
+        state.water.phosphate_mg_p_total = po4_conc * volume_l;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 25.0 * volume_l;
+        state.algae.suspended_biomass_g = 1.0;
+        state.algae.periphyton_biomass_g = 0.0;
+        state.water.temperature_c = 27.0;
+        state.process_params.algae_temp_optimum_c = 27.0;
+        state
+    };
+
+    let mut p_rich = build(0.5);
+    let mut p_poor = build(0.01);
+
+    step_daily_algae(&mut p_rich);
+    step_daily_algae(&mut p_poor);
+
+    let growth_rich = p_rich.algae.suspended_biomass_g - 1.0;
+    let growth_poor = p_poor.algae.suspended_biomass_g - 1.0;
+
+    assert!(
+        growth_rich > growth_poor * 2.0,
+        "P-rich growth ({growth_rich:.6}) should be substantially greater \
+         than P-depleted growth ({growth_poor:.6})"
     );
 }

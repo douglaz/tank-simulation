@@ -1,13 +1,7 @@
 use anyhow::{bail, Context};
 use reqwest::blocking::Client;
-use serde_json::{Map, Value};
-use tank_core::{PlayerAction, SaveFile, TankSnapshot, LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES};
-
-const SNAPSHOT_METADATA_FIELDS: [&str; 3] = [
-    "chemistry_field_semantics",
-    "estimated_tds_scope",
-    "legacy_chemistry_aliases",
-];
+use serde_json::Value;
+use tank_core::{PlayerAction, SaveFile, TankSnapshot};
 
 #[derive(Debug, Clone)]
 pub struct ApiClient {
@@ -110,38 +104,13 @@ fn check_status(resp: &reqwest::blocking::Response) -> anyhow::Result<()> {
 fn parse_load_response(mut value: Value) -> anyhow::Result<TankSnapshot> {
     let snapshot = value
         .as_object_mut()
-        .and_then(|object| object.get_mut("snapshot"))
+        .and_then(|object| object.remove("snapshot"))
         .context("load response missing snapshot")?;
-    normalize_snapshot_value(snapshot);
-    serde_json::from_value(snapshot.clone()).context("failed to deserialize load snapshot")
+    serde_json::from_value(snapshot).context("failed to deserialize load snapshot")
 }
 
-fn parse_snapshot_value(mut value: Value) -> anyhow::Result<TankSnapshot> {
-    normalize_snapshot_value(&mut value);
+fn parse_snapshot_value(value: Value) -> anyhow::Result<TankSnapshot> {
     serde_json::from_value(value).context("failed to deserialize snapshot")
-}
-
-fn normalize_snapshot_value(value: &mut Value) {
-    if let Some(object) = value.as_object_mut() {
-        normalize_snapshot_object(object);
-    }
-}
-
-fn normalize_snapshot_object(object: &mut Map<String, Value>) {
-    for (legacy, canonical) in LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES {
-        if object.contains_key(canonical) {
-            continue;
-        }
-        if let Some(legacy_value) = object.get(legacy).cloned() {
-            object.insert(canonical.to_string(), legacy_value);
-        }
-    }
-    for (legacy, _) in LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES {
-        object.remove(legacy);
-    }
-    for metadata_field in SNAPSHOT_METADATA_FIELDS {
-        object.remove(metadata_field);
-    }
 }
 
 #[cfg(test)]

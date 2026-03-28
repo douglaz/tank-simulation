@@ -575,9 +575,7 @@ fn legacy_schema_v6_saves_gain_explicit_substrate_area_factor() -> Result<(), Si
 
     let expected = migrated.state.substrate_layers[0]
         .derived_colonizable_area_cm2(migrated.state.geometry.footprint_area_cm2());
-    assert!(
-        (migrated.state.substrate_layers[0].colonizable_area_cm2 - expected).abs() < 0.01
-    );
+    assert!((migrated.state.substrate_layers[0].colonizable_area_cm2 - expected).abs() < 0.01);
 
     Ok(())
 }

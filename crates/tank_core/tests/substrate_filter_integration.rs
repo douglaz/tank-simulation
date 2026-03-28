@@ -39,6 +39,7 @@ fn base_state(seed: SimSeed, geometry: TankGeometry) -> TankState {
         nutrient_store_mg_p_total: 0.0,
         cation_exchange_capacity_index: 0.1,
         detritus_trapping_index: 0.2,
+        colonizable_area_factor: SubstrateKind::InertGravel.default_colonizable_area_factor(),
         colonizable_area_cm2: 500.0,
         low_oxygen_tendency_index: 0.2,
         grazing_surface_index: 0.4,

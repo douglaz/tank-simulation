@@ -4,7 +4,7 @@ use ratatui::{
 };
 use tank_core::TankSnapshot;
 
-use super::ESTIMATED_TDS_SCOPE_LINES;
+use super::{ESTIMATED_TDS_SCOPE_LINES, NH3_N_DISPLAY_UNIT};
 use crate::TuiApp;
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
@@ -20,25 +20,12 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
     let middle = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
         .split(layout[1]);
 
-    let chemistry = Paragraph::new(vec![
-        Line::from(format!("Day {}  Hour {:02}", snapshot.day, snapshot.hour)),
-        Line::from(format!(
-            "Temp {:.2} C  Ambient {:.2} C",
-            snapshot.water_temp_c, snapshot.ambient_temp_c
-        )),
-        Line::from(format!(
-            "pH {:.2}  DO {:.2}/{:.2} mg/L",
-            snapshot.ph, snapshot.do_mg_l, snapshot.do_sat_mg_l
-        )),
-        Line::from(format!(
-            "TAN {:.3}  NH3-N {:.4} mg N/L",
-            snapshot.tan_mg_n_per_l, snapshot.nh3_mg_n_per_l
-        )),
-        Line::from(format!(
-            "NO2 {:.3}  NO3 {:.3} mg N/L",
-            snapshot.nitrite_mg_n_per_l, snapshot.nitrate_mg_n_per_l
-        )),
-    ])
+    let chemistry = Paragraph::new(
+        water_column_text(snapshot)
+            .into_iter()
+            .map(Line::from)
+            .collect::<Vec<_>>(),
+    )
     .block(Block::default().title("Water column").borders(Borders::ALL));
     frame.render_widget(chemistry, top[0]);
 
@@ -118,6 +105,28 @@ fn on_off(enabled: bool) -> &'static str {
     }
 }
 
+fn water_column_text(snapshot: &TankSnapshot) -> Vec<String> {
+    vec![
+        format!("Day {}  Hour {:02}", snapshot.day, snapshot.hour),
+        format!(
+            "Temp {:.2} C  Ambient {:.2} C",
+            snapshot.water_temp_c, snapshot.ambient_temp_c
+        ),
+        format!(
+            "pH {:.2}  DO {:.2}/{:.2} mg/L",
+            snapshot.ph, snapshot.do_mg_l, snapshot.do_sat_mg_l
+        ),
+        format!(
+            "TAN {:.3} mg N/L  NH3-N {:.4} {NH3_N_DISPLAY_UNIT}",
+            snapshot.tan_mg_n_per_l, snapshot.nh3_mg_n_per_l
+        ),
+        format!(
+            "NO2 {:.3}  NO3 {:.3} mg N/L",
+            snapshot.nitrite_mg_n_per_l, snapshot.nitrate_mg_n_per_l
+        ),
+    ]
+}
+
 fn systems_text(snapshot: &TankSnapshot) -> Vec<String> {
     let mut lines = vec![
         format!(
@@ -157,7 +166,7 @@ fn systems_text(snapshot: &TankSnapshot) -> Vec<String> {
 mod tests {
     use tank_core::{rng::SimSeed, TankState};
 
-    use super::systems_text;
+    use super::{systems_text, water_column_text};
 
     #[test]
     fn overview_labels_tds_and_conductivity_as_estimates() {
@@ -167,5 +176,15 @@ mod tests {
         assert!(summary.contains("Est. TDS (7-ion)"));
         assert!(summary.contains("Est. cond"));
         assert!(!summary.contains("7-ion TDS"));
+    }
+
+    #[test]
+    fn overview_uses_shared_nh3_n_unit_label() {
+        let snapshot = tank_core::TankSnapshot::from_state(&TankState::new(SimSeed(913)));
+        let ammonia_line = &water_column_text(&snapshot)[3];
+
+        assert!(ammonia_line.contains("NH3-N"));
+        assert!(ammonia_line.contains("mg NH3-N/L"));
+        assert!(ammonia_line.contains("mg N/L"));
     }
 }

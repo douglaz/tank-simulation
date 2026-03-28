@@ -7,7 +7,7 @@ use tank_core::systems::chemistry::{
 };
 use tank_core::types::{
     check_all_ranges, format_param, ParamMeta, RangeWarning, ShrimpRuntimeParams,
-    LEGACY_KINETIC_REFERENCE_FOOTPRINT_M2, LEGACY_KINETIC_REFERENCE_VOLUME_L,
+    LEGACY_KINETIC_REFERENCE_VOLUME_L,
 };
 
 const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
@@ -306,8 +306,14 @@ impl SubstratePreset {
             ("colonizable_area_factor", self.colonizable_area_factor),
             ("low_oxygen_tendency_index", self.low_oxygen_tendency_index),
             ("grazing_surface_index", self.grazing_surface_index),
-            ("nutrient_charge_mg_n_total", self.nutrient_charge_mg_n_total),
-            ("nutrient_charge_mg_p_total", self.nutrient_charge_mg_p_total),
+            (
+                "nutrient_charge_mg_n_total",
+                self.nutrient_charge_mg_n_total,
+            ),
+            (
+                "nutrient_charge_mg_p_total",
+                self.nutrient_charge_mg_p_total,
+            ),
         ];
         for (name, value) in fields {
             if !value.is_finite() {
@@ -673,14 +679,12 @@ impl ParamMetaPreset for ShrimpPreset {
             "subadult_to_adult_days" => self
                 .subadult_to_adult_days
                 .or_else(|| shrimp_runtime_default_param_value(name)),
-            "juvenile_maturation_condition_threshold" => {
-                self.juvenile_maturation_condition_threshold
-                    .or_else(|| shrimp_runtime_default_param_value(name))
-            }
-            "subadult_maturation_condition_threshold" => {
-                self.subadult_maturation_condition_threshold
-                    .or_else(|| shrimp_runtime_default_param_value(name))
-            }
+            "juvenile_maturation_condition_threshold" => self
+                .juvenile_maturation_condition_threshold
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "subadult_maturation_condition_threshold" => self
+                .subadult_maturation_condition_threshold
+                .or_else(|| shrimp_runtime_default_param_value(name)),
             "base_molt_interval_days" => self
                 .base_molt_interval_days
                 .or_else(|| shrimp_runtime_default_param_value(name)),
@@ -1176,9 +1180,6 @@ fn normalize_process_param_for_provenance(name: &str, value: f64, unit: Option<&
         ProvenanceNormalization::LegacyMgPerL => {
             preserve_non_finite_division(value, LEGACY_KINETIC_REFERENCE_VOLUME_L)
         }
-        ProvenanceNormalization::LegacyMgPerM2 => {
-            preserve_non_finite_division(value, LEGACY_KINETIC_REFERENCE_FOOTPRINT_M2)
-        }
     }
 }
 
@@ -1186,10 +1187,9 @@ fn normalize_process_param_for_provenance(name: &str, value: f64, unit: Option<&
 enum ProvenanceNormalization {
     None,
     LegacyMgPerL,
-    LegacyMgPerM2,
 }
 
-fn legacy_process_param_normalization(name: &str, unit: Option<&str>) -> ProvenanceNormalization {
+fn legacy_process_param_normalization(name: &str, _unit: Option<&str>) -> ProvenanceNormalization {
     match name {
         "decomposer_k_doc_mg"
         | "decomposer_k_do_mg"
@@ -1207,25 +1207,9 @@ fn legacy_process_param_normalization(name: &str, unit: Option<&str>) -> Provena
         | "plant_half_saturation_p_mg_p_per_l"
         | "plant_half_saturation_c_mg_c_per_l"
         | "plant_half_saturation_n_substrate_mg_n_per_m2"
-        | "plant_half_saturation_p_substrate_mg_p_per_m2" => {
-            let _ = unit;
-            return ProvenanceNormalization::None;
-        }
+        | "plant_half_saturation_p_substrate_mg_p_per_m2" => ProvenanceNormalization::None,
         _ => ProvenanceNormalization::None,
     }
-}
-
-fn unit_requests_area_normalization(unit: Option<&str>) -> bool {
-    let Some(unit) = unit else {
-        return false;
-    };
-    let normalized = unit
-        .chars()
-        .filter(|ch| !ch.is_whitespace())
-        .collect::<String>()
-        .replace('²', "2")
-        .to_ascii_lowercase();
-    normalized.contains("/m2") || normalized.contains("/m^2")
 }
 
 fn preserve_non_finite_division(value: f64, denominator: f64) -> f64 {
@@ -1298,15 +1282,9 @@ impl ParamMetaPreset for ProcessParamsPreset {
             "plant_senescence_fraction_per_day" => Some(self.plant_senescence_fraction_per_day),
             "plant_health_recovery_per_day" => Some(self.plant_health_recovery_per_day),
             "plant_health_decline_per_day" => Some(self.plant_health_decline_per_day),
-            "plant_half_saturation_n_mg_n_per_l" => {
-                Some(self.plant_half_saturation_n_mg_n_per_l)
-            }
-            "plant_half_saturation_p_mg_p_per_l" => {
-                Some(self.plant_half_saturation_p_mg_p_per_l)
-            }
-            "plant_half_saturation_c_mg_c_per_l" => {
-                Some(self.plant_half_saturation_c_mg_c_per_l)
-            }
+            "plant_half_saturation_n_mg_n_per_l" => Some(self.plant_half_saturation_n_mg_n_per_l),
+            "plant_half_saturation_p_mg_p_per_l" => Some(self.plant_half_saturation_p_mg_p_per_l),
+            "plant_half_saturation_c_mg_c_per_l" => Some(self.plant_half_saturation_c_mg_c_per_l),
             "plant_half_saturation_n_substrate_mg_n_per_m2" => {
                 Some(self.plant_half_saturation_n_substrate_mg_n_per_m2)
             }
@@ -1320,12 +1298,8 @@ impl ParamMetaPreset for ProcessParamsPreset {
             "algae_max_growth_rate_per_day" => Some(self.algae_max_growth_rate_per_day),
             "periphyton_max_growth_rate_per_day" => Some(self.periphyton_max_growth_rate_per_day),
             "algae_respiration_fraction_per_day" => Some(self.algae_respiration_fraction_per_day),
-            "algae_half_saturation_n_mg_n_per_l" => {
-                Some(self.algae_half_saturation_n_mg_n_per_l)
-            }
-            "algae_half_saturation_p_mg_p_per_l" => {
-                Some(self.algae_half_saturation_p_mg_p_per_l)
-            }
+            "algae_half_saturation_n_mg_n_per_l" => Some(self.algae_half_saturation_n_mg_n_per_l),
+            "algae_half_saturation_p_mg_p_per_l" => Some(self.algae_half_saturation_p_mg_p_per_l),
             "algae_light_half_saturation" => Some(self.algae_light_half_saturation),
             "algae_temp_optimum_c" => Some(self.algae_temp_optimum_c),
             "algae_temp_sigma_c" => Some(self.algae_temp_sigma_c),
@@ -1760,7 +1734,9 @@ pub struct ScenarioPreset {
 
 #[cfg(test)]
 mod tests {
-    use super::{PlantPreset, ProcessParamsPreset, ShrimpPreset, SourceWaterPreset, SubstratePreset};
+    use super::{
+        PlantPreset, ProcessParamsPreset, ShrimpPreset, SourceWaterPreset, SubstratePreset,
+    };
     use tank_core::types::provenance::{
         check_param_range, format_param, ConfidenceLevel, ParamMeta,
     };
@@ -1950,8 +1926,8 @@ unit = "mg N total"
     }
 
     #[test]
-    fn test_plant_param_meta_roundtrip_and_range_warning(
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    fn test_plant_param_meta_roundtrip_and_range_warning() -> Result<(), Box<dyn std::error::Error>>
+    {
         let toml_str = r#"
 id = "test_plant"
 name = "Test Plant"
@@ -1988,8 +1964,7 @@ notes = "Fast stems lean heavily on water-column nutrients"
     }
 
     #[test]
-    fn test_plant_unknown_param_meta_keys_are_rejected() -> Result<(), Box<dyn std::error::Error>>
-    {
+    fn test_plant_unknown_param_meta_keys_are_rejected() -> Result<(), Box<dyn std::error::Error>> {
         let toml_str = r#"
 id = "test_plant"
 name = "Test Plant"
@@ -2325,6 +2300,16 @@ k_wall_w_per_m2_k = 5.0
     }
 
     #[test]
+    fn test_process_preset_format_param_without_meta_keeps_raw_legacy_value() {
+        let preset = default_process_preset();
+
+        let display = preset
+            .format_param("aob_k_tan_mg")
+            .expect("parameter should format");
+        assert_eq!(display, "aob_k_tan_mg: 0.5");
+    }
+
+    #[test]
     fn test_unknown_param_meta_keys_are_rejected() -> Result<(), Box<dyn std::error::Error>> {
         let toml_str = r#"
 id = "test"
@@ -2378,7 +2363,14 @@ notes = "Serde default should still be provenance-visible"
 [param_meta.base_clutch_size]
 unit = "eggs"
 confidence = "expert"
-notes = "Optional field may remain unset"
+valid_range = [1.0, 20.0]
+notes = "Optional field should inherit the runtime default"
+
+[param_meta.juvenile_to_subadult_days]
+unit = "days"
+confidence = "expert"
+valid_range = [10.0, 20.0]
+notes = "Optional field should inherit the runtime default"
 
 [param_meta.base_molt_interval_days]
 unit = "days"
@@ -2395,15 +2387,25 @@ valid_range = [20.0, 40.0]
         assert!(spawn_display.contains("base_spawn_rate: 0.15"));
         assert!(spawn_display.contains("heuristic"));
 
-        assert!(
-            preset.format_param("base_clutch_size").is_none(),
-            "unset optional fields should not fabricate values"
-        );
+        let clutch_display = preset
+            .format_param("base_clutch_size")
+            .expect("default-backed optional integer should format");
+        assert!(clutch_display.contains("base_clutch_size: 25"));
+        assert!(clutch_display.contains("runtime default"));
+
+        let maturation_display = preset
+            .format_param("juvenile_to_subadult_days")
+            .expect("default-backed optional float should format");
+        assert!(maturation_display.contains("juvenile_to_subadult_days: 30"));
 
         let warnings = preset.check_ranges();
-        assert_eq!(warnings.len(), 1);
-        assert_eq!(warnings[0].param_name, "base_molt_interval_days");
-        assert_eq!(warnings[0].value, 50.0);
+        assert_eq!(warnings.len(), 3);
+        assert_eq!(warnings[0].param_name, "base_clutch_size");
+        assert_eq!(warnings[0].value, 25.0);
+        assert_eq!(warnings[1].param_name, "base_molt_interval_days");
+        assert_eq!(warnings[1].value, 50.0);
+        assert_eq!(warnings[2].param_name, "juvenile_to_subadult_days");
+        assert_eq!(warnings[2].value, 30.0);
         Ok(())
     }
 
@@ -2440,6 +2442,16 @@ valid_range = [20.0, 40.0]
 
         let err = preset.validate().expect_err("preset should be rejected");
         assert!(err.contains("photosynthesis_dic_rate_mg_c_per_g_per_hour"));
+    }
+
+    #[test]
+    fn process_preset_rejects_non_positive_shrimp_juvenile_maturation_days() {
+        let mut preset = default_process_preset();
+        preset.shrimp_juvenile_maturation_days = 0.0;
+
+        let err = preset.validate().expect_err("preset should be rejected");
+        assert!(err.contains("shrimp_juvenile_maturation_days"));
+        assert!(err.contains("> 0.0"));
     }
 
     #[test]

@@ -1,5 +1,6 @@
 use proptest::prelude::*;
 use tank_core::{
+    systems::chemistry::{bicarbonate_mg_total_from_mmol_per_l, solve_carbonate_equilibrium},
     SimSeed, SourceWaterProfile, SubstrateKind, SubstrateLayerState, TankGeometry, TankState,
     WaterState,
 };
@@ -23,6 +24,7 @@ fn helper_state() -> TankState {
         nutrient_store_mg_p_total: 0.0,
         cation_exchange_capacity_index: 0.1,
         detritus_trapping_index: 0.3,
+        colonizable_area_factor: SubstrateKind::InertSand.default_colonizable_area_factor(),
         colonizable_area_cm2: state.geometry.footprint_area_cm2(),
         low_oxygen_tendency_index: 0.2,
         grazing_surface_index: 0.4,
@@ -48,6 +50,33 @@ fn expected_gh_d(calcium_mg_per_l: f64, magnesium_mg_per_l: f64) -> f64 {
 
 fn expected_kh_d(alkalinity_meq_per_l: f64) -> f64 {
     (alkalinity_meq_per_l * 50.0) / 17.848
+}
+
+fn expected_tds_and_conductivity(state: &TankState) -> (f64, f64) {
+    let volume_l = state.water_volume_l();
+    let carbonate_eq = solve_carbonate_equilibrium(
+        state.water.dissolved_inorganic_carbon_mg_c_total,
+        state.water.alkalinity_meq_total,
+        state.water.temperature_c,
+        volume_l,
+    );
+    let bicarbonate_mg_total =
+        bicarbonate_mg_total_from_mmol_per_l(carbonate_eq.hco3_mmol_per_l, volume_l);
+    let total_tracked_ions_mg = state.water.calcium_mg_total
+        + state.water.magnesium_mg_total
+        + state.water.sodium_mg_total
+        + state.water.potassium_mg_total
+        + bicarbonate_mg_total.max(0.0)
+        + state.water.chloride_mg_total
+        + state.water.sulfate_mg_total;
+    let tds = if volume_l <= f64::EPSILON {
+        0.0
+    } else {
+        (total_tracked_ions_mg / volume_l).max(0.0)
+    };
+    let conductivity = (tds / 0.65).max(0.0);
+
+    (tds, conductivity)
 }
 
 #[test]
@@ -87,8 +116,9 @@ fn canonical_helpers_use_net_water_volume() {
     assert_close(state.magnesium_mg_per_l(), 5.0);
     assert_close(state.gh_d(), expected_gh_d(20.0, 5.0));
     assert_close(state.kh_d(), expected_kh_d(2.5));
-    assert_close(state.tds_mg_per_l(), 128.0);
-    assert_close(state.conductivity_us_cm(), 128.0 / 0.65);
+    let (expected_tds, expected_conductivity) = expected_tds_and_conductivity(&state);
+    assert_close(state.tds_mg_per_l(), expected_tds);
+    assert_close(state.conductivity_us_cm(), expected_conductivity);
 }
 
 #[test]
@@ -299,6 +329,21 @@ fn concentration_view_matches_tank_helpers_without_recomputing_volume() {
     assert_close(chemistry.nitrate_mg_n_per_l(), state.nitrate_mg_n_per_l());
     assert_close(chemistry.do_mg_per_l(), state.do_mg_per_l());
     assert_close(chemistry.kh_d(), state.kh_d());
+}
+
+#[test]
+fn tds_helpers_ignore_stale_bicarbonate_cache() {
+    let mut state = helper_state();
+    let volume_l = state.water_volume_l();
+    state.water.dissolved_inorganic_carbon_mg_c_total = 42.0 * volume_l;
+    state.water.alkalinity_meq_total = 3.4 * volume_l;
+    state.water.bicarbonate_mg_total = 0.0;
+
+    let (expected_tds, expected_conductivity) = expected_tds_and_conductivity(&state);
+
+    assert!(expected_tds > 0.0);
+    assert_close(state.tds_mg_per_l(), expected_tds);
+    assert_close(state.conductivity_us_cm(), expected_conductivity);
 }
 
 proptest! {

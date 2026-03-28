@@ -30,8 +30,12 @@ pub fn step_daily_plants(state: &mut TankState) {
     let ks_n_per_l = state.process_params.plant_half_saturation_n_mg_n_per_l;
     let ks_p_per_l = state.process_params.plant_half_saturation_p_mg_p_per_l;
     let ks_c_per_l = state.process_params.plant_half_saturation_c_mg_c_per_l;
-    let ks_n_per_m2 = state.process_params.plant_half_saturation_n_substrate_mg_n_per_m2;
-    let ks_p_per_m2 = state.process_params.plant_half_saturation_p_substrate_mg_p_per_m2;
+    let ks_n_per_m2 = state
+        .process_params
+        .plant_half_saturation_n_substrate_mg_n_per_m2;
+    let ks_p_per_m2 = state
+        .process_params
+        .plant_half_saturation_p_substrate_mg_p_per_m2;
 
     let crowding_index = state.derived_plant_crowding_index();
     let f_light = plant_light_factor(state);
@@ -69,8 +73,7 @@ pub fn step_daily_plants(state: &mut TankState) {
         let w_norm = water_bias / bias_sum;
         let s_norm = substrate_bias / bias_sum;
         // Water-column limitation uses volumetric concentration (mg/L).
-        let water_n_factor =
-            half_saturation(tan_mg_n_per_l + nitrate_mg_n_per_l, ks_n_per_l);
+        let water_n_factor = half_saturation(tan_mg_n_per_l + nitrate_mg_n_per_l, ks_n_per_l);
         let water_p_factor = half_saturation(phosphate_mg_p_per_l, ks_p_per_l);
         // Substrate limitation uses areal density (mg/m²).
         let substrate_n_factor = half_saturation(substrate_n, ks_n_per_m2);

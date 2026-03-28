@@ -42,7 +42,11 @@ pub struct SubstrateLayerState {
 
 impl SubstrateLayerState {
     pub fn resolved_colonizable_area_factor(&self) -> f64 {
-        self.colonizable_area_factor.max(0.0)
+        if self.colonizable_area_factor.is_finite() && self.colonizable_area_factor > 0.0 {
+            self.colonizable_area_factor
+        } else {
+            self.kind.default_colonizable_area_factor()
+        }
     }
 
     /// Derived internal colonizable area for this layer from the current tank
@@ -63,7 +67,7 @@ impl Default for SubstrateLayerState {
             nutrient_store_mg_p_total: 0.0,
             cation_exchange_capacity_index: 0.1,
             detritus_trapping_index: 0.3,
-            colonizable_area_factor: SubstrateKind::InertSand.default_colonizable_area_factor(),
+            colonizable_area_factor: 0.0,
             colonizable_area_cm2: 0.0,
             low_oxygen_tendency_index: 0.2,
             grazing_surface_index: 0.4,

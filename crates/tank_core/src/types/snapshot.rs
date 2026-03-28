@@ -1,14 +1,11 @@
-use serde::{Deserialize, Serialize};
+use serde::{de::Error as DeError, Deserialize, Deserializer, Serialize};
+use serde_json::{Map, Value};
 
 use super::{PlantGuild, SimEvent, TankState};
-use crate::systems::{
-    chemistry::{
-        bicarbonate_mg_total_from_mmol_per_l, compute_nh3_mg_n_per_l, solve_carbonate_equilibrium,
-    },
-    temperature::do_sat_mg_l,
-};
+use crate::systems::{chemistry::compute_nh3_mg_n_per_l, temperature::do_sat_mg_l};
 
-/// Legacy chemistry field names kept in API responses for compatibility.
+/// Legacy chemistry field names accepted during snapshot deserialization and
+/// still emitted in API responses for compatibility.
 pub const LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES: [(&str, &str); 8] = [
     ("tan_mg_l", "tan_mg_n_per_l"),
     ("nh3_mg_l", "nh3_mg_n_per_l"),
@@ -23,7 +20,7 @@ pub const LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES: [(&str, &str); 8] = [
     ("conductivity_us_cm", "estimated_conductivity_us_cm"),
 ];
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct TankSnapshot {
     pub day: u32,
     pub hour: u8,
@@ -221,7 +218,7 @@ mod tests {
     use crate::{
         rng::SimSeed,
         systems::chemistry::{bicarbonate_mg_total_from_mmol_per_l, solve_carbonate_equilibrium},
-        ESTIMATED_TDS_OMITTED_CONTRIBUTORS, ESTIMATED_TDS_TRACKED_MAJOR_IONS, TankState,
+        TankState, ESTIMATED_TDS_OMITTED_CONTRIBUTORS, ESTIMATED_TDS_TRACKED_MAJOR_IONS,
     };
 
     fn assert_close(actual: f64, expected: f64, tolerance: f64) {
@@ -304,7 +301,11 @@ mod tests {
             fresh.conductivity_us_cm,
             1e-12,
         );
-        assert_close(snapshot.estimated_tds_7_ion_mg_per_l, state.tds_mg_per_l(), 1e-12);
+        assert_close(
+            snapshot.estimated_tds_7_ion_mg_per_l,
+            state.tds_mg_per_l(),
+            1e-12,
+        );
         assert_close(
             snapshot.estimated_conductivity_us_cm,
             state.conductivity_us_cm(),

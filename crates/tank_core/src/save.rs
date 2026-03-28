@@ -654,10 +654,7 @@ fn migrate_v6_to_v7(value: &mut Value) -> Result<(), SimError> {
                 ));
             }
         };
-        layer_obj.insert(
-            "colonizable_area_factor".to_string(),
-            Value::from(factor),
-        );
+        layer_obj.insert("colonizable_area_factor".to_string(), Value::from(factor));
     }
 
     Ok(())

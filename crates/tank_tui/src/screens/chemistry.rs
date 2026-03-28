@@ -3,7 +3,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Sparkline},
 };
 
-use super::ESTIMATED_TDS_SCOPE_LINES;
+use super::{ESTIMATED_TDS_SCOPE_LINES, NH3_N_DISPLAY_UNIT};
 use crate::TuiApp;
 
 pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
@@ -23,7 +23,7 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
         Line::from(format!("pH {:.3}", snapshot.ph)),
         Line::from(format!("TAN {:.3} mg N/L", snapshot.tan_mg_n_per_l)),
         Line::from(format!(
-            "Free NH3-N {:.5} mg NH3-N/L",
+            "Free NH3-N {:.5} {NH3_N_DISPLAY_UNIT}",
             snapshot.nh3_mg_n_per_l
         )),
         Line::from(format!("Nitrite {:.3} mg N/L", snapshot.nitrite_mg_n_per_l)),

@@ -37,11 +37,15 @@ pub fn load_source_water(id: &str) -> Result<SourceWaterPreset, PresetError> {
 }
 
 pub fn load_substrate(id: &str) -> Result<SubstratePreset, PresetError> {
-    load_from_registry("substrate", id, SUBSTRATE_PRESETS)
+    let (preset, diagnostics) = load_substrate_with_diagnostics(id)?;
+    emit_diagnostics(&diagnostics);
+    Ok(preset)
 }
 
 pub fn load_plant(id: &str) -> Result<PlantPreset, PresetError> {
-    load_from_registry("plants", id, PLANT_PRESETS)
+    let (preset, diagnostics) = load_plant_with_diagnostics(id)?;
+    emit_diagnostics(&diagnostics);
+    Ok(preset)
 }
 
 pub fn load_shrimp(id: &str) -> Result<ShrimpPreset, PresetError> {
@@ -65,6 +69,28 @@ pub fn load_source_water_with_diagnostics(
         SOURCE_WATER_PRESETS,
         SourceWaterPreset::validate,
         SourceWaterPreset::check_ranges,
+    )
+}
+
+pub fn load_substrate_with_diagnostics(
+    id: &str,
+) -> Result<(SubstratePreset, Vec<String>), PresetError> {
+    load_validated_with_range_diagnostics(
+        "substrate",
+        id,
+        SUBSTRATE_PRESETS,
+        SubstratePreset::validate,
+        SubstratePreset::check_ranges,
+    )
+}
+
+pub fn load_plant_with_diagnostics(id: &str) -> Result<(PlantPreset, Vec<String>), PresetError> {
+    load_validated_with_range_diagnostics(
+        "plants",
+        id,
+        PLANT_PRESETS,
+        PlantPreset::validate,
+        PlantPreset::check_ranges,
     )
 }
 
@@ -297,6 +323,10 @@ valid_range = [0.1, 5.0]
     #[test]
     fn shipped_param_meta_loaders_return_no_diagnostics() -> Result<(), PresetError> {
         assert!(load_source_water_with_diagnostics("moderate")?.1.is_empty());
+        assert!(load_substrate_with_diagnostics("active_planted")?
+            .1
+            .is_empty());
+        assert!(load_plant_with_diagnostics("fast_stem")?.1.is_empty());
         assert!(load_shrimp_with_diagnostics("neocaridina_davidi")?
             .1
             .is_empty());

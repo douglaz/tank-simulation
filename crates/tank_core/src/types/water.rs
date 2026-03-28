@@ -246,8 +246,7 @@ impl WaterState {
         let bicarbonate_mg_total =
             bicarbonate_mg_total_from_mmol_per_l(carbonate_eq.hco3_mmol_per_l, volume_l);
         let tds_mg_per_l = self.tds_mg_per_l_with_bicarbonate_total(volume_l, bicarbonate_mg_total);
-        let conductivity_us_cm =
-            (tds_mg_per_l / ESTIMATED_TDS_TO_CONDUCTIVITY_DIVISOR).max(0.0);
+        let conductivity_us_cm = (tds_mg_per_l / ESTIMATED_TDS_TO_CONDUCTIVITY_DIVISOR).max(0.0);
 
         EstimatedDissolvedSolids {
             bicarbonate_mg_total,
@@ -317,11 +316,11 @@ impl WaterState {
         crate::systems::chemistry::resolve_carbonate_state(self, new_volume_l.max(0.0));
     }
 
-    /// Returns the ion-total cache used for TDS/conductivity.
+    /// Returns the cached 7-ion total based on the stored bicarbonate field.
     ///
-    /// `bicarbonate_mg_total` is solver-derived, so callers must ensure
-    /// `resolve_carbonate_state()` has run after the most recent DIC or
-    /// alkalinity mutation before reading this aggregate.
+    /// This is useful for inspecting persisted solver state, but the public
+    /// TDS/conductivity accessors recompute a fresh carbonate projection so
+    /// they stay consistent with snapshot output even when the cache is stale.
     pub fn total_tracked_ions_mg(&self) -> f64 {
         self.total_tracked_ions_mg_with_bicarbonate_total(self.bicarbonate_mg_total)
     }
