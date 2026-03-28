@@ -1,0 +1,77 @@
+{
+  "rollback_id": "07ffdb78-da45-44df-8d18-0954a79a26c9",
+  "created_at": "2026-03-28T00:20:38.105167915Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "c765429e123f22ad10f6f73f5498ecba3738c411",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260327225238",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 5
+      },
+      "started_at": "2026-03-27T22:52:38.589241101Z",
+      "prompt_hash_at_cycle_start": "992e6d169e5d9d21",
+      "prompt_hash_at_stage_start": "992e6d169e5d9d21",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 4
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-27T23:44:38.470498089Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 5,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-4-bc2dc25a",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 4,
+          "body": "Reject malformed numeric geometry/depth inputs in the v2->v3 migration instead of silently coercing them. The migration contract explicitly says malformed legacy payloads must fail with `SimError::SchemaMigration` (`crates/tank_core/src/save.rs:30`, `crates/tank_core/src/save.rs:54`), but `migrate_v2_to_v3` currently clamps negative substrate depth with `depth.max(0.0)` (`crates/tank_core/src/save.rs:235`), clamps depth again against `fill_height` (`crates/tank_core/src/save.rs:239`), and falls back to `scale = 0.0` for non-positive/invalid gross volume (`crates/tank_core/src/save.rs:243`). That means malformed schema-2 saves can load successfully and even silently zero dissolved totals instead of failing early. For example, a v2 payload with `geometry.fill_height_cm = -1.0` currently loads as schema 4 with dissolved chemistry zeroed. Tighten these checks to reject invalid geometry/depth values up front, and add a regression test next to the existing malformed-save coverage in `crates/tank_core/tests/save_load.rs:305`.",
+          "created_at": "2026-03-28T00:20:38.055441648Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "e6f0dfda4b96033d65dcd3b1f96db99f91b7308eac1842a785affa884971dc23"
+        }
+      ],
+      "processed_count": 8
+    },
+    "status_summary": "running: final review restart round 5 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T00:09:17.768358386Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

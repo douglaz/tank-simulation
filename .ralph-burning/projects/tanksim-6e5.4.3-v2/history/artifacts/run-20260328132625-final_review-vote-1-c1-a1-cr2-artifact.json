@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328132625-final_review-vote-1-c1-a1-cr2-artifact",
+  "payload_id": "run-20260328132625-final_review-vote-1-c1-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T14:04:11.087691684Z",
+  "content": "# Final Review Votes\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nfr-2-ac995bdf should be accepted: the branch has a deterministic pre-existing test failure caused by the test using rounded GH conversion constants that disagree with the implementation's molar-mass-derived factors, so the expectation should be aligned instead of ignored.\n\n## Votes\n\n- `fr-2-ac995bdf`: Accept\n  `crates/tank_core/tests/concentration_helpers.rs` hardcodes `2.497` and `4.118` with a `1e-9` tolerance, while `crates/tank_core/src/types/water.rs` computes GH from more precise molar-mass ratios (`100.0869/40.078` and `100.0869/24.305`). Running the test reproduces a deterministic mismatch: expected `3.951703272075303`, got `3.9520299730321664`, a delta of about `3.27e-4`. That is a real defect in the test on this branch. The correct fix is to update the test/helper to use the same precise conversion basis as the implementation; simply loosening the tolerance would hide the underlying inconsistency.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

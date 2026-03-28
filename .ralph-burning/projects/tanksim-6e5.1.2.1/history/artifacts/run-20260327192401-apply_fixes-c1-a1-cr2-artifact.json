@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327192401-apply_fixes-c1-a1-cr2-artifact",
+  "payload_id": "run-20260327192401-apply_fixes-c1-a1-cr2",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-27T20:25:24.153607347Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNo additional fixes were applied in this Apply Fixes stage. The latest review approved the conservation remediation and budget-ledger implementation without follow-up amendments, so the code remains as produced in the most recent implement stage.\n\n## Steps\n\n1. [Completed] Reviewed the latest validation output and confirmed the second review approved the implementation with no required amendments.\n2. [Completed] Verified that no additional code edits were necessary for the budget ledger, conservation fixes, canonical helper coverage, or regression tests.\n3. [Skipped] Rerun validation after applying fixes.\n\n## Validation Evidence\n\n- Review outcome was `approved` with no follow-up amendments or blocking findings.\n- No new validation commands were required in this stage because no code changed; prior validation remains authoritative.\n- `cargo test -p tank_core --test budget_tracking` previously passed (7 tests).\n- `cargo test -p tank_core --test water_change_mass_balance` previously passed (8 tests).\n- `cargo test -p tank_core` previously passed across the full `tank_core` suite, and `cargo clippy -p tank_core -- -D warnings` previously passed with zero warnings.\n\n## Outstanding Risks\n\n- The structural canonical-helper coverage guard is heuristic; if a future explicit element-bearing field uses a new naming pattern or lives in an empty-by-default collection, the coverage test must be extended to recognize it.\n- Shrimp lifecycle transitions still model biomass through counts rather than explicit N/C transfer pools; future strict conservation across spawning, hatching, maturation, or mortality will need additional bookkeeping.\n- `dissolved_feed_residue_g_total` remains an excluded mirror of dissolved organics, so future DOC/DON exports or transforms must keep that mirror synchronized to avoid diagnostic drift.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

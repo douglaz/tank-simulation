@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327225238-review-c2-a1-cr6-artifact",
+  "payload_id": "run-20260327225238-review-c2-a1-cr6",
+  "stage_id": "review",
+  "created_at": "2026-03-28T00:46:33.529625757Z",
+  "content": "# Review\n\n## Outcome\n\n**Approved**\n\n## Evidence\n\n- All 18 save_load tests pass, including `very_old_schema_version_produces_clear_error` which now asserts the error message contains 're-create this save' remediation guidance (save_load.rs:434-436).\n- All 10 shrimp_population tests pass, including the rewritten `hatch_produces_juveniles` which now uses `step_daily_shrimp(&mut state)` directly instead of `engine.step_hours(24)` (shrimp_population.rs:135).\n- `cargo clippy -p tank_core --tests -- -D warnings` passes cleanly with no warnings.\n- Full `cargo test -p tank_core` passes: 133 tests across all test files, 0 failures.\n- `SchemaVersionTooOld` error message at actions.rs:78-81 now includes remediation text: 're-create this save with a newer version of the application', matching the pattern of `SchemaVersionTooNew` which says 'upgrade the application to load this save'.\n- The `hatch_produces_juveniles` test (shrimp_population.rs:110-160) is now deterministic: condition_index=1.0 (line 120), instability_index=0.0 (line 123), temp=24.0 in optimal range [22,26] → f_temp=1.0, DO=8.0 mg/L → f_oxygen=1.0, GH≈7.9 dGH in range [5,10] → f_mineral=1.0. All factors are 1.0, so p_hatch=1.0 and every rng.next_f64() < 1.0 check succeeds.\n- The test asserts exact juvenile count (`== 25`, line 139) and exact berried count (`== 0`, line 158) instead of the former `>= 25` inequality, confirming full determinism.\n- The test calls `step_daily_shrimp` directly on state (line 135), bypassing all other systems' RNG consumption that made the original engine-based path fragile.\n- Migration contract documentation at save.rs:41-76 remains comprehensive with 5 numbered steps, 'what migrations can do' section, and 'ordering guarantees' section.\n- Compile-time assertion at save.rs:89-92 ensures MIGRATIONS length stays in sync with SCHEMA_VERSION - MIN_SUPPORTED_SCHEMA.\n- Schema version is restamped per migration step (save.rs:169) for crash-safe intermediate state.\n\n## Findings and Gaps\n\n- The pre-existing `enforce_invariants(&mut self.state)` mutation-on-error architectural issue in engine.rs remains. This is unrelated to the save-schema deliverable and was consistently documented as outstanding risk throughout the cycle.\n- No regressions introduced by either amendment implementation.\n\n## Follow-up and Amendments\n\n- The enforce_invariants mutation-on-error issue should be addressed in a separate task by splitting pure validation from normalization or validating against a clone.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 6
+}

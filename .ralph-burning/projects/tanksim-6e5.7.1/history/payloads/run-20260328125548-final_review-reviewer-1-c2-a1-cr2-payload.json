@@ -1,0 +1,31 @@
+{
+  "payload_id": "run-20260328125548-final_review-reviewer-1-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T14:07:03.194340675Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "Fix the schema-v4 save migration so legacy `TrimPlants` actions map to `TrimPlantsAndLeaveCuttings`, not `TrimPlantsAndRemove` (`crates/tank_core/src/save.rs:555-565`). The old `TrimPlants` behavior matched the detritus-routing path that now lives in `crates/tank_core/src/engine.rs:620-631`, while `TrimPlantsAndRemove` at `crates/tank_core/src/engine.rs:600-618` exports biomass from the system. As written, loading an old save silently changes queued action semantics and mass balance.",
+        "rationale": "This is a behavior regression for existing saves: the same queued action now removes plant biomass that previously stayed in the tank as detritus."
+      },
+      {
+        "body": "Normalize provenance display/range-check values for legacy total-style process parameters before feeding them to `format_param()` / `check_ranges()` (`crates/tank_data/src/presets.rs:400-509`, `crates/tank_core/src/types/provenance.rs:148-158`). Several of the parameters being documented are explicitly stored in legacy total units and converted by the runtime to concentration units (`crates/tank_core/src/types/process.rs:56-63`, `crates/tank_core/src/types/process.rs:72-109`, `crates/tank_core/src/systems/nitrogen_cycle.rs:169-174`). Right now a value like `aob_k_tan_mg = 0.5` is displayed and range-checked as `0.5 mg N/L`, even though the engine actually uses `0.025 mg N/L`, so the new provenance output and `valid_range` diagnostics are scientifically wrong for these fields.",
+        "rationale": "The feature is supposed to improve scientific traceability, but for the Monod/half-saturation parameters it currently reports the wrong units and magnitudes."
+      },
+      {
+        "body": "Add a provenance path for the active code-defined process defaults that are still hardcoded during scenario materialization. `ProcessParams` includes `death_biomass_to_detritus_fraction` and the microfauna routing fractions (`crates/tank_core/src/types/process.rs:211-247`), but `ProcessParamsPreset` has no fields/`param_meta` support for them and rejects unknown metadata keys (`crates/tank_data/src/presets.rs:351-388`, `crates/tank_data/src/presets.rs:392-500`, `crates/tank_data/src/presets.rs:723-731`). `process_preset_to_params()` then injects literal values for them (`crates/tank_scenarios/src/lib.rs:433-443`) and drops provenance entirely. Those runtime parameters still cannot carry source/confidence/range metadata.",
+        "rationale": "This leaves the implementation incomplete for the exact 'code-defined defaults' case called out in the task, and it blocks future provenance enrichment of active biology/process parameters."
+      }
+    ],
+    "summary": "Reviewed the task-level provenance/loaders changes and found three substantive issues: the save migration rewrites legacy trim actions to the wrong new variant, provenance helpers operate on pre-normalized legacy totals instead of the runtime concentrations, and several active process defaults are still hardcoded outside the provenance schema so they cannot carry metadata."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}
