@@ -20,6 +20,14 @@ fn pka1(temperature_c: f64) -> f64 {
 /// is deferred.
 const PKA2: f64 = 10.33;
 
+/// Storage and gameplay pH bounds. The solver reprojects species at these
+/// bounds so cached carbonate outputs remain self-consistent.
+pub const CARBONATE_PH_MIN: f64 = 5.5;
+pub const CARBONATE_PH_MAX: f64 = 8.5;
+
+const DIAGNOSTIC_PH_MIN: f64 = 4.0;
+const DIAGNOSTIC_PH_MAX: f64 = 10.0;
+
 /// Molar mass of HCO3- in mg/mmol, used to project solved bicarbonate
 /// back to the cached `bicarbonate_mg_total` field.
 const HCO3_MG_PER_MMOL: f64 = 61.0;
@@ -45,6 +53,48 @@ const NEUTRAL_FALLBACK: CarbonateEquilibrium = CarbonateEquilibrium {
     hco3_mmol_per_l: 0.0,
     co3_mmol_per_l: 0.0,
 };
+
+fn clamp_carbonate_ph(ph: f64) -> f64 {
+    if ph.is_finite() {
+        ph.clamp(CARBONATE_PH_MIN, CARBONATE_PH_MAX)
+    } else {
+        7.0
+    }
+}
+
+fn carbonate_species_for_ph(
+    dic_mol_per_l: f64,
+    ph: f64,
+    ka1: f64,
+    ka2: f64,
+) -> (f64, f64, f64) {
+    let h = 10.0_f64.powf(-ph);
+    let denom = h * h + ka1 * h + ka1 * ka2;
+    let co2 = dic_mol_per_l * h * h / denom;
+    let hco3 = dic_mol_per_l * ka1 * h / denom;
+    let co3 = dic_mol_per_l * ka1 * ka2 / denom;
+    (co2 * 1000.0, hco3 * 1000.0, co3 * 1000.0)
+}
+
+fn acid_only_fallback_ph(dic_mol_per_l: f64, ka1: f64) -> f64 {
+    let discriminant = ka1 * ka1 + 4.0 * ka1 * dic_mol_per_l.max(0.0);
+    let h = (-ka1 + discriminant.sqrt()) / 2.0;
+
+    if h.is_finite() && h > 0.0 {
+        clamp_carbonate_ph(-h.log10())
+    } else {
+        7.0
+    }
+}
+
+fn fallback_all_co2(dic_mol_per_l: f64, ka1: f64) -> CarbonateEquilibrium {
+    CarbonateEquilibrium {
+        ph: acid_only_fallback_ph(dic_mol_per_l, ka1),
+        co2_aq_mmol_per_l: dic_mol_per_l * 1000.0,
+        hco3_mmol_per_l: 0.0,
+        co3_mmol_per_l: 0.0,
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Solver
@@ -78,14 +128,10 @@ pub fn solve_carbonate_equilibrium(
     let ka1 = 10.0_f64.powf(-pka1(temperature_c));
     let ka2 = 10.0_f64.powf(-PKA2);
 
-    // Negligible alkalinity: all DIC as CO2(aq).
+    // Negligible alkalinity: treat the water as carbonic-acid dominated so
+    // gameplay surfaces an acid crash instead of snapping back to neutral pH.
     if alk <= 1e-9 {
-        return CarbonateEquilibrium {
-            ph: 7.0,
-            co2_aq_mmol_per_l: dic * 1000.0,
-            hco3_mmol_per_l: 0.0,
-            co3_mmol_per_l: 0.0,
-        };
+        return fallback_all_co2(dic, ka1);
     }
 
     // Quadratic in [H+]:  a·H² + b·H + c = 0
@@ -99,12 +145,7 @@ pub fn solve_carbonate_equilibrium(
     let discriminant = b * b - 4.0 * a * c;
 
     if discriminant < 0.0 {
-        return CarbonateEquilibrium {
-            ph: 7.0,
-            co2_aq_mmol_per_l: dic * 1000.0,
-            hco3_mmol_per_l: 0.0,
-            co3_mmol_per_l: 0.0,
-        };
+        return fallback_all_co2(dic, ka1);
     }
 
     let sqrt_d = discriminant.sqrt();
@@ -121,8 +162,8 @@ pub fn solve_carbonate_equilibrium(
     } else if h1 > 0.0 && h2 > 0.0 {
         let ph1 = -h1.log10();
         let ph2 = -h2.log10();
-        let in1 = (4.0..=10.0).contains(&ph1);
-        let in2 = (4.0..=10.0).contains(&ph2);
+        let in1 = (DIAGNOSTIC_PH_MIN..=DIAGNOSTIC_PH_MAX).contains(&ph1);
+        let in2 = (DIAGNOSTIC_PH_MIN..=DIAGNOSTIC_PH_MAX).contains(&ph2);
         match (in1, in2) {
             (true, false) => h1,
             (false, true) => h2,
@@ -130,27 +171,20 @@ pub fn solve_carbonate_equilibrium(
         }
     } else {
         // No positive root: fallback.
-        return CarbonateEquilibrium {
-            ph: 7.0,
-            co2_aq_mmol_per_l: dic * 1000.0,
-            hco3_mmol_per_l: 0.0,
-            co3_mmol_per_l: 0.0,
-        };
+        return fallback_all_co2(dic, ka1);
     };
 
-    let ph = (-h.log10()).clamp(4.0, 10.0);
-
-    // Species fractions from the solved [H+].
-    let denom = h * h + ka1 * h + ka1 * ka2;
-    let co2 = dic * h * h / denom;
-    let hco3 = dic * ka1 * h / denom;
-    let co3 = dic * ka1 * ka2 / denom;
+    // Reproject the species fractions at the storage pH bounds so pH and the
+    // cached carbonate species remain idempotent across snapshots and save-load.
+    let ph = clamp_carbonate_ph(-h.log10());
+    let (co2_aq_mmol_per_l, hco3_mmol_per_l, co3_mmol_per_l) =
+        carbonate_species_for_ph(dic, ph, ka1, ka2);
 
     CarbonateEquilibrium {
         ph,
-        co2_aq_mmol_per_l: co2 * 1000.0,
-        hco3_mmol_per_l: hco3 * 1000.0,
-        co3_mmol_per_l: co3 * 1000.0,
+        co2_aq_mmol_per_l,
+        hco3_mmol_per_l,
+        co3_mmol_per_l,
     }
 }
 

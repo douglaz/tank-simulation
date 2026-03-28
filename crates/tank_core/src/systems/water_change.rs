@@ -64,7 +64,6 @@ pub fn apply_water_change(state: &mut TankState, percent: f64, source: &SourceWa
     state.water.magnesium_mg_total *= retention;
     state.water.sodium_mg_total *= retention;
     state.water.potassium_mg_total *= retention;
-    state.water.bicarbonate_mg_total *= retention;
     state.water.chloride_mg_total *= retention;
     state.water.sulfate_mg_total *= retention;
 
@@ -82,7 +81,6 @@ pub fn apply_water_change(state: &mut TankState, percent: f64, source: &SourceWa
     state.water.magnesium_mg_total += source.magnesium_mg_per_l * exchanged_l;
     state.water.sodium_mg_total += source.sodium_mg_per_l * exchanged_l;
     state.water.potassium_mg_total += source.potassium_mg_per_l * exchanged_l;
-    state.water.bicarbonate_mg_total += source.bicarbonate_mg_per_l * exchanged_l;
     state.water.chloride_mg_total += source.chloride_mg_per_l * exchanged_l;
     state.water.sulfate_mg_total += source.sulfate_mg_per_l * exchanged_l;
 
