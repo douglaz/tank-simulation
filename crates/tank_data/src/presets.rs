@@ -6,7 +6,8 @@ use tank_core::systems::chemistry::{
     CARBONATE_PH_MIN,
 };
 use tank_core::types::{
-    legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2, ParamMeta, RangeWarning,
+    ParamMeta, RangeWarning, LEGACY_KINETIC_REFERENCE_FOOTPRINT_M2,
+    LEGACY_KINETIC_REFERENCE_VOLUME_L,
 };
 
 const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
@@ -795,8 +796,12 @@ fn default_microfauna_growth_fraction() -> f64 {
 fn normalize_process_param_for_provenance(name: &str, value: f64, unit: Option<&str>) -> f64 {
     match legacy_process_param_normalization(name, unit) {
         ProvenanceNormalization::None => value,
-        ProvenanceNormalization::LegacyMgPerL => legacy_total_param_to_mg_per_l(value),
-        ProvenanceNormalization::LegacyMgPerM2 => legacy_total_param_to_mg_per_m2(value),
+        ProvenanceNormalization::LegacyMgPerL => {
+            preserve_non_finite_division(value, LEGACY_KINETIC_REFERENCE_VOLUME_L)
+        }
+        ProvenanceNormalization::LegacyMgPerM2 => {
+            preserve_non_finite_division(value, LEGACY_KINETIC_REFERENCE_FOOTPRINT_M2)
+        }
     }
 }
 
@@ -843,6 +848,14 @@ fn unit_requests_area_normalization(unit: Option<&str>) -> bool {
         .replace('²', "2")
         .to_ascii_lowercase();
     normalized.contains("/m2") || normalized.contains("/m^2")
+}
+
+fn preserve_non_finite_division(value: f64, denominator: f64) -> f64 {
+    if value.is_finite() {
+        value / denominator
+    } else {
+        value
+    }
 }
 
 impl ProcessParamsPreset {
