@@ -319,6 +319,13 @@ impl Engine {
             self.run_daily_update(&mut ctx);
         }
 
+        // Refresh habitat registry so light_exposure stays current with
+        // any DOC/detritus/algae changes from the hourly pipeline.
+        // (The daily update already refreshes twice; this covers non-daily hours.)
+        if self.state.environment.hour_of_day != 0 {
+            self.state.refresh_habitat_registry();
+        }
+
         self.maybe_record_stage(&mut ctx, "system:invariants", |engine, _stage_trace| {
             enforce_invariants(&mut engine.state)
         })?;

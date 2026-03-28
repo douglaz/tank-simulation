@@ -987,19 +987,30 @@ fn per_guild_monod_uses_concentration_not_total() -> Result<(), tank_core::SimEr
         // Monod factors must be identical for all volumes.
         let eps = 1e-12;
         assert!(
-            (monod(tan_c, pp.aob_k_tan_mg_n_per_l) - monod(tan_conc, pp.aob_k_tan_mg_n_per_l)).abs() < eps,
+            (monod(tan_c, pp.aob_k_tan_mg_n_per_l) - monod(tan_conc, pp.aob_k_tan_mg_n_per_l))
+                .abs()
+                < eps,
             "AOB TAN Monod factor should be volume-independent at {volume_l} L"
         );
         assert!(
-            (monod(no2_c, pp.nob_k_nitrite_mg_n_per_l) - monod(no2_conc, pp.nob_k_nitrite_mg_n_per_l)).abs() < eps,
+            (monod(no2_c, pp.nob_k_nitrite_mg_n_per_l)
+                - monod(no2_conc, pp.nob_k_nitrite_mg_n_per_l))
+            .abs()
+                < eps,
             "NOB NO2 Monod factor should be volume-independent at {volume_l} L"
         );
         assert!(
-            (monod(tan_c, pp.comammox_k_tan_mg_n_per_l) - monod(tan_conc, pp.comammox_k_tan_mg_n_per_l)).abs() < eps,
+            (monod(tan_c, pp.comammox_k_tan_mg_n_per_l)
+                - monod(tan_conc, pp.comammox_k_tan_mg_n_per_l))
+            .abs()
+                < eps,
             "Comammox TAN Monod factor should be volume-independent at {volume_l} L"
         );
         assert!(
-            (monod(doc_c, pp.decomposer_k_doc_mg_c_per_l) - monod(doc_conc, pp.decomposer_k_doc_mg_c_per_l)).abs() < eps,
+            (monod(doc_c, pp.decomposer_k_doc_mg_c_per_l)
+                - monod(doc_conc, pp.decomposer_k_doc_mg_c_per_l))
+            .abs()
+                < eps,
             "Decomposer DOC Monod factor should be volume-independent at {volume_l} L"
         );
         assert!(
@@ -1011,7 +1022,10 @@ fn per_guild_monod_uses_concentration_not_total() -> Result<(), tank_core::SimEr
             "NOB DO Monod factor should be volume-independent at {volume_l} L"
         );
         assert!(
-            (monod(do_c, pp.decomposer_k_do_mg_per_l) - monod(do_conc, pp.decomposer_k_do_mg_per_l)).abs() < eps,
+            (monod(do_c, pp.decomposer_k_do_mg_per_l)
+                - monod(do_conc, pp.decomposer_k_do_mg_per_l))
+            .abs()
+                < eps,
             "Decomposer DO Monod factor should be volume-independent at {volume_l} L"
         );
     }
