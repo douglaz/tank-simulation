@@ -854,12 +854,11 @@ mod tests {
         );
         assert_close(
             state.animal.reserve_g,
-            (
-                assimilated_n_mg * growth_frac
-                    + (target_respired_n_mg - target_respired_n_mg * respiration_scale)
-                    + assimilated_c_mg * growth_frac
-                    + (target_respired_c_mg - target_respired_c_mg * respiration_scale)
-            ) / 1000.0,
+            (assimilated_n_mg * growth_frac
+                + (target_respired_n_mg - target_respired_n_mg * respiration_scale)
+                + assimilated_c_mg * growth_frac
+                + (target_respired_c_mg - target_respired_c_mg * respiration_scale))
+                / 1000.0,
             1e-12,
         );
     }
