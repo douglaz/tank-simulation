@@ -5,6 +5,7 @@ use crate::types::{
 
 const FEED_P_TO_N_MASS_RATIO: f64 = 0.10;
 const SMALL_NEGATIVE_ROUNDING_TOLERANCE_MG: f64 = 1e-9;
+const SMALL_NEGATIVE_ROUNDING_TOLERANCE_MEQ: f64 = 1e-9;
 
 /// Result of one hourly nitrogen cycle step, carrying coupling values
 /// that downstream systems (DO, chemistry) need.
@@ -348,15 +349,15 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let comammox_o2_cost = comammox_step.oxidized_n_mg * o2_for_comammox;
     let comammox_alk_cost = comammox_step.oxidized_n_mg * alk_per_mg_n;
     do_budget = (do_budget - comammox_o2_cost).max(0.0);
-    alk_budget = (alk_budget - comammox_alk_cost).max(0.0);
+    let remaining_alk_budget = alk_budget - comammox_alk_cost;
     debug_assert!(
-        alk_budget <= state.water.alkalinity_meq_total + f64::EPSILON,
-        "running alkalinity budget should reflect AOB+comammox depletion before the pool commit"
+        remaining_alk_budget >= -SMALL_NEGATIVE_ROUNDING_TOLERANCE_MEQ,
+        "running alkalinity budget over-deducted before the pool commit: remaining={remaining_alk_budget} meq, cost={comammox_alk_cost} meq, prior_budget={alk_budget} meq"
     );
     state.water.dissolved_oxygen_mg_total =
         (state.water.dissolved_oxygen_mg_total - comammox_o2_cost).max(0.0);
 
-    // 4c. NOB: nitrite -> nitrate (uses remaining DO/alk budget)
+    // 4c. NOB: nitrite -> nitrate (uses remaining DO budget only)
     let nob_env_factor = combined_env
         * env.f_temp
         * env.f_ph
