@@ -348,6 +348,11 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let comammox_o2_cost = comammox_step.oxidized_n_mg * o2_for_comammox;
     let comammox_alk_cost = comammox_step.oxidized_n_mg * alk_per_mg_n;
     do_budget = (do_budget - comammox_o2_cost).max(0.0);
+    alk_budget = (alk_budget - comammox_alk_cost).max(0.0);
+    debug_assert!(
+        alk_budget <= state.water.alkalinity_meq_total + f64::EPSILON,
+        "running alkalinity budget should reflect AOB+comammox depletion before the pool commit"
+    );
     state.water.dissolved_oxygen_mg_total =
         (state.water.dissolved_oxygen_mg_total - comammox_o2_cost).max(0.0);
 

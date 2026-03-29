@@ -71,14 +71,16 @@ struct TickContext {
 
 struct StageTrace {
     enabled: bool,
+    budget_metrics_enabled: bool,
     notes: Vec<String>,
     budget_metrics: Vec<BudgetMetric>,
 }
 
 impl StageTrace {
-    fn new(enabled: bool) -> Self {
+    fn new(enabled: bool, budget_metrics_enabled: bool) -> Self {
         Self {
             enabled,
+            budget_metrics_enabled,
             notes: Vec::new(),
             budget_metrics: Vec::new(),
         }
@@ -95,10 +97,12 @@ impl StageTrace {
     }
 
     fn metric(&mut self, label: impl Into<String>, value: f64) {
-        self.budget_metrics.push(BudgetMetric {
-            label: label.into(),
-            value,
-        });
+        if self.budget_metrics_enabled {
+            self.budget_metrics.push(BudgetMetric {
+                label: label.into(),
+                value,
+            });
+        }
     }
 
     fn into_parts(self) -> (Vec<String>, Vec<BudgetMetric>) {
@@ -523,10 +527,13 @@ impl Engine {
             .filter(|t| t.verbosity >= Verbosity::Detail)
             .map(|_| PoolSnapshot::capture(&self.state));
         let event_count_before = ctx.trace.as_ref().map(|_| self.state.event_log.len());
-        let mut stage_trace = StageTrace::new(matches!(
-            ctx.trace.as_ref(),
-            Some(trace) if trace.verbosity >= Verbosity::Trace
-        ));
+        let mut stage_trace = StageTrace::new(
+            matches!(
+                ctx.trace.as_ref(),
+                Some(trace) if trace.verbosity >= Verbosity::Trace
+            ),
+            ctx.budget.is_some(),
+        );
 
         let result = stage(self, &mut stage_trace);
         let (notes, budget_metrics) = stage_trace.into_parts();
@@ -584,10 +591,13 @@ impl Engine {
             .filter(|t| t.verbosity >= Verbosity::Detail)
             .map(|_| PoolSnapshot::capture(&self.state));
         let event_count_before = ctx.trace.as_ref().map(|_| self.state.event_log.len());
-        let mut stage_trace = StageTrace::new(matches!(
-            ctx.trace.as_ref(),
-            Some(trace) if trace.verbosity >= Verbosity::Trace
-        ));
+        let mut stage_trace = StageTrace::new(
+            matches!(
+                ctx.trace.as_ref(),
+                Some(trace) if trace.verbosity >= Verbosity::Trace
+            ),
+            ctx.budget.is_some(),
+        );
 
         let (result, explicit_delta) = stage(self, &mut stage_trace, ctx.budget.is_some());
         let (notes, budget_metrics) = stage_trace.into_parts();
@@ -1015,7 +1025,7 @@ fn element_budget_has_flux(budget: ElementBudget) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{BudgetEntry, BudgetRecordingKind, BudgetTotals};
+    use crate::types::{BudgetEntry, BudgetMetric, BudgetRecordingKind, BudgetTotals};
 
     fn synthetic_entry(label: &str, delta: BudgetDelta) -> BudgetEntry {
         BudgetEntry {
@@ -1043,6 +1053,38 @@ mod tests {
             net_delta,
             entries,
         }
+    }
+
+    #[test]
+    fn stage_trace_skips_budget_metrics_without_budget_tracking() {
+        let mut stage_trace = StageTrace::new(true, false);
+
+        stage_trace.note("kept");
+        stage_trace.metric("nitrogen_cycle.tan_oxidized_mg", 1.25);
+
+        let (notes, metrics) = stage_trace.into_parts();
+
+        assert_eq!(notes, vec!["kept".to_owned()]);
+        assert!(metrics.is_empty());
+    }
+
+    #[test]
+    fn stage_trace_records_budget_metrics_without_trace_notes() {
+        let mut stage_trace = StageTrace::new(false, true);
+
+        stage_trace.note("suppressed");
+        stage_trace.metric("nitrogen_cycle.tan_oxidized_mg", 1.25);
+
+        let (notes, metrics) = stage_trace.into_parts();
+
+        assert!(notes.is_empty());
+        assert_eq!(
+            metrics,
+            vec![BudgetMetric {
+                label: "nitrogen_cycle.tan_oxidized_mg".to_owned(),
+                value: 1.25,
+            }]
+        );
     }
 
     #[test]
