@@ -5,6 +5,8 @@ pub mod invariants;
 pub mod rng;
 pub mod save;
 pub mod systems;
+#[doc(hidden)]
+pub mod test_fixtures;
 pub mod tracing;
 pub mod types;
 
