@@ -1,8 +1,0 @@
-{"timestamp":"2026-03-27T15:29:28.121964512Z","level":"info","source":"engine","message":"stage_entered: docs_plan cycle=1 attempt=1"}
-{"timestamp":"2026-03-27T15:33:30.227910499Z","level":"info","source":"engine","message":"stage_completed: docs_plan"}
-{"timestamp":"2026-03-27T15:33:30.333090435Z","level":"info","source":"engine","message":"stage_entered: docs_update cycle=1 attempt=1"}
-{"timestamp":"2026-03-27T15:38:59.171745719Z","level":"info","source":"engine","message":"stage_completed: docs_update"}
-{"timestamp":"2026-03-27T15:38:59.266237989Z","level":"info","source":"engine","message":"stage_entered (local validation): docs_validation cycle=1 attempt=1"}
-{"timestamp":"2026-03-27T15:38:59.320024385Z","level":"info","source":"engine","message":"stage_completed: docs_validation"}
-{"timestamp":"2026-03-27T15:38:59.412230716Z","level":"info","source":"engine","message":"stage_entered: review cycle=1 attempt=1"}
-{"timestamp":"2026-03-27T15:42:01.877468996Z","level":"info","source":"engine","message":"stage_completed: review"}

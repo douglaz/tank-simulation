@@ -80,6 +80,8 @@ pub struct Envelope {
     pub biofilter_maturity_bounds: Option<(f64, f64)>,
     pub fast_stem_biomass_g_bounds: Option<(f64, f64)>,
     pub periphyton_biomass_g_bounds: Option<(f64, f64)>,
+    pub kh_d_bounds: Option<(f64, f64)>,
+    pub dic_mg_c_per_l_bounds: Option<(f64, f64)>,
 }
 
 impl Envelope {
@@ -160,6 +162,16 @@ impl Envelope {
 
     pub fn periphyton_biomass_g(mut self, min: f64, max: f64) -> Self {
         self.periphyton_biomass_g_bounds = Some((min, max));
+        self
+    }
+
+    pub fn kh_d(mut self, min: f64, max: f64) -> Self {
+        self.kh_d_bounds = Some((min, max));
+        self
+    }
+
+    pub fn dic_mg_c_per_l(mut self, min: f64, max: f64) -> Self {
+        self.dic_mg_c_per_l_bounds = Some((min, max));
         self
     }
 
@@ -303,6 +315,24 @@ impl Envelope {
                 |value, min, max| {
                     format!("periphyton biomass {value:.4}g outside [{min:.3}, {max:.3}]")
                 },
+            );
+        }
+        if let Some((min, max)) = self.kh_d_bounds {
+            check_f64_bounds(
+                &mut violations,
+                "KH",
+                snap.kh_d,
+                (min, max),
+                |value, min, max| format!("KH {value:.2} dKH outside [{min:.1}, {max:.1}]"),
+            );
+        }
+        if let Some((min, max)) = self.dic_mg_c_per_l_bounds {
+            check_f64_bounds(
+                &mut violations,
+                "DIC",
+                snap.dissolved_inorganic_carbon_mg_c_per_l,
+                (min, max),
+                |value, min, max| format!("DIC {value:.2} mg C/L outside [{min:.1}, {max:.1}]"),
             );
         }
 
