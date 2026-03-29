@@ -2810,9 +2810,22 @@ valid_range = [20.0, 40.0]
             moderate_ph < hard_ph,
             "moderate should stay below hard shrimp"
         );
-        assert!(soft_ph > super::CARBONATE_PH_MIN && soft_ph < super::CARBONATE_PH_MAX);
-        assert!(moderate_ph > super::CARBONATE_PH_MIN && moderate_ph < super::CARBONATE_PH_MAX);
-        assert!(hard_ph > super::CARBONATE_PH_MIN && hard_ph < super::CARBONATE_PH_MAX);
-        assert_eq!(ro_ph, 7.0);
+        assert!(ro_ph < soft_ph, "ro-like should stay below soft acidic");
+        assert!(
+            (6.5..=7.0).contains(&soft_ph),
+            "soft acidic pH {soft_ph:.3} out of band"
+        );
+        assert!(
+            (7.0..=7.5).contains(&moderate_ph),
+            "moderate pH {moderate_ph:.3} out of band"
+        );
+        assert!(
+            (7.5..=8.0).contains(&hard_ph),
+            "hard shrimp pH {hard_ph:.3} out of band"
+        );
+        assert!(
+            (5.5..=6.5).contains(&ro_ph),
+            "ro-like pH {ro_ph:.3} out of band"
+        );
     }
 }

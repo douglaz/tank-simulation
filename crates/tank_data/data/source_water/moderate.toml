@@ -5,15 +5,15 @@ ammonia_mg_n_per_l = 0.0
 nitrite_mg_n_per_l = 0.0
 nitrate_mg_n_per_l = 5.0
 phosphate_mg_p_per_l = 0.1
-dic_mg_c_per_l = 18.0
+dic_mg_c_per_l = 20.0
 doc_mg_c_per_l = 0.0
 don_mg_n_per_l = 0.0
-alkalinity_meq_per_l = 1.249
+alkalinity_meq_per_l = 1.429
 calcium_mg_per_l = 25.0
 magnesium_mg_per_l = 10.0
 sodium_mg_per_l = 12.0
 potassium_mg_per_l = 3.0
-bicarbonate_mg_per_l = 76.2
+bicarbonate_mg_per_l = 87.2
 chloride_mg_per_l = 18.0
 sulfate_mg_per_l = 15.8
 
@@ -22,9 +22,10 @@ source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
 notes = """
-Balanced general-purpose freshwater profile. GH ~6.0, KH ~3.5, TDS ~160. \
-Alkalinity 1.25 meq/L provides moderate buffering — better than soft_acidic \
-but still exhaustible under heavy nitrification load. Starts with 5 mg N/L \
-nitrate and 0.1 mg P/L phosphate, reflecting typical municipal water. \
+Balanced community-tank water modeled after a typical treated municipal tap. \
+GH ~5.8, KH ~4.0, and moderate DIC keep the carbonate preview in the pH \
+7.0-7.5 band: clearly buffered, but still exhaustible under sustained \
+nitrification load. The preset carries 5 mg N/L nitrate and 0.1 mg P/L \
+phosphate to emulate a light nutrient floor from incoming water. \
 Post-normalization (6e5.2.6) the medium_planted and warm_room scenarios \
-use this profile and maintain a visible nitrate floor from water changes."""
+use this profile as their default tap-water baseline."""

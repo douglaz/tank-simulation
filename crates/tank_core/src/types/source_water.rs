@@ -85,7 +85,9 @@ impl SourceWaterProfile {
         Ok(())
     }
 
-    /// Creates a zero-nutrient profile (equivalent to pure RO water).
+    /// Creates a zeroed profile for tests and validation probes.
+    /// This is intentionally more extreme than the shipped `ro_like` preset,
+    /// which models lightly remineralized RO/DI water.
     pub fn zero() -> Self {
         Self {
             temperature_c: 23.0,

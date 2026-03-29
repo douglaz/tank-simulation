@@ -5,23 +5,26 @@ ammonia_mg_n_per_l = 0.0
 nitrite_mg_n_per_l = 0.0
 nitrate_mg_n_per_l = 0.0
 phosphate_mg_p_per_l = 0.0
-dic_mg_c_per_l = 0.0
+dic_mg_c_per_l = 1.0
 doc_mg_c_per_l = 0.0
 don_mg_n_per_l = 0.0
-alkalinity_meq_per_l = 0.0
-calcium_mg_per_l = 0.0
-magnesium_mg_per_l = 0.0
-sodium_mg_per_l = 0.0
-potassium_mg_per_l = 0.0
-bicarbonate_mg_per_l = 0.0
-chloride_mg_per_l = 0.0
-sulfate_mg_per_l = 0.0
+alkalinity_meq_per_l = 0.036
+calcium_mg_per_l = 20.0
+magnesium_mg_per_l = 5.0
+sodium_mg_per_l = 2.0
+potassium_mg_per_l = 1.0
+bicarbonate_mg_per_l = 2.2
+chloride_mg_per_l = 4.0
+sulfate_mg_per_l = 8.0
 
 [provenance]
 source_title = "Starter preset pack"
 source_year = 2026
-confidence = "high"
+confidence = "medium"
 notes = """
-Zero-nutrient reference water for regression tests. All dissolved species \
-at zero. Zero alkalinity means any nitrification will immediately crash pH \
-— this is intentional for isolation tests, not a realistic water profile."""
+Lightly remineralized RO/DI water for keepers who add GH salts but almost no \
+carbonate buffer. GH ~4.0, KH ~0.1, and minimal DIC place the carbonate \
+preview around pH 6.2 with very poor buffering, so water changes with this \
+preset dilute alkalinity aggressively without pretending the source is \
+literally ion-free. Use it when the gameplay story should be "clean but easy \
+to destabilize," not as a zero-everything regression fixture."""

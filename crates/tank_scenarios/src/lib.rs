@@ -1053,12 +1053,17 @@ mod tests {
 
         assert!(soft_water.ph < moderate_water.ph);
         assert!(moderate_water.ph < hard_water.ph);
+        assert!(ro_water.ph < soft_water.ph);
         assert!(
             hard_water.ph - soft_water.ph >= 0.3,
             "expected at least 0.3 pH spread, got soft={:.3}, hard={:.3}",
             soft_water.ph,
             hard_water.ph
         );
-        assert_eq!(ro_water.ph, 7.0);
+        assert!(
+            (5.5..=6.5).contains(&ro_water.ph),
+            "expected ro_like to land in the low-buffer acidic band, got {:.3}",
+            ro_water.ph
+        );
     }
 }
