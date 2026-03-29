@@ -67,6 +67,14 @@ fn microfauna_test_state() -> TankState {
     // Closed-loop: no gas exchange
     state.process_params.reaeration_kla_base = 0.0;
     state.process_params.aeration_kla_boost = 0.0;
+    // Zero DIC shortcuts (open-system respiration/photosynthesis) for
+    // closed-system carbon conservation assertions.
+    state
+        .process_params
+        .respiration_dic_rate_mg_c_per_g_per_hour = 0.0;
+    state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
     // Zero background BOD so only microfauna O2 demand shows
     state
         .process_params
