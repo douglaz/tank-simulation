@@ -142,10 +142,7 @@ fn test_source_water_carries_alkalinity() -> Result<(), Box<dyn std::error::Erro
         kh_hard > 7.0 && kh_hard < 10.0,
         "hard_shrimp KH should be ~8, got {kh_hard:.1}"
     );
-    assert!(
-        kh_ro < 0.5,
-        "ro_like KH should be ~0.1, got {kh_ro:.2}"
-    );
+    assert!(kh_ro < 0.5, "ro_like KH should be ~0.1, got {kh_ro:.2}");
 
     Ok(())
 }
@@ -374,9 +371,9 @@ fn test_source_water_validation() -> Result<(), Box<dyn std::error::Error>> {
     // All shipped presets should pass validation
     for id in tank_data::source_water_ids() {
         let profile = load_source_profile(id);
-        profile.validate(id).unwrap_or_else(|e| {
-            panic!("shipped preset '{id}' failed validation: {e}")
-        });
+        profile
+            .validate(id)
+            .unwrap_or_else(|e| panic!("shipped preset '{id}' failed validation: {e}"));
     }
 
     Ok(())
@@ -411,19 +408,13 @@ fn test_source_water_ph_story() -> Result<(), SimError> {
         ..soft_overrides.clone()
     };
 
-    let soft_state = tank_scenarios::seeded_state_with_full_overrides(
-        seed,
-        "nano_cycle",
-        soft_overrides,
-    )
-    .expect("failed to materialize soft_acidic nano_cycle");
+    let soft_state =
+        tank_scenarios::seeded_state_with_full_overrides(seed, "nano_cycle", soft_overrides)
+            .expect("failed to materialize soft_acidic nano_cycle");
 
-    let hard_state = tank_scenarios::seeded_state_with_full_overrides(
-        seed,
-        "nano_cycle",
-        hard_overrides,
-    )
-    .expect("failed to materialize hard_shrimp nano_cycle");
+    let hard_state =
+        tank_scenarios::seeded_state_with_full_overrides(seed, "nano_cycle", hard_overrides)
+            .expect("failed to materialize hard_shrimp nano_cycle");
 
     let soft_ph_initial = soft_state.water.ph;
     let hard_ph_initial = hard_state.water.ph;
