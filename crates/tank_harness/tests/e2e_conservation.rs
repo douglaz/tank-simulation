@@ -373,16 +373,78 @@ fn water_change_fixture() -> TankState {
 // ---------------------------------------------------------------------------
 
 fn run_grazing() -> Result<ScenarioOutcome, String> {
+    let label = "grazing";
     let state = grazing_fixture();
+    let initial_periphyton = state.algae.periphyton_biomass_g;
+    let initial_tan = state.water.ammonia_total_mg_n_total;
+    let initial_fine_detritus = state.detritus.fine_detritus_g_total;
     let mut engine = Engine::from_parts(state, vec![]);
     engine.enable_tracing(SimTracer::new(Verbosity::Detail));
     let result = step_and_inspect(&mut engine, 48).map_err(|e| e.to_string())?;
+    let after = engine.full_state();
     let n = result.budget.net_delta(Element::Nitrogen);
     let c = result.budget.net_delta(Element::Carbon);
     if n.abs() > TOL || c.abs() > TOL {
-        dump_trace("grazing", &engine);
+        dump_trace(label, &engine);
         return Err(format!("conservation: dN={n:+.9} dC={c:+.9}"));
     }
+    ensure(
+        label,
+        &engine,
+        after.algae.periphyton_biomass_g < initial_periphyton,
+        || {
+            format!(
+                "periphyton should decrease from grazing: before={initial_periphyton}, after={}",
+                after.algae.periphyton_biomass_g
+            )
+        },
+    )?;
+    ensure(
+        label,
+        &engine,
+        after.water.ammonia_total_mg_n_total > initial_tan,
+        || {
+            format!(
+                "TAN should increase from excretion: before={initial_tan}, after={}",
+                after.water.ammonia_total_mg_n_total
+            )
+        },
+    )?;
+    ensure(
+        label,
+        &engine,
+        after.detritus.fine_detritus_g_total > initial_fine_detritus,
+        || {
+            format!(
+                "fine detritus should increase from feces: before={initial_fine_detritus}, after={}",
+                after.detritus.fine_detritus_g_total
+            )
+        },
+    )?;
+    ensure_trace_delta(
+        label,
+        &engine,
+        "system:daily_shrimp",
+        "algae.periphyton_g",
+        |delta| delta < 0.0,
+        "shrimp grazing periphyton",
+    )?;
+    ensure_trace_delta(
+        label,
+        &engine,
+        "system:daily_shrimp",
+        "water.ammonia_mg_n",
+        |delta| delta > 0.0,
+        "shrimp excretion raising TAN",
+    )?;
+    ensure_trace_delta(
+        label,
+        &engine,
+        "system:daily_shrimp",
+        "detritus.fine_g",
+        |delta| delta > 0.0,
+        "shrimp feces raising fine detritus",
+    )?;
     Ok(ScenarioOutcome {
         n_delta_mg: n,
         c_delta_mg: c,
@@ -622,7 +684,10 @@ fn run_water_change() -> Result<ScenarioOutcome, String> {
             + state.water.dissolved_organic_nitrogen_mg_n_total);
     let source = state.source_water_catalog.get("test_source").unwrap();
     let expected_n_import = exchanged_l
-        * (source.ammonia_mg_n_per_l + source.nitrate_mg_n_per_l + source.don_mg_n_per_l);
+        * (source.ammonia_mg_n_per_l
+            + source.nitrite_mg_n_per_l
+            + source.nitrate_mg_n_per_l
+            + source.don_mg_n_per_l);
     let expected_c_export = fraction
         * (state.water.dissolved_inorganic_carbon_mg_c_total
             + state.water.dissolved_organic_carbon_mg_c_total);

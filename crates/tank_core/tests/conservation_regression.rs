@@ -254,20 +254,38 @@ fn closed_system_grazing_conserves_n_and_c() -> Result<(), SimError> {
     let after = engine.full_state();
 
     // Verify the grazing pathway was exercised.
-    assert!(
+    assert_or_dump(
+        "grazing",
+        &engine,
         after.algae.periphyton_biomass_g < initial_periphyton,
-        "periphyton should decrease from grazing: before={initial_periphyton}, after={}",
-        after.algae.periphyton_biomass_g
+        || {
+            format!(
+                "periphyton should decrease from grazing: before={initial_periphyton}, after={}",
+                after.algae.periphyton_biomass_g
+            )
+        },
     );
-    assert!(
+    assert_or_dump(
+        "grazing",
+        &engine,
         after.water.ammonia_total_mg_n_total > initial_tan,
-        "TAN should increase from excretion: before={initial_tan}, after={}",
-        after.water.ammonia_total_mg_n_total
+        || {
+            format!(
+                "TAN should increase from excretion: before={initial_tan}, after={}",
+                after.water.ammonia_total_mg_n_total
+            )
+        },
     );
-    assert!(
+    assert_or_dump(
+        "grazing",
+        &engine,
         after.detritus.fine_detritus_g_total > initial_fine_detritus,
-        "fine detritus should increase from feces: before={initial_fine_detritus}, after={}",
-        after.detritus.fine_detritus_g_total
+        || {
+            format!(
+                "fine detritus should increase from feces: before={initial_fine_detritus}, after={}",
+                after.detritus.fine_detritus_g_total
+            )
+        },
     );
 
     // Conservation: N and C flat within tolerance.
@@ -870,7 +888,10 @@ fn water_change_mass_balanced() -> Result<(), SimError> {
     // Expected N import: source concentrations × exchanged volume
     let source = state.source_water_catalog.get("test_source").unwrap();
     let expected_n_import = exchanged_l
-        * (source.ammonia_mg_n_per_l + source.nitrate_mg_n_per_l + source.don_mg_n_per_l);
+        * (source.ammonia_mg_n_per_l
+            + source.nitrite_mg_n_per_l
+            + source.nitrate_mg_n_per_l
+            + source.don_mg_n_per_l);
     let expected_c_export = fraction
         * (state.water.dissolved_inorganic_carbon_mg_c_total
             + state.water.dissolved_organic_carbon_mg_c_total);
