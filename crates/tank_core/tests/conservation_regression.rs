@@ -14,7 +14,7 @@
 use tank_core::{
     budget_helpers::{
         assert_c_conserved, assert_n_conserved, assert_per_tick_balanced, step_and_inspect,
-        BudgetInspector, Element,
+        BudgetInspector, Element, InspectionResult,
     },
     plant_carbon_mg, plant_nitrogen_mg, Engine, JsonLinesSink, PlantGuildState, PlayerAction,
     SimError, SimSeed, SimTracer, SimulationEngine, SourceWaterProfile, TankState, TraceSink,
@@ -28,10 +28,80 @@ const TOL: f64 = 1e-6;
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn assert_close(actual: f64, expected: f64, tolerance: f64) {
-    assert!(
-        (actual - expected).abs() <= tolerance,
-        "expected {expected}, got {actual} (tolerance {tolerance})"
+fn panic_with_trace(label: &str, engine: &Engine, message: String) -> ! {
+    dump_trace(label, engine);
+    panic!("{message}");
+}
+
+fn assert_or_dump<F>(label: &str, engine: &Engine, condition: bool, message: F)
+where
+    F: FnOnce() -> String,
+{
+    if !condition {
+        panic_with_trace(label, engine, message());
+    }
+}
+
+fn assert_close_or_dump(
+    label: &str,
+    engine: &Engine,
+    actual: f64,
+    expected: f64,
+    tolerance: f64,
+    context: &str,
+) {
+    if (actual - expected).abs() > tolerance {
+        panic_with_trace(
+            label,
+            engine,
+            format!("{context}: expected {expected}, got {actual} (tolerance {tolerance})"),
+        );
+    }
+}
+
+fn step_and_inspect_or_dump(
+    label: &str,
+    engine: &mut Engine,
+    hours: u32,
+) -> Result<InspectionResult, SimError> {
+    match step_and_inspect(engine, hours) {
+        Ok(result) => Ok(result),
+        Err(err) => {
+            dump_trace(label, engine);
+            Err(err)
+        }
+    }
+}
+
+fn trace_has_pool_delta<F>(engine: &Engine, system: &str, pool: &str, predicate: F) -> bool
+where
+    F: Fn(f64) -> bool,
+{
+    let Some(tracer) = engine.tracer() else {
+        return false;
+    };
+    tracer
+        .ticks()
+        .iter()
+        .filter_map(|tick| tick.system(system))
+        .any(|entry| predicate(entry.delta_for(pool)))
+}
+
+fn assert_trace_delta<F>(
+    label: &str,
+    engine: &Engine,
+    system: &str,
+    pool: &str,
+    predicate: F,
+    description: &str,
+) where
+    F: Fn(f64) -> bool,
+{
+    assert_or_dump(
+        label,
+        engine,
+        trace_has_pool_delta(engine, system, pool, predicate),
+        || format!("missing trace evidence for {description}: expected {system} to move {pool}"),
     );
 }
 
@@ -180,7 +250,7 @@ fn closed_system_grazing_conserves_n_and_c() -> Result<(), SimError> {
 
     let mut engine = Engine::from_parts(state, vec![]);
     enable_tracing(&mut engine);
-    let result = step_and_inspect(&mut engine, 48)?;
+    let result = step_and_inspect_or_dump("grazing", &mut engine, 48)?;
     let after = engine.full_state();
 
     // Verify the grazing pathway was exercised.
@@ -282,9 +352,64 @@ fn feeding_fixture() -> TankState {
 /// disabled, total N and C must stay flat over 120 hours.
 #[test]
 fn closed_system_feeding_conserves_n_and_c() -> Result<(), SimError> {
-    let mut engine = Engine::from_parts(feeding_fixture(), vec![]);
+    let state = feeding_fixture();
+    let initial_particulate = state.detritus.particulate_organics_g_total;
+    let mut engine = Engine::from_parts(state, vec![]);
     enable_tracing(&mut engine);
-    let result = step_and_inspect(&mut engine, 120)?;
+    let result = step_and_inspect_or_dump("feeding", &mut engine, 120)?;
+    let after = engine.full_state();
+
+    assert_or_dump(
+        "feeding",
+        &engine,
+        after.detritus.particulate_organics_g_total < initial_particulate,
+        || {
+            format!(
+                "feed should leave particulate organics: before={initial_particulate}, after={}",
+                after.detritus.particulate_organics_g_total
+            )
+        },
+    );
+    assert_trace_delta(
+        "feeding",
+        &engine,
+        "system:nitrogen_cycle",
+        "detritus.particulate_g",
+        |delta| delta < 0.0,
+        "feed leaching out of particulate organics",
+    );
+    assert_trace_delta(
+        "feeding",
+        &engine,
+        "system:nitrogen_cycle",
+        "detritus.feed_residue_g",
+        |delta| delta > 0.0,
+        "feed dissolution into dissolved residue",
+    );
+    assert_trace_delta(
+        "feeding",
+        &engine,
+        "system:nitrogen_cycle",
+        "water.dic_mg_c",
+        |delta| delta > 0.0,
+        "decomposer mineralization producing DIC",
+    );
+    assert_trace_delta(
+        "feeding",
+        &engine,
+        "system:nitrogen_cycle",
+        "water.nitrate_mg_n",
+        |delta| delta > 0.0,
+        "nitrification producing nitrate",
+    );
+    assert_trace_delta(
+        "feeding",
+        &engine,
+        "system:daily_microfauna",
+        "algae.periphyton_g",
+        |delta| delta < 0.0,
+        "microfauna grazing periphyton",
+    );
 
     assert_conserved("feeding", &result.budget, &engine);
     assert_per_tick_balanced(&result.budget, Element::Nitrogen, TOL);
@@ -329,6 +454,8 @@ fn mortality_senescence_fixture() -> TankState {
     if state.plant_guilds.len() > 1 {
         state.plant_guilds[1].biomass_g = 4.0;
     }
+    state.process_params.plant_respiration_fraction_per_day = 0.08;
+    state.process_params.plant_senescence_fraction_per_day = 0.18;
 
     // Shrimp with high mortality conditions
     state.animal.adult.count = 8;
@@ -345,15 +472,17 @@ fn mortality_senescence_fixture() -> TankState {
     state.microbe.comammox_biomass_g = 0.03;
 
     state.algae.periphyton_biomass_g = 1.0;
+    state.algae.suspended_biomass_g = 0.4;
+    state.process_params.algae_respiration_fraction_per_day = 0.25;
     state.microfauna.population_index = 0.0;
     state.microfauna.grazing_pressure_index = 0.0;
 
     close_gas_exchange(&mut state);
     disable_dic_shortcuts(&mut state);
 
-    state.hardware.light.enabled = true;
-    state.hardware.light.photoperiod_hours = 10.0;
-    state.hardware.light.intensity_index = 0.7;
+    state.hardware.light.enabled = false;
+    state.hardware.light.photoperiod_hours = 0.0;
+    state.hardware.light.intensity_index = 0.0;
 
     state.reseed_stability_tracker();
     state
@@ -378,14 +507,52 @@ fn closed_system_mortality_senescence_conserves_n_and_c() -> Result<(), SimError
 
     let mut engine = Engine::from_parts(state, vec![]);
     enable_tracing(&mut engine);
-    let result = step_and_inspect(&mut engine, 120)?;
+    let result = step_and_inspect_or_dump("mortality_senescence", &mut engine, 120)?;
     let after = engine.full_state();
 
     // Verify that some shrimp actually died.
-    assert!(
+    assert_or_dump(
+        "mortality_senescence",
+        &engine,
         after.animal.adult.count < initial_shrimp,
-        "some shrimp should have died: before={initial_shrimp}, after={}",
-        after.animal.adult.count
+        || {
+            format!(
+                "some shrimp should have died: before={initial_shrimp}, after={}",
+                after.animal.adult.count
+            )
+        },
+    );
+    assert_trace_delta(
+        "mortality_senescence",
+        &engine,
+        "system:daily_plants",
+        "plants.biomass_g",
+        |delta| delta < 0.0,
+        "plant senescence reducing plant biomass",
+    );
+    assert_trace_delta(
+        "mortality_senescence",
+        &engine,
+        "system:daily_plants",
+        "detritus.fine_g",
+        |delta| delta > 0.0,
+        "plant senescence routing biomass to fine detritus",
+    );
+    assert_trace_delta(
+        "mortality_senescence",
+        &engine,
+        "system:daily_algae",
+        "algae.suspended_g",
+        |delta| delta < 0.0,
+        "algae senescence reducing suspended algae biomass",
+    );
+    assert_trace_delta(
+        "mortality_senescence",
+        &engine,
+        "system:daily_algae",
+        "detritus.fine_g",
+        |delta| delta > 0.0,
+        "algae senescence routing biomass to fine detritus",
     );
 
     // Conservation: all dead biomass routes to detritus → DOC → mineralization.
@@ -439,6 +606,7 @@ fn trim_fixture() -> TankState {
 /// explicit export, not unexplained mass loss.
 #[test]
 fn trim_and_remove_exports_exact_amount() -> Result<(), SimError> {
+    let label = "trim_and_remove";
     let state = trim_fixture();
     let initial_total_n = state.total_nitrogen();
     let initial_total_c = state.total_carbon();
@@ -455,18 +623,24 @@ fn trim_and_remove_exports_exact_amount() -> Result<(), SimError> {
     let mut engine = Engine::from_parts(state, vec![]);
     enable_tracing(&mut engine);
     engine.apply_action(PlayerAction::TrimPlantsAndRemove { fraction })?;
-    let _result = step_and_inspect(&mut engine, 1)?;
+    let _result = step_and_inspect_or_dump(label, &mut engine, 1)?;
 
     // System total N/C should decrease by the exported amount.
-    assert_close(
+    assert_close_or_dump(
+        label,
+        &engine,
         engine.full_state().total_nitrogen(),
         initial_total_n - expected_n_export,
         TOL,
+        "trim-and-remove total nitrogen",
     );
-    assert_close(
+    assert_close_or_dump(
+        label,
+        &engine,
         engine.full_state().total_carbon(),
         initial_total_c - expected_c_export,
         TOL,
+        "trim-and-remove total carbon",
     );
 
     // Budget entry should show the export as net negative.
@@ -475,16 +649,34 @@ fn trim_and_remove_exports_exact_amount() -> Result<(), SimError> {
         .entries
         .iter()
         .find(|e| e.label == "action:trim_plants_and_remove")
-        .expect("trim_plants_and_remove entry should be recorded");
-    assert!(
+        .unwrap_or_else(|| {
+            panic_with_trace(
+                label,
+                &engine,
+                "trim_plants_and_remove entry should be recorded".to_string(),
+            )
+        });
+    assert_or_dump(
+        label,
+        &engine,
         trim_entry.delta.nitrogen.net_mg() < 0.0,
-        "nitrogen should show net export: net={}",
-        trim_entry.delta.nitrogen.net_mg()
+        || {
+            format!(
+                "nitrogen should show net export: net={}",
+                trim_entry.delta.nitrogen.net_mg()
+            )
+        },
     );
-    assert!(
+    assert_or_dump(
+        label,
+        &engine,
         trim_entry.delta.carbon.net_mg() < 0.0,
-        "carbon should show net export: net={}",
-        trim_entry.delta.carbon.net_mg()
+        || {
+            format!(
+                "carbon should show net export: net={}",
+                trim_entry.delta.carbon.net_mg()
+            )
+        },
     );
 
     Ok(())
@@ -502,6 +694,7 @@ fn trim_and_remove_exports_exact_amount() -> Result<(), SimError> {
 /// must remain flat because the cuttings stay in the tank.
 #[test]
 fn trim_and_leave_conserves_n_and_c() -> Result<(), SimError> {
+    let label = "trim_and_leave";
     let state = trim_fixture();
     let initial_total_n = state.total_nitrogen();
     let initial_total_c = state.total_carbon();
@@ -511,17 +704,37 @@ fn trim_and_leave_conserves_n_and_c() -> Result<(), SimError> {
     let mut engine = Engine::from_parts(state, vec![]);
     enable_tracing(&mut engine);
     engine.apply_action(PlayerAction::TrimPlantsAndLeaveCuttings { fraction })?;
-    let _result = step_and_inspect(&mut engine, 1)?;
+    let _result = step_and_inspect_or_dump(label, &mut engine, 1)?;
 
     // Total N and C must stay flat — cuttings stay in the system.
-    assert_close(engine.full_state().total_nitrogen(), initial_total_n, TOL);
-    assert_close(engine.full_state().total_carbon(), initial_total_c, TOL);
+    assert_close_or_dump(
+        label,
+        &engine,
+        engine.full_state().total_nitrogen(),
+        initial_total_n,
+        TOL,
+        "trim-and-leave total nitrogen",
+    );
+    assert_close_or_dump(
+        label,
+        &engine,
+        engine.full_state().total_carbon(),
+        initial_total_c,
+        TOL,
+        "trim-and-leave total carbon",
+    );
 
     // Fine detritus should increase from the cuttings.
-    assert!(
+    assert_or_dump(
+        label,
+        &engine,
         engine.full_state().detritus.fine_detritus_g_total > initial_fine_detritus,
-        "fine detritus should increase from cuttings: before={initial_fine_detritus}, after={}",
-        engine.full_state().detritus.fine_detritus_g_total
+        || {
+            format!(
+                "fine detritus should increase from cuttings: before={initial_fine_detritus}, after={}",
+                engine.full_state().detritus.fine_detritus_g_total
+            )
+        },
     );
 
     // Budget entry should show zero net N/C (internal transfer).
@@ -530,9 +743,29 @@ fn trim_and_leave_conserves_n_and_c() -> Result<(), SimError> {
         .entries
         .iter()
         .find(|e| e.label == "action:trim_plants_and_leave_cuttings")
-        .expect("trim_plants_and_leave_cuttings entry should be recorded");
-    assert_close(trim_entry.delta.nitrogen.net_mg(), 0.0, TOL);
-    assert_close(trim_entry.delta.carbon.net_mg(), 0.0, TOL);
+        .unwrap_or_else(|| {
+            panic_with_trace(
+                label,
+                &engine,
+                "trim_plants_and_leave_cuttings entry should be recorded".to_string(),
+            )
+        });
+    assert_close_or_dump(
+        label,
+        &engine,
+        trim_entry.delta.nitrogen.net_mg(),
+        0.0,
+        TOL,
+        "trim-and-leave budget nitrogen net",
+    );
+    assert_close_or_dump(
+        label,
+        &engine,
+        trim_entry.delta.carbon.net_mg(),
+        0.0,
+        TOL,
+        "trim-and-leave budget carbon net",
+    );
 
     Ok(())
 }
@@ -597,6 +830,9 @@ fn water_change_fixture() -> TankState {
     source.ammonia_mg_n_per_l = 0.5;
     source.nitrate_mg_n_per_l = 5.0;
     source.don_mg_n_per_l = 0.5;
+    source.dic_mg_c_per_l = 30.0;
+    source.doc_mg_c_per_l = 4.0;
+    source.alkalinity_meq_per_l = 2.5;
     state
         .source_water_catalog
         .insert("test_source".to_string(), source);
@@ -617,6 +853,7 @@ fn water_change_fixture() -> TankState {
 /// gross flows to within tolerance.
 #[test]
 fn water_change_mass_balanced() -> Result<(), SimError> {
+    let label = "water_change";
     let state = water_change_fixture();
     let percent = 25.0;
     let fraction = percent / 100.0;
@@ -634,8 +871,13 @@ fn water_change_mass_balanced() -> Result<(), SimError> {
     let source = state.source_water_catalog.get("test_source").unwrap();
     let expected_n_import = exchanged_l
         * (source.ammonia_mg_n_per_l + source.nitrate_mg_n_per_l + source.don_mg_n_per_l);
+    let expected_c_export = fraction
+        * (state.water.dissolved_inorganic_carbon_mg_c_total
+            + state.water.dissolved_organic_carbon_mg_c_total);
+    let expected_c_import = exchanged_l * (source.dic_mg_c_per_l + source.doc_mg_c_per_l);
 
     let initial_total_n = state.total_nitrogen();
+    let initial_total_c = state.total_carbon();
 
     let mut engine = Engine::from_parts(state, vec![]);
     enable_tracing(&mut engine);
@@ -643,23 +885,79 @@ fn water_change_mass_balanced() -> Result<(), SimError> {
         percent,
         source_profile_id: "test_source".to_string(),
     })?;
-    let _result = step_and_inspect(&mut engine, 1)?;
+    let _result = step_and_inspect_or_dump(label, &mut engine, 1)?;
 
-    // Budget entry should track gross N import and export.
+    // Budget entry should track gross N and C import and export.
     let ledger = engine.budget_ledger().expect("budget tracking enabled");
     let wc_entry = ledger.ticks[0]
         .entries
         .iter()
         .find(|e| e.label == "action:water_change")
-        .expect("water change entry should be recorded");
-    assert_close(wc_entry.delta.nitrogen.out_mg, expected_n_export, TOL);
-    assert_close(wc_entry.delta.nitrogen.in_mg, expected_n_import, TOL);
+        .unwrap_or_else(|| {
+            panic_with_trace(
+                label,
+                &engine,
+                "water change entry should be recorded".to_string(),
+            )
+        });
+    assert_close_or_dump(
+        label,
+        &engine,
+        wc_entry.delta.nitrogen.out_mg,
+        expected_n_export,
+        TOL,
+        "water-change nitrogen export",
+    );
+    assert_close_or_dump(
+        label,
+        &engine,
+        wc_entry.delta.nitrogen.in_mg,
+        expected_n_import,
+        TOL,
+        "water-change nitrogen import",
+    );
+    assert_close_or_dump(
+        label,
+        &engine,
+        wc_entry.delta.carbon.out_mg,
+        expected_c_export,
+        TOL,
+        "water-change carbon export",
+    );
+    assert_close_or_dump(
+        label,
+        &engine,
+        wc_entry.delta.carbon.in_mg,
+        expected_c_import,
+        TOL,
+        "water-change carbon import",
+    );
 
     // System total N change should match import − export.
     let final_total_n = engine.full_state().total_nitrogen();
     let actual_change = final_total_n - initial_total_n;
     let expected_change = expected_n_import - expected_n_export;
-    assert_close(actual_change, expected_change, TOL);
+    assert_close_or_dump(
+        label,
+        &engine,
+        actual_change,
+        expected_change,
+        TOL,
+        "water-change total nitrogen delta",
+    );
+
+    // System total C change should match import − export.
+    let final_total_c = engine.full_state().total_carbon();
+    let actual_c_change = final_total_c - initial_total_c;
+    let expected_c_change = expected_c_import - expected_c_export;
+    assert_close_or_dump(
+        label,
+        &engine,
+        actual_c_change,
+        expected_c_change,
+        TOL,
+        "water-change total carbon delta",
+    );
 
     Ok(())
 }

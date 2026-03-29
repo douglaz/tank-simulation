@@ -13,8 +13,9 @@
 
 use tank_core::{
     budget_helpers::{step_and_inspect, Element},
-    plant_nitrogen_mg, Engine, JsonLinesSink, PlantGuildState, PlayerAction, SimSeed, SimTracer,
-    SimulationEngine, SourceWaterProfile, TankState, TraceSink, Verbosity, WaterState,
+    plant_carbon_mg, plant_nitrogen_mg, Engine, JsonLinesSink, PlantGuildState, PlayerAction,
+    SimSeed, SimTracer, SimulationEngine, SourceWaterProfile, TankState, TraceSink, Verbosity,
+    WaterState,
 };
 
 const TOL: f64 = 1e-6;
@@ -64,6 +65,71 @@ fn dump_trace(label: &str, engine: &Engine) {
         }
     }
     let _ = std::fs::write(&path, &buf);
+}
+
+fn fail_scenario<T>(label: &str, engine: &Engine, message: String) -> Result<T, String> {
+    dump_trace(label, engine);
+    Err(message)
+}
+
+fn ensure<F>(label: &str, engine: &Engine, condition: bool, message: F) -> Result<(), String>
+where
+    F: FnOnce() -> String,
+{
+    if condition {
+        Ok(())
+    } else {
+        fail_scenario(label, engine, message())
+    }
+}
+
+fn ensure_close(
+    label: &str,
+    engine: &Engine,
+    actual: f64,
+    expected: f64,
+    tolerance: f64,
+    context: &str,
+) -> Result<(), String> {
+    ensure(
+        label,
+        engine,
+        (actual - expected).abs() <= tolerance,
+        || format!("{context}: expected {expected}, got {actual} (tolerance {tolerance})"),
+    )
+}
+
+fn trace_has_pool_delta<F>(engine: &Engine, system: &str, pool: &str, predicate: F) -> bool
+where
+    F: Fn(f64) -> bool,
+{
+    let Some(tracer) = engine.tracer() else {
+        return false;
+    };
+    tracer
+        .ticks()
+        .iter()
+        .filter_map(|tick| tick.system(system))
+        .any(|entry| predicate(entry.delta_for(pool)))
+}
+
+fn ensure_trace_delta<F>(
+    label: &str,
+    engine: &Engine,
+    system: &str,
+    pool: &str,
+    predicate: F,
+    description: &str,
+) -> Result<(), String>
+where
+    F: Fn(f64) -> bool,
+{
+    ensure(
+        label,
+        engine,
+        trace_has_pool_delta(engine, system, pool, predicate),
+        || format!("missing trace evidence for {description}: expected {system} to move {pool}"),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -193,6 +259,8 @@ fn mortality_senescence_fixture() -> TankState {
     if state.plant_guilds.len() > 1 {
         state.plant_guilds[1].biomass_g = 4.0;
     }
+    state.process_params.plant_respiration_fraction_per_day = 0.08;
+    state.process_params.plant_senescence_fraction_per_day = 0.18;
     state.animal.adult.count = 8;
     state.animal.adult.condition_index = 0.0;
     state.animal.molt_stress_index = 1.0;
@@ -204,13 +272,15 @@ fn mortality_senescence_fixture() -> TankState {
     state.microbe.nitrite_oxidizer_biomass_g = 0.08;
     state.microbe.comammox_biomass_g = 0.03;
     state.algae.periphyton_biomass_g = 1.0;
+    state.algae.suspended_biomass_g = 0.4;
+    state.process_params.algae_respiration_fraction_per_day = 0.25;
     state.microfauna.population_index = 0.0;
     state.microfauna.grazing_pressure_index = 0.0;
     close_gas_exchange(&mut state);
     disable_dic_shortcuts(&mut state);
-    state.hardware.light.enabled = true;
-    state.hardware.light.photoperiod_hours = 10.0;
-    state.hardware.light.intensity_index = 0.7;
+    state.hardware.light.enabled = false;
+    state.hardware.light.photoperiod_hours = 0.0;
+    state.hardware.light.intensity_index = 0.0;
     state.reseed_stability_tracker();
     state
 }
@@ -288,6 +358,9 @@ fn water_change_fixture() -> TankState {
     source.ammonia_mg_n_per_l = 0.5;
     source.nitrate_mg_n_per_l = 5.0;
     source.don_mg_n_per_l = 0.5;
+    source.dic_mg_c_per_l = 30.0;
+    source.doc_mg_c_per_l = 4.0;
+    source.alkalinity_meq_per_l = 2.5;
     state
         .source_water_catalog
         .insert("test_source".to_string(), source);
@@ -317,16 +390,70 @@ fn run_grazing() -> Result<ScenarioOutcome, String> {
 }
 
 fn run_feeding() -> Result<ScenarioOutcome, String> {
+    let label = "feeding";
     let state = feeding_fixture();
+    let initial_particulate = state.detritus.particulate_organics_g_total;
     let mut engine = Engine::from_parts(state, vec![]);
     engine.enable_tracing(SimTracer::new(Verbosity::Detail));
     let result = step_and_inspect(&mut engine, 120).map_err(|e| e.to_string())?;
+    let after = engine.full_state();
     let n = result.budget.net_delta(Element::Nitrogen);
     let c = result.budget.net_delta(Element::Carbon);
     if n.abs() > TOL || c.abs() > TOL {
-        dump_trace("feeding", &engine);
+        dump_trace(label, &engine);
         return Err(format!("conservation: dN={n:+.9} dC={c:+.9}"));
     }
+    ensure(
+        label,
+        &engine,
+        after.detritus.particulate_organics_g_total < initial_particulate,
+        || {
+            format!(
+                "feed should leave particulate organics: before={initial_particulate}, after={}",
+                after.detritus.particulate_organics_g_total
+            )
+        },
+    )?;
+    ensure_trace_delta(
+        label,
+        &engine,
+        "system:nitrogen_cycle",
+        "detritus.particulate_g",
+        |delta| delta < 0.0,
+        "feed leaching out of particulate organics",
+    )?;
+    ensure_trace_delta(
+        label,
+        &engine,
+        "system:nitrogen_cycle",
+        "detritus.feed_residue_g",
+        |delta| delta > 0.0,
+        "feed dissolution into dissolved residue",
+    )?;
+    ensure_trace_delta(
+        label,
+        &engine,
+        "system:nitrogen_cycle",
+        "water.dic_mg_c",
+        |delta| delta > 0.0,
+        "decomposer mineralization producing DIC",
+    )?;
+    ensure_trace_delta(
+        label,
+        &engine,
+        "system:nitrogen_cycle",
+        "water.nitrate_mg_n",
+        |delta| delta > 0.0,
+        "nitrification producing nitrate",
+    )?;
+    ensure_trace_delta(
+        label,
+        &engine,
+        "system:daily_microfauna",
+        "algae.periphyton_g",
+        |delta| delta < 0.0,
+        "microfauna grazing periphyton",
+    )?;
     Ok(ScenarioOutcome {
         n_delta_mg: n,
         c_delta_mg: c,
@@ -334,16 +461,62 @@ fn run_feeding() -> Result<ScenarioOutcome, String> {
 }
 
 fn run_mortality_senescence() -> Result<ScenarioOutcome, String> {
+    let label = "mortality_senescence";
     let state = mortality_senescence_fixture();
+    let initial_shrimp = state.animal.adult.count;
     let mut engine = Engine::from_parts(state, vec![]);
     engine.enable_tracing(SimTracer::new(Verbosity::Detail));
     let result = step_and_inspect(&mut engine, 120).map_err(|e| e.to_string())?;
+    let after = engine.full_state();
     let n = result.budget.net_delta(Element::Nitrogen);
     let c = result.budget.net_delta(Element::Carbon);
     if n.abs() > TOL || c.abs() > TOL {
-        dump_trace("mortality_senescence", &engine);
+        dump_trace(label, &engine);
         return Err(format!("conservation: dN={n:+.9} dC={c:+.9}"));
     }
+    ensure(
+        label,
+        &engine,
+        after.animal.adult.count < initial_shrimp,
+        || {
+            format!(
+                "some shrimp should have died: before={initial_shrimp}, after={}",
+                after.animal.adult.count
+            )
+        },
+    )?;
+    ensure_trace_delta(
+        label,
+        &engine,
+        "system:daily_plants",
+        "plants.biomass_g",
+        |delta| delta < 0.0,
+        "plant senescence reducing plant biomass",
+    )?;
+    ensure_trace_delta(
+        label,
+        &engine,
+        "system:daily_plants",
+        "detritus.fine_g",
+        |delta| delta > 0.0,
+        "plant senescence routing biomass to fine detritus",
+    )?;
+    ensure_trace_delta(
+        label,
+        &engine,
+        "system:daily_algae",
+        "algae.suspended_g",
+        |delta| delta < 0.0,
+        "algae senescence reducing suspended algae biomass",
+    )?;
+    ensure_trace_delta(
+        label,
+        &engine,
+        "system:daily_algae",
+        "detritus.fine_g",
+        |delta| delta > 0.0,
+        "algae senescence routing biomass to fine detritus",
+    )?;
     Ok(ScenarioOutcome {
         n_delta_mg: n,
         c_delta_mg: c,
@@ -351,6 +524,7 @@ fn run_mortality_senescence() -> Result<ScenarioOutcome, String> {
 }
 
 fn run_trim_and_remove() -> Result<ScenarioOutcome, String> {
+    let label = "trim_and_remove";
     let state = trim_fixture();
     let fraction = 0.25;
     let trimmed_biomass_g: f64 = state
@@ -359,7 +533,10 @@ fn run_trim_and_remove() -> Result<ScenarioOutcome, String> {
         .map(|p| p.biomass_g * fraction)
         .sum();
     let expected_n_export = plant_nitrogen_mg(trimmed_biomass_g);
+    let expected_c_export =
+        plant_carbon_mg(trimmed_biomass_g, state.process_params.feed_n_to_c_ratio);
     let initial_total_n = state.total_nitrogen();
+    let initial_total_c = state.total_carbon();
     let mut engine = Engine::from_parts(state, vec![]);
     engine.enable_tracing(SimTracer::new(Verbosity::Detail));
     engine
@@ -367,13 +544,24 @@ fn run_trim_and_remove() -> Result<ScenarioOutcome, String> {
         .map_err(|e| e.to_string())?;
     let result = step_and_inspect(&mut engine, 1).map_err(|e| e.to_string())?;
     let final_total_n = engine.full_state().total_nitrogen();
+    let final_total_c = engine.full_state().total_carbon();
     let actual_export = initial_total_n - final_total_n;
-    if (actual_export - expected_n_export).abs() > TOL {
-        dump_trace("trim_and_remove", &engine);
-        return Err(format!(
-            "export mismatch: actual={actual_export:.9} expected={expected_n_export:.9}"
-        ));
-    }
+    ensure_close(
+        label,
+        &engine,
+        actual_export,
+        expected_n_export,
+        TOL,
+        "trim-and-remove nitrogen export",
+    )?;
+    ensure_close(
+        label,
+        &engine,
+        initial_total_c - final_total_c,
+        expected_c_export,
+        TOL,
+        "trim-and-remove carbon export",
+    )?;
     let n = result.budget.net_delta(Element::Nitrogen);
     let c = result.budget.net_delta(Element::Carbon);
     Ok(ScenarioOutcome {
@@ -383,8 +571,10 @@ fn run_trim_and_remove() -> Result<ScenarioOutcome, String> {
 }
 
 fn run_trim_and_leave() -> Result<ScenarioOutcome, String> {
+    let label = "trim_and_leave";
     let state = trim_fixture();
     let initial_total_n = state.total_nitrogen();
+    let initial_total_c = state.total_carbon();
     let fraction = 0.25;
     let mut engine = Engine::from_parts(state, vec![]);
     engine.enable_tracing(SimTracer::new(Verbosity::Detail));
@@ -393,12 +583,25 @@ fn run_trim_and_leave() -> Result<ScenarioOutcome, String> {
         .map_err(|e| e.to_string())?;
     let result = step_and_inspect(&mut engine, 1).map_err(|e| e.to_string())?;
     let final_total_n = engine.full_state().total_nitrogen();
+    let final_total_c = engine.full_state().total_carbon();
     let n = result.budget.net_delta(Element::Nitrogen);
     let c = result.budget.net_delta(Element::Carbon);
-    if (final_total_n - initial_total_n).abs() > TOL {
-        dump_trace("trim_and_leave", &engine);
-        return Err(format!("conservation: dN={n:+.9} dC={c:+.9}"));
-    }
+    ensure_close(
+        label,
+        &engine,
+        final_total_n,
+        initial_total_n,
+        TOL,
+        "trim-and-leave total nitrogen",
+    )?;
+    ensure_close(
+        label,
+        &engine,
+        final_total_c,
+        initial_total_c,
+        TOL,
+        "trim-and-leave total carbon",
+    )?;
     Ok(ScenarioOutcome {
         n_delta_mg: n,
         c_delta_mg: c,
@@ -406,6 +609,7 @@ fn run_trim_and_leave() -> Result<ScenarioOutcome, String> {
 }
 
 fn run_water_change() -> Result<ScenarioOutcome, String> {
+    let label = "water_change";
     let state = water_change_fixture();
     let percent = 25.0;
     let fraction = percent / 100.0;
@@ -419,7 +623,12 @@ fn run_water_change() -> Result<ScenarioOutcome, String> {
     let source = state.source_water_catalog.get("test_source").unwrap();
     let expected_n_import = exchanged_l
         * (source.ammonia_mg_n_per_l + source.nitrate_mg_n_per_l + source.don_mg_n_per_l);
+    let expected_c_export = fraction
+        * (state.water.dissolved_inorganic_carbon_mg_c_total
+            + state.water.dissolved_organic_carbon_mg_c_total);
+    let expected_c_import = exchanged_l * (source.dic_mg_c_per_l + source.doc_mg_c_per_l);
     let initial_total_n = state.total_nitrogen();
+    let initial_total_c = state.total_carbon();
     let mut engine = Engine::from_parts(state, vec![]);
     engine.enable_tracing(SimTracer::new(Verbosity::Detail));
     engine
@@ -430,14 +639,25 @@ fn run_water_change() -> Result<ScenarioOutcome, String> {
         .map_err(|e| e.to_string())?;
     let result = step_and_inspect(&mut engine, 1).map_err(|e| e.to_string())?;
     let final_total_n = engine.full_state().total_nitrogen();
+    let final_total_c = engine.full_state().total_carbon();
     let actual_change = final_total_n - initial_total_n;
     let expected_change = expected_n_import - expected_n_export;
-    if (actual_change - expected_change).abs() > TOL {
-        dump_trace("water_change", &engine);
-        return Err(format!(
-            "mass imbalance: actual_change={actual_change:.9} expected={expected_change:.9}"
-        ));
-    }
+    ensure_close(
+        label,
+        &engine,
+        actual_change,
+        expected_change,
+        TOL,
+        "water-change total nitrogen delta",
+    )?;
+    ensure_close(
+        label,
+        &engine,
+        final_total_c - initial_total_c,
+        expected_c_import - expected_c_export,
+        TOL,
+        "water-change total carbon delta",
+    )?;
     let n = result.budget.net_delta(Element::Nitrogen);
     let c = result.budget.net_delta(Element::Carbon);
     Ok(ScenarioOutcome {
