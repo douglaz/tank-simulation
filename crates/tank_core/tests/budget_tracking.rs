@@ -1516,9 +1516,7 @@ fn test_weekly_trim_and_remove_exports_nutrients_over_500_hours() -> Result<(), 
     state.hardware.aeration.enabled = false;
 
     state.process_params = ProcessParams::default();
-    state.process_params.reaeration_kla_base = 0.0;
-    state.process_params.aeration_kla_boost = 0.0;
-    state.hardware.filter.flow_lph = 0.0;
+    close_budget_gas_exchange(&mut state);
 
     state.substrate_layers[0].nutrient_store_mg_n_total = 20.0;
     state.substrate_layers[0].nutrient_store_mg_p_total = 5.0;

@@ -54,8 +54,10 @@ pub fn step_daily_algae(state: &mut TankState) {
         return;
     }
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
-    let hourly_photosynthesis_dic_enabled =
-        state.process_params.photosynthesis_dic_rate_mg_c_per_g_per_hour > f64::EPSILON;
+    let hourly_photosynthesis_dic_enabled = state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour
+        > f64::EPSILON;
     let tan_mg_n_per_l = concentrations.tan_mg_n_per_l();
     let nitrate_mg_n_per_l = concentrations.nitrate_mg_n_per_l();
     let phosphate_mg_p_per_l = concentrations.phosphate_mg_p_per_l();

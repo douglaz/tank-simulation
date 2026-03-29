@@ -24,8 +24,10 @@ const PLANT_P_MG_PER_G_GROWTH: f64 = 4.0;
 pub fn step_daily_plants(state: &mut TankState) {
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let dic_mg_c_per_l = state.concentrations().dic_mg_c_per_l();
-    let hourly_photosynthesis_dic_enabled =
-        state.process_params.photosynthesis_dic_rate_mg_c_per_g_per_hour > f64::EPSILON;
+    let hourly_photosynthesis_dic_enabled = state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour
+        > f64::EPSILON;
 
     // Concentration-based half-saturation constants — used directly,
     // no legacy total-to-concentration conversion needed.

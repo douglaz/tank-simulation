@@ -249,11 +249,6 @@ pub fn seeded_state_with_full_overrides(
 
     let mut state = materialize_scenario(seed, scenario)?;
     apply_startup_overrides(&mut state, &scenario_source_water_id, overrides)?;
-    if scenario_id == "medium_planted" {
-        // Keep the shipped planted startup profile below runaway daytime pH
-        // peaks while preserving a visible carbonate swing.
-        state.hardware.light.intensity_index = state.hardware.light.intensity_index.min(0.25);
-    }
     if (area_scale - 1.0).abs() > f64::EPSILON {
         for layer in &mut state.substrate_layers {
             layer.nutrient_store_mg_n_total *= area_scale;
@@ -294,7 +289,7 @@ pub fn startup_defaults_for_scenario(
     let (light_preset, heater_preset, aeration_enabled, initial_adult_shrimp_count) =
         match scenario_id {
             "medium_planted" => (
-                StartupLightPreset::Hours8,
+                StartupLightPreset::Hours10,
                 StartupHeaterPreset::Celsius25,
                 false,
                 10,

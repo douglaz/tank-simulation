@@ -356,6 +356,7 @@ fn water_change_fixture() -> TankState {
     let mut source = SourceWaterProfile::zero();
     source.temperature_c = 24.0;
     source.ammonia_mg_n_per_l = 0.5;
+    source.nitrite_mg_n_per_l = 0.25;
     source.nitrate_mg_n_per_l = 5.0;
     source.don_mg_n_per_l = 0.5;
     source.dic_mg_c_per_l = 30.0;
