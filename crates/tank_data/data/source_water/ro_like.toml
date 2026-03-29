@@ -5,29 +5,23 @@ ammonia_mg_n_per_l = 0.0
 nitrite_mg_n_per_l = 0.0
 nitrate_mg_n_per_l = 0.0
 phosphate_mg_p_per_l = 0.0
-dic_mg_c_per_l = 1.2
+dic_mg_c_per_l = 0.0
 doc_mg_c_per_l = 0.0
 don_mg_n_per_l = 0.0
-alkalinity_meq_per_l = 0.036
-calcium_mg_per_l = 15.0
-magnesium_mg_per_l = 6.0
-sodium_mg_per_l = 2.0
-potassium_mg_per_l = 1.0
-bicarbonate_mg_per_l = 2.2
-chloride_mg_per_l = 5.0
-sulfate_mg_per_l = 3.0
+alkalinity_meq_per_l = 0.0
+calcium_mg_per_l = 0.0
+magnesium_mg_per_l = 0.0
+sodium_mg_per_l = 0.0
+potassium_mg_per_l = 0.0
+bicarbonate_mg_per_l = 0.0
+chloride_mg_per_l = 0.0
+sulfate_mg_per_l = 0.0
 
 [provenance]
 source_title = "Starter preset pack"
 source_year = 2026
-confidence = "medium"
+confidence = "high"
 notes = """
-Remineralized RO/DI water with minimal buffering capacity. GH ~3.5, \
-KH ~0.1, TDS ~34. Equilibrium pH ~6.1 (range 5.5-6.5). Trace DIC \
-(1.2 mg C/L) represents atmospheric CO2 absorption; near-zero \
-alkalinity (0.036 meq/L) means virtually no buffering — any \
-nitrification will crash pH rapidly. Ca/Mg from a typical GH \
-remineralizer (Salty Shrimp-style) provides mineral support for \
-shrimp molting without adding KH. This is the most pH-sensitive \
-of the shipped profiles, useful for demonstrating the importance \
-of carbonate buffering."""
+Zero-nutrient reference water for regression tests. All dissolved species \
+at zero. Zero alkalinity means any nitrification will immediately crash pH \
+— this is intentional for isolation tests, not a realistic water profile."""

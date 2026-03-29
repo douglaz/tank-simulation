@@ -1,6 +1,6 @@
 id = "medium_planted"
 name = "Medium Planted"
-source_water_id = "moderate_planted"
+source_water_id = "moderate"
 substrate_ids = ["active_planted", "coarse_porous"]
 plant_ids = ["fast_stem", "root_rosette"]
 shrimp_profile_id = "neocaridina_davidi"
@@ -18,10 +18,11 @@ confidence = "medium"
 notes = """
 Broader planted baseline for regression scenarios. Post-normalization \
 (6e5.2.6) expected behavior: active substrate provides initial N/P charge \
-boosting early plant growth (12 g total at start). Fast stems dominate over \
+boosting early plant growth (10 g total at start). Fast stems dominate over \
 root rosettes as substrate nutrients deplete. TAN reaches ~7 mg N/L by day \
 30 with 0.1 g/day feed. Moderate water provides better buffering than \
 soft_acidic. Biofilter matures to ~0.1 by day 28 — slower than nano_cycle \
 because the larger volume dilutes nitrifier density per unit biomass. \
 Algae nuisance rises to 0.2+ by week 12. Tests the "guild competition" \
 and "substrate exhaustion" stories."""
+

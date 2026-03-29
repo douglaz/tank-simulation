@@ -8,7 +8,6 @@ use tank_core::systems::chemistry::{
 use tank_core::types::{
     check_all_ranges, format_param, legacy_total_param_to_mg_per_l,
     legacy_total_param_to_mg_per_m2, ParamMeta, RangeWarning, ShrimpRuntimeParams,
-    NITRIFICATION_ALK_MEQ_PER_MG_N,
 };
 
 const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
@@ -1017,7 +1016,7 @@ fn default_o2_per_mg_n() -> f64 {
     4.57
 }
 fn default_alk_per_mg_n() -> f64 {
-    NITRIFICATION_ALK_MEQ_PER_MG_N
+    0.1428
 }
 fn default_plant_max_growth_fast_stem() -> f64 {
     0.08
@@ -1887,10 +1886,7 @@ mod tests {
     use tank_core::types::provenance::{
         check_param_range, format_param, ConfidenceLevel, ParamMeta,
     };
-    use tank_core::{
-        legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2,
-        NITRIFICATION_ALK_MEQ_PER_MG_N,
-    };
+    use tank_core::{legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2};
 
     fn default_process_preset() -> ProcessParamsPreset {
         parse_process_params_preset(include_str!("../data/process/default.toml"))
@@ -2371,11 +2367,6 @@ valid_range = [0.1, 5.0]
         preset
             .validate()
             .expect("legacy file should still validate");
-        assert_eq!(
-            preset.alkalinity_meq_per_mg_n_nitrified,
-            NITRIFICATION_ALK_MEQ_PER_MG_N,
-            "shipped default.toml should stay aligned with the named nitrification alkalinity constant"
-        );
 
         // Also verify a minimal TOML with only required fields.
         let minimal = r#"
@@ -2400,11 +2391,6 @@ k_wall_w_per_m2_k = 5.0
         assert_eq!(preset.microfauna_respiration_fraction_of_assimilated, 0.70);
         assert_eq!(preset.microfauna_excretion_fraction_of_assimilated, 0.10);
         assert_eq!(preset.microfauna_growth_fraction_of_assimilated, 0.20);
-        assert_eq!(
-            preset.alkalinity_meq_per_mg_n_nitrified,
-            NITRIFICATION_ALK_MEQ_PER_MG_N,
-            "serde defaults for omitted process stoichiometry should stay aligned with the runtime constant"
-        );
         Ok(())
     }
 
@@ -2824,10 +2810,9 @@ valid_range = [20.0, 40.0]
             moderate_ph < hard_ph,
             "moderate should stay below hard shrimp"
         );
-        assert!(ro_ph < soft_ph, "ro_like should stay below soft acidic");
         assert!(soft_ph > super::CARBONATE_PH_MIN && soft_ph < super::CARBONATE_PH_MAX);
         assert!(moderate_ph > super::CARBONATE_PH_MIN && moderate_ph < super::CARBONATE_PH_MAX);
         assert!(hard_ph > super::CARBONATE_PH_MIN && hard_ph < super::CARBONATE_PH_MAX);
-        assert!(ro_ph > super::CARBONATE_PH_MIN && ro_ph < super::CARBONATE_PH_MAX);
+        assert_eq!(ro_ph, 7.0);
     }
 }

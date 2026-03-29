@@ -69,22 +69,6 @@ pub enum Element {
     Oxygen,
 }
 
-impl Element {
-    fn label(self) -> &'static str {
-        match self {
-            Element::Nitrogen => "nitrogen",
-            Element::Carbon => "carbon",
-            Element::Oxygen => "oxygen",
-        }
-    }
-
-    fn unit(self) -> &'static str {
-        match self {
-            Element::Nitrogen | Element::Carbon | Element::Oxygen => "mg",
-        }
-    }
-}
-
 /// Per-system delta for a single element, returned by
 /// [`InspectionResult::system_deltas`].
 #[derive(Debug, Clone)]
@@ -419,15 +403,15 @@ pub fn assert_o2_balanced(budget: &BudgetInspector, tolerance_mg: f64) {
 /// Generic per-element conservation assertion.
 ///
 /// Checks that the absolute net delta for `element` across all inspected ticks
-/// is within `tolerance`. Use this for closed-system assertions; open oxygen
+/// is within `tolerance_mg`. Use this for closed-system assertions; open oxygen
 /// scenarios should prefer [`assert_o2_balanced`]. On failure, the panic
 /// message includes:
 /// - the actual net delta
 /// - the system with the largest absolute contribution
 /// - per-tick breakdown
-pub fn assert_budget_balanced(budget: &BudgetInspector, element: Element, tolerance: f64) {
+pub fn assert_budget_balanced(budget: &BudgetInspector, element: Element, tolerance_mg: f64) {
     let net = budget.net_delta(element);
-    if net.abs() <= tolerance {
+    if net.abs() <= tolerance_mg {
         return;
     }
     let largest = budget.largest_mover(element);
@@ -436,25 +420,26 @@ pub fn assert_budget_balanced(budget: &BudgetInspector, element: Element, tolera
         .iter()
         .enumerate()
         .max_by(|(_, a), (_, b)| abs_cmp(**a, **b));
-    let element_name = element.label();
-    let unit = element.unit();
+    let element_name = match element {
+        Element::Nitrogen => "nitrogen",
+        Element::Carbon => "carbon",
+        Element::Oxygen => "oxygen",
+    };
 
     let mut msg = format!(
-        "{element_name} budget imbalance: net delta = {net:+.9} {unit} (tolerance = {tolerance:.9} {unit})\n"
+        "{element_name} budget imbalance: net delta = {net:+.9} mg (tolerance = {tolerance_mg:.9} mg)\n"
     );
     if let Some(mover) = &largest {
         msg.push_str(&format!(
-            "  largest mover: {} ({:+.9} {unit} net, in={:.9} {unit} out={:.9} {unit})\n",
+            "  largest mover: {} ({:+.9} mg net, in={:.9} out={:.9})\n",
             mover.label, mover.net_mg, mover.in_mg, mover.out_mg
         ));
     }
     if let Some((idx, val)) = worst_tick {
-        msg.push_str(&format!(
-            "  worst tick: index {idx} (net {val:+.9} {unit})\n"
-        ));
+        msg.push_str(&format!("  worst tick: index {idx} (net {val:+.9} mg)\n"));
     }
     msg.push_str(&format!(
-        "  before: {:.6} {unit}, after: {:.6} {unit}\n",
+        "  before: {:.6} mg, after: {:.6} mg\n",
         match element {
             Element::Nitrogen => budget.before_totals.nitrogen_mg,
             Element::Carbon => budget.before_totals.carbon_mg,
@@ -469,7 +454,7 @@ pub fn assert_budget_balanced(budget: &BudgetInspector, element: Element, tolera
     msg.push_str("  all systems:\n");
     for sd in budget.system_deltas(element) {
         msg.push_str(&format!(
-            "    {}: {:+.9} {unit} (in={:.9} {unit} out={:.9} {unit})\n",
+            "    {}: {:+.9} mg (in={:.9} out={:.9})\n",
             sd.label, sd.net_mg, sd.in_mg, sd.out_mg
         ));
     }
@@ -477,23 +462,26 @@ pub fn assert_budget_balanced(budget: &BudgetInspector, element: Element, tolera
 }
 
 /// Assert that every tick individually has its element net delta within
-/// `tolerance`. Useful for catching single-tick spikes that cancel out
+/// `tolerance_mg`. Useful for catching single-tick spikes that cancel out
 /// across a multi-tick run.
-pub fn assert_per_tick_balanced(budget: &BudgetInspector, element: Element, tolerance: f64) {
+pub fn assert_per_tick_balanced(budget: &BudgetInspector, element: Element, tolerance_mg: f64) {
     for (i, net) in budget.per_tick_net(element).iter().enumerate() {
-        if net.abs() > tolerance {
-            let element_name = element.label();
-            let unit = element.unit();
+        if net.abs() > tolerance_mg {
+            let element_name = match element {
+                Element::Nitrogen => "nitrogen",
+                Element::Carbon => "carbon",
+                Element::Oxygen => "oxygen",
+            };
             let tick = &budget.ledger.ticks[i];
             let mut msg = format!(
                 "{element_name} per-tick imbalance at tick {i} (day {}, hour {}): \
-                 net = {net:+.9} {unit} (tolerance = {tolerance:.9} {unit})\n  stages:\n",
+                 net = {net:+.9} mg (tolerance = {tolerance_mg:.9} mg)\n  stages:\n",
                 tick.day, tick.hour
             );
             for entry in &tick.entries {
                 let eb = select_element(&entry.delta, element);
                 msg.push_str(&format!(
-                    "    {}: {:+.9} {unit} (in={:.9} {unit} out={:.9} {unit})\n",
+                    "    {}: {:+.9} mg (in={:.9} out={:.9})\n",
                     entry.label,
                     eb.net_mg(),
                     eb.in_mg,

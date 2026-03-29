@@ -1,5 +1,5 @@
 use crate::{
-    systems::chemistry::{daily_hourly_photosynthesis_dic_credit_mg, resolve_carbonate_state},
+    systems::chemistry::resolve_carbonate_state,
     systems::events,
     types::{
         algae_carbon_mg, algae_detrital_mass_g, total_colonizable_area_cm2, TankState,
@@ -54,10 +54,6 @@ pub fn step_daily_algae(state: &mut TankState) {
         return;
     }
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
-    let hourly_photosynthesis_dic_enabled = state
-        .process_params
-        .photosynthesis_dic_rate_mg_c_per_g_per_hour
-        > f64::EPSILON;
     let tan_mg_n_per_l = concentrations.tan_mg_n_per_l();
     let nitrate_mg_n_per_l = concentrations.nitrate_mg_n_per_l();
     let phosphate_mg_p_per_l = concentrations.phosphate_mg_p_per_l();
@@ -110,8 +106,6 @@ pub fn step_daily_algae(state: &mut TankState) {
         * plant_shading
         * temp_factor
         * nutrient_factor;
-    let suspended_hourly_dic_credit_mg =
-        daily_hourly_photosynthesis_dic_credit_mg(state, state.algae.suspended_biomass_g);
     let suspended_respiration_g =
         state.algae.suspended_biomass_g * state.process_params.algae_respiration_fraction_per_day;
     let suspended_grazing_g = state.algae.suspended_biomass_g * 0.03 * microfauna_grazing;
@@ -136,11 +130,7 @@ pub fn step_daily_algae(state: &mut TankState) {
         };
         let c_demand = algae_carbon_mg(suspended_gross_growth_g, n_to_c_ratio);
         let c_frac = if c_demand > f64::EPSILON {
-            if hourly_photosynthesis_dic_enabled {
-                suspended_hourly_dic_credit_mg / c_demand
-            } else {
-                state.water.dissolved_inorganic_carbon_mg_c_total / c_demand
-            }
+            state.water.dissolved_inorganic_carbon_mg_c_total / c_demand
         } else {
             1.0
         };
@@ -166,17 +156,10 @@ pub fn step_daily_algae(state: &mut TankState) {
         susp_no3_removed * susp_n_frac,
         susp_p_refund,
     );
-    if !hourly_photosynthesis_dic_enabled {
-        // Closed-system tests zero the hourly shortcut and still need daily
-        // biomass growth to withdraw carbon explicitly. When the hourly
-        // chemistry path is enabled, it already owns the visible DIC/pH
-        // response, while the daily credit above keeps algae growth bounded
-        // to the same modeled CO2 uptake.
-        state.water.dissolved_inorganic_carbon_mg_c_total =
-            (state.water.dissolved_inorganic_carbon_mg_c_total
-                - algae_carbon_mg(susp_cap, n_to_c_ratio))
-            .max(0.0);
-    }
+    state.water.dissolved_inorganic_carbon_mg_c_total =
+        (state.water.dissolved_inorganic_carbon_mg_c_total
+            - algae_carbon_mg(susp_cap, n_to_c_ratio))
+        .max(0.0);
     let suspended_available_after_growth_g = (state.algae.suspended_biomass_g + susp_cap).max(0.0);
     let suspended_realized_loss_g = (suspended_respiration_g + suspended_grazing_g)
         .max(0.0)
@@ -210,8 +193,6 @@ pub fn step_daily_algae(state: &mut TankState) {
         * temp_factor
         * nutrient_factor
         * surface_cap_factor;
-    let periphyton_hourly_dic_credit_mg =
-        daily_hourly_photosynthesis_dic_credit_mg(state, state.algae.periphyton_biomass_g);
     let periphyton_respiration_g =
         state.algae.periphyton_biomass_g * state.process_params.algae_respiration_fraction_per_day;
     let periphyton_grazing_g = state.algae.periphyton_biomass_g * 0.06 * microfauna_grazing;
@@ -236,11 +217,7 @@ pub fn step_daily_algae(state: &mut TankState) {
         };
         let c_demand = algae_carbon_mg(periphyton_gross_growth_g, n_to_c_ratio);
         let c_frac = if c_demand > f64::EPSILON {
-            if hourly_photosynthesis_dic_enabled {
-                periphyton_hourly_dic_credit_mg / c_demand
-            } else {
-                state.water.dissolved_inorganic_carbon_mg_c_total / c_demand
-            }
+            state.water.dissolved_inorganic_carbon_mg_c_total / c_demand
         } else {
             1.0
         };
@@ -264,12 +241,10 @@ pub fn step_daily_algae(state: &mut TankState) {
         peri_no3_removed * peri_n_frac,
         peri_p_refund,
     );
-    if !hourly_photosynthesis_dic_enabled {
-        state.water.dissolved_inorganic_carbon_mg_c_total =
-            (state.water.dissolved_inorganic_carbon_mg_c_total
-                - algae_carbon_mg(peri_cap, n_to_c_ratio))
-            .max(0.0);
-    }
+    state.water.dissolved_inorganic_carbon_mg_c_total =
+        (state.water.dissolved_inorganic_carbon_mg_c_total
+            - algae_carbon_mg(peri_cap, n_to_c_ratio))
+        .max(0.0);
     let periphyton_available_after_growth_g =
         (state.algae.periphyton_biomass_g + peri_cap).max(0.0);
     let periphyton_realized_loss_g = (periphyton_respiration_g + periphyton_grazing_g)

@@ -13,5 +13,4 @@ tracing = "0.1"
 
 [dev-dependencies]
 proptest = "1"
-tank_data = { path = "../tank_data" }
 tank_scenarios = { path = "../tank_scenarios" }

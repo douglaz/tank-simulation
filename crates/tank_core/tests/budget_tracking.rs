@@ -27,14 +27,6 @@ fn close_budget_gas_exchange(state: &mut TankState) {
     state.hardware.filter.flow_lph = 0.0;
     state.hardware.aeration.enabled = false;
     state.hardware.aeration.intensity = 0.0;
-    // Zero DIC shortcuts (open-system respiration/photosynthesis) for
-    // closed-system carbon conservation assertions.
-    state
-        .process_params
-        .respiration_dic_rate_mg_c_per_g_per_hour = 0.0;
-    state
-        .process_params
-        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
 }
 
 fn known_budget_state() -> TankState {
@@ -1382,14 +1374,6 @@ fn test_high_mortality_200_hours_conserves_n_c_and_accumulates_detritus() -> Res
     // carbon conservation assertions.
     state.process_params.reaeration_kla_base = 0.0;
     state.process_params.aeration_kla_boost = 0.0;
-    // Zero DIC shortcuts (open-system respiration/photosynthesis) for
-    // closed-system carbon conservation assertions.
-    state
-        .process_params
-        .respiration_dic_rate_mg_c_per_g_per_hour = 0.0;
-    state
-        .process_params
-        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
     state.process_params.fine_detritus_dissolution_rate_per_hour = 0.0;
     state.hardware.filter.flow_lph = 0.0;
     // Elevated base mortality for this stress scenario
@@ -1516,7 +1500,9 @@ fn test_weekly_trim_and_remove_exports_nutrients_over_500_hours() -> Result<(), 
     state.hardware.aeration.enabled = false;
 
     state.process_params = ProcessParams::default();
-    close_budget_gas_exchange(&mut state);
+    state.process_params.reaeration_kla_base = 0.0;
+    state.process_params.aeration_kla_boost = 0.0;
+    state.hardware.filter.flow_lph = 0.0;
 
     state.substrate_layers[0].nutrient_store_mg_n_total = 20.0;
     state.substrate_layers[0].nutrient_store_mg_p_total = 5.0;

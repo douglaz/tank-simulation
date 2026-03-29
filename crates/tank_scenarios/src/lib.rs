@@ -248,12 +248,7 @@ pub fn seeded_state_with_full_overrides(
     let area_scale = overrides.geometry.size_scale * overrides.geometry.size_scale;
 
     let mut state = materialize_scenario(seed, scenario)?;
-    apply_startup_overrides(
-        &mut state,
-        scenario_id,
-        &scenario_source_water_id,
-        overrides,
-    )?;
+    apply_startup_overrides(&mut state, &scenario_source_water_id, overrides)?;
     if (area_scale - 1.0).abs() > f64::EPSILON {
         for layer in &mut state.substrate_layers {
             layer.nutrient_store_mg_n_total *= area_scale;
@@ -294,7 +289,7 @@ pub fn startup_defaults_for_scenario(
     let (light_preset, heater_preset, aeration_enabled, initial_adult_shrimp_count) =
         match scenario_id {
             "medium_planted" => (
-                StartupLightPreset::Hours12,
+                StartupLightPreset::Hours10,
                 StartupHeaterPreset::Celsius25,
                 false,
                 10,
@@ -550,7 +545,6 @@ fn materialize_scenario(
     state.source_water_catalog = source_water_catalog;
     state.process_params = process_params;
     state.shrimp_params = shrimp_params;
-    apply_named_scenario_tuning(&mut state);
 
     // Seed stability tracker baselines from actual water state to prevent
     // false chemistry-swing detection on the first update.
@@ -618,7 +612,6 @@ fn shrimp_preset_to_params(
 
 fn apply_startup_overrides(
     state: &mut TankState,
-    scenario_id: &str,
     scenario_source_water_id: &str,
     overrides: StartupOverrides,
 ) -> Result<(), tank_data::PresetError> {
@@ -717,26 +710,12 @@ fn apply_startup_overrides(
         state.animal = AnimalState::with_adults(initial_adult_shrimp_count);
     }
 
-    if state.meta.scenario_id.as_deref() == Some(scenario_id) {
-        apply_named_scenario_tuning(state);
-    }
-
     // Reseed stability baselines so that overridden water chemistry is not
     // treated as a "swing" on the first daily update.
     state.reseed_stability_tracker();
     state.refresh_habitat_registry();
 
     Ok(())
-}
-
-fn apply_named_scenario_tuning(state: &mut TankState) {
-    if state.meta.scenario_id.as_deref() == Some("medium_planted") {
-        // Keep the shipped planted regression visibly active after the
-        // hourly-DIC carbon cap by starting each selected guild at 6 g.
-        for plant in &mut state.plant_guilds {
-            plant.biomass_g = plant.biomass_g.max(6.0);
-        }
-    }
 }
 
 fn resolve_source_profile(
@@ -975,7 +954,7 @@ fn cycling_base_state(seed: SimSeed) -> TankState {
 #[cfg(test)]
 mod tests {
     use super::{process_preset_to_params, shrimp_preset_to_params, source_water_to_profile};
-    use tank_core::{ProcessParams, WaterState, NITRIFICATION_ALK_MEQ_PER_MG_N};
+    use tank_core::WaterState;
 
     #[test]
     fn process_preset_mapping_carries_shrimp_routing_fields() {
@@ -1013,23 +992,6 @@ mod tests {
         assert_eq!(params.microfauna_respiration_fraction_of_assimilated, 0.64);
         assert_eq!(params.microfauna_excretion_fraction_of_assimilated, 0.11);
         assert_eq!(params.microfauna_growth_fraction_of_assimilated, 0.25);
-    }
-
-    #[test]
-    fn default_process_preset_matches_runtime_nitrification_alkalinity_constant() {
-        let preset =
-            tank_data::load_process_params("default").expect("default process preset should load");
-        let params = process_preset_to_params(&preset);
-
-        assert_eq!(
-            preset.alkalinity_meq_per_mg_n_nitrified, NITRIFICATION_ALK_MEQ_PER_MG_N,
-            "the shipped process preset should stay aligned with the named stoichiometric constant"
-        );
-        assert_eq!(
-            params.alkalinity_meq_per_mg_n_nitrified,
-            ProcessParams::default().alkalinity_meq_per_mg_n_nitrified,
-            "preset-driven scenarios should match the runtime ProcessParams default"
-        );
     }
 
     #[test]
@@ -1097,7 +1059,6 @@ mod tests {
             soft_water.ph,
             hard_water.ph
         );
-        assert!(ro_water.ph < soft_water.ph);
-        assert!((5.5..=8.5).contains(&ro_water.ph));
+        assert_eq!(ro_water.ph, 7.0);
     }
 }

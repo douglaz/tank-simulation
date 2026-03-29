@@ -27,14 +27,6 @@ fn close_budget_gas_exchange(state: &mut TankState) {
     state.hardware.filter.flow_lph = 0.0;
     state.hardware.aeration.enabled = false;
     state.hardware.aeration.intensity = 0.0;
-    // Zero DIC shortcuts (open-system respiration/photosynthesis) for
-    // closed-system carbon conservation assertions.
-    state
-        .process_params
-        .respiration_dic_rate_mg_c_per_g_per_hour = 0.0;
-    state
-        .process_params
-        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
 }
 
 fn active_budget_state(seed: SimSeed) -> TankState {

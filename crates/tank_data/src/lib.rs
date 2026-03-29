@@ -123,13 +123,7 @@ pub fn load_scenario(id: &str) -> Result<ScenarioPreset, PresetError> {
 }
 
 pub fn source_water_ids() -> &'static [&'static str] {
-    &[
-        "soft_acidic",
-        "moderate",
-        "moderate_planted",
-        "hard_shrimp",
-        "ro_like",
-    ]
+    &["soft_acidic", "moderate", "hard_shrimp", "ro_like"]
 }
 
 pub fn substrate_ids() -> &'static [&'static str] {
@@ -262,10 +256,6 @@ const SOURCE_WATER_PRESETS: &[(&str, &str)] = &[
     (
         "moderate",
         include_str!("../data/source_water/moderate.toml"),
-    ),
-    (
-        "moderate_planted",
-        include_str!("../data/source_water/moderate_planted.toml"),
     ),
     (
         "hard_shrimp",

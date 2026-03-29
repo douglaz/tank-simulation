@@ -1,6 +1,4 @@
-use crate::systems::chemistry::{
-    daily_hourly_photosynthesis_dic_credit_mg, resolve_carbonate_state,
-};
+use crate::systems::chemistry::resolve_carbonate_state;
 use crate::types::{
     plant_carbon_mg, plant_nitrogen_mg, PlantGuild, TankState, PLANT_N_MG_PER_G_BIOMASS,
 };
@@ -26,10 +24,6 @@ const PLANT_P_MG_PER_G_GROWTH: f64 = 4.0;
 pub fn step_daily_plants(state: &mut TankState) {
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let dic_mg_c_per_l = state.concentrations().dic_mg_c_per_l();
-    let hourly_photosynthesis_dic_enabled = state
-        .process_params
-        .photosynthesis_dic_rate_mg_c_per_g_per_hour
-        > f64::EPSILON;
 
     // Concentration-based half-saturation constants — used directly,
     // no legacy total-to-concentration conversion needed.
@@ -107,7 +101,6 @@ pub fn step_daily_plants(state: &mut TankState) {
             * state.process_params.plant_senescence_fraction_per_day
             * (1.0 + 0.5 * (1.0 - health_index));
         let realized_growth_g = gross_growth_g.max(0.0);
-        let hourly_dic_credit_mg = daily_hourly_photosynthesis_dic_credit_mg(state, biomass_g);
 
         let n_demand = realized_growth_g * PLANT_N_MG_PER_G_BIOMASS;
         let p_demand = realized_growth_g * PLANT_P_MG_PER_G_GROWTH;
@@ -129,11 +122,7 @@ pub fn step_daily_plants(state: &mut TankState) {
                 1.0
             };
             let c_frac = if c_demand > f64::EPSILON {
-                if hourly_photosynthesis_dic_enabled {
-                    hourly_dic_credit_mg / c_demand
-                } else {
-                    state.water.dissolved_inorganic_carbon_mg_c_total / c_demand
-                }
+                state.water.dissolved_inorganic_carbon_mg_c_total / c_demand
             } else {
                 1.0
             };
@@ -164,15 +153,8 @@ pub fn step_daily_plants(state: &mut TankState) {
             p_refund,
         );
         let c_used = plant_carbon_mg(nutrient_cap_g, n_to_c_ratio);
-        if !hourly_photosynthesis_dic_enabled {
-            // Closed-system tests zero the hourly shortcut and still need daily
-            // biomass growth to withdraw carbon explicitly. When the hourly
-            // chemistry path is enabled, it already owns the visible DIC/pH
-            // response, while `hourly_dic_credit_mg` above keeps the same
-            // shortcut responsible for the carbon that daily growth can spend.
-            state.water.dissolved_inorganic_carbon_mg_c_total =
-                (state.water.dissolved_inorganic_carbon_mg_c_total - c_used).max(0.0);
-        }
+        state.water.dissolved_inorganic_carbon_mg_c_total =
+            (state.water.dissolved_inorganic_carbon_mg_c_total - c_used).max(0.0);
 
         let biomass_after_growth_g = (biomass_g + nutrient_cap_g).max(0.0);
         let (realized_respiration_g, realized_senescence_g) =
