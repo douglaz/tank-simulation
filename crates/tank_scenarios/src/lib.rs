@@ -289,7 +289,7 @@ pub fn startup_defaults_for_scenario(
     let (light_preset, heater_preset, aeration_enabled, initial_adult_shrimp_count) =
         match scenario_id {
             "medium_planted" => (
-                StartupLightPreset::Hours10,
+                StartupLightPreset::Hours12,
                 StartupHeaterPreset::Celsius25,
                 false,
                 10,
