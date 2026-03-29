@@ -5,15 +5,15 @@ ammonia_mg_n_per_l = 0.0
 nitrite_mg_n_per_l = 0.0
 nitrate_mg_n_per_l = 0.0
 phosphate_mg_p_per_l = 0.0
-dic_mg_c_per_l = 24.0
+dic_mg_c_per_l = 12.1
 doc_mg_c_per_l = 0.0
 don_mg_n_per_l = 0.0
-alkalinity_meq_per_l = 1.07
+alkalinity_meq_per_l = 0.714
 calcium_mg_per_l = 12.0
 magnesium_mg_per_l = 6.0
 sodium_mg_per_l = 10.0
 potassium_mg_per_l = 2.0
-bicarbonate_mg_per_l = 65.3
+bicarbonate_mg_per_l = 43.6
 chloride_mg_per_l = 15.0
 sulfate_mg_per_l = 12.4
 
@@ -22,10 +22,12 @@ source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
 notes = """
-Low-mineral planted tank source water. GH ~3.0, KH ~3.0, TDS ~120. \
-Alkalinity 1.07 meq/L provides limited buffering: the nano_cycle scenario \
-demonstrates pH depression and nitrification stalls as alkalinity is \
-consumed (each mg N nitrified costs ~0.14 meq). Zero initial nitrogen \
-species means all TAN in cycling scenarios comes from feed decomposition. \
-Post-normalization (6e5.2.6) this profile still produces the expected \
-"soft water = poor cycling buffer" story."""
+Low-mineral, weakly-buffered source water emulating blackwater or soft \
+Asian tap water for planted tanks. GH ~3.1, KH ~2.0, TDS ~101. \
+Equilibrium pH ~6.75 (range 6.5-7.0). Alkalinity 0.71 meq/L provides \
+limited buffering: the nano_cycle scenario demonstrates pH depression \
+and nitrification stalls as alkalinity is consumed (each mg N nitrified \
+costs ~0.14 meq). Low DIC (12.1 mg C/L) means CO2 fraction is higher \
+relative to HCO3-, making pH more sensitive to biological activity. \
+Zero initial nitrogen species means all TAN in cycling scenarios comes \
+from feed decomposition."""
