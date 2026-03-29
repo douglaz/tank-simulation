@@ -54,6 +54,8 @@ pub fn step_daily_algae(state: &mut TankState) {
         return;
     }
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
+    let hourly_photosynthesis_dic_enabled =
+        state.process_params.photosynthesis_dic_rate_mg_c_per_g_per_hour > f64::EPSILON;
     let tan_mg_n_per_l = concentrations.tan_mg_n_per_l();
     let nitrate_mg_n_per_l = concentrations.nitrate_mg_n_per_l();
     let phosphate_mg_p_per_l = concentrations.phosphate_mg_p_per_l();
@@ -156,10 +158,16 @@ pub fn step_daily_algae(state: &mut TankState) {
         susp_no3_removed * susp_n_frac,
         susp_p_refund,
     );
-    state.water.dissolved_inorganic_carbon_mg_c_total =
-        (state.water.dissolved_inorganic_carbon_mg_c_total
-            - algae_carbon_mg(susp_cap, n_to_c_ratio))
-        .max(0.0);
+    if !hourly_photosynthesis_dic_enabled {
+        // Closed-system tests zero the hourly shortcut and still need daily
+        // biomass growth to withdraw carbon explicitly. When the hourly
+        // chemistry path is enabled, it already owns the visible DIC/pH
+        // response and a second midnight withdrawal creates false spikes.
+        state.water.dissolved_inorganic_carbon_mg_c_total =
+            (state.water.dissolved_inorganic_carbon_mg_c_total
+                - algae_carbon_mg(susp_cap, n_to_c_ratio))
+            .max(0.0);
+    }
     let suspended_available_after_growth_g = (state.algae.suspended_biomass_g + susp_cap).max(0.0);
     let suspended_realized_loss_g = (suspended_respiration_g + suspended_grazing_g)
         .max(0.0)
@@ -241,10 +249,12 @@ pub fn step_daily_algae(state: &mut TankState) {
         peri_no3_removed * peri_n_frac,
         peri_p_refund,
     );
-    state.water.dissolved_inorganic_carbon_mg_c_total =
-        (state.water.dissolved_inorganic_carbon_mg_c_total
-            - algae_carbon_mg(peri_cap, n_to_c_ratio))
-        .max(0.0);
+    if !hourly_photosynthesis_dic_enabled {
+        state.water.dissolved_inorganic_carbon_mg_c_total =
+            (state.water.dissolved_inorganic_carbon_mg_c_total
+                - algae_carbon_mg(peri_cap, n_to_c_ratio))
+            .max(0.0);
+    }
     let periphyton_available_after_growth_g =
         (state.algae.periphyton_biomass_g + peri_cap).max(0.0);
     let periphyton_realized_loss_g = (periphyton_respiration_g + periphyton_grazing_g)

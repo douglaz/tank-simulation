@@ -252,7 +252,7 @@ pub fn seeded_state_with_full_overrides(
     if scenario_id == "medium_planted" {
         // Keep the shipped planted startup profile below runaway daytime pH
         // peaks while preserving a visible carbonate swing.
-        state.hardware.light.intensity_index = state.hardware.light.intensity_index.min(0.55);
+        state.hardware.light.intensity_index = state.hardware.light.intensity_index.min(0.25);
     }
     if (area_scale - 1.0).abs() > f64::EPSILON {
         for layer in &mut state.substrate_layers {

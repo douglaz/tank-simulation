@@ -533,8 +533,8 @@ fn test_planted_tank_day_night_cycle() -> Result<(), tank_core::SimError> {
         overrides,
     )
     .expect("medium_planted shipped startup profile should materialize");
-    let (end_of_dark_hour, end_of_light_hour) =
-        light_transition_hours(state.hardware.light.photoperiod_hours);
+    let photoperiod_hours = state.hardware.light.photoperiod_hours;
+    let (end_of_dark_hour, end_of_light_hour) = light_transition_hours(photoperiod_hours);
 
     let mut engine = Engine::from_parts(state, vec![]);
 
@@ -552,6 +552,41 @@ fn test_planted_tank_day_night_cycle() -> Result<(), tank_core::SimError> {
     }
 
     // pH must stay within storage bounds at all times.
+    let max_sample = samples
+        .iter()
+        .max_by(|left, right| left.ph.total_cmp(&right.ph))
+        .copied()
+        .unwrap();
+    eprintln!(
+        "debug medium_planted max_ph={:.3} hour={} photoperiod={:.1}",
+        max_sample.ph, max_sample.hour_of_day, photoperiod_hours
+    );
+    eprintln!(
+        "debug medium_planted day1_ph={:?}",
+        samples
+            .iter()
+            .take(24)
+            .map(|sample| (sample.hour_of_day, (sample.ph * 1000.0).round() / 1000.0))
+            .collect::<Vec<_>>()
+    );
+    let debug_end_of_dark: Vec<f64> = samples[84..]
+        .iter()
+        .filter(|sample| sample.hour_of_day == end_of_dark_hour)
+        .map(|sample| sample.ph)
+        .collect();
+    let debug_end_of_light: Vec<f64> = samples[84..]
+        .iter()
+        .filter(|sample| sample.hour_of_day == end_of_light_hour)
+        .map(|sample| sample.ph)
+        .collect();
+    eprintln!(
+        "debug medium_planted settled_cycle_delta={:?}",
+        debug_end_of_dark
+            .iter()
+            .zip(debug_end_of_light.iter())
+            .map(|(dark_ph, light_ph)| ((light_ph - dark_ph) * 1000.0).round() / 1000.0)
+            .collect::<Vec<_>>()
+    );
     for (i, sample) in samples.iter().enumerate() {
         assert!(
             (6.0..=8.0).contains(&sample.ph),
