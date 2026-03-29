@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328140833-final_review-vote-1-c2-a1-cr2-artifact",
+  "payload_id": "run-20260328140833-final_review-vote-1-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T15:27:41.029462217Z",
+  "content": "# Final Review Votes\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccept the default-substrate inconsistency, the photoperiod test logic issue, and the substrate-factor split source of truth. Reject the reproduction-baseline amendment because its claimed failure does not reproduce on the current checkout: both the targeted maintained-reproduction test and the full `e2e_baseline_scenarios` test target pass.\n\n## Votes\n\n- `fr-2-5ed4a8bc`: Accept\n  `SubstrateLayerState::default()` seeds a derived field with a self-inconsistent magic value (`100.0`) instead of either computing the default from the default geometry/kind/depth or using an obviously invalid sentinel. The main initialization paths overwrite it, but direct `default()` or struct-update construction can still expose stale area data, so this is a real correctness and maintainability defect.\n- `fr-2-211b5df3`: Accept\n  The test hard-codes `0..7` as the lit window even though `is_light_on(hour, 8.0)` defines the lit hours as `8..15`. That means the assertion is sampling the wrong buckets and is coupled to a false assumption about engine behavior. I do not reproduce the claimed current failure, but the test logic itself is still wrong and should derive lit/dark windows from `is_light_on(...)`.\n- `fr-2-fce9ecb0`: Reject\n  The amendment's factual premise is not supported on the current tree. On this checkout, `cargo test -p tank_harness --test e2e_baseline_scenarios maintained_medium_variant_reaches_reproduction_window -- --exact` passes, and the full `cargo test -p tank_harness --test e2e_baseline_scenarios` target also passes. Without a reproduced failure, loosening the envelopes or retuning the scenario would weaken a currently functioning regression gate.\n- `fr-2-24f6329b`: Accept\n  `SubstratePreset` exposes `colonizable_area_factor`, but runtime state only persists `SubstrateKind`, and both initial colonizable-area calculation and later `refresh_habitat_registry()` recomputation use hard-coded per-kind constants instead of the preset field. That creates a real split source of truth where preset/data changes are silently ignored, which is a correctness and maintainability problem even if the current preset files happen to match the hard-coded constants today.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

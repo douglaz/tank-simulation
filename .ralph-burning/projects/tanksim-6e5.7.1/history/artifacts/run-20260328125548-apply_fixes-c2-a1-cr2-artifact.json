@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328125548-apply_fixes-c2-a1-cr2-artifact",
+  "payload_id": "run-20260328125548-apply_fixes-c2-a1-cr2",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-28T13:55:59.363666004Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nVerified that the requested provenance fixes are already present in the current branch: ParamMeta formatting includes notes and rejects unknown metadata fields, ProcessParamsPreset validation rejects unknown param_meta keys, and load_process_params() routes that validation through the normal process-preset load path. No additional source edits were required in this turn.\n\n## Steps\n\n0. [Completed] Inspected the provenance-related implementation in crates/tank_core and crates/tank_data to confirm the requested fixes against the current tree state.\n1. [Skipped] Determined that no further source edits were necessary because the branch already contains the notes-inclusive formatter, deny_unknown_fields on ParamMeta, and unknown param_meta key validation.\n2. [Completed] Revalidated the provenance and library test targets and checked the relevant-file diff/status state to confirm the fixes remain intact.\n\n## Validation Evidence\n\n- cargo test -p tank_core --lib provenance passed: 9 tests passed, 0 failed.\n- cargo test -p tank_data --lib passed: 13 tests passed, 0 failed.\n- cargo test -p tank_core --lib passed: 43 tests passed, 0 failed.\n- git diff --stat -- crates/tank_core/src/types/provenance.rs crates/tank_data/src/presets.rs crates/tank_data/src/lib.rs crates/tank_core/src/types/mod.rs returned no diff, confirming no additional provenance-file edits were pending.\n- git status --short showed only unrelated pre-existing changes outside the provenance fix scope.\n\n## Outstanding Risks\n\n- Callers that deserialize ProcessParamsPreset directly still need to invoke validate() themselves to catch unknown param_meta names; load_process_params() covers the normal preset-loading path.\n- The worktree contains unrelated pre-existing edits in crates/tank_harness/src/lib.rs, crates/tank_tui/src/screens/biology.rs, crates/tank_tui/src/screens/overview.rs, plus untracked .ralph-burning/; they were left untouched.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

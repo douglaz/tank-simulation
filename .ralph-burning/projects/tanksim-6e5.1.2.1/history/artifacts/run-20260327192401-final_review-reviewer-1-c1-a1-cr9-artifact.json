@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327192401-final_review-reviewer-1-c1-a1-cr9-artifact",
+  "payload_id": "run-20260327192401-final_review-reviewer-1-c1-a1-cr9-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T01:36:48.059195702Z",
+  "content": "# Final Review Proposal\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nReviewed the carbonate/source-water changes end-to-end and ran the workspace test suite. I found one robustness regression: the new shared validation path can accept numerically invalid but finite source-water inputs by collapsing solver failure to `pH 7.0`.\n\n## Amendments\n\n1. `crates/tank_core/src/systems/chemistry.rs:58-63` and `crates/tank_core/src/systems/chemistry.rs:314-329` now normalize non-finite carbonate-solver outcomes to an interior `pH 7.0`, and both `crates/tank_core/src/types/source_water.rs:66-75` and `crates/tank_data/src/presets.rs:75-89` treat that result as a valid source-water profile. That is a validation regression: a profile such as `dic_mg_c_per_l = 1e308, alkalinity_meq_per_l = 1.0` currently passes validation even though the quadratic has overflowed internally. The old preset-side validation rejected non-finite solves instead of collapsing them to neutral water. Please preserve an explicit error path when the shared solver had to use the non-finite neutral fallback, rather than accepting those inputs as calibrated source water.\n   Rationale: Source-water validation is the guardrail that keeps malformed chemistry out of the simulation. Collapsing overflow/NaN math to `pH 7.0` makes catastrophic numeric failure indistinguishable from a legitimate neutral solve and lets unusable finite inputs through.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 9
+}

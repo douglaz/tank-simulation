@@ -1,0 +1,44 @@
+{
+  "payload_id": "run-20260328140833-final_review-vote-1-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T16:03:20.327353162Z",
+  "payload": {
+    "summary": "Accept the two maintainability amendments that identify real dependency mismatches in the current code, and reject the three defect claims that are contradicted by the current habitat/state implementation: deep-substrate area is geometry-derived, substrate-surface light already depends on water depth above substrate, and the claimed stale crowding path after trimming is not how habitat refresh currently works.",
+    "votes": [
+      {
+        "amendment_id": "fr-3-df697556",
+        "decision": "accept",
+        "rationale": "`ChangePhotoperiod` currently causes `refresh_habitat_registry()`, but `compute_habitat_registry()` reads light enablement and `hardware.light.intensity_index`, not `hardware.light.photoperiod_hours`. That makes the refresh a redundant and currently undocumented over-approximation, so either removing it or documenting the intent is technically justified."
+      },
+      {
+        "amendment_id": "fr-3-77143f76",
+        "decision": "accept",
+        "rationale": "`systems/algae_growth.rs` still computes periphyton capacity from `total_colonizable_area_cm2(substrate_layers, wall_area_cm2)`, and that helper sums wall area plus stored substrate-layer area only. `compute_glass_hardscape()` already includes `geometry.hardscape_area_cm2`, so hardscape affects the habitat registry but not the legacy algae-capacity path. A note or TODO calling out that mismatch is warranted until algae migrates to habitat-based surfaces."
+      },
+      {
+        "amendment_id": "fr-3-dc32db9e",
+        "decision": "reject",
+        "rationale": "The current code does derive deep-substrate area from geometry. `SubstrateLayerState::derived_colonizable_area_cm2()` multiplies footprint by actual layer depth and resolved factor, scenario materialization seeds `colonizable_area_cm2` from that helper, `TankState::new()` does the same, and `compute_substrate_deep()` recomputes from current footprint instead of trusting the serialized scalar. The described fixed-100-cm² behavior is not present."
+      },
+      {
+        "amendment_id": "fr-3-3d1fd76b",
+        "decision": "reject",
+        "rationale": "The current habitat computation does not use `geometry.mean_depth_cm()` for substrate-surface light. `compute_habitat_registry()` derives attenuation from `state.water_depth_above_substrate_cm()`, and that helper subtracts substrate depth from fill height. A deeper bed therefore leaves less water above the substrate and yields higher substrate-surface light exposure, so the amendment's premise is incorrect."
+      },
+      {
+        "amendment_id": "fr-3-bc5a66d7",
+        "decision": "reject",
+        "rationale": "The amendment's stated mechanism is contradicted by the current code. `compute_habitat_registry()` uses `state.derived_plant_crowding_index()` from live biomass rather than cached `plant.crowding_index`, and `refresh_habitat_registry()` recomputes and writes crowding before rebuilding the registry. Trim actions are also marked as habitat-affecting. That means the claimed stale-crowding/shading path after trimming is not the one implemented today."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

@@ -1,0 +1,125 @@
+{
+  "payload_id": "run-20260328125529-final_review-aggregate-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T15:27:44.581120529Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-4-2b018d6f",
+      "fr-4-84ddc83e",
+      "fr-4-83b30b59"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-4-c9fd9fff",
+        "normalized_body": "The `conversions` module (crates/tank_core/src/conversions.rs) is declared as `pub mod conversions` in lib.rs and contains 5 named constants (NO3_PER_N, NO2_PER_N, NH4_PER_N, NH3_PER_N, PO4_PER_P) plus 10 public forward/inverse conversion functions — but is never referenced anywhere in the codebase. No other file imports or uses `crate::conversions`, `tank_core::conversions`, or any of its symbols. The bead's acceptance criteria require centralized conversion logic, yet the module is dead code. Either: (a) the snapshot/TUI/API code that should be using these conversions to offer dual element+ion display fields is missing, or (b) the module was intended for external consumers and should at minimum be re-exported via `pub use conversions::*` or selectively re-exported, and referenced in docs/UNITS.md as the canonical conversion API. As-is, the constants and functions exist but serve no purpose.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-b753cd38",
+        "normalized_body": "The GH formula changed from the old magic-number approximation `((2.497 * ca) + (4.118 * mg)) / 17.848` to the molar-mass-derived `((100.0869/40.078 * ca) + (100.0869/24.305 * mg)) / 17.848`, which evaluates to factors of ~2.4973 and ~4.1180 respectively. This introduces a ~0.05% drift in computed GH values for existing saves. While scientifically more correct, this is a silent behavioral change with no save migration and no mention in the migration chain or changelog. For a tank with Ca=30 mg/L and Mg=5 mg/L, GH shifts from 5.3507 to 5.3512 dGH — negligible in practice but violates the principle that save/load should produce identical derived values. Consider either: (a) documenting this as an accepted precision improvement in the migration notes, or (b) adding a test that explicitly asserts the old and new formulas produce results within an acceptable tolerance.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-2b018d6f",
+        "normalized_body": "In overview.rs, the NH3 label reads `NH3-N {:.4} mg N/L` while in chemistry.rs it reads `Free NH3-N {:.5} mg NH3-N/L`. The unit suffixes differ: overview says 'mg N/L' (element basis) while chemistry says 'mg NH3-N/L' (which is the same thing but uses a different notation). Both are technically correct for the same quantity, but the inconsistency may confuse users comparing the two screens. Standardize on one label — either 'mg N/L' or 'mg NH3-N/L' — across both screens.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-84ddc83e",
+        "normalized_body": "`crates/tank_core/src/types/snapshot.rs:11-23,26-45` introduces legacy field mappings but does not apply them during `TankSnapshot` deserialization. Compatibility for renamed chemistry keys currently lives only in `crates/tank_tui/src/api_client.rs:119-145`, so any other Rust consumer that deserializes legacy `/snapshot` or `/load` payloads directly into `tank_core::TankSnapshot` will still fail with missing `*_mg_n_per_l` / `*_mg_p_per_l` fields. Move the compatibility into `tank_core` itself (for example with `#[serde(alias = ...)]` or a shared normalizer) instead of making each client reimplement the shim.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-83b30b59",
+        "normalized_body": "`crates/tank_core/src/types/snapshot.rs:87-111` now computes TDS/conductivity from a fresh carbonate solve, but the public state helpers still read the cached `water.bicarbonate_mg_total` via `crates/tank_core/src/types/water.rs:207-240` and `crates/tank_core/src/types/state.rs:317-322`. The new test at `crates/tank_core/src/types/snapshot.rs:256-289` explicitly asserts that snapshot values can exceed the cached helper values. That leaves two public APIs able to report different TDS/conductivity for the same `TankState`, which is a correctness/maintenance trap for any internal caller that does not go through `TankSnapshot`. Factor the fresh carbonate projection into a single shared helper or refresh the cache before every public accessor.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-4-2b018d6f",
+        "normalized_body": "In overview.rs, the NH3 label reads `NH3-N {:.4} mg N/L` while in chemistry.rs it reads `Free NH3-N {:.5} mg NH3-N/L`. The unit suffixes differ: overview says 'mg N/L' (element basis) while chemistry says 'mg NH3-N/L' (which is the same thing but uses a different notation). Both are technically correct for the same quantity, but the inconsistency may confuse users comparing the two screens. Standardize on one label — either 'mg N/L' or 'mg NH3-N/L' — across both screens.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-84ddc83e",
+        "normalized_body": "`crates/tank_core/src/types/snapshot.rs:11-23,26-45` introduces legacy field mappings but does not apply them during `TankSnapshot` deserialization. Compatibility for renamed chemistry keys currently lives only in `crates/tank_tui/src/api_client.rs:119-145`, so any other Rust consumer that deserializes legacy `/snapshot` or `/load` payloads directly into `tank_core::TankSnapshot` will still fail with missing `*_mg_n_per_l` / `*_mg_p_per_l` fields. Move the compatibility into `tank_core` itself (for example with `#[serde(alias = ...)]` or a shared normalizer) instead of making each client reimplement the shim.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-83b30b59",
+        "normalized_body": "`crates/tank_core/src/types/snapshot.rs:87-111` now computes TDS/conductivity from a fresh carbonate solve, but the public state helpers still read the cached `water.bicarbonate_mg_total` via `crates/tank_core/src/types/water.rs:207-240` and `crates/tank_core/src/types/state.rs:317-322`. The new test at `crates/tank_core/src/types/snapshot.rs:256-289` explicitly asserts that snapshot values can exceed the cached helper values. That leaves two public APIs able to report different TDS/conductivity for the same `TankState`, which is a correctness/maintenance trap for any internal caller that does not go through `TankSnapshot`. Factor the fresh carbonate projection into a single shared helper or refresh the cache before every public accessor.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 4,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-4-c9fd9fff",
+      "fr-4-b753cd38"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 3 amendment(s); restart required.",
+    "total_proposed_amendments": 5,
+    "total_reviewers": 2,
+    "unique_amendment_count": 5
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 4
+}

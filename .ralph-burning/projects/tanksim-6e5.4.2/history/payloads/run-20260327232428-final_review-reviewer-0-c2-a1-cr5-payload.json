@@ -1,0 +1,31 @@
+{
+  "payload_id": "run-20260327232428-final_review-reviewer-0-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T02:38:44.466601736Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "In `shrimp_feeding()` (shrimp.rs:165-168), the N/C elemental routing for periphyton uses `periph_consumed_biomass_g` (wet-biomass grams) while the N/C routing for detritus uses `detritus_consumed_route_g` (organic-matter grams). Both function signatures accept their respective input conventions correctly (`algae_nitrogen_mg` takes biomass, `detritus_nitrogen_mg` takes organic mass). However, there is no guard or debug assertion ensuring `periph_consumed_route_g + detritus_consumed_route_g` (the value written to `daily_food_consumed_g`) stays consistent with the sum of `consumed_n_mg + consumed_c_mg` converted back to grams. Add a debug_assert verifying `(consumed_n_mg + consumed_c_mg) / 1000.0` approximately equals `daily_food_consumed_g` so that any future refactor of the mass-conversion helpers cannot silently break the invariant between the organic-matter tracking and the elemental routing.",
+        "rationale": "The biomass-vs-route-mass mixing was the original bug this diff fixes. The two accounting paths (organic-matter grams and elemental mg) are computed through different helper call chains, so a regression in either chain would be invisible without an explicit cross-check. A debug_assert is zero-cost in release builds and protects a subtle invariant."
+      },
+      {
+        "body": "The `migrate_v3_to_v4` function (save.rs:329-331) was changed from seeding `reserve_g` proportionally to existing shrimp counts to a complete no-op (`let _ = value; Ok(())`). Legacy v3 saves with active shrimp colonies will now deserialize with `reserve_g = 0.0` (serde default), which means `fund_live_shrimp_biomass()` will return false for every hatching and maturation attempt until the colony accumulates enough feeding reserve organically. This could stall reproduction for multiple in-game days after upgrade. Consider either: (a) adding an inline comment documenting this intentional stall window and its expected recovery timeline, or (b) seeding a minimal non-zero reserve (e.g. one day's feeding output) so legacy colonies do not experience a hard reproduction freeze immediately post-upgrade.",
+        "rationale": "The fund_live_shrimp_biomass gate at shrimp.rs:650-656 requires reserve_g >= biomass * LIVE_BIOMASS_ORGANIC_FRACTION before any hatch or maturation can proceed. Starting at zero after migration blocks all reproduction until the feeding pathway builds enough reserve. For a colony with berried females already in the egg pipeline, this produces a guaranteed egg failure that the player cannot prevent, which is a gameplay regression relative to the prior migration behavior."
+      },
+      {
+        "body": "The `validate_source_water_carbonate_profile` boundary check (chemistry.rs:423) uses `eq.ph >= CARBONATE_PH_MAX` with a special exemption for `ZeroDicBufferedLimit`, but the `fallback_high_buffer` function (chemistry.rs:213) returns `CarbonateSolveStatus::Stable` at `ph == CARBONATE_PH_MAX`. This means two different solver paths produce the same pH 8.5 output with different validation outcomes: zero-DIC-buffered passes, high-buffer-ceiling rejects. Both are ceiling-clamp cases. Add a brief comment at the validation check explaining why this asymmetry is intentional (zero-DIC-buffered is a physical limit, while high-buffer-ceiling indicates the solver couldn't resolve within bounds), so future maintainers don't 'fix' the exemption.",
+        "rationale": "Without a comment, the asymmetry between two pH=8.5 outcomes with different CarbonateSolveStatus values looks like an oversight rather than a deliberate design choice. The ZeroDicBufferedLimit status exists specifically to distinguish these cases, but the reasoning is only visible from reading the full diff context, not from the code alone."
+      }
+    ],
+    "summary": "Reviewed all 8 changed files across chemistry solver, snapshot, save migration, shrimp feeding, source water, and presets. All 238 tests pass, clippy is clean. The carbonate chemistry changes (ZeroDicBufferedLimit status, named constants, validation envelope update, snapshot pH source change) are correct and well-tested. Two bundled changes outside the core carbonate scope warrant attention: (1) the v3→v4 migration was gutted from reserve-seeding to a no-op, and (2) the shrimp feeding unit-consistency fix corrects a biomass/route-mass mixing bug but significantly changes detritus consumption magnitude. No NaN/Inf risks, no correctness bugs found in the solver path."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 5
+}

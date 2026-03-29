@@ -1,0 +1,27 @@
+{
+  "payload_id": "run-20260328125535-final_review-reviewer-0-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T13:52:57.815796447Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "Fix TUI test `rejects_invalid_integer_counts` in `crates/tank_tui/src/screens/actions.rs:540`. Adding `TrimPlantsAndLeaveCuttings` to the `ALL` array shifted action indices: `AddShrimp` moved from index 5 to index 6. The test calls `select_next_action()` 5 times expecting to land on `AddShrimp` but now lands on `CleanFilter`, causing the assertion to fail because `CleanFilter` accepts a float `intensity` and submits successfully instead of rejecting. Change the loop from `for _ in 0..5` to `for _ in 0..6`, or better, navigate by matching `ActionKind::AddShrimp` directly to avoid fragility.",
+        "rationale": "This is a real test failure (`cargo test -p tank_tui --lib` fails). The bug was introduced by inserting `TrimPlantsAndLeaveCuttings` into the `ALL` array without updating the positional test. The code compiles but the test suite does not pass."
+      },
+      {
+        "body": "In save migration `migrate_v4_to_v5` (crates/tank_core/src/save.rs:555-568), `TrimPlants` is mapped to `TrimPlantsAndRemove`, but the original `TrimPlants` behavior routed biomass to fine_detritus (identical to `TrimPlantsAndLeaveCuttings`). This silently changes gameplay for saves with queued trim actions: biomass that would have stayed in the tank now exits the system. Either (a) map `TrimPlants` → `TrimPlantsAndLeaveCuttings` to preserve original behavior, or (b) add a comment documenting this as an intentional behavior upgrade and update the migration test name to reflect it is a deliberate semantic change, not a simple rename.",
+        "rationale": "The bead spec states the original behavior 'turns all removed plant biomass into fine detritus, which only matches the specific case where clippings are left in the tank.' That behavior is `TrimPlantsAndLeaveCuttings`, not `TrimPlantsAndRemove`. Mapping to `TrimPlantsAndRemove` changes queued-action semantics for existing saves without user awareness. The acceptance criterion says 'old saves with the legacy TrimPlants action load and migrate correctly to the new action variant' — correctness here depends on which variant is semantically correct for the migration."
+      }
+    ],
+    "summary": "Reviewed the plant trimming split implementation (tanksim-6e5.3.5). The core engine logic is correct: TrimPlantsAndRemove properly exports biomass (open-system), TrimPlantsAndLeaveCuttings properly routes to fine_detritus with mathematically exact N/C conservation (closed-system). Budget instrumentation, event messages, TUI labels, and validation are all properly differentiated. All tank_core tests pass (including the 500-hour integration test). Two issues found: (1) a TUI test failure caused by index shift when TrimPlantsAndLeaveCuttings was added to the ALL array, and (2) the save migration maps legacy TrimPlants to TrimPlantsAndRemove, but the original TrimPlants behavior was detritus-routing (semantically TrimPlantsAndLeaveCuttings), which silently changes gameplay for existing saves."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}

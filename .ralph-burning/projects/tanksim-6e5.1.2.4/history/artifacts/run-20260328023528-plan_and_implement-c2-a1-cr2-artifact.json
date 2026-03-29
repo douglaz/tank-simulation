@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328023528-plan_and_implement-c2-a1-cr2-artifact",
+  "payload_id": "run-20260328023528-plan_and_implement-c2-a1-cr2",
+  "stage_id": "plan_and_implement",
+  "created_at": "2026-03-28T03:33:24.625680480Z",
+  "content": "# Plan and Implement\n\n## Change Summary\n\nTightened the structured tracing stack so external sinks no longer fail silently, tick ids remain monotonic after `drain_ticks()`, pool-delta reporting suppresses floating-point noise with a relative/absolute threshold, and detail tracing now covers the previously missing shrimp/stability/internal-state fields while rejecting unsupported pool lookups explicitly instead of treating them as unchanged. The tracer API now exposes sink-failure inspection and total emitted tick count, engine docs clarify that clones drop tracing because sinks are not cloneable, and integration coverage was updated to assert the expanded daily-shrimp/stability-tracker detail schema alongside sink-failure and monotonic-id behavior.\n\n## Steps\n\n0. [Completed] Inspected the current tracing API, engine clone/tracing behavior, and existing unit/integration coverage against the five pending amendments to map the required code and test changes.\n1. [Completed] Patched the tracing facilities to surface sink write/serialization failures, keep tick numbering monotonic across drained buffers, use a practical delta threshold, expand the tracked detail-schema surface for internal shrimp/stability state, and make unsupported pool lookups explicit.\n2. [Completed] Updated engine-facing tracing documentation to state that cloned engines do not retain tracer configuration and callers must re-enable tracing on scenario forks when needed.\n3. [Completed] Extended tracing tests to cover sink-failure retention, monotonic tick ids after draining, and newly tracked daily shrimp/stability-tracker internal deltas, then ran focused and full-package validation.\n\n## Validation Evidence\n\n- `cargo fmt --all` completed successfully.\n- `cargo test -p tank_core --lib tracing::tests` passed.\n- `cargo test -p tank_core --test tracing` passed.\n- `cargo test -p tank_core` passed the full `tank_core` test suite.\n\n## Outstanding Risks\n\nNone identified.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

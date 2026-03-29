@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327225238-final_review-planner-positions-c2-a1-cr4-artifact",
+  "payload_id": "run-20260327225238-final_review-planner-positions-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T00:19:24.154922318Z",
+  "content": "# Final Review Planner Positions\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nThe amendment fixes a real migration-contract violation: malformed schema-2 geometry/depth values are currently coerced into seemingly valid saves, which can silently corrupt dissolved totals instead of surfacing a SchemaMigration error.\n\n## Votes\n\n- `fr-4-bc2dc25a`: Accept\n  `migrate_v2_to_v3` currently clamps negative substrate depth, caps against possibly invalid fill height, and falls back to `scale = 0.0` when gross volume is non-positive. That behavior contradicts the documented migration requirement to fail explicitly on malformed legacy payloads, and it permits silent data loss during load. Rejecting invalid geometry/depth inputs up front and adding regression coverage next to the malformed-save tests is the safer and more maintainable behavior.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

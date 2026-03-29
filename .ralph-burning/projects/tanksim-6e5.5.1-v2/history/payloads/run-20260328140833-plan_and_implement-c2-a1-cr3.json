@@ -1,0 +1,48 @@
+{
+  "payload_id": "run-20260328140833-plan_and_implement-c2-a1-cr3",
+  "stage_id": "plan_and_implement",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T15:38:39.204310586Z",
+  "payload": {
+    "data": {
+      "change_summary": "Audited the pending habitat-registry amendments against the checked-out base, confirmed the preset/save plumbing and photoperiod-aware planted-tank DO regression were already wired in, and finished the remaining substrate-layer hardening by making `SubstrateLayerState::default()` derive its colonizable area from default geometry while treating non-positive `colonizable_area_factor` values as \"use the layer kind default\" before refresh persists an explicit factor. Updated the affected substrate-bearing test fixtures so current/legacy save handling and habitat recomputation stay aligned with the explicit substrate-factor model.",
+      "outstanding_risks": [
+        "Validation was targeted, not full-workspace; I ran the affected core, scenario, and harness suites plus a broader `tank_core --tests --no-run`, but not the entire repository test matrix.",
+        "The worktree still contains unrelated pre-existing changes outside this task scope (including `crates/tank_core/src/systems/plant_growth.rs`, `crates/tank_data/src/*`, `crates/tank_tui/src/*`, `.ralph-burning/`, and `crates/tank_core/tests/plant_nutrient_normalization.rs`), which I left untouched.",
+        "Targeted builds still emit unrelated existing warnings in `crates/tank_data/src/presets.rs` about unused normalization helpers/arguments."
+      ],
+      "steps": [
+        {
+          "description": "Inspected the current substrate serialization/refresh paths and the pending light-window regression to separate already-landed fixes in the checked-out base from the remaining default/fallback bug.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Hardened substrate-layer defaults so derived colonizable area comes from default geometry and non-positive serialized area factors fall back to the layer kind default, then aligned the affected substrate-bearing test fixtures with the explicit factor field.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Revalidated the touched save/load, habitat, substrate, scenario-materialization, and planted-tank DO paths with targeted cargo test runs.",
+          "order": 3,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo test -p tank_core --tests --no-run` passed.",
+        "`cargo test -p tank_core --test habitat_registry --test save_load --test plant_algae_integration --test rooted_substrate_advantage --test substrate_filter_integration` passed (32 habitat tests, 27 save/load tests, 8 plant/algae tests, 1 rooted-substrate test, 4 substrate/filter tests).",
+        "`cargo test -p tank_scenarios --test materialization --test startup_overrides` passed (9 materialization tests, 4 startup-override tests).",
+        "`cargo test -p tank_harness --test e2e_baseline_scenarios do_dips_at_night_in_planted_tank` passed (1 test)."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

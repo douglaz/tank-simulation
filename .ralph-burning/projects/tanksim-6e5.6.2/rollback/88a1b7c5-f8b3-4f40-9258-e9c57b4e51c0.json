@@ -1,0 +1,99 @@
+{
+  "rollback_id": "88a1b7c5-f8b3-4f40-9258-e9c57b4e51c0",
+  "created_at": "2026-03-28T16:01:59.997688622Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "f04be36b366c2e9bb6f86df81fafe3c8d92e741f",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260328125540",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 4
+      },
+      "started_at": "2026-03-28T12:55:40.361045876Z",
+      "prompt_hash_at_cycle_start": "edd2f683d0046c28",
+      "prompt_hash_at_stage_start": "edd2f683d0046c28",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 3
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-28T13:49:13.189784810Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 4,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-3-4901e64f",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "`crates/tank_core/src/systems/shrimp.rs:136-143` computes shrimp food demand with `grazing_access_factor`, but `update_condition()` recomputes `target_food_g` at `crates/tank_core/src/systems/shrimp.rs:267-273` without that same factor. That means a colony that eats its full accessible ration is still treated as partially unsatiated whenever grazing access is below 1.0, which is the default case. The result is a systematic condition/reproduction/maturation penalty in otherwise healthy tanks. Reuse the exact access-adjusted demand basis from feeding when deriving the food-factor target.",
+          "created_at": "2026-03-28T16:01:59.909542533Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "3b71c2d65bfda0910e9d379823965b21b0efcc509885f92df9a9d714afddaa8c"
+        },
+        {
+          "amendment_id": "fr-3-17d200a6",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "`PlayerAction::AddShrimp` in `crates/tank_core/src/engine.rs:691-693` only increments `adult.count`. With the new stage-aware state, that bypasses the empty-stage seeding/merge logic in `StageCohort::receive_entrants()` (`crates/tank_core/src/types/biology.rs:97-123`). If the adult cohort had previously dropped to zero after poor conditions, newly added adults inherit the stale `adult.condition_index` from the dead cohort instead of starting from fresh state, so purchased shrimp can arrive effectively sick for no biological reason. Adding shrimp should go through cohort seeding/averaging rather than mutating the count directly.",
+          "created_at": "2026-03-28T16:01:59.909547672Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "88e5a10e9560a72bd73834399133f7e828139d773d3eb3ab07e9f72d1183199d"
+        },
+        {
+          "amendment_id": "fr-3-dce4c34e",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "The snapshot compatibility story is incomplete. `TankSnapshotRepr` requires `total_shrimp_count` and `sub_adult_count` with no defaults (`crates/tank_core/src/types/snapshot.rs:112-117`), but `normalize_snapshot_object()` only rewrites chemistry aliases (`crates/tank_core/src/types/snapshot.rs:206-215`). `tank_tui` then deserializes snapshots directly via `serde_json::from_value()` (`crates/tank_tui/src/api_client.rs:112-113`). A newer client talking to a pre-stage server payload that only has `adult_shrimp_count`/`juveniles_count` will fail to parse snapshots instead of defaulting `sub_adult_count` to 0 and recomputing the total. Add serde defaults or explicit normalization for the new shrimp-stage fields.",
+          "created_at": "2026-03-28T16:01:59.909551399Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "d7aa2cf284f7371b6a24af00d52c020f73c1bacba08570372454857726c21f4e"
+        }
+      ],
+      "processed_count": 8
+    },
+    "status_summary": "running: final review restart round 4 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T15:31:27.866673079Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

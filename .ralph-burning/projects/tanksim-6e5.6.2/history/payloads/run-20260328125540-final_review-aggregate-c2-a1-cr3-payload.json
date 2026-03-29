@@ -1,0 +1,149 @@
+{
+  "payload_id": "run-20260328125540-final_review-aggregate-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T16:01:59.909560166Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-3-4901e64f",
+      "fr-3-17d200a6",
+      "fr-3-dce4c34e"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-3-bbde1d06",
+        "normalized_body": "The v6→v7 schema migration must rescale the algae half-saturation fields in the save JSON, not just rely on serde aliases. Old saves contain `algae_half_saturation_n_mg_total: 5.0` (\"total mg\" units requiring division by 20). The serde alias on ProcessParams maps this directly to `algae_half_saturation_n_mg_n_per_l: 5.0`, but the code now uses it as mg/L without the legacy /20 normalization. This produces a 20× error in Ks (5.0 mg N/L instead of the intended 0.25 mg N/L), making algae drastically more nutrient-limited in old saves. The migration should rename the JSON key and divide the value by 20 (LEGACY_KINETIC_REFERENCE_VOLUME_L), or alternatively remove the serde alias so old values fall through to the correct defaults via #[serde(default)].",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-b5ce6a89",
+        "normalized_body": "The v6→v7 migration should also rename the plant half-saturation fields (`plant_half_saturation_n_mg_total` → `plant_half_saturation_n_mg_n_per_l`, etc.) in the save JSON and rescale them. Currently there are no serde aliases for these fields, so old saves silently lose custom plant Ks values and fall back to defaults. This happens to give correct values for the standard defaults (8.0/20 = 0.4 matches the new default) but any save with non-default plant Ks values will silently reset.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-bc482e98",
+        "normalized_body": "The pre-existing test `substrate_deep_area_scales_with_depth_and_kind` (crates/tank_core/tests/habitat_registry.rs:227) is broken by the substrate refactor. It creates a CoarsePorous layer with `..SubstrateLayerState::default()`, which sets `colonizable_area_factor = 0.5` (InertSand default), but the expected calculation uses 0.9 (CoarsePorous factor). With the new code using `resolved_colonizable_area_factor()` instead of `kind.colonizable_area_factor()`, the test expects `footprint * 1.5 * 0.9` but gets `footprint * 1.5 * 0.5`. Fix by explicitly setting `colonizable_area_factor: SubstrateKind::CoarsePorous.default_colonizable_area_factor()` on the test layer (and similarly for any other test layers that override kind).",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-f57688d0",
+        "normalized_body": "The `legacy_process_param_normalization` function in crates/tank_data/src/presets.rs no longer handles the old algae field names (`algae_half_saturation_n_mg_total`, `algae_half_saturation_p_mg_total`), but the `ProcessParamsPreset` struct still has serde aliases for them. Any user-created preset TOML referencing the old names will have the value loaded via alias but not normalized, producing a 20× error in the preset pathway as well. Either remove the serde aliases from ProcessParamsPreset (breaking old custom presets cleanly) or keep the old names in the normalization function so they get /20 treatment.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-4901e64f",
+        "normalized_body": "`crates/tank_core/src/systems/shrimp.rs:136-143` computes shrimp food demand with `grazing_access_factor`, but `update_condition()` recomputes `target_food_g` at `crates/tank_core/src/systems/shrimp.rs:267-273` without that same factor. That means a colony that eats its full accessible ration is still treated as partially unsatiated whenever grazing access is below 1.0, which is the default case. The result is a systematic condition/reproduction/maturation penalty in otherwise healthy tanks. Reuse the exact access-adjusted demand basis from feeding when deriving the food-factor target.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-17d200a6",
+        "normalized_body": "`PlayerAction::AddShrimp` in `crates/tank_core/src/engine.rs:691-693` only increments `adult.count`. With the new stage-aware state, that bypasses the empty-stage seeding/merge logic in `StageCohort::receive_entrants()` (`crates/tank_core/src/types/biology.rs:97-123`). If the adult cohort had previously dropped to zero after poor conditions, newly added adults inherit the stale `adult.condition_index` from the dead cohort instead of starting from fresh state, so purchased shrimp can arrive effectively sick for no biological reason. Adding shrimp should go through cohort seeding/averaging rather than mutating the count directly.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-dce4c34e",
+        "normalized_body": "The snapshot compatibility story is incomplete. `TankSnapshotRepr` requires `total_shrimp_count` and `sub_adult_count` with no defaults (`crates/tank_core/src/types/snapshot.rs:112-117`), but `normalize_snapshot_object()` only rewrites chemistry aliases (`crates/tank_core/src/types/snapshot.rs:206-215`). `tank_tui` then deserializes snapshots directly via `serde_json::from_value()` (`crates/tank_tui/src/api_client.rs:112-113`). A newer client talking to a pre-stage server payload that only has `adult_shrimp_count`/`juveniles_count` will fail to parse snapshots instead of defaulting `sub_adult_count` to 0 and recomputing the total. Add serde defaults or explicit normalization for the new shrimp-stage fields.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-3-4901e64f",
+        "normalized_body": "`crates/tank_core/src/systems/shrimp.rs:136-143` computes shrimp food demand with `grazing_access_factor`, but `update_condition()` recomputes `target_food_g` at `crates/tank_core/src/systems/shrimp.rs:267-273` without that same factor. That means a colony that eats its full accessible ration is still treated as partially unsatiated whenever grazing access is below 1.0, which is the default case. The result is a systematic condition/reproduction/maturation penalty in otherwise healthy tanks. Reuse the exact access-adjusted demand basis from feeding when deriving the food-factor target.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-17d200a6",
+        "normalized_body": "`PlayerAction::AddShrimp` in `crates/tank_core/src/engine.rs:691-693` only increments `adult.count`. With the new stage-aware state, that bypasses the empty-stage seeding/merge logic in `StageCohort::receive_entrants()` (`crates/tank_core/src/types/biology.rs:97-123`). If the adult cohort had previously dropped to zero after poor conditions, newly added adults inherit the stale `adult.condition_index` from the dead cohort instead of starting from fresh state, so purchased shrimp can arrive effectively sick for no biological reason. Adding shrimp should go through cohort seeding/averaging rather than mutating the count directly.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-dce4c34e",
+        "normalized_body": "The snapshot compatibility story is incomplete. `TankSnapshotRepr` requires `total_shrimp_count` and `sub_adult_count` with no defaults (`crates/tank_core/src/types/snapshot.rs:112-117`), but `normalize_snapshot_object()` only rewrites chemistry aliases (`crates/tank_core/src/types/snapshot.rs:206-215`). `tank_tui` then deserializes snapshots directly via `serde_json::from_value()` (`crates/tank_tui/src/api_client.rs:112-113`). A newer client talking to a pre-stage server payload that only has `adult_shrimp_count`/`juveniles_count` will fail to parse snapshots instead of defaulting `sub_adult_count` to 0 and recomputing the total. Add serde defaults or explicit normalization for the new shrimp-stage fields.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 3,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-3-bbde1d06",
+      "fr-3-b5ce6a89",
+      "fr-3-bc482e98",
+      "fr-3-f57688d0"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 3 amendment(s); restart required.",
+    "total_proposed_amendments": 7,
+    "total_reviewers": 2,
+    "unique_amendment_count": 7
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 3
+}

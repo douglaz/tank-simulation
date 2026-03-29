@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328132625-apply_fixes-c1-a1-cr2-artifact",
+  "payload_id": "run-20260328132625-apply_fixes-c1-a1-cr2",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-28T13:50:52.525423333Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNo code changes applied. The review (cr2) approved the implementation without amendments. The two prior amendments (K_LA cap ordering fix and tautological test rewrite) were already applied in the plan_and_implement stage of this completion round and passed review. All 38 relevant tests (12 co2_exchange + 21 chemistry + 5 dissolved_oxygen) pass, formatting is clean.\n\n## Steps\n\n1. [Completed] Confirmed review outcome is 'approved' with no follow_up_or_amendments — no fixes needed\n2. [Completed] Ran cargo test --test co2_exchange --test chemistry --test dissolved_oxygen: 38/38 passed\n3. [Completed] Ran cargo fmt --check -p tank_core: clean\n\n## Validation Evidence\n\n- cargo test --test co2_exchange: 12 passed, 0 failed\n- cargo test --test chemistry: 21 passed, 0 failed\n- cargo test --test dissolved_oxygen: 5 passed, 0 failed\n- cargo fmt --check -p tank_core: clean, exit 0\n\n## Outstanding Risks\n\nNone identified.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}
