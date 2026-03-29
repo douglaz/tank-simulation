@@ -1,0 +1,38 @@
+{
+  "payload_id": "run-20260329191454-review-c1-a1-cr1",
+  "stage_id": "review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-29T19:26:49.648912045Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "cargo test -q --test nitrification_alkalinity passed (6/6).",
+        "cargo test -q --test tracing --test budget_tracking --test chemistry passed (65/65).",
+        "crates/tank_core/src/systems/nitrogen_cycle.rs:13-23 and 346-384 show `total_mg_n_nitrified` is traced alongside `alkalinity_consumed_meq`, but the former is computed as `nob_step.oxidized_n_mg + comammox_step.oxidized_n_mg` while the latter is computed from `aob_alk_cost + comammox_alk_cost`.",
+        "crates/tank_core/src/engine.rs:229-239 emits `nitrogen_cycle.total_n_nitrified_mg` and `nitrogen_cycle.alk_consumed_meq` as paired trace notes.",
+        "crates/tank_core/src/types/process.rs:19-27 adds `DENITRIFICATION_ALK_MEQ_PER_MG_N`, but crates/tank_core/src/systems/nitrogen_cycle.rs:12-23 exposes no corresponding produced/returned-alkalinity field, and crates/tank_core/src/types/budget.rs:68-98 only records a single net alkalinity delta.",
+        "rg -n \"alk_consumed_meq|total_n_nitrified_mg\" crates/tank_core/tests found no test that asserts the new nitrogen-cycle trace notes."
+      ],
+      "findings_or_gaps": [
+        "Structured tracing is currently inconsistent on the nitrogen basis for alkalinity. `nitrogen_cycle.total_n_nitrified_mg` is documented and traced as the nitrified N amount, but it excludes pure AOB TAN->NO2 oxidation (`nob + comammox` only) while the alkalinity debit is charged on `aob + comammox`. On ticks where nitrite accumulates, the new trace output understates the N responsible for the alkalinity loss.",
+        "The denitrification return path is not actually prepared as a stable accounting interface yet. The change adds a constant, but the only structured surface is `alkalinity_consumed_meq` plus a net alkalinity budget entry. If E4b adds alkalinity return in the same stage, budget/tracing cannot attribute consumption versus return without another schema change.",
+        "The tracing acceptance criterion is not locked down by tests. The new coverage file validates chemistry and budget visibility, but nothing asserts that a `Verbosity::Trace` nitrogen-cycle entry contains the alkalinity pool delta and the new attribution notes."
+      ],
+      "follow_up_or_amendments": [
+        "Expose the alkalinity-driving nitrogen basis explicitly, e.g. `tan_oxidized_mg`, and trace that instead of `total_n_nitrified_mg`; alternatively rename the existing metric so it no longer implies a stoichiometric cross-check with alkalinity.",
+        "Add a symmetric alkalinity attribution surface now, such as `alkalinity_consumed_meq` and `alkalinity_produced_meq` on `NitrogenCycleOutput` or a dedicated struct, and thread it through budget/tracing so denitrification can plug in without redesign.",
+        "Add a trace-level integration test that runs with `Verbosity::Trace` and asserts `system:nitrogen_cycle` exposes `water.alkalinity_meq` plus the nitrification/denitrification attribution notes."
+      ],
+      "outcome": "request_changes"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

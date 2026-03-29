@@ -1,0 +1,38 @@
+{
+  "payload_id": "run-20260328125535-review-c2-a1-cr2",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T13:45:12.505539613Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All tank_core tests pass: 0 failures across all 15 test binaries (approx. 196 tests total). clippy clean, fmt clean.",
+        "Action model correctly split: PlayerAction::TrimPlantsAndRemove (export, biomass exits system) and PlayerAction::TrimPlantsAndLeaveCuttings (detritus routing, closed-system) defined in actions.rs:13-18.",
+        "Engine handling verified: engine.rs:600-619 exports biomass for Remove variant; engine.rs:620-642 routes to fine_detritus for LeaveCuttings variant. Budget labels correctly assigned at engine.rs:791-792.",
+        "Event log/UI text distinguishes the two actions: TUI shows 'Trim & remove' with hint '(exported)' vs 'Trim & leave' with hint '(to detritus)' in crates/tank_tui/src/screens/actions.rs.",
+        "Budget instrumentation: Remove variant uses snapshot-delta recording (open-system), explicitly documented in engine.rs:616-617 comment. Budget guard recognizes the label as open-system.",
+        "Unit test coverage: test_trim_plants_and_remove_exports_n_and_c (budget_tracking.rs:654-703) asserts total N/C decreases by exactly the exported amount within 1e-6 tolerance.",
+        "Unit test coverage: test_trim_plants_and_leave_cuttings_preserves_n_and_c (budget_tracking.rs:624-651) asserts total N/C is conserved within 1e-6 tolerance.",
+        "Legacy migration test: legacy_schema_v4_saves_migrate_trim_plants_to_trim_and_remove (save_load.rs:416-497) verifies old TrimPlants actions migrate to TrimPlantsAndRemove with correct fractions.",
+        "Integration test: test_weekly_trim_and_remove_exports_nutrients_over_500_hours (budget_tracking.rs:1433-1539) confirms cumulative export matches total N decrease over 500 simulated hours.",
+        "SUB_ADULT_FEEDING_WEIGHT unified: single definition at biology.rs:149 (value 0.67, pub(crate)), re-exported via types/mod.rs:24, imported by shrimp.rs:7. No duplicate definitions remain.",
+        "Stale trim tests fixed: budget_helpers.rs now tests TrimPlantsAndLeaveCuttings with label 'action:trim_plants_and_leave_cuttings'; plant_algae_integration.rs now tests TrimPlantsAndLeaveCuttings for detritus routing."
+      ],
+      "findings_or_gaps": [
+        "No gaps found against acceptance criteria. All seven criteria are met: (1) action model distinguishes export vs in-tank decay, (2) event log/UI text reflects distinction, (3) budget instrumentation treats export as intentional removal, (4) unit test for Remove reducing N/C by exported amount, (5) unit test for LeaveCuttings conserving N/C, (6) legacy save migration test, (7) 500-hour integration test.",
+        "Amendment fixes from final review round 1 are properly applied: feeding weight unification (fr-1-2857eb23), budget_helpers test correction (fr-1-b5357512 / fr-1-264c0ac6), and plant_algae_integration test correction (fr-1-f4085f8d)."
+      ],
+      "follow_up_or_amendments": [],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}

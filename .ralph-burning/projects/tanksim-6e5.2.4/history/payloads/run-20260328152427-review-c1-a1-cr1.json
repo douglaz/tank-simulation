@@ -1,0 +1,33 @@
+{
+  "payload_id": "run-20260328152427-review-c1-a1-cr1",
+  "stage_id": "review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T15:44:00.632804356Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "`crates/tank_core/src/systems/plant_growth.rs` now uses the concentration-based `plant_half_saturation_*_mg_*_per_l` / `*_per_m2` fields directly and documents the explicit water-column vs substrate uptake assumptions, so the runtime plant-limitation semantics themselves match the bead intent.",
+        "`cargo test -p tank_core --test plant_nutrient_normalization`, `cargo test -p tank_core save_load -- --nocapture`, and `cargo test -p tank_data` all pass in the current tree.",
+        "Source inspection shows a compatibility hole: `crates/tank_core/src/save.rs:16,80-108` keeps `SCHEMA_VERSION = 7` with no migration for the plant-field rename, while the renamed plant fields in `crates/tank_core/src/types/process.rs:24-25,128-140` and `crates/tank_data/src/presets.rs:825-834` have defaults but no legacy-key conversion. The nearby algae renames still have explicit legacy aliases in `process.rs:154-160` and `presets.rs:850-859`."
+      ],
+      "findings_or_gaps": [
+        "High: pre-rename save files are no longer behaviorally stable. Because `ProcessParams` still deserializes under schema 7 and the renamed plant fields in `crates/tank_core/src/types/process.rs:128-140` have no migration or legacy-key conversion, a schema-7 save containing `plant_half_saturation_{n,p,c}_mg_total` will silently load the new default plant Ks instead of preserving the saved tuning.",
+        "Medium: legacy/custom process preset TOML has the same silent fallback path. `ProcessParamsPreset` gives the renamed plant fields defaults in `crates/tank_data/src/presets.rs:825-834` but no conversion shim for legacy `plant_half_saturation_{n,p,c}_mg_total` keys, so older preset/provenance files can be accepted while losing non-default user values and seeding the new substrate Ks from defaults instead of the legacy inputs."
+      ],
+      "follow_up_or_amendments": [
+        "Add explicit backward-compat conversion for both save JSON and process preset TOML. For saves, bump the schema and migrate legacy `plant_half_saturation_{n,p,c}_mg_total` values into the new water-column fields, and derive the new substrate `N/P` fields from the legacy `N/P` values using the old reference footprint. For presets, add a load shim or custom deserializer that performs the same conversion, or fail fast on legacy keys if a hard break is intentional.",
+        "Add regression tests that load a pre-rename save payload and a legacy process preset TOML with non-default `plant_half_saturation_{n,p,c}_mg_total` values, then assert the converted `*_per_l` / `*_per_m2` values are preserved rather than replaced by defaults."
+      ],
+      "outcome": "request_changes"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

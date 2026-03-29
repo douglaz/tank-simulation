@@ -1,0 +1,36 @@
+{
+  "rollback_id": "e45664fe-e85f-4f18-9f49-6a2b8d64660c",
+  "created_at": "2026-03-28T03:31:56.672152540Z",
+  "stage_id": "docs_plan",
+  "cycle": 1,
+  "git_sha": "a977de7743116322d58eee9c44b80e97cfd4c1f5",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260328032854",
+      "stage_cursor": {
+        "stage": "docs_update",
+        "cycle": 1,
+        "attempt": 1,
+        "completion_round": 1
+      },
+      "started_at": "2026-03-28T03:28:54.003629485Z",
+      "prompt_hash_at_cycle_start": "87d9d3a98ae0e7da",
+      "prompt_hash_at_stage_start": "87d9d3a98ae0e7da",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 0
+    },
+    "status": "running",
+    "cycle_history": [],
+    "completion_rounds": 1,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [],
+      "processed_count": 0
+    },
+    "status_summary": "running: completed Docs Plan, next Docs Update"
+  }
+}

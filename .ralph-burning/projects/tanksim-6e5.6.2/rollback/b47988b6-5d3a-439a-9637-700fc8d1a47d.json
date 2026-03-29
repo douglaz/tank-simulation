@@ -1,0 +1,110 @@
+{
+  "rollback_id": "b47988b6-5d3a-439a-9637-700fc8d1a47d",
+  "created_at": "2026-03-28T14:22:00.710727961Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "ad8897be5369290af94664cd510437e62640d381",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260328125540",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 2
+      },
+      "started_at": "2026-03-28T12:55:40.361045876Z",
+      "prompt_hash_at_cycle_start": "edd2f683d0046c28",
+      "prompt_hash_at_stage_start": "edd2f683d0046c28",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 1
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-28T13:49:13.189784810Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 2,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-1-206e00d0",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "In `AnimalState::add_reserve_by_feeding_units()` (biology.rs:491), the adult weight is computed as `f64::from(self.adult.count)` without multiplying by `ADULT_FEEDING_WEIGHT`, while `feeding_units()` (biology.rs:451) explicitly uses `ADULT_FEEDING_WEIGHT`. Both are numerically identical since the constant is 1.0, but they would silently diverge if the constant were ever changed. Use `f64::from(self.adult.count) * ADULT_FEEDING_WEIGHT` for consistency with the feeding_units() method that this function is documented to mirror.",
+          "created_at": "2026-03-28T14:22:00.616203698Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "a4634dd1b54dbafc332572d1a499e1f0a22bd057037b96e0288734610e2c6b29"
+        },
+        {
+          "amendment_id": "fr-1-03f6968a",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "`crates/tank_data/src/presets.rs:135-155` still exposes only the old shrimp species fields, and `crates/tank_scenarios/src/lib.rs:511-523` builds `ShrimpRuntimeParams` by filling every new stage-structured knob from `..ShrimpRuntimeParams::default()`. At the same time the legacy `process_params.shrimp_juvenile_maturation_days` is still loaded in `crates/tank_scenarios/src/lib.rs:420-423`, but stage promotion now reads only `state.shrimp_params` in `crates/tank_core/src/systems/shrimp.rs:610-683`. The result is that scenario/preset lifecycle tuning silently does nothing: maturation timing, molt timing, clutch sizing, and sub-adult sensitivity all fall back to hard-coded defaults instead of scenario data.",
+          "created_at": "2026-03-28T14:22:00.616207345Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "d5912b250a1bff3d5bbaa3c94f543d3d3049889d034a0197095d31ef2b1f9db9"
+        },
+        {
+          "amendment_id": "fr-1-b4c84d14",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "The v4->v5 migration in `crates/tank_core/src/save.rs:408-573` rewrites `state.animal`, but it never derives `shrimp_params.juvenile_to_subadult_days` / `subadult_to_adult_days` from the legacy `process_params.shrimp_juvenile_maturation_days`. Missing stage fields then deserialize to the defaults in `crates/tank_core/src/types/biology.rs:347-352`, while runtime promotion consults only those new fields in `crates/tank_core/src/systems/shrimp.rs:610-683`. Any older save with a non-default maturation schedule will therefore load with a silently changed 30+20 day lifecycle, so old saves do not actually migrate cleanly.",
+          "created_at": "2026-03-28T14:22:00.616210420Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "8342e06822d71530b40c8113383e1a48a4ff7f83f27303fbb5467c8bd7b87946"
+        },
+        {
+          "amendment_id": "fr-1-b484d552",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "`SaveFile::into_engine` relies on invariant enforcement for load-time validation (`crates/tank_core/src/save.rs:215-226`), but `validate_invariants_inner` returns after checking `process_params` and never validates any of the new `ShrimpRuntimeParams` fields declared in `crates/tank_core/src/types/biology.rs:165-217` (`crates/tank_core/src/invariants.rs:215-252`). A current-schema save or API load can therefore set impossible species settings and the engine will accept them, after which `crates/tank_core/src/systems/shrimp.rs:610-683` and `crates/tank_core/src/systems/shrimp.rs:927-969` silently clamp or run with nonsensical stage timing/temperature/GH behavior instead of rejecting bad input.",
+          "created_at": "2026-03-28T14:22:00.616213536Z",
+          "batch_sequence": 4,
+          "source": "workflow_stage",
+          "dedup_key": "037f998c05216f6db5122feec274db8c0344e88cf8ba6a5cd6af9cc26758dbd8"
+        }
+      ],
+      "processed_count": 0
+    },
+    "status_summary": "running: final review restart round 2 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T14:00:50.706307119Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

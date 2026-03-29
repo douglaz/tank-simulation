@@ -1,0 +1,44 @@
+{
+  "payload_id": "run-20260327232421-final_review-planner-positions-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T00:11:19.909993339Z",
+  "payload": {
+    "summary": "Accept all five amendments. fr-1-6ca96dcb, fr-1-5684c488, and fr-1-601251fc identify clear correctness or data-contract problems; fr-1-6ae781a3 tightens validation to match the model’s documented assumptions; fr-1-1508633a is a worthwhile documentation amendment for a real phase-1 reserve-model limitation, with the minor nuance that explicit shrimp removal also exports reserve.",
+    "votes": [
+      {
+        "amendment_id": "fr-1-6ca96dcb",
+        "decision": "accept",
+        "rationale": "`step_hours` uses `enforce_invariants` as a preflight guard, but that function mutates state before returning errors. Because clamps happen before later hard checks such as `animal.reserve_g`, a failed step can partially normalize the state and still return `Err`, which is a poor validation contract. Splitting read-only validation from post-step cleanup, or at least documenting and testing the current behavior, is technically justified."
+      },
+      {
+        "amendment_id": "fr-1-1508633a",
+        "decision": "accept",
+        "rationale": "The core point is valid: the current model has no endogenous reserve spend, so `animal.reserve_g` can grow without bound in long runs and produce misleading diagnostics. A nearby comment documenting that this is a deliberate phase-1 approximation pending the reserve/condition work would improve maintainability. The only wording nuance is that explicit `RemoveShrimp` also exports reserve, so the comment should describe the lack of metabolic or physiological drain rather than say mortality is literally the only drain."
+      },
+      {
+        "amendment_id": "fr-1-6ae781a3",
+        "decision": "accept",
+        "rationale": "`shrimp_assimilation_efficiency` is documented as a literature-bounded biological parameter, not an arbitrary fraction knob. Allowing exactly `0.0` or `1.0` collapses one side of the routing contract entirely, creating degenerate behavior that conflicts with the documented intent and the default-pathway assumptions. Tightening validation to an open interval, or at least rejecting zero, is a reasonable robustness improvement."
+      },
+      {
+        "amendment_id": "fr-1-5684c488",
+        "decision": "accept",
+        "rationale": "The implementation currently decrements food sources and records `daily_food_consumed_g` in gram space, but `route_consumed_food` routes only elemental N and C and then reconstructs gram-based feces and reserve from `N+C` mass. That mixes bookkeeping bases and means the consumed gram amount is not reconciled with the routed gram outputs, even though condition and satiation logic depends on the gram-valued consumption. Either the routing basis needs to be made consistent or the field semantics need to be renamed and documented much more explicitly."
+      },
+      {
+        "amendment_id": "fr-1-601251fc",
+        "decision": "accept",
+        "rationale": "This is a concrete configuration bug. The new shrimp-routing fields exist in `default.toml`, but `ProcessParamsPreset` does not deserialize or validate them, and scenario materialization fills the runtime struct from `ProcessParams::default()` instead. That means shipped preset values are silently ignored and malformed preset values are never checked. The preset/materialization path should carry these fields end to end."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

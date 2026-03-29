@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327192401-apply_fixes-c1-a1-cr1-artifact",
+  "payload_id": "run-20260327192401-apply_fixes-c1-a1-cr1",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-27T19:40:24.260390806Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNo additional fixes were applied in this stage. The prior review approved the per-tick N/C/O2 budget ledger implementation without actionable amendments, so the code remains as produced in the implement stage.\n\n## Steps\n\n1. [Completed] Reviewed the validation output and confirmed the implementation was approved with no required amendments.\n2. [Completed] Verified that no code edits were necessary for the budget ledger, canonical total helpers, or associated tests.\n3. [Skipped] Rerun validation after applying fixes.\n\n## Validation Evidence\n\n- Review outcome was `approved` with no follow-up amendments or blocking findings.\n- Existing validation remains applicable because no code changed in this stage: `cargo test -p tank_core --test budget_tracking` passed.\n- Existing validation remains applicable because no code changed in this stage: `cargo test -p tank_core --test water_change_mass_balance` passed.\n- Existing validation remains applicable because no code changed in this stage: `cargo test -p tank_core` passed across the full `tank_core` suite.\n- Review evidence also recorded `cargo clippy -p tank_core` with zero warnings.\n\n## Outstanding Risks\n\n- Canonical live-biomass C/N totals still depend on shared stoichiometric helper assumptions in `types/budget.rs`; if future phases add new explicit element-bearing fields or refine biomass composition, those helpers and tests must be updated together.\n- The closed-system conservation checks use a quiescent no-growth scenario. Richer gameplay states may still expose pre-existing stoichiometry gaps in systems that do not yet move every element explicitly, but the new ledger makes those imbalances inspectable.\n- No compile-time coverage guard exists for newly added element-bearing state fields; helper completeness still relies on the canonical helper tests being kept in sync with state evolution.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

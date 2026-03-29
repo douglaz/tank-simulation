@@ -1,0 +1,44 @@
+{
+  "payload_id": "run-20260327232421-final_review-vote-0-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T00:16:08.961239363Z",
+  "payload": {
+    "summary": "All five amendments verified against the codebase. Each identifies a real issue. fr-1-6ca96dcb: partial mutation on error confirmed — clamps execute before later hard checks, and tests only pass due to single-fault injection. fr-1-1508633a: unbounded reserve_g accumulation confirmed — only mortality and manual RemoveShrimp drain it, a comment noting the phase-1 limitation is warranted. fr-1-6ae781a3: inclusive boundary check confirmed inconsistent with doc comments (0.4–0.7) and test assertions (strict open interval). fr-1-5684c488: mass basis mismatch confirmed — N+C elemental routing accounts for ~25% of consumed gram mass, the rest vanishes from the budget. fr-1-601251fc: TOML values silently ignored confirmed — ProcessParamsPreset lacks fields, materialization uses ProcessParams::default(), and the code even comments \"not yet in presets.\"",
+    "votes": [
+      {
+        "amendment_id": "fr-1-6ca96dcb",
+        "decision": "accept",
+        "rationale": "Verified in code. enforce_invariants (invariants.rs:5-217) performs clamps (e.g. ph.clamp at line 95, condition_index.clamp at line 124) before later hard error checks (e.g. check_non_negative for reserve_g). When called as a pre-step guard (engine.rs:491), a multi-fault state gets partially clamped before the first hard error aborts the function with Err. The validation tests (validation.rs:91-127) assert full_state() == expected after failure, which only holds because each test injects exactly one fault. Splitting into a read-only validation pass and a separate clamp pass — or at minimum documenting and hardening the tests — is a sound improvement to the validation contract."
+      },
+      {
+        "amendment_id": "fr-1-1508633a",
+        "decision": "accept",
+        "rationale": "Verified: reserve_g is incremented in route_consumed_food (shrimp.rs:235) and only decremented by mortality (shrimp.rs:602-606) and manual RemoveShrimp (engine.rs:405-407). No metabolic baseline, molt, or reproductive drain exists. Mass conservation is maintained (budget.rs tracks it correctly), but unbounded accumulation is biologically implausible. Adding a doc comment noting this is a deliberate phase-1 simplification pending the reserve/condition bead (tanksim-6e5.6.1) is low-cost and high-value for future maintainers. The planner's nuance about RemoveShrimp also draining reserve is correct and should be reflected in the comment wording."
+      },
+      {
+        "amendment_id": "fr-1-6ae781a3",
+        "decision": "accept",
+        "rationale": "Verified: check_unit_interval (invariants.rs:236-242) uses the inclusive range 0.0..=1.0, accepting both boundary values. But the field's doc comment (process.rs:186) says 'Literature range: 0.4–0.7', and the test default_fraction_sums_are_valid (shrimp_feeding_pathway.rs:81-84) explicitly asserts ae > 0.0 && ae < 1.0 with a strict open interval. ae=0.0 collapses all food to feces (zero assimilation, no TAN/DIC/O2 effects), and ae=1.0 produces zero feces — both physically degenerate. Tightening to a strict open interval or at minimum rejecting zero aligns the invariant with the documented intent and existing test."
+      },
+      {
+        "amendment_id": "fr-1-5684c488",
+        "decision": "accept",
+        "rationale": "Verified: daily_food_consumed_g (shrimp.rs:153) tracks total gram mass consumed, but route_consumed_food (shrimp.rs:183-235) partitions only the elemental N+C extracted via algae_nitrogen_mg (35 mg N/g) and algae_carbon_mg (218.75 mg C/g at default n_to_c_ratio=0.16). For 1g periphyton, only 253.75 mg of N+C is routed — just 25.4% of consumed mass. The remaining ~75% (H, O, ash, etc.) vanishes from the elemental budget. This means feces_g and reserve_g as computed from (fecal_N + fecal_C)/1000 significantly undercount actual mass. Satiation and condition logic that depends on daily_food_consumed_g operates on a fundamentally different basis than the routed matter. The inconsistency should be reconciled or the field semantics explicitly documented."
+      },
+      {
+        "amendment_id": "fr-1-601251fc",
+        "decision": "accept",
+        "rationale": "Verified: default.toml lines 85-94 define all five shrimp routing coefficients. ProcessParamsPreset (presets.rs:191-340) has no corresponding fields, so these TOML values are never deserialized into the preset struct. The materialization function process_preset_to_params (tank_scenarios/src/lib.rs:427-435) explicitly uses ProcessParams::default() for these fields, with a comment 'not yet in presets, use defaults.' This means editing the TOML has zero effect on simulation behavior, and invalid preset values would be silently ignored. The fields should be wired through the preset/materialization path end-to-end."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

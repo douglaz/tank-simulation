@@ -1,0 +1,121 @@
+{
+  "rollback_id": "5cc693be-8189-4b6e-9607-194903857ad2",
+  "created_at": "2026-03-28T00:30:40.404978958Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "bd71a80b3ae577c6a97d9337634fee6722d9ff5a",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260327232428",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 2
+      },
+      "started_at": "2026-03-27T23:24:28.209316216Z",
+      "prompt_hash_at_cycle_start": "5abde49e7a84a16b",
+      "prompt_hash_at_stage_start": "5abde49e7a84a16b",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 1
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-27T23:59:18.757877469Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 2,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-1-f4b7f286",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "In `water_change.rs` lines 67 and 85, `bicarbonate_mg_total` is independently retained and added from the source profile before `resolve_carbonate_state` overwrites it at line 95. The state contract (`docs/carbonate_state_contract.md`) says 'bicarbonate_mg_total should never again be incremented independently by chemistry logic once the new solver lands.' Remove the independent mutations of `bicarbonate_mg_total` in `apply_water_change` (lines 67 and 85) since the resolve at line 95 computes the correct value from DIC and alkalinity. This also applies to `rescale_totals_for_volume` (water.rs:204) which rescales `bicarbonate_mg_total` — since it's a cached projection, it should be re-derived via resolve rather than linearly scaled (though in the rescale case the result happens to be numerically identical).",
+          "created_at": "2026-03-28T00:30:40.270059809Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "743980e3d52d1efebf140ef5218e6a82e10c3da2557cb8510508818d68fb5bb7"
+        },
+        {
+          "amendment_id": "fr-1-3a75c43a",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "The negligible-alkalinity fallback (chemistry.rs lines 82-88) returns pH 7.0 with all DIC reported as CO2(aq). This is per the contract spec but creates a gameplay-critical blind spot: when nitrification depletes alkalinity to zero (nitrogen_cycle.rs line 349-350 clamps to 0.0) while respiration continues adding DIC, the solver reports pH 7.0 instead of the acidic pH (roughly 5.0-5.5) that represents an acid crash — the single most dangerous event in aquarium keeping. Consider returning a low pH estimate (e.g., from the Henderson-Hasselbalch approximation treating all DIC as CO2, giving pH ≈ pKa1 - log10(DIC/Alk_trace)) or at minimum emitting a structured warning event when this fallback fires with nonzero DIC, so the gameplay layer can surface the acid crash to the player.",
+          "created_at": "2026-03-28T00:30:40.270064769Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "17cf4169d312336850fdd3ecf7832756a8d2120d7d7af6e222a1d1386af604b0"
+        },
+        {
+          "amendment_id": "fr-1-02f18c66",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "The pre-existing `hatch_produces_juveniles` test in shrimp_population.rs is failing (adults drop from 10 to 2 over 60 days with condition_index=0.652 and zero juveniles produced). This failure predates the 6e5.4.2 changes (confirmed at commit 99c61dc) and is not introduced by the carbonate solver work. However, `cargo test` currently fails due to this test. Either fix the underlying shrimp population dynamics issue or update the test expectations to match the current behavior before merging.",
+          "created_at": "2026-03-28T00:30:40.270067644Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "912a2e865365f54efb10ed713547dd5c895e35b1beaa735c6bfd6f9372b1eb41"
+        },
+        {
+          "amendment_id": "fr-1-ae57349f",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "Fix the post-solve pH clamping split. `resolve_carbonate_state()` writes the raw equilibrium result into `water.ph` (`crates/tank_core/src/systems/chemistry.rs:162-170`), but `enforce_invariants()` later clamps only `water.ph` to `5.5..=8.5` (`crates/tank_core/src/invariants.rs:89-95`). `TankSnapshot::from_state()` then recomputes `co2_aq_mmol_per_l` from the unclamped carbonate inputs while using the clamped `water.ph` for NH3 (`crates/tank_core/src/types/snapshot.rs:76-88`), and save loading re-solves back to the unclamped value (`crates/tank_core/src/save.rs:309-330`). Any state whose solver pH falls outside `5.5..=8.5` ends up with mutually inconsistent pH/CO2/bicarbonate behavior and non-idempotent save-loads. Clamp at the carbonate-solver boundary or reproject all derived carbonate fields together after clamping.",
+          "created_at": "2026-03-28T00:30:40.270071231Z",
+          "batch_sequence": 4,
+          "source": "workflow_stage",
+          "dedup_key": "3d2890442a6fdd9a0e2ccf8146b3e801c4a4ef7359b5583dd55c8c95f15a1d35"
+        },
+        {
+          "amendment_id": "fr-1-22793191",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "Recalibrate or reject the shipped source-water carbonate presets under the new solver. Startup water materialization now derives pH from `dic_mg_c_per_l` and `alkalinity_meq_per_l` (`crates/tank_core/src/types/water.rs:87-110`), but the existing presets still encode ratios from the old shortcut: `soft_acidic.toml` uses `12.0` mg C/L with `1.07` meq/L (`crates/tank_data/data/source_water/soft_acidic.toml:8-16`), `moderate.toml` uses `15.0` with `1.249` (`crates/tank_data/data/source_water/moderate.toml:8-16`), and `hard_shrimp.toml` uses `21.0` with `1.785` (`crates/tank_data/data/source_water/hard_shrimp.toml:8-16`). Plugging those values into the implemented `solve_carbonate_equilibrium()` yields roughly pH `9.12`, `8.29`, and `8.68`, so the `soft_acidic` preset is not acidic at all and two shipped presets immediately hit the invariant ceiling. `SourceWaterPreset::validate()` (`crates/tank_data/src/presets.rs:34-70`) does not catch this. Update the preset DIC/alk pairs or add a derived-pH validation gate before shipping.",
+          "created_at": "2026-03-28T00:30:40.270075369Z",
+          "batch_sequence": 5,
+          "source": "workflow_stage",
+          "dedup_key": "96c3ef02db23f3521e02c8ae458460f29ea9175c18326a3fe2ac8c0da3db4784"
+        }
+      ],
+      "processed_count": 0
+    },
+    "status_summary": "running: final review restart round 2 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T00:04:56.391832443Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

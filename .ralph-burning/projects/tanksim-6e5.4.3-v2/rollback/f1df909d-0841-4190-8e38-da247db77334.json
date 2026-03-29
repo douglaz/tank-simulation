@@ -1,0 +1,70 @@
+{
+  "rollback_id": "f1df909d-0841-4190-8e38-da247db77334",
+  "created_at": "2026-03-28T14:57:18.519647055Z",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "git_sha": "9784745e84029ccb00b4d71d2f30e6073026a8ea",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260328132625",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 1,
+        "attempt": 1,
+        "completion_round": 5
+      },
+      "started_at": "2026-03-28T13:26:25.386753572Z",
+      "prompt_hash_at_cycle_start": "0bee02f77dd8aaf9",
+      "prompt_hash_at_stage_start": "0bee02f77dd8aaf9",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 4
+    },
+    "status": "running",
+    "cycle_history": [],
+    "completion_rounds": 5,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-4-7dfb6287",
+          "source_stage": "final_review",
+          "source_cycle": 1,
+          "source_completion_round": 4,
+          "body": "The `check_strictly_increasing` helper in crates/tank_core/src/invariants.rs:398-409 only reports the upper field name and value in its error. When the invariant fires (e.g., `optimal_temp_min_c >= optimal_temp_max_c`), the error says `InvariantViolation { field: \"shrimp_params.optimal_temp_max_c\", value: X }` without mentioning the lower bound that caused the conflict. Consider including both field names or a more descriptive message to aid debugging.",
+          "created_at": "2026-03-28T14:57:18.456470184Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "dba0b581a2faabe1574bf24b6f08af829e454225706d59ed4fb6bff867681c2a"
+        }
+      ],
+      "processed_count": 4
+    },
+    "status_summary": "running: final review restart round 5 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T14:39:34.052229716Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      },
+      "final_review_arbiter": {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      }
+    }
+  }
+}

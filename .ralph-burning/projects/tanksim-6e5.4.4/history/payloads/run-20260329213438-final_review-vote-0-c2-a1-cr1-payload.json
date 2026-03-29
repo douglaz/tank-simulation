@@ -1,0 +1,49 @@
+{
+  "payload_id": "run-20260329213438-final_review-vote-0-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-29T22:43:49.640969991Z",
+  "payload": {
+    "summary": "Verified all six amendments against the actual codebase. Accept the carbon-accounting documentation amendment and the broken-test amendment as both are real, actionable issues. Reject the remaining four because the reported issues are either already addressed in the current code, are not substantiated by actual failures, or are based on stale premises.",
+    "votes": [
+      {
+        "amendment_id": "fr-1-3cee9db3",
+        "decision": "accept",
+        "rationale": "Verified in plant_growth.rs:128-133 and 160-167. When hourly photosynthesis DIC is enabled, daily growth still caps on DIC availability (c_frac) but never withdraws c_used from the DIC pool - this is intentional to avoid double-accounting. However, the hourly chemistry path (chemistry.rs:559-571) uses a fixed rate×biomass model independent of daily nutrient-driven growth demand. If abundant nutrients cause faster daily growth than the fixed hourly rate can cover, biomass grows without fully paying its carbon cost. The code has good comments explaining the mutual exclusion, but no assertion or reconciliation verifying the two paths stay in balance. Adding a comment or assertion documenting that the hourly rate must be calibrated to match daily C demand is a reasonable, low-cost improvement to a real design assumption."
+      },
+      {
+        "amendment_id": "fr-1-f39ff2c8",
+        "decision": "reject",
+        "rationale": "Verified in photosynthesis_dic.rs:527-650. The test derives transition hours from the active photoperiod and starts at hour 0, so samples[96..] begins at hour 96 (day 5, hour 0). With any valid photoperiod, end_of_dark and end_of_light each appear exactly once per 24h cycle, yielding 3 matched samples in the remaining 72 hours. The assert_eq on vector lengths catches any count mismatch before zip runs. The concern about zip silently dropping elements is guarded by this length check. While a comment about the alignment invariant would be nice, this is not a correctness bug."
+      },
+      {
+        "amendment_id": "fr-1-0006127f",
+        "decision": "accept",
+        "rationale": "Confirmed by running the test: `cargo test -p tank_core --test chemistry nitrification_lowers_alkalinity_and_ph -- --exact` fails on current HEAD with pH 8.258 vs control 8.250. The TODO at lines 188-190 acknowledges the assertion is marginal and mentions retuning in B6. A persistently failing test in the suite is a real defect that should be tracked and fixed rather than left red."
+      },
+      {
+        "amendment_id": "fr-1-1a834dc2",
+        "decision": "reject",
+        "rationale": "Verified moderate_planted.toml exists with alkalinity_meq_per_l = 0.58 and includes provenance notes explaining the intentional low KH for visible pH swings. The medium_planted scenario correctly references source_water_id = 'moderate_planted'. The amendment raises hypothetical concerns about validation lower bounds and test breakage, but no concrete failure is demonstrated. The scenario materializes and passes existing tests. This is an intentional design choice, not a bug."
+      },
+      {
+        "amendment_id": "fr-1-4c9bbe8b",
+        "decision": "reject",
+        "rationale": "Based on stale premises. Verified in process.rs:304-317 that ProcessParams::default() sets respiration_dic_rate_mg_c_per_g_per_hour = 0.01875 and photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.075 (nonzero, stoichiometrically consistent with O2 rates). chemistry.rs:559-571 applies these rates hourly to photosynthetic/respiring biomass. The photosynthesis_dic.rs test suite validates day/night pH swings, lights-off controls, and stoichiometry. The claimed 'still zero' condition is factually incorrect on current HEAD."
+      },
+      {
+        "amendment_id": "fr-1-10e3fb3b",
+        "decision": "reject",
+        "rationale": "Verified that photosynthesis_dic.rs already contains the acceptance-criterion tests: test_day_night_ph_swing runs a heavily planted 48h day/night scenario asserting end-of-light pH > end-of-dark pH with >= 0.1 unit separation; test_planted_lights_off_has_no_diurnal_ph_swing is the lights-always-off control; test_planted_tank_day_night_cycle runs medium_planted for 168h asserting the same criteria. The nitrification_alkalinity.rs suite adds complementary carbonate-buffering coverage. The claimed missing coverage is already present in a different test file."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

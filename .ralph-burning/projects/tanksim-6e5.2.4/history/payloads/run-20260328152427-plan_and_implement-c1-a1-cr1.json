@@ -1,0 +1,86 @@
+{
+  "payload_id": "run-20260328152427-plan_and_implement-c1-a1-cr1",
+  "stage_id": "plan_and_implement",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T15:38:21.191495848Z",
+  "payload": {
+    "data": {
+      "change_summary": "Refactored plant nutrient limitation from legacy total-mass parameters to explicit concentration-based semantics. Renamed three half-saturation fields in ProcessParams (plant_half_saturation_n_mg_total → plant_half_saturation_n_mg_n_per_l, etc.) with default values converted from mg-total to mg/L (e.g., 8.0 → 0.4). Added two new substrate-specific half-saturation parameters (plant_half_saturation_n_substrate_mg_n_per_m2 = 80.0, plant_half_saturation_p_substrate_mg_p_per_m2 = 12.0) that were previously derived at runtime by dividing the same total by the reference footprint. Removed legacy_total_param_to_mg_per_l/m2 calls from plant_growth.rs — parameters are now used directly. Added explicit doc comments documenting water-column vs substrate nutrient source assumptions and noting Phase 3 (E4) root-zone redox hooks. Updated presets.rs, default.toml, tank_scenarios/lib.rs, and docs/UNITS.md. Added 8 tests: 2 tank-size-independence tests (water-column and rooted plants) and 6 unit tests covering half-saturation, Gaussian response, weighted limitation, combined N, default Ks equivalence, and min-nutrient behavior.",
+      "outstanding_risks": [
+        "Pre-existing compilation errors in 4 test files (plant_algae_integration, rooted_substrate_advantage, substrate_filter_integration, concentration_helpers) due to missing colonizable_area_factor field from a concurrent bead — not introduced by this change",
+        "Pre-existing habitat_registry test failure (substrate_deep_area_scales_with_depth_and_kind) unrelated to this change",
+        "Serialized save files that explicitly set the old plant_half_saturation_*_mg_total fields will silently receive new defaults instead of the old values — this is the intended behavior since the value semantics changed (total mg → mg/L)",
+        "The LegacyMgPerM2 provenance normalization variant is now unreachable but retained for the remaining nitrogen-cycle field renames (tanksim-6e5.2.3)"
+      ],
+      "steps": [
+        {
+          "description": "Renamed plant_half_saturation_{n,p,c}_mg_total fields to concentration-based names (plant_half_saturation_{n,p,c}_mg_{n,p,c}_per_l) in ProcessParams struct with updated doc comments and default values (8.0→0.4, 1.2→0.06, 20.0→1.0)",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Added plant_half_saturation_n_substrate_mg_n_per_m2 (80.0) and plant_half_saturation_p_substrate_mg_p_per_m2 (12.0) as separate substrate-specific half-saturation parameters in ProcessParams",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Updated plant_growth.rs to use concentration params directly — removed legacy_total_param_to_mg_per_l/m2 imports and calls, added doc comments documenting water-column vs substrate nutrient source assumptions and Phase 3 hooks",
+          "order": 3,
+          "status": "completed"
+        },
+        {
+          "description": "Updated ProcessParamsPreset in presets.rs with renamed fields, new substrate fields, updated defaults (0.4/0.06/1.0/80.0/12.0), and fixed provenance normalization (plant fields now return ProvenanceNormalization::None)",
+          "order": 4,
+          "status": "completed"
+        },
+        {
+          "description": "Updated default.toml with new field names and concentration-based values, updated header comment to describe concentration semantics",
+          "order": 5,
+          "status": "completed"
+        },
+        {
+          "description": "Updated tank_scenarios/src/lib.rs field mappings for preset-to-ProcessParams conversion",
+          "order": 6,
+          "status": "completed"
+        },
+        {
+          "description": "Updated docs/UNITS.md to mark plant field renames as done (tanksim-6e5.2.4), added new substrate fields to the table",
+          "order": 7,
+          "status": "completed"
+        },
+        {
+          "description": "Added tank-size-independence tests: plant_limitation_is_tank_size_independent (10L vs 100L, water-column only) and rooted_plant_limitation_is_tank_size_independent (with substrate) — both verify identical biomass at same concentrations",
+          "order": 8,
+          "status": "completed"
+        },
+        {
+          "description": "Added 6 unit tests for refactored limitation terms: half_saturation_function_known_values, gaussian_temperature_response_known_values, weighted_limitation_factor_known_values, nitrogen_limitation_uses_combined_dissolved_n, default_ks_values_match_legacy_equivalents, nutrient_limitation_takes_minimum",
+          "order": 9,
+          "status": "completed"
+        },
+        {
+          "description": "Ran cargo clippy -- -D warnings (clean), cargo fmt (applied), cargo test (all 8 new tests pass, all existing compilable tests pass)",
+          "order": 10,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "cargo clippy -- -D warnings passes with zero warnings on changed crates",
+        "cargo fmt --check passes after formatting",
+        "8/8 new tests pass in plant_nutrient_normalization.rs: plant_limitation_is_tank_size_independent, rooted_plant_limitation_is_tank_size_independent, half_saturation_function_known_values, gaussian_temperature_response_known_values, weighted_limitation_factor_known_values, nitrogen_limitation_uses_combined_dissolved_n, default_ks_values_match_legacy_equivalents, nutrient_limitation_takes_minimum",
+        "All existing compilable tests pass (save_load 27/27, determinism 24/24, budget_tracking 21/21, tank_size_thermal_response 3/3, cycling 14/14, end_to_end 17/17, events 5/5, chemistry 7/7, dissolved_oxygen 8/8, budget_helpers 1/1, water_change_mass_balance 10/10, tank_data 28/28)",
+        "Tank-size-independence test confirms 10L and 100L tanks with identical nutrient concentrations produce identical plant biomass within 1e-9 tolerance",
+        "Default Ks values verified: N=0.4 mg/L (was 8.0/20), P=0.06 mg/L (was 1.2/20), C=1.0 mg/L (was 20.0/20), substrate N=80.0 mg/m² (was 8.0/0.1), substrate P=12.0 mg/m² (was 1.2/0.1)"
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

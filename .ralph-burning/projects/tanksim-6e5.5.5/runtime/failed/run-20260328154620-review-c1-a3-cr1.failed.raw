@@ -1,0 +1,272 @@
+=== stdout ===
+=== stderr ===
+OpenAI Codex v0.117.0 (research preview)
+--------
+workdir: /home/master/p/tank-simulation
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019d3548-f62c-7e40-9f2d-d19dc6eb0831
+--------
+user
+Contract: review
+Role: Reviewer
+
+# Stage Execution Prompt
+
+You are the Reviewer. Your objective for this Review stage is to review the completed work for correctness, regressions, and completeness.
+
+## Original Project Prompt
+
+○ tanksim-6e5.5.5 · Add depth/turbidity light attenuation and habitat-specific light exposure   [● P1 · OPEN]
+Owner: master · Type: task
+Created: 2026-03-26 · Updated: 2026-03-27
+Labels: algae, geometry, light, phase-3, plants, scientific-core
+
+Context:
+- Tank geometry already includes depth (fill_height_cm in geometry.rs), but the light model does not yet turn depth and turbidity into different average exposure conditions.
+- Depth-sensitive light is a key mechanism for distinguishing shallow and deep planted tanks under the same nominal lamp setting.
+
+Deliverable:
+- Extend light handling so depth and turbidity influence light available to plants/algae/habitats.
+- Integrate the result with the habitat model where useful.
+- Keep the first pass simple enough that users and developers can reason about it.
+
+Likely model:
+  I(z) = I_0 × exp(-k × z)  (Beer-Lambert law)
+  where k = extinction coefficient (depends on turbidity, dissolved color, algae density)
+  z = depth below surface
+
+Likely touch points:
+- crates/tank_core/src/systems/light.rs
+- crates/tank_core/src/systems/plant_growth.rs
+- crates/tank_core/src/systems/algae_growth.rs
+- crates/tank_core/src/types/geometry.rs
+
+## Acceptance Criteria
+
+Acceptance Criteria:
+- deeper or more turbid tanks receive meaningfully different effective light
+- plant/algae systems can consume that difference without ad hoc hacks
+- unit test: Beer-Lambert computation correctness — I(z) = I_0 × exp(-k×z) for k=0.2, z=20cm → expected attenuation factor ≈ 0.018 (within 0.001)
+- unit test: average light across water column matches analytical formula I_avg = I_0 × (1 - exp(-k×H)) / (k×H)
+- integration test: shallow tank (20cm) vs deep tank (50cm) with same lamp → shallow tank shows measurably higher plant growth rate over 200 hours
+
+Dependencies:
+  -> tanksim-6e5.5.1 (blocks) - Introduce habitat registry and colonizable-area model
+  -> tanksim-6e5.2.5 (blocks) - Normalize algae kinetics around concentration, light, and temperature interactions
+  -> tanksim-6e5.2.4 (blocks) - Normalize plant nutrient uptake and growth limitation semantics
+  -> tanksim-6e5.5 (parent-child) - Phase 3 — habitatized ecology, substrate redox, and geometry-aware scaling
+
+Dependents:
+  <- tanksim-6e5.5.7 (blocks) - Add habitat/geometry scenario tests and probes
+
+Comments:
+  [2026-03-26 13:46 UTC] backlog-planner: Rationale:
+- This bead turns geometry into a scientifically relevant control on growth instead of only a thermal or volumetric one.
+- Avoid overcomplication: one clear attenuation story (Beer-Lambert) is better than several overlapping fudge factors.
+- Make sure the result remains explainable in the TUI later.
+
+Scientific notes:
+- Typical extinction coefficient for clear freshwater: k ≈ 0.1-0.3 per cm. For turbid or tannin-stained water: k ≈ 0.5-2.0 per cm.
+- In a 20cm deep nano tank with k=0.2: light at bottom = I_0 × exp(-0.2×20) ≈ I_0 × 0.018 (1.8% of surface light). This is significant.
+- In a 50cm deep tank: light at bottom ≈ I_0 × 0.00005 — essentially dark. This is why tall tanks need strong lighting.
+- Average light across the water column (more relevant for planktonic algae): I_avg = I_0 × (1 - exp(-k×H)) / (k×H).
+  [2026-03-26 17:06 UTC] reviewer: Unit test requirements:
+
+1. test_light_attenuation_increases_with_depth: At depth 30cm vs 60cm, light reaching substrate surface is measurably lower (Beer-Lambert style attenuation).
+2. test_light_attenuation_increases_with_turbidity: Same depth, higher turbidity (from suspended algae or DOC) → less light reaches substrate.
+3. test_zero_turbidity_depth_only_attenuation: Clear water attenuates light by depth alone. Verify against known freshwater Kd values (pure water Kd ≈ 0.04/m at PAR wavelengths).
+4. test_habitat_light_exposure_varies: FilterMedia habitat → light_exposure ≈ 0 (inside canister). SubstrateSurface → attenuated by depth. GlassHardscape at water surface → higher than substrate.
+5. test_algae_growth_responds_to_depth: Deeper tank → less light → lower algae growth rate. Run same nutrients in 20cm vs 50cm tank, assert algae biomass difference after 100 hours.
+6. test_plant_growth_responds_to_light_attenuation: High turbidity from algae bloom → reduced plant growth (light competition feedback).
+
+Integration test:
+7. test_depth_light_competition_scenario: 50cm deep tank with substrate plants + suspended algae. Algae bloom shades substrate → plant health declines → plant nutrient uptake drops → more nutrients for algae (positive feedback). Assert this feedback loop is directionally present.
+
+## Prior Stage Outputs This Cycle
+
+### Plan and Implement (`plan_and_implement`)
+- Payload ID: `run-20260328154620-plan_and_implement-c1-a2-cr1`
+- Attempt: `2`
+
+```json
+{
+  "data": {
+    "change_summary": "Beer-Lambert depth/turbidity light attenuation is fully implemented and integrated with habitat, plant, and algae systems. The core implementation (light.rs Beer-Lambert functions, extinction_coefficient() on TankState combining base water + algae + DOC + detritus, integration in plant_growth.rs and algae_growth.rs via column_average_attenuation_factor, and habitat registry light exposure via both beer_lambert_at_depth and column_average_attenuation_factor) was already complete from prior beads. This execution added: (1) the missing nitrifier_base_density_g_per_cm2 field to ProcessParams to fix a pre-existing compilation error blocking test runs, (2) the corresponding field in tank_scenarios, and (3) four new reviewer-required tests: pure water Kd validation against known freshwater values, habitat zone light exposure variation (FilterMedia≈0, SubstrateDeep=0, GlassHardscape > SubstrateSurface), turbidity-from-algae reducing plant growth, and a 200-hour depth-light competition scenario demonstrating positive feedback (algae shading → plant stress → lower plant nutrient uptake → more nutrients for algae).",
+    "outstanding_risks": [
+      "Pre-existing test failure shrimp_death_plus_feed_conserves_nitrogen: nitrogen budget tracking issue in feed action (unrelated to light attenuation, existed before this bead but was masked by compilation error)",
+      "Pre-existing test failure save_load_with_active_cycle_state: intermittent determinism issue from changed biofilter carrying capacity (dynamic vs former hardcoded 0.5g), also unrelated to this bead",
+      "The nitrifier_base_density_g_per_cm2 addition to ProcessParams was required to make nitrogen_cycle.rs compile — this was pre-existing broken code, not a new feature from this bead, but it changes biofilter dynamics from hardcoded 0.5g capacity to habitat-derived ~0.285g capacity"
+    ],
+    "steps": [
+      {
+        "description": "Verified core Beer-Lambert implementation already complete: beer_lambert_at_depth(k,z), column_average_attenuation_factor(k,h) in light.rs, extinction_coefficient() composing base+algae+DOC+detritus in state.rs, integration in plant_growth.rs and algae_growth.rs via column-average attenuation, and habitat registry using both point-depth and column-average Beer-Lambert factors.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Added nitrifier_base_density_g_per_cm2 field to ProcessParams (process.rs) with serde default function and Default impl value of 2.5e-4 g/cm², fixing pre-existing compilation error where nitrogen_cycle.rs referenced this field but it didn't exist on the struct.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Added nitrifier_base_density_g_per_cm2 to tank_scenarios process_preset_to_params() initializer, using the defaults value to maintain backward compatibility.",
+        "order": 3,
+        "status": "completed"
+      },
+      {
+        "description": "Added test zero_turbidity_depth_only_attenuation: validates that clear water extinction coefficient matches known freshwater Kd ≈ 0.04/m (0.0004/cm), verifies Beer-Lambert transmittance at 40cm pure water is >98%, and column average is >99%.",
+        "order": 4,
+        "status": "completed"
+      },
+      {
+        "description": "Added test habitat_light_exposure_varies_across_zones: verifies FilterMedia light <0.1, SubstrateDeep light ≈0, GlassHardscape light > SubstrateSurface in a 30cm tank with k=0.02, and all exposures bounded [0,1].",
+        "order": 5,
+        "status": "completed"
+      },
+      {
+        "description": "Added test plant_growth_responds_to_light_attenuation_from_algae: demonstrates that 5g suspended algae biomass increases extinction coefficient and reduces plant growth compared to clear water — confirming the algae-plant light competition pathway.",
+        "order": 6,
+        "status": "completed"
+      },
+      {
+        "description": "Added test depth_light_competition_scenario: 50cm deep tank with plants+algae run for 200 hours. Asserts positive feedback loop: algae shading reduces plant health and biomass compared to plant-only control, and algae maintains biomass >0.1g.",
+        "order": 7,
+        "status": "completed"
+      },
+      {
+        "description": "Verified all 14 depth_light_attenuation tests pass, all 9 light.rs unit tests pass, all habitat_registry tests pass, clippy clean on tank_core, fmt clean on modified files.",
+        "order": 8,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "cargo test -p tank_core --test depth_light_attenuation: 14 passed, 0 failed (10 existing + 4 new reviewer tests)",
+      "cargo test -p tank_core --lib -- light: 9 passed, 0 failed (Beer-Lambert unit tests including AC k=0.2 z=20cm → 0.018 within 0.001)",
+      "cargo test -p tank_core --test habitat_registry: all passed (habitat light exposure integration)",
+      "cargo clippy -p tank_core -- -D warnings: clean, no warnings",
+      "New test zero_turbidity_depth_only_attenuation: confirms default base_extinction_coeff_per_cm=0.0004 matches pure water Kd≈0.04/m, 40cm transmittance >98%, column avg >99%",
+      "New test habitat_light_exposure_varies_across_zones: FilterMedia=0.045 (<0.1), SubstrateDeep=0.0, GlassHardscape > SubstrateSurface in 30cm tank with k=0.02",
+      "New test plant_growth_responds_to_light_attenuation_from_algae: clear water plant biomass exceeds algae-bloomed water plant biomass after 1 daily step",
+      "New test depth_light_competition_scenario: 200h integration confirms plant health and biomass lower with algae competition, algae biomass maintained — positive feedback loop directionally present",
+      "Pre-existing failures (1-2 tests in feeding_detritus_audit, save_load) are unrelated to light attenuation — caused by newly-compilable compute_biofilter_carrying_capacity code that was previously blocked by missing ProcessParams field"
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+## Authoritative JSON Schema
+
+The JSON schema below is authoritative. Return only JSON that conforms exactly to it.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ReviewOutcome": {
+      "enum": [
+        "approved",
+        "conditionally_approved",
+        "request_changes",
+        "rejected"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload for validation/review stages.\n\nRequires an explicit outcome/decision enum plus evidence, findings or gaps, and follow-up or amendment data when the outcome is not cleanly approved.",
+  "properties": {
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "findings_or_gaps": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "follow_up_or_amendments": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "outcome": {
+      "$ref": "#/definitions/ReviewOutcome"
+    }
+  },
+  "required": [
+    "evidence",
+    "findings_or_gaps",
+    "follow_up_or_amendments",
+    "outcome"
+  ],
+  "title": "ValidationPayload",
+  "type": "object"
+}
+```
+
+--- Context JSON ---
+{
+  "attempt": 3,
+  "completion_round": 1,
+  "cycle": 1
+}
+
+Return ONLY valid JSON matching the following schema:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ReviewOutcome": {
+      "enum": [
+        "approved",
+        "conditionally_approved",
+        "request_changes",
+        "rejected"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload for validation/review stages.\n\nRequires an explicit outcome/decision enum plus evidence, findings or gaps, and follow-up or amendment data when the outcome is not cleanly approved.",
+  "properties": {
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "findings_or_gaps": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "follow_up_or_amendments": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "outcome": {
+      "$ref": "#/definitions/ReviewOutcome"
+    }
+  },
+  "required": [
+    "evidence",
+    "findings_or_gaps",
+    "follow_up_or_amendments",
+    "outcome"
+  ],
+  "title": "ValidationPayload",
+  "type": "object"
+}
+
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:00 PM.
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:00 PM.

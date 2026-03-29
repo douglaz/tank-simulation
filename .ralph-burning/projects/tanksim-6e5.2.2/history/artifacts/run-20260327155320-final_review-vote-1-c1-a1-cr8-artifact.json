@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327155320-final_review-vote-1-c1-a1-cr8-artifact",
+  "payload_id": "run-20260327155320-final_review-vote-1-c1-a1-cr8-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-27T19:56:32.219793610Z",
+  "content": "# Final Review Votes\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccepted three amendments that address real ambiguity or hidden modeling assumptions: Monod helper units, substrate-displacement semantics, and conflicting `water_volume_l` meanings. Rejected the legacy-reference-constant amendment because the 20 L reference is already intentionally different from `TankGeometry::default()`, so asserting or documenting equality to the default geometry would be incorrect coupling.\n\n## Votes\n\n- `fr-8-cd41c2dd`: Accept\n  `monod_rate` documents the formula but not the required units, and `monod_factor` is undocumented. After the concentration migration, callers must pass concentration-valued substrate and half-saturation inputs in matching units, currently mg/L. A short doc comment is a low-cost way to prevent a plausible future bug where totals are passed into a dimensionless Monod term.\n- `fr-8-b5b1b923`: Accept\n  `substrate_displacement_l` currently subtracts the entire geometric substrate column from water volume, which encodes an unstated zero-porosity assumption. That value feeds the canonical net-water volume and therefore concentration calculations, so the assumption materially affects model behavior rather than being a harmless implementation detail. A full porosity model may require broader calibration and save-format work, but at minimum the assumption should be documented; adding porosity data is a technically sound follow-up.\n- `fr-8-bdd60b5c`: Reject\n  The proposed fix is based on a false premise. `LEGACY_KINETIC_REFERENCE_VOLUME_L` is already 20.0 while `TankGeometry::default()` yields 22.0 L gross volume, and the surrounding field docs explicitly describe a fixed 20 L reference tank for legacy parameter normalization. These are calibration/reference constants, not values meant to stay equal to the default geometry, so a compile-time assertion or comment tying them together would misdocument the system.\n- `fr-8-91607365`: Accept\n  `TankGeometry::water_volume_l()` returns gross filled-prism volume, while `TankState::water_volume_l()` returns net post-substrate water volume. Reusing the same public name for adjacent but semantically incompatible quantities is an API footgun, especially now that concentration and normalization logic are defined in terms of net water volume. Renaming the geometry-side gross helper, and the ratio helpers built on it, would make future misuse less likely.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 8
+}
