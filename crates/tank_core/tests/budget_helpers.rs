@@ -394,6 +394,7 @@ fn o2_balance_check_rejects_snapshot_only_bidirectional_stage_accounting() {
                         ..BudgetDelta::default()
                     },
                     recording_kind: BudgetRecordingKind::Snapshot,
+                    metrics: Vec::new(),
                 }],
             }],
         },

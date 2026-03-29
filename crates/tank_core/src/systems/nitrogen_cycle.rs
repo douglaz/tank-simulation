@@ -10,17 +10,41 @@ const SMALL_NEGATIVE_ROUNDING_TOLERANCE_MG: f64 = 1e-9;
 /// that downstream systems (DO, chemistry) need.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NitrogenCycleOutput {
-    /// Total mg N oxidized to nitrate this tick (AOB + NOB + comammox pathway).
-    pub total_mg_n_nitrified: f64,
+    /// Total mg N that reached nitrate this tick (NOB + comammox pathway).
+    ///
+    /// This excludes AOB TAN -> NO₂ oxidation that remains buffered in the
+    /// nitrite pool at tick end. Use `tan_oxidized_mg` for the nitrogen basis
+    /// that drives alkalinity consumption.
+    pub nitrate_produced_mg_n: f64,
+    /// Total mg N oxidized from TAN this tick (AOB + comammox pathway).
+    ///
+    /// This is the stoichiometric nitrogen basis for nitrification alkalinity
+    /// depletion and stays correct even when nitrite accumulates transiently.
+    pub tan_oxidized_mg: f64,
     /// Total alkalinity consumed this tick by nitrification (meq).
     ///
     /// Only AOB and comammox consume alkalinity (TAN oxidation step).
     /// NOB (NO₂⁻ → NO₃⁻) does not consume additional alkalinity.
-    pub total_alk_consumed_meq: f64,
+    pub alkalinity_consumed_meq: f64,
+    /// Total alkalinity produced this tick (meq).
+    ///
+    /// Reserved for the future denitrification return path. Kept as a first-
+    /// class output now so denitrification can add alkalinity without another
+    /// tracing/budget schema change.
+    pub alkalinity_produced_meq: f64,
     /// mg N oxidized by AOB (TAN → NO₂⁻) this tick.
     pub aob_n_oxidized_mg: f64,
+    /// mg N oxidized by NOB (NO₂⁻ → NO₃⁻) this tick.
+    pub nob_n_oxidized_mg: f64,
     /// mg N oxidized by comammox (TAN → NO₃⁻) this tick.
     pub comammox_n_oxidized_mg: f64,
+}
+
+impl NitrogenCycleOutput {
+    /// Net alkalinity change applied to the water pool this tick.
+    pub fn net_alkalinity_delta_meq(&self) -> f64 {
+        self.alkalinity_produced_meq - self.alkalinity_consumed_meq
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -372,10 +396,11 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     state.water.dissolved_oxygen_mg_total =
         (state.water.dissolved_oxygen_mg_total - nob_o2_cost).max(0.0);
 
-    // Total N fully nitrified to nitrate (for alkalinity coupling)
-    // AOB only takes TAN -> nitrite, NOB takes nitrite -> nitrate, comammox takes TAN -> nitrate
-    // Full pathway N: NOB (came from the AOB path) + comammox.
-    let total_mg_n_nitrified = nob_step.oxidized_n_mg + comammox_step.oxidized_n_mg;
+    // Keep both nitrate production and TAN oxidation explicit. Nitrate
+    // production can lag TAN oxidation when nitrite accumulates, but the
+    // alkalinity charge belongs to the TAN-oxidation leg overall.
+    let nitrate_produced_mg_n = nob_step.oxidized_n_mg + comammox_step.oxidized_n_mg;
+    let tan_oxidized_mg = aob_step.oxidized_n_mg + comammox_step.oxidized_n_mg;
 
     let aob_decay =
         safe_rate(pp.aob_decay_rate_per_hour) * state.microbe.ammonia_oxidizer_biomass_g;
@@ -398,9 +423,11 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     // ---- 6. Alkalinity consumption from nitrification ----
     // Only AOB and comammox consume alkalinity (TAN oxidation step).
     // NOB (nitrite -> nitrate) does not consume additional alkalinity.
-    let total_alk_consumed = aob_alk_cost + comammox_alk_cost;
-    state.water.alkalinity_meq_total =
-        (state.water.alkalinity_meq_total - total_alk_consumed).max(0.0);
+    let alkalinity_consumed_meq = aob_alk_cost + comammox_alk_cost;
+    let alkalinity_produced_meq = 0.0;
+    state.water.alkalinity_meq_total = (state.water.alkalinity_meq_total + alkalinity_produced_meq
+        - alkalinity_consumed_meq)
+        .max(0.0);
     // The subsequent chemistry step is responsible for re-running the carbonate
     // solver after this alkalinity mutation. Until then, `water.ph` and
     // `bicarbonate_mg_total` remain stale cached projections, so any new system
@@ -410,9 +437,12 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     // chemistry model still omits a more detailed inorganic-carbon coupling.
 
     NitrogenCycleOutput {
-        total_mg_n_nitrified,
-        total_alk_consumed_meq: total_alk_consumed,
+        nitrate_produced_mg_n,
+        tan_oxidized_mg,
+        alkalinity_consumed_meq,
+        alkalinity_produced_meq,
         aob_n_oxidized_mg: aob_step.oxidized_n_mg,
+        nob_n_oxidized_mg: nob_step.oxidized_n_mg,
         comammox_n_oxidized_mg: comammox_step.oxidized_n_mg,
     }
 }

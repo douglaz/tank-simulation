@@ -7,8 +7,8 @@ use crate::{
     tracing::{PoolSnapshot, SimTracer, SystemTraceEntry, TickTraceBuilder, Verbosity},
     types::{
         live_biomass_carbon_mg, live_biomass_nitrogen_mg, BudgetDelta, BudgetEntry, BudgetLedger,
-        BudgetRecordingKind, BudgetSnapshot, ElementBudget, EventCause, EventKind, EventSeverity,
-        PlayerAction, SimError, SimEvent, TankSnapshot, TankState, TickBudgetRecord,
+        BudgetMetric, BudgetRecordingKind, BudgetSnapshot, ElementBudget, EventCause, EventKind,
+        EventSeverity, PlayerAction, SimError, SimEvent, TankSnapshot, TankState, TickBudgetRecord,
     },
 };
 
@@ -72,6 +72,7 @@ struct TickContext {
 struct StageTrace {
     enabled: bool,
     notes: Vec<String>,
+    budget_metrics: Vec<BudgetMetric>,
 }
 
 impl StageTrace {
@@ -79,6 +80,7 @@ impl StageTrace {
         Self {
             enabled,
             notes: Vec::new(),
+            budget_metrics: Vec::new(),
         }
     }
 
@@ -92,12 +94,16 @@ impl StageTrace {
         }
     }
 
-    fn into_notes(self) -> Vec<String> {
-        if self.enabled {
-            self.notes
-        } else {
-            Vec::new()
-        }
+    fn metric(&mut self, label: impl Into<String>, value: f64) {
+        self.budget_metrics.push(BudgetMetric {
+            label: label.into(),
+            value,
+        });
+    }
+
+    fn into_parts(self) -> (Vec<String>, Vec<BudgetMetric>) {
+        let notes = if self.enabled { self.notes } else { Vec::new() };
+        (notes, self.budget_metrics)
     }
 }
 
@@ -227,19 +233,58 @@ impl Engine {
         // Nitrification O2 consumption and alkalinity depletion are handled
         // internally by the nitrogen cycle system.
         self.maybe_record_stage(&mut ctx, "system:nitrogen_cycle", |engine, stage_trace| {
+            let alkalinity_before = engine.state.water.alkalinity_meq_total;
             let output = systems::nitrogen_cycle::step_nitrogen_cycle(&mut engine.state);
+            let alkalinity_after = engine.state.water.alkalinity_meq_total;
+            stage_trace.metric(
+                "water.alkalinity_meq.delta",
+                alkalinity_after - alkalinity_before,
+            );
+            stage_trace.metric("nitrogen_cycle.tan_oxidized_mg", output.tan_oxidized_mg);
+            stage_trace.metric(
+                "nitrogen_cycle.nitrate_produced_mg_n",
+                output.nitrate_produced_mg_n,
+            );
+            stage_trace.metric(
+                "nitrogen_cycle.alkalinity_consumed_meq",
+                output.alkalinity_consumed_meq,
+            );
+            stage_trace.metric(
+                "nitrogen_cycle.alkalinity_produced_meq",
+                output.alkalinity_produced_meq,
+            );
             if stage_trace.is_enabled() {
                 stage_trace.note(format!(
-                    "nitrogen_cycle.total_n_nitrified_mg={:.6}",
-                    output.total_mg_n_nitrified
+                    "nitrogen_cycle.tan_oxidized_mg={:.6}",
+                    output.tan_oxidized_mg
                 ));
                 stage_trace.note(format!(
-                    "nitrogen_cycle.alk_consumed_meq={:.6}",
-                    output.total_alk_consumed_meq
+                    "nitrogen_cycle.nitrate_produced_mg_n={:.6}",
+                    output.nitrate_produced_mg_n
                 ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.alkalinity_consumed_meq={:.6}",
+                    output.alkalinity_consumed_meq
+                ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.alkalinity_produced_meq={:.6}",
+                    output.alkalinity_produced_meq
+                ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.alkalinity_net_delta_meq={:.6}",
+                    output.net_alkalinity_delta_meq()
+                ));
+                stage_trace.note(format!(
+                    "water.alkalinity_meq.before={alkalinity_before:.6}"
+                ));
+                stage_trace.note(format!("water.alkalinity_meq.after={alkalinity_after:.6}"));
                 stage_trace.note(format!(
                     "nitrogen_cycle.aob_n_oxidized_mg={:.6}",
                     output.aob_n_oxidized_mg
+                ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.nob_n_oxidized_mg={:.6}",
+                    output.nob_n_oxidized_mg
                 ));
                 stage_trace.note(format!(
                     "nitrogen_cycle.comammox_n_oxidized_mg={:.6}",
@@ -484,6 +529,7 @@ impl Engine {
         ));
 
         let result = stage(self, &mut stage_trace);
+        let (notes, budget_metrics) = stage_trace.into_parts();
 
         if let (Some(tick), Some(before)) = (ctx.budget.as_mut(), budget_before) {
             let after = BudgetSnapshot::from_state(&self.state);
@@ -494,10 +540,10 @@ impl Engine {
                 after.totals,
                 delta,
                 BudgetRecordingKind::Snapshot,
+                budget_metrics,
             );
         }
 
-        let notes = stage_trace.into_notes();
         if let Some(trace) = ctx.trace.as_mut() {
             let pool_deltas = if let Some(before) = trace_before {
                 let after = PoolSnapshot::capture(&self.state);
@@ -544,6 +590,7 @@ impl Engine {
         ));
 
         let (result, explicit_delta) = stage(self, &mut stage_trace, ctx.budget.is_some());
+        let (notes, budget_metrics) = stage_trace.into_parts();
 
         if let (Some(tick), Some(before)) = (ctx.budget.as_mut(), budget_before) {
             let after = BudgetSnapshot::from_state(&self.state);
@@ -554,10 +601,16 @@ impl Engine {
             };
             let delta =
                 explicit_delta.unwrap_or_else(|| BudgetDelta::from_snapshots(&before, &after));
-            tick.record_stage(label, before.totals, after.totals, delta, recording_kind);
+            tick.record_stage(
+                label,
+                before.totals,
+                after.totals,
+                delta,
+                recording_kind,
+                budget_metrics,
+            );
         }
 
-        let notes = stage_trace.into_notes();
         if let Some(trace) = ctx.trace.as_mut() {
             let pool_deltas = if let Some(before) = trace_before {
                 let after = PoolSnapshot::capture(&self.state);
@@ -969,6 +1022,7 @@ mod tests {
             label: label.to_owned(),
             delta,
             recording_kind: BudgetRecordingKind::Snapshot,
+            metrics: Vec::new(),
         }
     }
 

@@ -134,12 +134,31 @@ impl BudgetSnapshot {
     }
 }
 
+/// Optional per-stage scalar diagnostics that complement element budgets.
+///
+/// These are for tracked quantities that matter for attribution and debugging
+/// but are not part of the conserved N/C/O element ledger, such as alkalinity
+/// deltas or future denitrification return bookkeeping.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BudgetMetric {
+    pub label: String,
+    pub value: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BudgetEntry {
     pub label: String,
     pub delta: BudgetDelta,
     #[serde(default)]
     pub recording_kind: BudgetRecordingKind,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub metrics: Vec<BudgetMetric>,
+}
+
+impl BudgetEntry {
+    pub fn metric(&self, label: &str) -> Option<&BudgetMetric> {
+        self.metrics.iter().find(|metric| metric.label == label)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -174,6 +193,7 @@ impl TickBudgetRecord {
         after: BudgetTotals,
         delta: BudgetDelta,
         recording_kind: BudgetRecordingKind,
+        metrics: Vec<BudgetMetric>,
     ) {
         debug_assert!(delta_net_matches_totals(delta, before, after));
         self.after = after;
@@ -182,6 +202,7 @@ impl TickBudgetRecord {
             label: label.to_owned(),
             delta,
             recording_kind,
+            metrics,
         });
     }
 }

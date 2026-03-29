@@ -350,6 +350,7 @@ fn cycling_without_water_changes_shows_ph_decline() -> Result<(), tank_core::Sim
 fn tracing_shows_alkalinity_attribution() -> Result<(), tank_core::SimError> {
     let state = nitrifying_state(SimSeed(7_300), 3.0);
     let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_budget_tracking();
     engine.enable_tracing(SimTracer::new(Verbosity::Trace));
 
     engine.step_hours(1)?;
@@ -378,28 +379,72 @@ fn tracing_shows_alkalinity_attribution() -> Result<(), tank_core::SimError> {
         alk_delta.delta
     );
 
-    // At Trace verbosity, notes should include alkalinity consumption info
-    let has_alk_note = nc_entry
+    // At Trace verbosity, notes should include separate alkalinity attribution
+    let has_consumed_note = nc_entry
         .notes
         .iter()
-        .any(|n| n.contains("alk_consumed_meq"));
+        .any(|n| n.contains("alkalinity_consumed_meq"));
     assert!(
-        has_alk_note,
-        "nitrogen_cycle trace notes should include alk_consumed_meq attribution. \
+        has_consumed_note,
+        "nitrogen_cycle trace notes should include alkalinity_consumed_meq attribution. \
          Notes: {:?}",
         nc_entry.notes
     );
 
-    // Notes should also include N nitrified for cross-reference
-    let has_n_note = nc_entry
+    let has_produced_note = nc_entry
         .notes
         .iter()
-        .any(|n| n.contains("total_n_nitrified_mg"));
+        .any(|n| n.contains("alkalinity_produced_meq"));
     assert!(
-        has_n_note,
-        "nitrogen_cycle trace notes should include total_n_nitrified_mg. \
+        has_produced_note,
+        "nitrogen_cycle trace notes should include alkalinity_produced_meq attribution. \
          Notes: {:?}",
         nc_entry.notes
+    );
+
+    // Notes should use the TAN-oxidation basis that actually drives alkalinity.
+    let has_tan_basis_note = nc_entry.notes.iter().any(|n| n.contains("tan_oxidized_mg"));
+    assert!(
+        has_tan_basis_note,
+        "nitrogen_cycle trace notes should include tan_oxidized_mg. Notes: {:?}",
+        nc_entry.notes
+    );
+
+    let ledger = engine.budget_ledger().expect("budget tracking enabled");
+    let budget_entry = ledger
+        .ticks
+        .first()
+        .and_then(|tick| {
+            tick.entries
+                .iter()
+                .find(|entry| entry.label == "system:nitrogen_cycle")
+        })
+        .expect("should record a nitrogen_cycle budget entry");
+    let alk_budget_metric = budget_entry
+        .metric("water.alkalinity_meq.delta")
+        .expect("nitrogen_cycle budget entry should include alkalinity delta");
+    assert!(
+        alk_budget_metric.value < 0.0,
+        "budget alkalinity delta should be negative (consumed): {:.6}",
+        alk_budget_metric.value
+    );
+    assert!(
+        budget_entry
+            .metric("nitrogen_cycle.alkalinity_consumed_meq")
+            .is_some(),
+        "nitrogen_cycle budget entry should expose alkalinity_consumed_meq"
+    );
+    assert!(
+        budget_entry
+            .metric("nitrogen_cycle.alkalinity_produced_meq")
+            .is_some(),
+        "nitrogen_cycle budget entry should expose alkalinity_produced_meq"
+    );
+    assert!(
+        budget_entry
+            .metric("nitrogen_cycle.tan_oxidized_mg")
+            .is_some(),
+        "nitrogen_cycle budget entry should expose tan_oxidized_mg"
     );
 
     Ok(())
@@ -448,19 +493,36 @@ fn nob_does_not_double_charge_alkalinity() -> Result<(), tank_core::SimError> {
 
     // Output should show zero alkalinity consumption
     assert!(
-        output.total_alk_consumed_meq.abs() < 1e-9,
-        "NitrogenCycleOutput.total_alk_consumed_meq should be zero for NOB-only: {:.9}",
-        output.total_alk_consumed_meq
+        output.alkalinity_consumed_meq.abs() < 1e-9,
+        "NitrogenCycleOutput.alkalinity_consumed_meq should be zero for NOB-only: {:.9}",
+        output.alkalinity_consumed_meq
+    );
+    assert!(
+        output.alkalinity_produced_meq.abs() < 1e-9,
+        "NitrogenCycleOutput.alkalinity_produced_meq should be zero for NOB-only: {:.9}",
+        output.alkalinity_produced_meq
     );
 
-    // AOB and comammox oxidized N should be zero
+    // AOB/comammox TAN oxidation should be zero; only NOB should run.
+    assert!(
+        output.tan_oxidized_mg.abs() < 1e-9,
+        "No TAN oxidation expected during NOB-only step"
+    );
     assert!(
         output.aob_n_oxidized_mg.abs() < 1e-9,
         "No AOB activity expected"
     );
     assert!(
+        output.nob_n_oxidized_mg > 0.0,
+        "NOB activity expected during nitrite-only step"
+    );
+    assert!(
         output.comammox_n_oxidized_mg.abs() < 1e-9,
         "No comammox activity expected"
+    );
+    assert!(
+        output.nitrate_produced_mg_n > 0.0,
+        "Nitrate production should reflect the NOB step"
     );
 
     Ok(())
