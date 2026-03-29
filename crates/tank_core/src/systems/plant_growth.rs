@@ -1,4 +1,6 @@
-use crate::systems::chemistry::resolve_carbonate_state;
+use crate::systems::chemistry::{
+    daily_hourly_photosynthesis_dic_credit_mg, resolve_carbonate_state,
+};
 use crate::types::{
     plant_carbon_mg, plant_nitrogen_mg, PlantGuild, TankState, PLANT_N_MG_PER_G_BIOMASS,
 };
@@ -105,6 +107,7 @@ pub fn step_daily_plants(state: &mut TankState) {
             * state.process_params.plant_senescence_fraction_per_day
             * (1.0 + 0.5 * (1.0 - health_index));
         let realized_growth_g = gross_growth_g.max(0.0);
+        let hourly_dic_credit_mg = daily_hourly_photosynthesis_dic_credit_mg(state, biomass_g);
 
         let n_demand = realized_growth_g * PLANT_N_MG_PER_G_BIOMASS;
         let p_demand = realized_growth_g * PLANT_P_MG_PER_G_GROWTH;
@@ -126,7 +129,11 @@ pub fn step_daily_plants(state: &mut TankState) {
                 1.0
             };
             let c_frac = if c_demand > f64::EPSILON {
-                state.water.dissolved_inorganic_carbon_mg_c_total / c_demand
+                if hourly_photosynthesis_dic_enabled {
+                    hourly_dic_credit_mg / c_demand
+                } else {
+                    state.water.dissolved_inorganic_carbon_mg_c_total / c_demand
+                }
             } else {
                 1.0
             };
@@ -161,7 +168,8 @@ pub fn step_daily_plants(state: &mut TankState) {
             // Closed-system tests zero the hourly shortcut and still need daily
             // biomass growth to withdraw carbon explicitly. When the hourly
             // chemistry path is enabled, it already owns the visible DIC/pH
-            // response and a second midnight withdrawal creates false spikes.
+            // response, while `hourly_dic_credit_mg` above keeps the same
+            // shortcut responsible for the carbon that daily growth can spend.
             state.water.dissolved_inorganic_carbon_mg_c_total =
                 (state.water.dissolved_inorganic_carbon_mg_c_total - c_used).max(0.0);
         }

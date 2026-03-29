@@ -16,6 +16,12 @@ fn growth_state(seed: SimSeed, fill_height_cm: f64) -> TankState {
     state.hardware.light.photoperiod_hours = 10.0;
     state.microfauna.population_index = 0.0;
     state.microfauna.grazing_pressure_index = 0.0;
+    state
+        .process_params
+        .respiration_dic_rate_mg_c_per_g_per_hour = 0.0;
+    state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
     // Set nutrient concentrations (per-litre values scaled to total).
     let volume_l = state.water_volume_l();
     state.water.ammonia_total_mg_n_total = 0.5 * volume_l;

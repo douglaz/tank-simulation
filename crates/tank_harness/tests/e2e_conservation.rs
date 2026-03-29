@@ -11,14 +11,17 @@
 //! Run: `cargo test -p tank_harness --test e2e_conservation -- --nocapture`
 //! Set `TANK_BUDGET_DEBUG=1` for per-tick budget summaries on stderr.
 
+#[path = "../../tank_core/tests/support/test_fixtures.rs"]
+mod test_fixtures;
+
 use tank_core::{
     budget_helpers::{step_and_inspect, Element},
-    plant_carbon_mg, plant_nitrogen_mg,
-    test_fixtures::{
-        dump_trace_to_subdir, feeding_fixture, grazing_fixture, mortality_senescence_fixture,
-        trim_fixture, water_change_fixture,
-    },
-    Engine, PlayerAction, SimTracer, SimulationEngine, Verbosity,
+    plant_carbon_mg, plant_nitrogen_mg, Engine, PlayerAction, SimTracer, SimulationEngine,
+    Verbosity,
+};
+use test_fixtures::{
+    dump_trace_to_subdir, feeding_fixture, grazing_fixture, mortality_senescence_fixture,
+    trim_fixture, water_change_fixture,
 };
 
 const TOL: f64 = 1e-6;

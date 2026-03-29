@@ -5,15 +5,15 @@ ammonia_mg_n_per_l = 0.0
 nitrite_mg_n_per_l = 0.0
 nitrate_mg_n_per_l = 8.0
 phosphate_mg_p_per_l = 0.15
-dic_mg_c_per_l = 22.0
+dic_mg_c_per_l = 35.7
 doc_mg_c_per_l = 0.0
 don_mg_n_per_l = 0.0
-alkalinity_meq_per_l = 1.785
+alkalinity_meq_per_l = 2.856
 calcium_mg_per_l = 42.0
 magnesium_mg_per_l = 15.0
 sodium_mg_per_l = 16.0
 potassium_mg_per_l = 4.0
-bicarbonate_mg_per_l = 108.9
+bicarbonate_mg_per_l = 174.2
 chloride_mg_per_l = 20.0
 sulfate_mg_per_l = 14.1
 
@@ -22,9 +22,12 @@ source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
 notes = """
-Mineral-rich profile targeted at Neocaridina husbandry. GH ~9.3, KH ~5.0, \
-TDS ~220. Alkalinity 1.79 meq/L provides the strongest buffering of the \
-shipped profiles — essential for shrimp husbandry scenarios where pH \
-stability supports both nitrification and molt success. Higher Ca/Mg \
-supports shell/exoskeleton formation. 8 mg N/L nitrate and 0.15 mg P/L \
-phosphate reflect remineralized tap water."""
+Mineral-rich, well-buffered profile emulating Sulawesi-type or high-KH tap \
+water for Neocaridina husbandry. GH ~9.3, KH ~8.0, TDS ~285. \
+Equilibrium pH ~7.7 (range 7.5-8.0). Alkalinity 2.86 meq/L provides the \
+strongest buffering of the shipped profiles — essential for shrimp \
+husbandry scenarios where pH stability supports both nitrification and \
+molt success. High DIC (35.7 mg C/L) keeps HCO3- dominant, resisting pH \
+swings from respiration or nitrification. Higher Ca/Mg supports \
+shell/exoskeleton formation. 8 mg N/L nitrate and 0.15 mg P/L phosphate \
+reflect remineralized tap water."""

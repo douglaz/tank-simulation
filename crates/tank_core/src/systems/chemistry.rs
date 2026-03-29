@@ -635,3 +635,34 @@ pub(crate) fn photosynthetic_biomass_g(state: &TankState) -> f64 {
     let plant_biomass_g: f64 = state.plant_guilds.iter().map(|plant| plant.biomass_g).sum();
     plant_biomass_g + state.algae.periphyton_biomass_g + state.algae.suspended_biomass_g
 }
+
+/// Convert the hourly photosynthesis shortcut into a per-day fixed-carbon
+/// credit for a specific photosynthetic biomass pool.
+///
+/// Daily plant/algae growth uses this when the hourly DIC path is enabled so
+/// biomass cannot outgrow the CO2 uptake implied by the same shortcut. If the
+/// shortcut rate is retuned, keep this daily credit in mind as the carbon
+/// ceiling for biomass gain.
+pub(crate) fn daily_hourly_photosynthesis_dic_credit_mg(state: &TankState, biomass_g: f64) -> f64 {
+    if biomass_g <= f64::EPSILON || !state.hardware.light.enabled {
+        return 0.0;
+    }
+
+    let hourly_rate_mg_c = state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour;
+    if hourly_rate_mg_c <= f64::EPSILON {
+        return 0.0;
+    }
+
+    // Match the discrete hourly light schedule used by `step_hourly_chemistry`
+    // so daily biomass growth cannot outrun the shortcut's modeled CO2 uptake.
+    let lit_hours_per_day = (0..24u8)
+        .filter(|hour| super::light::is_light_on(*hour, state.hardware.light.photoperiod_hours))
+        .count() as f64;
+
+    hourly_rate_mg_c
+        * biomass_g.max(0.0)
+        * state.hardware.light.intensity_index.max(0.0)
+        * lit_hours_per_day
+}

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::{
+use tank_core::{
     Engine, JsonLinesSink, PlantGuildState, SimSeed, SourceWaterProfile, TankState, TraceSink,
     WaterState,
 };

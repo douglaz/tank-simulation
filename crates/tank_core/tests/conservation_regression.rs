@@ -11,17 +11,20 @@
 //! simulation trace is dumped to `/tmp/tank_conservation_traces/<scenario>.jsonl`.
 //! Run with `TANK_BUDGET_DEBUG=1` for per-tick budget summaries on stderr.
 
+#[path = "support/test_fixtures.rs"]
+mod test_fixtures;
+
 use tank_core::{
     budget_helpers::{
         assert_c_conserved, assert_n_conserved, assert_per_tick_balanced, step_and_inspect,
         BudgetInspector, Element, InspectionResult,
     },
-    plant_carbon_mg, plant_nitrogen_mg,
-    test_fixtures::{
-        dump_trace_to_subdir, feeding_fixture, grazing_fixture, mortality_senescence_fixture,
-        trim_fixture, water_change_fixture,
-    },
-    Engine, PlayerAction, SimError, SimTracer, SimulationEngine, Verbosity,
+    plant_carbon_mg, plant_nitrogen_mg, Engine, PlayerAction, SimError, SimTracer,
+    SimulationEngine, Verbosity,
+};
+use test_fixtures::{
+    dump_trace_to_subdir, feeding_fixture, grazing_fixture, mortality_senescence_fixture,
+    trim_fixture, water_change_fixture,
 };
 
 /// Tolerance for deterministic floating-point conservation: < 1e-6 mg per tick.

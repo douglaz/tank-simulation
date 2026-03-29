@@ -1,5 +1,5 @@
 use tank_core::{
-    plant_carbon_mg, plant_nitrogen_mg,
+    algae_carbon_mg, plant_carbon_mg, plant_nitrogen_mg,
     systems::{algae_growth::step_daily_algae, plant_growth::step_daily_plants},
     Engine, EventKind, PlantGuild, PlantGuildState, PlayerAction, SimSeed, SimulationEngine,
     SubstrateKind, SubstrateLayerState, TankState,
@@ -17,6 +17,14 @@ fn base_growth_state(seed: SimSeed) -> TankState {
     state.hardware.light.photoperiod_hours = 10.0;
     state.microfauna.population_index = 0.1;
     state.microfauna.grazing_pressure_index = 0.1;
+    // These tests target the daily growth formulas, not the hourly DIC/pH
+    // shortcut. Keep carbon withdrawal explicit inside the daily steps.
+    state
+        .process_params
+        .respiration_dic_rate_mg_c_per_g_per_hour = 0.0;
+    state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
     state
 }
 
@@ -58,6 +66,102 @@ fn plant_growth_improves_with_light_and_nutrients() -> Result<(), tank_core::Sim
     );
 
     Ok(())
+}
+
+#[test]
+fn hourly_dic_shortcut_caps_daily_plant_growth_to_modeled_credit() {
+    let mut state = base_growth_state(SimSeed(8_150));
+    state.plant_guilds = vec![PlantGuildState {
+        guild: PlantGuild::FastStem,
+        biomass_g: 5.0,
+        health_index: 1.0,
+        crowding_index: 0.0,
+        habitat_index: 0.95,
+        water_column_uptake_bias: Some(1.0),
+        substrate_uptake_bias: Some(0.0),
+    }];
+    let volume_l = state.water_volume_l();
+    state.water.ammonia_total_mg_n_total = 4.0 * volume_l;
+    state.water.nitrate_mg_n_total = 20.0 * volume_l;
+    state.water.phosphate_mg_p_total = 2.0 * volume_l;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 40.0 * volume_l;
+    state.hardware.light.enabled = true;
+    state.hardware.light.intensity_index = 1.0;
+    state.hardware.light.photoperiod_hours = 12.0;
+    state.process_params.plant_max_growth_rate_fast_stem_per_day = 0.5;
+    state.process_params.plant_respiration_fraction_per_day = 0.0;
+    state.process_params.plant_senescence_fraction_per_day = 0.0;
+    state.process_params.plant_light_half_saturation = 0.01;
+    state.process_params.plant_temp_optimum_c = 25.0;
+    state.process_params.plant_temp_sigma_c = 20.0;
+    state.process_params.plant_crowding_biomass_g_per_m2 = 1.0e9;
+    state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.05;
+
+    let dic_before = state.water.dissolved_inorganic_carbon_mg_c_total;
+    let carbon_credit_mg = 5.0 * 0.05 * 12.0;
+    let expected_growth_g =
+        carbon_credit_mg / plant_carbon_mg(1.0, state.process_params.feed_n_to_c_ratio);
+
+    step_daily_plants(&mut state);
+
+    assert!(
+        (state.plant_guilds[0].biomass_g - (5.0 + expected_growth_g)).abs() < 1e-6,
+        "hourly DIC shortcut should cap plant growth to its modeled carbon credit"
+    );
+    assert!(
+        (state.water.dissolved_inorganic_carbon_mg_c_total - dic_before).abs() < 1e-9,
+        "daily plant step should not double-withdraw DIC when hourly chemistry owns the carbon path"
+    );
+}
+
+#[test]
+fn hourly_dic_shortcut_caps_daily_algae_growth_to_modeled_credit() {
+    let mut state = base_growth_state(SimSeed(8_151));
+    state.plant_guilds.clear();
+    state.algae.suspended_biomass_g = 1.5;
+    state.algae.periphyton_biomass_g = 0.0;
+    state.microfauna.population_index = 0.0;
+    state.microfauna.grazing_pressure_index = 0.0;
+    let volume_l = state.water_volume_l();
+    state.water.ammonia_total_mg_n_total = 4.0 * volume_l;
+    state.water.nitrate_mg_n_total = 20.0 * volume_l;
+    state.water.phosphate_mg_p_total = 2.0 * volume_l;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 40.0 * volume_l;
+    state.hardware.light.enabled = true;
+    state.hardware.light.intensity_index = 1.0;
+    state.hardware.light.photoperiod_hours = 12.0;
+    state.process_params.algae_max_growth_rate_per_day = 0.6;
+    state.process_params.algae_respiration_fraction_per_day = 0.0;
+    state.process_params.algae_light_half_saturation = 0.01;
+    state.process_params.algae_temp_optimum_c = 25.0;
+    state.process_params.algae_temp_sigma_c = 20.0;
+    state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.03;
+    state.process_params.base_extinction_coeff_per_cm = 0.0;
+    state.process_params.algae_extinction_coeff_per_cm_per_g_l = 0.0;
+    state.process_params.doc_extinction_coeff_per_cm_per_mg_c_l = 0.0;
+    state
+        .process_params
+        .detritus_extinction_coeff_per_cm_per_g_l = 0.0;
+
+    let dic_before = state.water.dissolved_inorganic_carbon_mg_c_total;
+    let carbon_credit_mg = 1.5 * 0.03 * 12.0;
+    let expected_growth_g =
+        carbon_credit_mg / algae_carbon_mg(1.0, state.process_params.feed_n_to_c_ratio);
+
+    step_daily_algae(&mut state);
+
+    assert!(
+        (state.algae.suspended_biomass_g - (1.5 + expected_growth_g)).abs() < 1e-6,
+        "hourly DIC shortcut should cap algae growth to its modeled carbon credit"
+    );
+    assert!(
+        (state.water.dissolved_inorganic_carbon_mg_c_total - dic_before).abs() < 1e-9,
+        "daily algae step should not double-withdraw DIC when hourly chemistry owns the carbon path"
+    );
 }
 
 #[test]
