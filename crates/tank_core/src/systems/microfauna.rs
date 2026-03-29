@@ -1,12 +1,10 @@
 use crate::types::{
     algae_carbon_mg, algae_nitrogen_mg, detritus_carbon_mg, detritus_nitrogen_mg, TankState,
+    MG_N_PER_MEQ_AMMONIA,
 };
 
 /// Stoichiometric O2:C for organic matter oxidation (32/12 ≈ 2.67).
 const O2_PER_MG_C_RESPIRED: f64 = 2.67;
-
-/// Molar mass of nitrogen for alkalinity coupling (mg N per meq NH4+).
-const MG_N_PER_MEQ_AMMONIA: f64 = 14.007;
 
 /// Daily microfauna turnover: updates population_index and grazing_pressure_index
 /// from detritus/periphyton resource availability and shrimp grazing pressure.

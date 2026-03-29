@@ -354,6 +354,7 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
         remaining_alk_budget >= -SMALL_NEGATIVE_ROUNDING_TOLERANCE_MEQ,
         "running alkalinity budget over-deducted before the pool commit: remaining={remaining_alk_budget} meq, cost={comammox_alk_cost} meq, prior_budget={alk_budget} meq"
     );
+    alk_budget = remaining_alk_budget.max(0.0);
     state.water.dissolved_oxygen_mg_total =
         (state.water.dissolved_oxygen_mg_total - comammox_o2_cost).max(0.0);
 
@@ -431,9 +432,7 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     // NOB (nitrite -> nitrate) does not consume additional alkalinity.
     let alkalinity_consumed_meq = aob_alk_cost + comammox_alk_cost;
     let alkalinity_produced_meq = 0.0;
-    state.water.alkalinity_meq_total = (state.water.alkalinity_meq_total + alkalinity_produced_meq
-        - alkalinity_consumed_meq)
-        .max(0.0);
+    state.water.alkalinity_meq_total = (alk_budget + alkalinity_produced_meq).max(0.0);
     // The subsequent chemistry step is responsible for re-running the carbonate
     // solver after this alkalinity mutation. Until then, `water.ph` and
     // `bicarbonate_mg_total` remain stale cached projections, so any new system

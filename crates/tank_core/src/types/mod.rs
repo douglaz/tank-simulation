@@ -43,7 +43,7 @@ pub use hardware::{
 pub use process::{
     legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2, ProcessParams,
     DENITRIFICATION_ALK_MEQ_PER_MG_N, LEGACY_KINETIC_REFERENCE_FOOTPRINT_M2,
-    LEGACY_KINETIC_REFERENCE_VOLUME_L, NITRIFICATION_ALK_MEQ_PER_MG_N,
+    LEGACY_KINETIC_REFERENCE_VOLUME_L, MG_N_PER_MEQ_AMMONIA, NITRIFICATION_ALK_MEQ_PER_MG_N,
 };
 pub use provenance::{
     check_all_ranges, check_param_range, format_param, ConfidenceLevel, ParamMeta, RangeWarning,

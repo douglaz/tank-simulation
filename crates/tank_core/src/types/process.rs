@@ -12,6 +12,11 @@ pub const LEGACY_KINETIC_REFERENCE_FOOTPRINT_M2: f64 = 0.1;
 /// Source: Stumm & Morgan, *Aquatic Chemistry*, 3rd ed.
 pub const NITRIFICATION_ALK_MEQ_PER_MG_N: f64 = 2.0 / 14.007;
 
+/// Atomic mass of nitrogen, used to convert TAN release into alkalinity return.
+///
+/// NH4+ excretion/respiration restores 1 meq alkalinity per 14.007 mg N.
+pub const MG_N_PER_MEQ_AMMONIA: f64 = 14.007;
+
 /// Stoichiometric alkalinity production during denitrification (NO₃⁻ → N₂).
 ///
 /// 1 meq per 14.007 mg N ≈ 0.0714 meq/mg N. Approximately half the
