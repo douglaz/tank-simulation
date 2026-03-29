@@ -310,8 +310,11 @@ impl Default for ProcessParams {
             aeration_kla_boost: 0.9,
             background_bod_mg_o2_per_g_biomass_per_hour: 0.05,
             plant_photosynthesis_o2_mg_per_g_per_hour: 0.2,
-            respiration_dic_rate_mg_c_per_g_per_hour: 0.0,
-            photosynthesis_dic_rate_mg_c_per_g_per_hour: 0.0,
+            // Stoichiometrically consistent with O2 rates: C:O2 = 12:32 = 0.375.
+            // respiration_dic = background_bod (0.05) × 12/32 = 0.01875
+            // photosynthesis_dic = plant_photosynthesis_o2 (0.2) × 12/32 = 0.075
+            respiration_dic_rate_mg_c_per_g_per_hour: 0.01875,
+            photosynthesis_dic_rate_mg_c_per_g_per_hour: 0.075,
             k_surface_w_per_m2_k: 10.0,
             k_wall_w_per_m2_k: 5.0,
 

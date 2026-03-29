@@ -1374,6 +1374,14 @@ fn test_high_mortality_200_hours_conserves_n_c_and_accumulates_detritus() -> Res
     // carbon conservation assertions.
     state.process_params.reaeration_kla_base = 0.0;
     state.process_params.aeration_kla_boost = 0.0;
+    // Zero DIC shortcuts (open-system respiration/photosynthesis) for
+    // closed-system carbon conservation assertions.
+    state
+        .process_params
+        .respiration_dic_rate_mg_c_per_g_per_hour = 0.0;
+    state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
     state.process_params.fine_detritus_dissolution_rate_per_hour = 0.0;
     state.hardware.filter.flow_lph = 0.0;
     // Elevated base mortality for this stress scenario
