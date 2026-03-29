@@ -1,0 +1,115 @@
+{
+  "payload_id": "run-20260328125529-final_review-aggregate-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T16:05:00.647177105Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-5-9227ab6c",
+      "fr-5-ed3ca0d0"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-5-b994c526",
+        "normalized_body": "The `conversions.rs` module (NO3_PER_N, NO2_PER_N, NH4_PER_N, NH3_PER_N, PO4_PER_P and all 10 forward/inverse conversion functions) is entirely unused outside its own test module. No production code, TUI, or API path imports or calls any of these constants or functions. While the acceptance criteria call for centralized conversion logic and the module is well-tested internally, it is dead code. Either (a) wire at least one display path (e.g. the TUI chemistry screen or the API `chemistry_field_semantics` response) to actually use these conversions for an optional ion-basis display column, so the module has a live consumer, or (b) gate the module behind a `#[cfg(test)]` or explicitly document it as preparatory infrastructure so clippy dead-code warnings won't fire and future maintainers don't remove it.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-9227ab6c",
+        "normalized_body": "The new `co2_aq_mmol_per_l` field on `TankSnapshot` (and its deserialization proxy `TankSnapshotRepr`) is required with no `#[serde(default)]` annotation and has no entry in `LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES`. Any external consumer that has cached or stored a snapshot JSON from a previous version (before this field existed) will fail to deserialize it with a missing-field error. Add `#[serde(default)]` on the `co2_aq_mmol_per_l` field in `TankSnapshotRepr`, or add it as a legacy alias mapping to itself, so old snapshot payloads without this field still parse (defaulting to 0.0).",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-5e3652d6",
+        "normalized_body": "High: the `ProcessParams` kinetic-field rename is incomplete and currently breaks the build. `ProcessParams` now exposes `decomposer_k_doc_mg_c_per_l`, `decomposer_k_do_mg_per_l`, `aob_k_tan_mg_n_per_l`, `aob_k_do_mg_per_l`, `nob_k_nitrite_mg_n_per_l`, `nob_k_do_mg_per_l`, `comammox_k_tan_mg_n_per_l`, and `comammox_k_do_mg_per_l` (`crates/tank_core/src/types/process.rs:56-64`, `crates/tank_core/src/types/process.rs:72-112`), but `process_preset_to_params` still initializes the deleted field names in `crates/tank_scenarios/src/lib.rs:347-386`. `cargo test -p tank_harness --lib` now fails with E0560 here. The same stale field names are also still referenced in `crates/tank_core/tests/cycling.rs:455-467`, `crates/tank_core/tests/cycling.rs:490-506`, and `crates/tank_core/tests/cycling.rs:637-641`, so the core test suite will remain broken even after the scenario mapper is fixed.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-a3f02708",
+        "normalized_body": "High: legacy save/preset compatibility is broken for the renamed decomposer/nitrifier half-saturation fields. The runtime now consumes the new fields directly as concentration values (`crates/tank_core/src/systems/nitrogen_cycle.rs:100-101`, `crates/tank_core/src/systems/nitrogen_cycle.rs:167-172`), and the renamed fields only carry serde aliases for the legacy keys (`crates/tank_core/src/types/process.rs:59-64`, `crates/tank_core/src/types/process.rs:75-112`). But the save migration chain only converts plant/algae half-saturation keys (`crates/tank_core/src/save.rs:81-119`, `crates/tank_core/src/save.rs:678-787`), and the preset normalizer likewise only rewrites plant/algae legacy names (`crates/tank_data/src/presets.rs:1186-1293`). That means an old payload such as `aob_k_tan_mg = 0.5` now loads as `0.5 mg N/L` instead of the old `0.025 mg N/L`, which silently changes nitrification/decomposition kinetics for existing saves and legacy TOML presets.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-ed3ca0d0",
+        "normalized_body": "Medium: the new `envelope_reports_non_finite_values` unit test is built on an impossible condition and will fail once the compile blockers are fixed. The test sets `state.water.ph = NaN` and expects `Envelope::check` to see a non-finite snapshot pH (`crates/tank_harness/src/lib.rs:821-829`), but `TankSnapshot::from_state` recomputes `ph` from `projected_carbonate_equilibrium` instead of copying `state.water.ph` (`crates/tank_core/src/types/snapshot.rs:232-248`). In an earlier run of `cargo test -p tank_harness`, this exact assertion already failed because `violations` came back empty. The test needs to exercise a field that actually survives into `TankSnapshot`, or the non-finite validation needs to run on raw state rather than snapshot pH.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [
+      "fr-5-5e3652d6",
+      "fr-5-a3f02708"
+    ],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-5-9227ab6c",
+        "normalized_body": "The new `co2_aq_mmol_per_l` field on `TankSnapshot` (and its deserialization proxy `TankSnapshotRepr`) is required with no `#[serde(default)]` annotation and has no entry in `LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES`. Any external consumer that has cached or stored a snapshot JSON from a previous version (before this field existed) will fail to deserialize it with a missing-field error. Add `#[serde(default)]` on the `co2_aq_mmol_per_l` field in `TankSnapshotRepr`, or add it as a legacy alias mapping to itself, so old snapshot payloads without this field still parse (defaulting to 0.0).",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-ed3ca0d0",
+        "normalized_body": "Medium: the new `envelope_reports_non_finite_values` unit test is built on an impossible condition and will fail once the compile blockers are fixed. The test sets `state.water.ph = NaN` and expects `Envelope::check` to see a non-finite snapshot pH (`crates/tank_harness/src/lib.rs:821-829`), but `TankSnapshot::from_state` recomputes `ph` from `projected_carbonate_equilibrium` instead of copying `state.water.ph` (`crates/tank_core/src/types/snapshot.rs:232-248`). In an earlier run of `cargo test -p tank_harness`, this exact assertion already failed because `violations` came back empty. The test needs to exercise a field that actually survives into `TankSnapshot`, or the non-finite validation needs to run on raw state rather than snapshot pH.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 5,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-5-b994c526"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 2 amendment(s); restart required.",
+    "total_proposed_amendments": 5,
+    "total_reviewers": 2,
+    "unique_amendment_count": 5
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 5
+}

@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260329204233-apply_fixes-c2-a1-cr4-artifact",
+  "payload_id": "run-20260329204233-apply_fixes-c2-a1-cr4",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-29T22:55:52.387130088Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nMoved the shared conservation fixture helpers out of `tank_core`'s public library surface into `crates/tank_core/tests/support/test_fixtures.rs`, removed the `pub mod test_fixtures` export from `crates/tank_core/src/lib.rs`, and updated both `crates/tank_core/tests/conservation_regression.rs` and `crates/tank_harness/tests/e2e_conservation.rs` to include that shared test-only module via `#[path = ...]`. This keeps fixture reuse between the unit and e2e suites while excluding the helper code from `tank_core` release builds.\n\n## Steps\n\n1. [Completed] Inspected the current test-fixture export and the two conservation suites to confirm the only remaining review item was release-build exposure of test-only helpers.\n2. [Completed] Moved the shared fixture and trace helpers from `crates/tank_core/src/test_fixtures.rs` into `crates/tank_core/tests/support/test_fixtures.rs`, removed the library export, and rewired both conservation suites to import the shared test-only module by path.\n3. [Completed] Ran formatting plus targeted regression and release-build validation to verify the shared fixtures still work for both suites and are no longer part of the `tank_core` release build.\n\n## Validation Evidence\n\n- `cargo fmt --all` completed successfully.\n- `cargo test -p tank_core --test conservation_regression -- --nocapture` passed: 6 tests passed, 0 failed.\n- `cargo test -p tank_harness --test e2e_conservation -- --nocapture` passed: 1 test passed, 0 failed; the summary still reported all 6 scenarios as PASS with the expected deltas, including `water_change` at `dN=+21.187500000 mg` and `dC=+97.500000000 mg`.\n- `cargo check -p tank_core --release` passed, confirming `tank_core` still builds in release mode after removing the public test-fixture module from the library surface.\n\n## Outstanding Risks\n\nNone identified.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

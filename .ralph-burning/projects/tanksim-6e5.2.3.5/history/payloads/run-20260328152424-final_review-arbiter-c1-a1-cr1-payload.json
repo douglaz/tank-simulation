@@ -1,0 +1,24 @@
+{
+  "payload_id": "run-20260328152424-final_review-arbiter-c1-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T16:03:18.975502304Z",
+  "payload": {
+    "rulings": [
+      {
+        "amendment_id": "fr-1-7e77d2a4",
+        "decision": "accept",
+        "rationale": "The omission is factually confirmed by all three parties: the extreme-scale test (1L vs 1000L) checks per-liter concentration deltas but entirely omits the Monod factor comparison block present in the primary test (10L vs 100L). Reviewer 2's objection that per_guild_monod_uses_concentration_not_total already covers Monod factors at multiple volumes has merit as a redundancy argument, but it does not outweigh the value of adding the check here. First, the amendment itself acknowledges the per-liter delta is the stronger assertion — the Monod factor block is a complementary, low-cost addition that makes the extreme-scale test self-contained and internally consistent with the primary test. Second, the dedicated Monod test and the integration-style volume-independence test exercise different code paths and verify different properties (isolated Monod correctness vs. end-to-end volume independence); having Monod factor equivalence confirmed alongside delta equivalence at 1000x scale provides meaningful defense-in-depth. Third, the cost is negligible — either copy the block or factor it into a shared helper, which also improves maintainability. The 2-1 consensus in favor of acceptance reflects the correct balance: a small, low-risk improvement that closes a real asymmetry between the two tests."
+      }
+    ],
+    "summary": "One disputed amendment (fr-1-7e77d2a4) ruled ACCEPT. The extreme-scale volume-independence test genuinely omits the Monod factor verification block present in the primary test. While a separate dedicated Monod test exists, adding the same block to the extreme-scale integration test is a low-cost improvement that makes the test self-contained and provides defense-in-depth at the 1000x volume ratio where floating-point precision issues are most likely to surface."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

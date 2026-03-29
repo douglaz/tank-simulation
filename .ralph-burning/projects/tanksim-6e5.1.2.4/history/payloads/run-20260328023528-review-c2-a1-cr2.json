@@ -1,0 +1,36 @@
+{
+  "payload_id": "run-20260328023528-review-c2-a1-cr2",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T03:36:44.172154786Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "Tracing module (tracing.rs) implements all five accepted amendments: (1) TraceSink::emit_tick returns Result<(), TraceSinkError> with serialization and write error variants; SimTracer captures sink failures in a Vec<TraceSinkFailure> accessible via sink_failures()/sink_failure_count(). (2) Engine Clone impl has doc comment explaining tracer is dropped because Box<dyn TraceSink> is not Clone; enable_tracing() also documents the limitation. (3) meaningful_delta() uses combined relative-and-absolute threshold (1e-12), replacing raw f64::EPSILON. (4) next_tick_index field on SimTracer tracks monotonic IDs independently of retained buffer length; begin_tick uses self.next_tick_index, finish_tick advances it. (5) PoolSnapshot::capture covers 70 pools including stability tracker baselines, shrimp internal state (molt_stress, reproductive_readiness, egg cohorts, stress accumulators), microfauna, per-guild plant metrics; delta_for/try_delta_for reject untracked pools with UntrackedPoolError; TRACKED_POOL_NAMES constant matches PoolSnapshot::capture exactly.",
+        "Integration test suite (crates/tank_core/tests/tracing.rs) has 16 tests covering: core tracing (off-by-default, one-tick-per-hour, detail pool deltas, summary no-deltas, trace notes and event attribution), JSON-lines output (valid parseable records, jq-compatible schema), zero overhead (identical results with/without tracing, off-mode no ticks/no sink), sink failure retention, drain/disable (frees memory, monotonic indices after drain), clone behavior, budget+tracing compatibility, and expanded detail coverage (daily_shrimp internal state, stability_tracker baselines).",
+        "Engine integration (engine.rs) correctly wraps all system stages via maybe_record_stage / maybe_record_stage_with_explicit_budget, capturing pool deltas at Detail+ verbosity, stage notes at Trace verbosity, and events_generated at all active verbosity levels. Verbosity::Off gate at step_one_hour:174 skips tick builder construction entirely.",
+        "Public API exports in lib.rs expose all consumer-facing types: JsonLinesSink, PoolDelta, SimTracer, StderrSink, SystemTraceEntry, TickTrace, TraceSink, TraceSinkError, TraceSinkFailure, UntrackedPoolError, Verbosity.",
+        "Unit tests in tracing.rs::tests cover: verbosity ordering, delta filtering (includes changes, suppresses rounding noise), JSON roundtrip, sink write success/failure, try_delta_for rejection of untracked pools."
+      ],
+      "findings_or_gaps": [
+        "BLOCKER: Workspace does not compile. MicrofaunaState::default() in biology.rs:195-201 is missing the reserve_g field, and BudgetSnapshot nitrogen_components array size is 17 but the function returns 18 elements. These failures originate from bead tanksim-6e5.3.2, not from this tracing bead, but they prevent running the tracing test suite to confirm green state. The prior stage's validation evidence claims 'cargo test -p tank_core passed', which means either the tests were run at a prior commit or the workspace was in a different state.",
+        "MINOR: TRACKED_POOL_NAMES is a linear array searched via .contains() in tracks_pool(). With 70 entries this is negligible, but if the list grows further a HashSet or compile-time sorted slice with binary search would be more idiomatic.",
+        "MINOR: The PoolSnapshot::capture and TRACKED_POOL_NAMES are maintained as two parallel lists with no compile-time or runtime assertion that they remain synchronized. A debug_assert or test asserting len/name equality would prevent silent drift when new pools are added to one but not the other."
+      ],
+      "follow_up_or_amendments": [
+        "The workspace build failures in biology.rs and budget.rs must be resolved (by whichever bead owns them) before this bead's tests can be verified green. If those fixes land independently, this bead's approval becomes unconditional — no further tracing-specific changes are needed.",
+        "Consider adding a unit test that asserts TRACKED_POOL_NAMES.len() equals PoolSnapshot::capture().pools.len() and that every name matches positionally, to guard against future drift between the two parallel lists."
+      ],
+      "outcome": "conditionally_approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}

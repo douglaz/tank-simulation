@@ -1,0 +1,23 @@
+{
+  "payload_id": "run-20260327192401-final_review-reviewer-1-c1-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T22:38:46.719638096Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "In `crates/tank_core/src/engine.rs`, make the closed-system budget guard depend on actual mass movement, not just the presence of an action label. Every queued action is recorded into the tick ledger (`step_one_hour`, lines 93-99), but several of the actions that are treated as open-system in `tick_has_closed_system_nitrogen`/`tick_has_closed_system_carbon` can be no-ops (`Feed { grams: 0.0 }`, `WaterChangePercent { percent: 0.0 }`, `SiphonDetritus { fraction: 0.0 }`, `CleanFilter { intensity: 0.0 }`, `AddShrimp { count: 0 }`, `RemoveShrimp { count: 0 }`; see `process_action`, lines 285-406). Because `tick_has_closed_system_nitrogen` only checks `entry.label` (`engine.rs`, lines 523-544), any such zero-effect action suppresses the conservation guard for that tick even though the tick is still closed. Use `BudgetEntry.delta` (or the original action parameters) so zero-delta/no-op actions do not disable the nitrogen/carbon balance check.",
+        "rationale": "This creates a real correctness hole in the new guardrail: a caller can queue a no-op open-system action and accidentally or intentionally bypass per-tick conservation enforcement on an otherwise closed tick."
+      }
+    ],
+    "summary": "Reviewed the budget-ledger, canonical total helpers, water-volume migration, and routed mass-balance changes, and ran `cargo test -p tank_core`. I found one concrete correctness gap: the closed-system guard is label-based, so no-op open-system actions incorrectly disable conservation checking for that tick."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 5
+}

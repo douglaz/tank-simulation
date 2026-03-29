@@ -1,0 +1,76 @@
+{
+  "payload_id": "run-20260327152928-docs_plan-c1-a1-cr1",
+  "stage_id": "docs_plan",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T15:33:30.201572561Z",
+  "payload": {
+    "data": {
+      "assumptions_or_open_questions": [
+        "The routing doc will live at docs/ROUTING.md alongside UNITS.md and scientific_inventory.md, following the same prescriptive-policy style. Confirm this is the right location vs. inline code comments only.",
+        "Assimilation efficiency and waste-split fractions will be named ProcessParams fields (not hardcoded constants), consistent with existing parameter style in types/process.rs. The doc defines the names and default ranges; actual values are tuned later.",
+        "Carbon routing (respiration → DIC, photosynthesis → DIC) is in scope for the convention but full carbonate-system design is deferred to tanksim-6e5.4.1. The routing doc will reference DIC as a sink/source without specifying CO2/HCO3/CO3 speciation.",
+        "The model will use a single 'fine_detritus' pool for feces, dead biomass, and plant cuttings rather than separate fecal/corpse/cutting pools. This is an intentional lumping decision that should be documented.",
+        "Microfauna will follow the same ingestion→assimilation→excretion→feces template as shrimp, with their own named fraction parameters, even though microfauna are currently an index (not explicit biomass). The convention should note this and allow the index-based model to approximate the mass budget.",
+        "Feed uneaten-fraction routing already exists (particulate_organics → fine_detritus via leaching in nitrogen_cycle.rs). The doc should codify this existing path rather than redesign it.",
+        "Organism death → detritus routing should cover shrimp, plants (senescence already partially handled), algae, and failed eggs. Molt shells are out of scope until calcium modeling exists.",
+        "The doc should include a summary flow diagram (ASCII or Mermaid) showing all pools and directed edges for quick visual reference."
+      ],
+      "problem_framing": "The tank simulation has 11+ conservation gaps where consumed, respired, or dead matter vanishes instead of being routed to appropriate pools (detritus, TAN, DIC, O2 demand). Shrimp grazing, microfauna consumption, organism death, and plant trimming all remove mass without returning it. Three existing docs (scientific_specs.md, scientific_inventory.md, UNITS.md) catalog these gaps but no single document defines the routing convention that downstream implementation beads (tanksim-6e5.3.2 through 6e5.3.7) need to follow. The deliverable is a concise design note—ROUTING.md in docs/—that specifies every ingestion→waste pathway, names the tunable fractions, declares which pools are intentionally lumped, and gives implementation beads an unambiguous contract to code against.",
+      "proposed_work": [
+        {
+          "details": "Enumerate every matter pool in the system (particulate_organics, fine_detritus, dissolved_feed_residue, DOC, DON, TAN, nitrite, nitrate, phosphate, DIC, DO, plant biomass per guild, algae biomass suspended+periphyton, shrimp biomass adult+juvenile, microfauna index, decomposer/AOB/NOB/comammox biomass). For each pool, state its unit (from UNITS.md), whether it is a conserved stock or a derived quantity, and which processes add to or remove from it. Include an ASCII flow diagram showing the directed graph of all pools and transfer edges. This section establishes the shared vocabulary that every subsequent routing rule references.",
+          "order": 0,
+          "summary": "Draft the pool inventory and flow topology section of ROUTING.md"
+        },
+        {
+          "details": "Define the canonical pathway: Ingestion → {assimilated_fraction, fecal_fraction} where assimilated_fraction + fecal_fraction = 1.0. Assimilated material splits into {growth_fraction, respiration_fraction, excretion_fraction} where the three sum to 1.0. Specify: (a) fecal output → fine_detritus_g_total, (b) excretion → ammonia_total_mg_n_total (TAN), (c) respiration → O2 demand (mg O2) + DIC production (mg C), (d) growth → organism biomass reserve. Name each fraction as a ProcessParams field: e.g. shrimp_assimilation_efficiency, shrimp_fecal_to_detritus_fraction, shrimp_respiration_fraction, shrimp_excretion_tan_fraction. Provide default value ranges from the scientific reference in the bead comments (assimilation 0.4–0.7, fecal 0.3–0.6, respiration 0.6–0.8 of assimilated, excretion 0.1–0.2). Apply the same template to microfauna with microfauna_ prefix, noting that microfauna biomass is currently an index and the convention approximates mass transfer proportional to the index × consumed amount.",
+          "order": 1,
+          "summary": "Write the consumer ingestion→waste routing convention (shrimp and microfauna)"
+        },
+        {
+          "details": "Define: when an organism dies (shrimp mortality, plant senescence, algae death, failed eggs), its body mass enters fine_detritus_g_total with fraction death_biomass_to_detritus_fraction (default 1.0, meaning all dead biomass becomes detritus unless explicitly exported by a player action like 'remove dead shrimp'). Specify the C:N composition of dead biomass for each organism type so nitrogen_cycle can correctly partition DOC/DON during subsequent decomposition. Note that plant senescence → fine_detritus already exists in plant_growth.rs and should be kept as-is. Note that shrimp death (shrimp.rs:440-480) and failed eggs (shrimp.rs:314-415) currently lack this routing and are the primary implementation targets for tanksim-6e5.3.7.",
+          "order": 2,
+          "summary": "Write the organism death→detritus routing convention"
+        },
+        {
+          "details": "Define routing for each PlayerAction: (1) Feed{grams}: current path (→ particulate_organics) is correct; document uneaten_fraction leaching pathway already in nitrogen_cycle.rs. (2) TrimPlants: split into two actions—TrimPlantsAndExport (biomass removed from system entirely, mass exits the model) and TrimPlantsAndLeaveCuttings (biomass → fine_detritus, current behavior). Document that export is the only sanctioned way to permanently remove organic mass besides SiphonDetritus. (3) SiphonDetritus: current behavior (proportional removal of particulate + fine detritus) is correct; codify it. (4) CleanFilter: document that removed biofilm mass is currently not tracked (biofilm is implicit in microbe biomass) and this is an intentional simplification—no detritus is generated from filter cleaning. (5) WaterChange: document that removed water carries dissolved nutrients (TAN, nitrite, nitrate, DOC, DON, phosphate) out of the system proportionally.",
+          "order": 3,
+          "summary": "Write the maintenance action routing conventions (trimming, feeding, siphoning, filter cleaning)"
+        },
+        {
+          "details": "Document every place where the model intentionally simplifies or defers detailed routing: (a) Single fine_detritus pool rather than separate fecal/corpse/litter pools—justified by decomposition timescale similarity at this model resolution. (b) No explicit urea or amino acid pools—all dissolved N excretion is lumped into TAN. (c) No shell/calcium routing from molting—deferred until carbonate system (tanksim-6e5.4.1). (d) Microfauna as population index not explicit biomass—mass budget is approximate. (e) DIC routing uses a single pool, not CO2/HCO3/CO3 speciation—deferred to tanksim-6e5.4.1. (f) No denitrification pathway—nitrate only removed by plant/algae uptake or water export. (g) Phosphorus cycling is simplified (no sediment adsorption). For each, state why the lumping is acceptable at the current model fidelity and what would trigger un-lumping.",
+          "order": 4,
+          "summary": "Write the intentional-lumping and out-of-scope section"
+        },
+        {
+          "details": "Update scientific_inventory.md to add a 'Routing Convention' column or annotation to the pool catalog table, referencing the relevant ROUTING.md section for each pool. Add a brief pointer paragraph at the top of scientific_specs.md noting that the routing conventions addressing issues #2 and #8 are now defined in ROUTING.md. Ensure UNITS.md and ROUTING.md are consistent on pool names and units. Add a note to ROUTING.md listing the downstream implementation beads (tanksim-6e5.3.2 through 6e5.3.7) and which routing rules each bead is responsible for implementing.",
+          "order": 5,
+          "summary": "Add cross-references and dependency mapping to existing docs"
+        },
+        {
+          "details": "Check that ROUTING.md covers every pathway listed in the bead prompt (ingestion→assimilation, ingestion→fecal, assimilation→respiration, assimilation→excretion, plant trimming→export vs leave-cuttings, feed→uneaten fraction, organism death→detritus). Verify that trim, feed, graze, and decay all have explicit intended outcomes documented. Confirm the design is simple enough to test by checking that each routing rule can be expressed as a conservation equation (inputs = outputs for each pool per timestep). Verify that every downstream bead (tanksim-6e5.3.2, 3.3, 3.5, 3.7) can point to a specific section of ROUTING.md for its routing contract.",
+          "order": 6,
+          "summary": "Self-review: verify completeness against acceptance criteria and bead prompt"
+        }
+      ],
+      "readiness": {
+        "ready": true,
+        "risks": [
+          "The microfauna population-index model makes true mass conservation for microfauna approximate rather than exact. The routing convention must clearly label this as intentional lumping to avoid false precision in downstream implementation.",
+          "DIC routing conventions may need revision once tanksim-6e5.4.1 (carbonate-state contract) is complete. ROUTING.md should be written to allow the DIC section to be updated without invalidating the organic-matter routing rules.",
+          "Default parameter ranges (assimilation 0.4–0.7, etc.) are order-of-magnitude from freshwater invertebrate literature. If the user or domain expert has specific Neocaridina shrimp data, the defaults may need adjustment before implementation beads use them.",
+          "The scientific_inventory.md cross-reference update (work item 5) touches a 55KB file that is a key reference for multiple beads. Edits must be surgical to avoid disrupting existing content relied upon by other open beads."
+        ]
+      }
+    },
+    "family": "Planning"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

@@ -1,0 +1,13 @@
+{
+  "sessions": [
+    {
+      "role": "implementer",
+      "backend_family": "claude",
+      "model_id": "claude-opus-4-6",
+      "session_id": "32a3195d-ab9a-450f-b56e-75e5ea9696f4",
+      "created_at": "2026-03-28T16:11:38.181219669Z",
+      "last_used_at": "2026-03-28T16:11:38.181219669Z",
+      "invocation_count": 1
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "payload_id": "run-20260327225238-review-c1-a1-cr1",
+  "stage_id": "review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T23:00:13.538183063Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "Reviewed crates/tank_core/src/save.rs: save loading now uses an ordered migration registry with a compile-time length invariant, applies migrations sequentially from the file version to SCHEMA_VERSION, and stamps migrated saves to the current schema before deserialization.",
+        "Reviewed crates/tank_core/src/types/actions.rs: unknown future saves and unsupported old saves now return explicit, human-readable SimError variants instead of falling through to a generic mismatch path.",
+        "Reviewed crates/tank_core/tests/save_load.rs: coverage includes v2->current migration, legacy saves missing stability_tracker, future-version rejection, too-old rejection, zero-version rejection, and save/load determinism after restore.",
+        "Verified the implementation in the workspace with `cargo test`, `cargo clippy -- -D warnings`, and `cargo fmt --check`; all passed.",
+        "The migration contract is documented inline next to the registry in crates/tank_core/src/save.rs, including how later phases should append migrations and keep the version chain contiguous."
+      ],
+      "findings_or_gaps": [],
+      "follow_up_or_amendments": [],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}
