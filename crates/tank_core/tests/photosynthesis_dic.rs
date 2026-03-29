@@ -6,7 +6,58 @@
 //! - Stoichiometric consistency between O2 and DIC fluxes
 //! - Diurnal pH swing in planted tanks
 
-use tank_core::{Engine, SimSeed, SimulationEngine, TankState};
+use tank_core::{
+    systems::light::is_light_on, Engine, SimError, SimSeed, SimulationEngine, TankState,
+};
+
+#[derive(Clone, Copy, Debug)]
+struct HourlyChemSample {
+    hour_of_day: u8,
+    ph: f64,
+    dic_mg_c_total: f64,
+}
+
+fn hourly_chemistry_samples(
+    state: TankState,
+    hours: usize,
+) -> Result<Vec<HourlyChemSample>, SimError> {
+    let mut engine = Engine::from_parts(state, vec![]);
+    let mut samples = Vec::with_capacity(hours);
+
+    for _ in 0..hours {
+        engine.step_hours(1)?;
+        let snapshot = engine.full_state();
+        samples.push(HourlyChemSample {
+            hour_of_day: snapshot.environment.hour_of_day,
+            ph: snapshot.water.ph,
+            dic_mg_c_total: snapshot.water.dissolved_inorganic_carbon_mg_c_total,
+        });
+    }
+
+    Ok(samples)
+}
+
+fn light_transition_hours(photoperiod_hours: f64) -> (u8, u8) {
+    let mut end_of_dark_hour = None;
+    let mut end_of_light_hour = None;
+
+    for hour in 0..24u8 {
+        let light_now = is_light_on(hour, photoperiod_hours);
+        let light_next = is_light_on((hour + 1) % 24, photoperiod_hours);
+
+        if !light_now && light_next {
+            end_of_dark_hour = Some((hour + 1) % 24);
+        }
+        if light_now && !light_next {
+            end_of_light_hour = Some((hour + 1) % 24);
+        }
+    }
+
+    (
+        end_of_dark_hour.expect("photoperiod should define an end-of-dark boundary"),
+        end_of_light_hour.expect("photoperiod should define an end-of-light boundary"),
+    )
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -134,29 +185,24 @@ fn test_day_night_ph_swing() -> Result<(), tank_core::SimError> {
     let mut state = planted_dic_state(SimSeed(10_200));
     state.environment.hour_of_day = 0;
     state.environment.day = 1;
-
-    let mut engine = Engine::from_parts(state, vec![]);
+    let (end_of_dark_hour, end_of_light_hour) =
+        light_transition_hours(state.hardware.light.photoperiod_hours);
 
     // Track pH at end of each light and dark period over 2 full cycles.
     let mut ph_end_of_light = Vec::new();
     let mut ph_end_of_dark = Vec::new();
 
     // Collect pH at every hour for the full 48h period.
-    let mut ph_trace: Vec<(u8, f64)> = Vec::new();
-    for _hour in 1..=48 {
-        engine.step_hours(1)?;
-        let s = engine.full_state();
-        ph_trace.push((s.environment.hour_of_day, s.water.ph));
-    }
+    let samples = hourly_chemistry_samples(state, 48)?;
 
-    // Extract end-of-light (hour 18) and end-of-dark (hour 6) from day 2
-    // (indices 24-47) to allow transient settling on day 1.
-    for &(h, ph) in &ph_trace[24..] {
-        if h == 18 {
-            ph_end_of_light.push(ph);
+    // Extract end-of-light and end-of-dark from day 2 (indices 24-47)
+    // to allow transient settling on day 1.
+    for sample in &samples[24..] {
+        if sample.hour_of_day == end_of_light_hour {
+            ph_end_of_light.push(sample.ph);
         }
-        if h == 6 {
-            ph_end_of_dark.push(ph);
+        if sample.hour_of_day == end_of_dark_hour {
+            ph_end_of_dark.push(sample.ph);
         }
     }
 
@@ -289,7 +335,68 @@ fn test_no_plants_minimal_ph_swing() -> Result<(), tank_core::SimError> {
 }
 
 // ---------------------------------------------------------------------------
-// 6. Photosynthesis O2/DIC stoichiometry (within 5%)
+// 5b. Planted tank with lights forced off shows no diurnal pH recovery
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_planted_lights_off_has_no_diurnal_ph_swing() -> Result<(), tank_core::SimError> {
+    let mut state = planted_dic_state(SimSeed(10_450));
+    state.environment.hour_of_day = 0;
+    state.environment.day = 1;
+    state.hardware.light.enabled = false;
+
+    let (end_of_dark_hour, end_of_light_hour) =
+        light_transition_hours(state.hardware.light.photoperiod_hours);
+    let samples = hourly_chemistry_samples(state, 48)?;
+
+    let mut ph_end_of_light = Vec::new();
+    let mut ph_end_of_dark = Vec::new();
+
+    for sample in &samples {
+        if sample.hour_of_day == end_of_light_hour {
+            ph_end_of_light.push(sample.ph);
+        }
+        if sample.hour_of_day == end_of_dark_hour {
+            ph_end_of_dark.push(sample.ph);
+        }
+    }
+
+    assert_eq!(
+        ph_end_of_dark.len(),
+        ph_end_of_light.len(),
+        "lights-off probe should capture matching dark/light cycle boundaries"
+    );
+
+    let max_nominal_daytime_recovery = ph_end_of_dark
+        .iter()
+        .zip(ph_end_of_light.iter())
+        .map(|(dark_ph, light_ph)| light_ph - dark_ph)
+        .fold(f64::NEG_INFINITY, f64::max);
+
+    assert!(
+        max_nominal_daytime_recovery <= 0.05,
+        "lights-off planted tank should not show a daytime pH rebound: max_delta={max_nominal_daytime_recovery:.4}"
+    );
+
+    for window in samples.windows(2) {
+        let previous = window[0].dic_mg_c_total;
+        let current = window[1].dic_mg_c_total;
+        assert!(
+            current + 1e-6 >= previous,
+            "lights-off planted tank should only accumulate DIC from respiration: prev={previous:.6}, current={current:.6}"
+        );
+    }
+
+    assert!(
+        samples.last().unwrap().dic_mg_c_total > samples.first().unwrap().dic_mg_c_total,
+        "lights-off planted tank should end with more DIC than it started"
+    );
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// 6. Photosynthesis O2/DIC stoichiometry (within 1%)
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -340,8 +447,8 @@ fn test_photosynthesis_o2_dic_stoichiometry() -> Result<(), tank_core::SimError>
     let relative_error = ((actual_ratio - expected_ratio) / expected_ratio).abs();
 
     assert!(
-        relative_error < 0.05,
-        "photosynthesis DIC:O2 ratio ({actual_ratio:.6}) should be within 5% of \
+        relative_error < 0.01,
+        "photosynthesis DIC:O2 ratio ({actual_ratio:.6}) should be within 1% of \
          stoichiometric ({expected_ratio:.6}), relative error = {relative_error:.6}"
     );
 
@@ -418,65 +525,106 @@ fn test_respiration_o2_dic_stoichiometry() -> Result<(), tank_core::SimError> {
 
 #[test]
 fn test_planted_tank_day_night_cycle() -> Result<(), tank_core::SimError> {
-    let state = tank_scenarios::seeded_state(SimSeed(10_700), "medium_planted")
-        .expect("medium_planted scenario should materialize");
+    let overrides = tank_scenarios::startup_defaults_for_scenario("medium_planted")
+        .expect("medium_planted startup defaults should materialize");
+    let state = tank_scenarios::seeded_state_with_full_overrides(
+        SimSeed(10_700),
+        "medium_planted",
+        overrides,
+    )
+    .expect("medium_planted shipped startup profile should materialize");
+    let (end_of_dark_hour, end_of_light_hour) =
+        light_transition_hours(state.hardware.light.photoperiod_hours);
 
     let mut engine = Engine::from_parts(state, vec![]);
 
-    let mut ph_trajectory: Vec<f64> = Vec::new();
-    let mut dic_trajectory: Vec<f64> = Vec::new();
+    let mut samples: Vec<HourlyChemSample> = Vec::new();
 
     // Run for 168 hours (1 week).
     for _ in 0..168 {
         engine.step_hours(1)?;
         let s = engine.full_state();
-        ph_trajectory.push(s.water.ph);
-        dic_trajectory.push(s.water.dissolved_inorganic_carbon_mg_c_total);
+        samples.push(HourlyChemSample {
+            hour_of_day: s.environment.hour_of_day,
+            ph: s.water.ph,
+            dic_mg_c_total: s.water.dissolved_inorganic_carbon_mg_c_total,
+        });
     }
 
     // pH must stay within storage bounds at all times.
-    for (i, &ph) in ph_trajectory.iter().enumerate() {
+    for (i, sample) in samples.iter().enumerate() {
         assert!(
-            (5.5..=8.5).contains(&ph),
-            "pH out of bounds at hour {}: {ph:.3}",
-            i + 1
+            (6.0..=8.0).contains(&sample.ph),
+            "pH out of bounds at hour {}: {:.3}",
+            i + 1,
+            sample.ph
         );
     }
 
     // DIC should not be constant — the photosynthesis/respiration pathway
     // and atmospheric exchange should exercise it.
-    let dic_min = dic_trajectory.iter().cloned().reduce(f64::min).unwrap();
-    let dic_max = dic_trajectory.iter().cloned().reduce(f64::max).unwrap();
+    let dic_min = samples
+        .iter()
+        .map(|sample| sample.dic_mg_c_total)
+        .reduce(f64::min)
+        .unwrap();
+    let dic_max = samples
+        .iter()
+        .map(|sample| sample.dic_mg_c_total)
+        .reduce(f64::max)
+        .unwrap();
     assert!(
         dic_max - dic_min > 0.1,
         "DIC should vary over 168h: min={dic_min:.2}, max={dic_max:.2}"
     );
 
     // DIC should remain positive and finite.
-    for (i, &dic) in dic_trajectory.iter().enumerate() {
+    for (i, sample) in samples.iter().enumerate() {
         assert!(
-            dic >= 0.0 && dic.is_finite(),
-            "DIC non-finite at hour {}: {dic}",
-            i + 1
+            sample.dic_mg_c_total >= 0.0 && sample.dic_mg_c_total.is_finite(),
+            "DIC non-finite at hour {}: {}",
+            i + 1,
+            sample.dic_mg_c_total
         );
     }
 
-    // Verify hourly photosynthesis/respiration is actually coupled:
-    // during consecutive lit hours, pH should generally increase (or at least
-    // not monotonically decrease). Check the FIRST lit period of day 2
-    // (hours 7-16 of day 2, which is index 31-40 in the trajectory).
-    if ph_trajectory.len() >= 41 {
-        // Hourly photosynthesis removes DIC → pH rises during lit hours.
-        // This may be partially offset by atmospheric exchange but should
-        // still show a net upward trend.
-        let lit_start_ph = ph_trajectory[31]; // hour 7 of day 2
-        let lit_end_ph = ph_trajectory[40]; // hour 16 of day 2
+    // Use the back half of the week to avoid startup transients and verify the
+    // actual shipped scenario shows the expected end-of-light / end-of-dark
+    // separation on every sampled cycle.
+    let mut ph_end_of_light = Vec::new();
+    let mut ph_end_of_dark = Vec::new();
+    for sample in &samples[84..] {
+        if sample.hour_of_day == end_of_light_hour {
+            ph_end_of_light.push(sample.ph);
+        }
+        if sample.hour_of_day == end_of_dark_hour {
+            ph_end_of_dark.push(sample.ph);
+        }
+    }
+
+    assert_eq!(
+        ph_end_of_dark.len(),
+        ph_end_of_light.len(),
+        "scenario probe should capture matching end-of-dark and end-of-light samples"
+    );
+
+    let min_cycle_delta = ph_end_of_dark
+        .iter()
+        .zip(ph_end_of_light.iter())
+        .map(|(dark_ph, light_ph)| light_ph - dark_ph)
+        .fold(f64::INFINITY, f64::min);
+
+    for (dark_ph, light_ph) in ph_end_of_dark.iter().zip(ph_end_of_light.iter()) {
         assert!(
-            lit_end_ph >= lit_start_ph - 0.05,
-            "pH should not significantly decline during lit hours: \
-             start={lit_start_ph:.3}, end={lit_end_ph:.3}"
+            light_ph > dark_ph,
+            "end-of-light pH ({light_ph:.3}) should exceed end-of-dark pH ({dark_ph:.3})"
         );
     }
+
+    assert!(
+        min_cycle_delta >= 0.1,
+        "medium_planted should show at least 0.1 pH units of day-night separation in the shipped scenario: min_delta={min_cycle_delta:.3}"
+    );
 
     // Plants should still be alive and healthy.
     let final_state = engine.full_state();
