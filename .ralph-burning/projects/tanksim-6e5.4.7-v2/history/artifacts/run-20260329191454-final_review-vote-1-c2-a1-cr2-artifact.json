@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260329191454-final_review-vote-1-c2-a1-cr2-artifact",
+  "payload_id": "run-20260329191454-final_review-vote-1-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-29T20:16:20.018272502Z",
+  "content": "# Final Review Votes\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccept the vacuous debug-assert amendment. Reject the other four: the proposed ratio tightening is stricter than current valid behavior, the test file is already tracked, and the tracing/output surfaces already separate TAN oxidation from nitrate production and already expose alkalinity production for future denitrification work.\n\n## Votes\n\n- `fr-2-f86e4833`: Accept\n  The asserted condition is effectively tautological in its current location. `alk_budget` has already been decremented and clamped to `>= 0`, while `state.water.alkalinity_meq_total` still holds the pre-commit pool value, so `max(initial - cost, 0) <= initial + EPSILON` does not detect over-deduction. Replacing it with a pre-clamp invariant against the actual costs, or removing it, is a correctness and maintainability improvement.\n- `fr-2-1cbd2690`: Reject\n  The suggested 0.90 or 0.92 lower bound is not supported by the current model behavior. Reproducing the test scenario yields an observed `alk_consumed / tan_consumed` ratio of about 0.12245, which is only about 0.858 of `NITRIFICATION_ALK_MEQ_PER_MG_N`, so a 0.90 floor would falsely fail. The existing test also already includes a separate check comparing alkalinity consumed against `NO2+NO3` gain times the stoichiometric constant.\n- `fr-2-0f6e9beb`: Reject\n  This defect is not present in the current tree. `crates/tank_core/tests/nitrification_alkalinity.rs` is already tracked by git, and `git status --short` does not show it as untracked, so there is no missing-version-control issue to fix here.\n- `fr-2-7ee0abfa`: Reject\n  The inconsistency described by the amendment has already been addressed. `NitrogenCycleOutput` now exposes both `nitrate_produced_mg_n` and `tan_oxidized_mg`, with comments explaining the distinction, and engine tracing records both alongside alkalinity consumption. That keeps diagnostics internally consistent when nitrite accumulates.\n- `fr-2-aff4afaf`: Reject\n  The reusable return path surface already exists. `NitrogenCycleOutput` includes `alkalinity_produced_meq`, `net_alkalinity_delta_meq()`, and engine tracing exports both consumed and produced alkalinity metrics, so future denitrification work does not need another public API or trace-schema change merely to represent alkalinity return.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

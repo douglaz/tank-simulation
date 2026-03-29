@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328023522-apply_fixes-c2-a1-cr2-artifact",
+  "payload_id": "run-20260328023522-apply_fixes-c2-a1-cr2",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-28T03:25:17.546020543Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNo additional source edits were required in this Apply Fixes pass because the latest review approved the previously landed budget-helper work. The resolved fix set remains the same: budget-helper docs now describe runtime `Option<BudgetLedger>` opt-in behavior, absolute-delta sorting is NaN-tolerant, `step_and_inspect` emits budget debug output on the error path, dissolved-oxygen totals assert before clamping in debug builds, the 50% RO water-change regression uses the public action path, and the shrimp closed-system conservation tests now use one-line `assert_n_conserved`/`assert_c_conserved` helper calls.\n\n## Steps\n\n1. [Completed] Inspect the latest review findings and confirm whether any blocking amendments remained for the budget-helper work.\n2. [Skipped] Apply additional source edits for review feedback if needed.\n3. [Completed] Record the approved validation state and the remaining non-blocking coverage gaps for the completed implementation.\n\n## Validation Evidence\n\n- No new commands were required in this pass; the latest review outcome was `approved` with no blocking findings.\n- `cargo fmt -p tank_core --check` passed cleanly.\n- `cargo clippy -p tank_core -- -D warnings` passed with zero warnings.\n- `cargo test -p tank_core --test budget_helpers -- --nocapture` passed (13 passed, 0 failed), including the `TANK_BUDGET_DEBUG` smoke path.\n- `cargo test -p tank_core --test budget_tracking -- --nocapture` passed (22 passed, 0 failed), including the closed-system conservation coverage.\n- `cargo test -p tank_core --test shrimp_feeding_pathway -- --nocapture` passed (8 passed, 0 failed).\n- `cargo test -p tank_core --test water_change_mass_balance -- --nocapture` passed (10 passed, 0 failed).\n\n## Outstanding Risks\n\n- There is still no dedicated stderr-capture regression for a multi-tick partial-failure `step_and_inspect` run, so the error-path debug emission is only indirectly covered.\n- The quick-start example in `budget_helpers.rs` remains marked `rust,ignore`, so example drift would not be caught by compilation.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

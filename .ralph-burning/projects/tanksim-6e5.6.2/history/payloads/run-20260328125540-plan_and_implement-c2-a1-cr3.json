@@ -1,0 +1,52 @@
+{
+  "payload_id": "run-20260328125540-plan_and_implement-c2-a1-cr3",
+  "stage_id": "plan_and_implement",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T15:26:40.259221946Z",
+  "payload": {
+    "data": {
+      "change_summary": "Completed the pending shrimp bookkeeping amendment pass by hardening the shared stage/egg cohort count helpers with saturating arithmetic and adding regression coverage for the remaining lifecycle invariants: hatch-into-empty juvenile reset, promotion into empty sub-adult reset, and multi-day population conservation where total population change equals births minus deaths. The current `tank_core` branch now has direct tests covering the empty-stage carryover bug class and the acceptance-criteria count-accounting identity.",
+      "outstanding_risks": [
+        "This amendment pass revalidated `tank_core` only; downstream crates were not rerun because the net code diff stayed inside that crate.",
+        "The new conservation regression isolates births and deaths by freezing stage promotions, so long-horizon accounting with simultaneous promotion and mortality still relies on the existing transition-specific tests rather than a dedicated combined invariant test."
+      ],
+      "steps": [
+        {
+          "description": "Inspect the current branch to confirm which pending shrimp-stage amendments were already wired and where the remaining gaps still lived in shared biology helpers and regression coverage.",
+          "order": 0,
+          "status": "completed"
+        },
+        {
+          "description": "Harden the shared stage/egg cohort helper arithmetic so incoming-stage and egg-cohort totals use saturating count math instead of unchecked `u32` addition.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Add focused shrimp population regressions for hatch-into-empty juvenile state reset, promotion into empty sub-adult state reset, and multi-day births-minus-deaths population conservation.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Format the updated code and rerun the relevant `tank_core` validation suites, including the full crate test pass.",
+          "order": 3,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo fmt --all` completed.",
+        "`cargo test -p tank_core --lib` passed.",
+        "`cargo test -p tank_core --test shrimp_population --test validation --test save_load` passed.",
+        "`cargo test -p tank_core` passed (full `tank_core` suite, including the new shrimp population regressions)."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

@@ -1,0 +1,37 @@
+{
+  "payload_id": "run-20260328125548-review-c2-a1-cr3",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T14:26:01.635541051Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All 6 acceptance-criteria tests pass in tank_data: test_provenance_schema_roundtrip (AC1), test_provenance_optional_fields (AC2), test_confidence_levels_enum (AC3), test_valid_range_enforcement (AC4), test_backward_compatible_loading (AC5), test_provenance_display (AC6).",
+        "11 provenance unit tests pass in tank_core covering ConfidenceLevel roundtrip, unknown rejection, ParamMeta display (full and empty), range check (in-range, out-of-range, no-range, non-finite value, invalid range), and format_param (with and without notes).",
+        "NaN/non-finite guard implemented in check_param_range (provenance.rs:140-146): non-finite values now produce a warning with distinct 'non-finite' message. Inverted range guard at provenance.rs:133-139 catches lo > hi with 'invalid valid_range' message. Both have dedicated tests.",
+        "Legacy total-style normalization implemented via provenance_value() -> normalize_process_param_for_provenance() pipeline (presets.rs:535-542, 796-806). All legacy _mg parameters (aob_k_tan_mg, decomposer_k_doc_mg, etc.) are divided by LEGACY_KINETIC_REFERENCE_VOLUME_L before display/range-check. preserve_non_finite_division() (presets.rs:853-858) retains NaN/inf for diagnostic paths. Covered by test_process_preset_format_param_normalizes_legacy_total_units.",
+        "Preset-level Provenance.confidence documented as intentionally freeform (presets.rs:18-20 doc comment), distinct from per-parameter ParamMeta.confidence which uses the validated ConfidenceLevel enum. Covered by test_preset_level_provenance_confidence_is_freeform.",
+        "death_biomass_to_detritus_fraction and all 4 microfauna routing fractions now present in ProcessParamsPreset struct (presets.rs:381-401) with serde defaults, included in param_value() lookup (presets.rs:514, 521-530), and tested in test_backward_compatible_loading (presets.rs:1488-1492).",
+        "ProcessParamsPreset::validate() rejects unknown param_meta keys (presets.rs:862-869). ParamMeta uses #[serde(deny_unknown_fields)] (provenance.rs:40). Both guard against typos/invalid metadata.",
+        "All public types properly exported: tank_core::types::mod.rs re-exports ConfidenceLevel, ParamMeta, RangeWarning, check_param_range, check_all_ranges, format_param. tank_data::lib.rs re-exports the same for external consumers.",
+        "Full test suite green: 45 tank_core lib + 16 tank_data lib + 3 tank_scenarios lib + 13 budget_helpers + 24 budget_tracking + 16 shrimp_population = 117 tests, 0 failures."
+      ],
+      "findings_or_gaps": [
+        "No TOML data files currently contain [param_meta.*] sections — the provenance infrastructure is ready but actual metadata attachment is deferred to the downstream bead tanksim-6e5.7.2. This is expected per the project design.",
+        "Preset-level Provenance.confidence remains Option<String> rather than Option<ConfidenceLevel>. The distinction is now documented in a doc comment (presets.rs:18-20), which satisfies the amendment requirement for explicit documentation of the intentional divergence.",
+        "The valid_range check at presets.rs:1412 asserts warnings[0].value == 10.0 for a raw aob_k_tan_mg of 200.0 — this is correct because the legacy normalization divides by 20.0 (LEGACY_KINETIC_REFERENCE_VOLUME_L), yielding 10.0. The test correctly validates that range checks operate on normalized values, not raw stored values."
+      ],
+      "follow_up_or_amendments": [],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 3
+}

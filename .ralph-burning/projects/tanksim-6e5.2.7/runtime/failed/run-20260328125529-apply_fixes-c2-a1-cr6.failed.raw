@@ -1,0 +1,892 @@
+=== stdout ===
+=== stderr ===
+OpenAI Codex v0.117.0 (research preview)
+--------
+workdir: /home/master/p/tank-simulation
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019d3536-1cf3-7510-beb9-19f4e53c3589
+--------
+user
+Contract: apply_fixes
+Role: Implementer
+
+# Stage Execution Prompt
+
+You are the Implementer. Your objective for this Apply Fixes stage is to apply the requested fixes, summarize the edits, and record the validation performed.
+
+## Original Project Prompt
+
+○ tanksim-6e5.2.7 · Update snapshot/API chemistry semantics, display conversions, and TDS/conductivity labeling   [● P1 · OPEN]
+Owner: master · Type: task
+Created: 2026-03-26 · Updated: 2026-03-27
+Labels: api, phase-1, scientific-core, tui, units
+
+Context:
+- Snapshot and UI fields such as nitrite_mg_l and nitrate_mg_l (snapshot.rs:15-16) currently risk misleading users about whether values are nitrogen-as-N or full-ion concentrations.
+- Current TDS/conductivity output also risks sounding more precise than it is, while undercounting relevant dissolved contributors.
+- As the simulation gets more scientific, ambiguous output language becomes a product problem as well as an engineering problem.
+
+Deliverable:
+- Rename snapshot/API fields where needed or add explicit conversion/display fields so users can tell whether chemistry values are N-as-element, ion concentration, or another derived view.
+- Centralize the conversion logic used by snapshot/API/TUI rather than scattering unit math through rendering code.
+- Review TDS/conductivity against current model scope: add missing in-scope contributors where state already exists, and where the number remains approximate, relabel it honestly as an estimate or tracked-major-ions proxy.
+- Update TUI/API/help text so surfaced chemistry metrics explain what is tracked directly, what is converted for display, and what important contributors are still omitted.
+- Keep backward compatibility considerations visible if save/load or API consumers are affected.
+
+Implementation options (per B1 decision):
+  Option A: Rename to nitrite_mg_n_per_l, nitrate_mg_n_per_l (explicit N-as-element).
+  Option B: Add dual fields: nitrite_mg_n_per_l (internal) + nitrite_mg_ion_per_l (display).
+  Option C: Keep short names but add a unit label field or documentation.
+
+Likely touch points:
+- crates/tank_core/src/types/snapshot.rs
+- crates/tank_api (response structs)
+- crates/tank_tui (rendering logic)
+- crates/tank_core/src/types/water.rs
+- save/schema code if field names change
+
+## Acceptance Criteria
+
+Acceptance Criteria:
+- a user reading the UI/API can tell what chemistry unit or metric is being shown, including whether a value is N-as-element, ion concentration, tracked major ions, or an estimate.
+- internal and external naming plus conversion logic are centralized and consistent; unit tests verify NO3/NO2/NH4/PO4 conversion accuracy and round-trip behavior within tolerance.
+- displayed TDS/conductivity either includes the currently in-scope tracked contributors or is explicitly labeled as an estimate/major-ion proxy rather than true total dissolved solids.
+- tracked versus omitted contributors for TDS/conductivity are documented in user-facing text so future ions/fertilizers can extend the metric cleanly.
+
+Dependencies:
+  -> tanksim-6e5.2.2 (blocks) - Implement canonical concentration and compartment helper APIs
+  -> tanksim-6e5.2.1 (blocks) - Decide internal unit taxonomy and display policy
+  -> tanksim-6e5.2 (parent-child) - Phase 1A — units, concentration semantics, and kinetic normalization
+
+Dependents:
+  <- tanksim-6e5.7.5 (blocks) - Update developer docs, TUI/API messaging, and scientific-scope narrative
+
+Comments:
+  [2026-03-26 20:44 UTC] master: Canonicalization note: merged former B8 into B7 so user-facing chemistry semantics, display conversions, and TDS/conductivity honesty live in one place instead of two partially overlapping beads.
+  [2026-03-26 13:46 UTC] backlog-planner: Rationale:
+- The point of scientific fidelity is undermined if the outputs are mislabeled.
+- This bead should make the model easier to learn from, not just more correct internally.
+- Keep old names only where compatibility truly demands it, and document any transitional shims clearly.
+
+Conversion factors (for reference):
+  NO3 as ion = N × (62.004/14.007) ≈ N × 4.427
+  NO2 as ion = N × (46.005/14.007) ≈ N × 3.284
+  NH4+ as ion = N × (18.039/14.007) ≈ N × 1.288
+  NH3 as molecule = N × (17.031/14.007) ≈ N × 1.216
+  PO4 as ion = P × (94.971/30.974) ≈ P × 3.066
+
+These conversions should be defined as named constants, not magic numbers scattered through rendering code.
+
+## Prior Stage Outputs This Cycle
+
+### Apply Fixes (`apply_fixes`)
+- Payload ID: `run-20260328125529-apply_fixes-c2-a1-cr1`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "Updated the user-visible chemistry surfaces so threshold event summaries now spell out NH3-N and N-basis units, the overview screen restores GH/KH derivation labels plus 7-ion TDS and conductivity estimate units, and API snapshot responses now emit legacy chemistry keys alongside the explicit renamed fields with semantics/scope metadata for the 7-ion estimate.",
+    "outstanding_risks": [
+      "Repository has unrelated pre-existing modifications in `crates/tank_core/src/invariants.rs`, several `tank_core` tests, and `.ralph-burning/`; they were left untouched.",
+      "The overview copy change was validated with `cargo check -p tank_tui`, but there is still no dedicated render test asserting the exact TUI text."
+    ],
+    "steps": [
+      {
+        "description": "Inspected the event, snapshot/API, and overview paths called out in the review feedback.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Changed threshold event summaries to include explicit chemistry bases and added regression coverage for the rendered text.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Expanded overview chemistry/system copy to show GH/KH derivation labels plus estimated 7-ion TDS and conductivity units.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Centralized API snapshot serialization behind helpers that emit legacy chemistry aliases and semantics metadata on `/snapshot`, `/snapshot/chemistry`, `/time/step`, `/load`, and scenario-load responses.",
+        "order": 3,
+        "status": "completed"
+      },
+      {
+        "description": "Ran targeted tests and compile checks for the touched crates.",
+        "order": 4,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "`cargo fmt --all` completed successfully.",
+      "`cargo test -p tank_core --test events` passed (7 tests), including the new explicit-unit summary regression.",
+      "`cargo test -p tank_api` passed (2 tests), covering legacy chemistry aliases and 7-ion estimate semantics metadata.",
+      "`cargo check -p tank_tui` completed successfully after the overview copy changes."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Plan and Implement (`plan_and_implement`)
+- Payload ID: `run-20260328125529-plan_and_implement-c2-a1-cr2`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "Reviewed the pending amendment list against current HEAD, confirmed the API/core chemistry-semantics remediations were already present, and made the remaining TUI follow-up in `crates/tank_tui/src/screens/chemistry.rs` so the existing 7-ion scope/omission copy fits within the fixed-height derived panel by folding temperature into the DO line.",
+    "outstanding_risks": [
+      "The worktree still contains unrelated pre-existing edits in `crates/tank_core/src/systems/shrimp.rs`, `crates/tank_core/tests/shrimp_population.rs`, `crates/tank_harness/src/lib.rs`, `crates/tank_tui/src/screens/biology.rs`, and `.ralph-burning/`; they were left untouched.",
+      "`cargo test -p tank_tui` is still not fully green because the unrelated existing test `screens::actions::tests::rejects_invalid_integer_counts` fails in `crates/tank_tui/src/screens/actions.rs`.",
+      "`cargo fmt --all --check` still reports unrelated pre-existing formatting drift in other dirty files, so I avoided a workspace-wide formatting rewrite and used targeted verification instead."
+    ],
+    "steps": [
+      {
+        "description": "Compared the pending amendment list against the current `tank_api`, `tank_core`, and `tank_tui` state to identify what still required code changes versus what had already landed.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Verified that the previously flagged API/core items were already satisfied in HEAD, including the biology sub-adult field, DIC legacy alias, DO semantics metadata, corrected TDS omission wording, and named/documented GH/KH/conductivity constants.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Updated the chemistry TUI derived panel so the 7-ion proxy scope text remains visible without overflowing the fixed block height by combining the temperature readout with the DO line.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Ran targeted validation for the chemistry semantics surfaces and recorded the remaining unrelated test/formatting issues outside this change.",
+        "order": 3,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "`cargo test -p tank_api` passed (3 tests), covering legacy chemistry aliases, estimate-scope metadata, and biology stage breakdown serialization.",
+      "`cargo test -p tank_tui screens::tests::estimated_tds_scope_lines_name_included_and_omitted_species --lib` passed.",
+      "`cargo check -p tank_tui` passed.",
+      "`cargo test -p tank_tui` failed only in the unrelated existing `screens::actions::tests::rejects_invalid_integer_counts` test.",
+      "`cargo fmt --all --check` reported unrelated formatting drift in other modified files outside this change set."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Review (`review`)
+- Payload ID: `run-20260328125529-review-c2-a1-cr2`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "evidence": [
+      "All acceptance criteria met: (1) API/TUI fields now use explicit unit suffixes (tan_mg_n_per_l, nitrite_mg_n_per_l, phosphate_mg_p_per_l, dissolved_inorganic_carbon_mg_c_per_l, estimated_tds_7_ion_mg_per_l, estimated_conductivity_us_cm) so users can tell whether a value is N-as-element, P-as-element, or a 7-ion estimate.",
+      "(2) Conversion logic is centralized in conversions.rs with named constants (NO3_PER_N, NO2_PER_N, NH4_PER_N, NH3_PER_N, PO4_PER_P) documented with molar mass derivations. Round-trip unit tests verify all five conversions within 1e-12 tolerance.",
+      "(3) GH/KH coefficients in water.rs are now named constants (CALCIUM_AS_CACO3_FACTOR, MAGNESIUM_AS_CACO3_FACTOR, MG_CACO3_PER_MEQ, MG_CACO3_PER_DEGREE, MOLAR_MASS_CACO3_G_PER_MOL, MOLAR_MASS_CALCIUM_G_PER_MOL, MOLAR_MASS_MAGNESIUM_G_PER_MOL) with doc comments explaining the CaCO3-basis derivation.",
+      "(4) The conductivity divisor 0.65 is now ESTIMATED_TDS_TO_CONDUCTIVITY_DIVISOR with doc comment explaining it is an empirical freshwater approximation for display only.",
+      "(5) TDS/conductivity labeled as estimates: field names include 'estimated_' prefix, TUI shows 'Est. TDS (7-ion)' and 'Est. conductivity (7-ion)', and OMITTED_TDS_CONTRIBUTORS correctly states tracked species (TAN/NH3, NO2, NO3, PO4) are excluded from the estimate.",
+      "(6) TUI scope lines (ESTIMATED_TDS_SCOPE_LINES) now tell user which 7 ions are counted and what is omitted, displayed on both chemistry and overview screens.",
+      "(7) Backward compatibility maintained: insert_legacy_chemistry_fields() backfills all old field names including dissolved_inorganic_carbon_mg_l. legacy_chemistry_aliases metadata maps old->new names. snapshot_response_json() is used consistently in /snapshot, /time/step, /load, and scenario-load endpoints.",
+      "(8) BiologySnapshot includes sub_adult_count and total_shrimp_count with test coverage (biology_snapshot_keeps_total_and_stage_breakdown).",
+      "(9) chemistry_field_semantics metadata includes do_mg_l and do_sat_mg_l entries clarifying they refer to dissolved oxygen.",
+      "(10) cargo test -p tank_api passes all 3 tests. cargo test -p tank_core --test events passes all 7 tests. cargo clippy -p tank_api -p tank_tui -p tank_core -- -D warnings is clean."
+    ],
+    "findings_or_gaps": [
+      "The tank_tui test `screens::actions::tests::rejects_invalid_integer_counts` fails, but this is a pre-existing issue unrelated to this bead's changes (confirmed in prior stage output and by inspection: it is in actions.rs, not in any chemistry/snapshot code).",
+      "The overview screen's Hardware panel now has 8 content lines (5 original + 3 scope lines) inserted at position 3, pushing hardware status lines further down. This may cause visual overflow in small terminal windows, but is a reasonable tradeoff for the scope transparency requirement.",
+      "The chemistry TUI combined DO and temperature onto one line to make room for scope lines — a practical layout decision that preserves all information."
+    ],
+    "follow_up_or_amendments": [],
+    "outcome": "approved"
+  },
+  "family": "Validation"
+}
+```
+
+### Apply Fixes (`apply_fixes`)
+- Payload ID: `run-20260328125529-apply_fixes-c2-a1-cr2`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "No additional fixes were applied in this round because the review stage approved the existing implementation and provided no follow-up amendments.",
+    "outstanding_risks": [
+      "The worktree still contains unrelated pre-existing modifications in other files called out by prior stages; they were not touched in this no-op apply-fixes pass.",
+      "No new validation commands were run in this round because no code changed; the latest verification remains the targeted test and check results recorded in the prior implementation/review stages.",
+      "The unrelated existing `tank_tui` test failure in `screens::actions::tests::rejects_invalid_integer_counts` remains outside the scope of this bead."
+    ],
+    "steps": [
+      {
+        "description": "Reviewed the prior stage outputs to confirm whether the review requested any follow-up amendments.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Confirmed the review outcome was approved and that the follow-up amendment list was empty.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Skipped code edits because there were no requested fixes to apply in this round.",
+        "order": 2,
+        "status": "skipped"
+      },
+      {
+        "description": "Recorded the no-op outcome and carried forward the latest relevant validation evidence from the prior stages.",
+        "order": 3,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "Review payload `run-20260328125529-review-c2-a1-cr2` reported `outcome: approved` with an empty `follow_up_or_amendments` list.",
+      "Latest existing verification from prior stages remains: `cargo test -p tank_api` passed (3 tests).",
+      "Latest existing verification from prior stages remains: `cargo test -p tank_core --test events` passed (7 tests).",
+      "Latest existing verification from prior stages remains: `cargo check -p tank_tui` passed, while the unrelated pre-existing `screens::actions::tests::rejects_invalid_integer_counts` failure remains outside this change set."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Plan and Implement (`plan_and_implement`)
+- Payload ID: `run-20260328125529-plan_and_implement-c2-a1-cr3`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "Rechecked the pending amendment list against current `tank_tui` HEAD and found the runtime fixes already present: legacy chemistry alias normalization was already wired into snapshot parsing, and the overview screen already labeled the 7-ion TDS/conductivity values as estimates. The remaining gap was coverage, so I extended `crates/tank_tui/src/api_client.rs` with a regression test that proves `/load` responses containing only legacy chemistry field names still deserialize into `TankSnapshot` correctly.",
+    "outstanding_risks": [
+      "The pending amendment list was stale relative to current HEAD, so this round only added regression coverage rather than changing runtime behavior.",
+      "Validation in this round was targeted to the touched compatibility and overview paths plus `cargo check -p tank_tui`; I did not rerun the full `cargo test -p tank_tui` suite.",
+      "Untracked `.ralph-burning/` workspace artifacts remain in the repository root and were left untouched."
+    ],
+    "steps": [
+      {
+        "description": "Compared the pending amendment list with the current `tank_tui` snapshot parsing and overview rendering code to determine what still differed from HEAD.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Confirmed the TUI already normalized legacy chemistry aliases for snapshot deserialization and already labeled overview TDS/conductivity values as estimates, so no additional runtime patch was needed for those paths.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Extended the `api_client` compatibility tests so the legacy snapshot fixture is reusable by seed and added a `/load` regression proving nested legacy chemistry payloads deserialize successfully.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Ran targeted formatting and validation for the compatibility and overview paths after the test update.",
+        "order": 3,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "`cargo fmt --all -- crates/tank_tui/src/api_client.rs` completed successfully.",
+      "`cargo test -p tank_tui api_client::tests --lib` passed (3 tests), covering direct legacy snapshot parsing, canonical-over-legacy precedence, and `/load` nested snapshot compatibility.",
+      "`cargo test -p tank_tui screens::overview::tests::overview_labels_tds_and_conductivity_as_estimates --lib` passed.",
+      "`cargo check -p tank_tui` passed."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Review (`review`)
+- Payload ID: `run-20260328125529-review-c2-a1-cr3`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "evidence": [
+      "All snapshot fields use explicit unit suffixes: tan_mg_n_per_l, nitrite_mg_n_per_l, nitrate_mg_n_per_l, phosphate_mg_p_per_l, dissolved_inorganic_carbon_mg_c_per_l, estimated_tds_7_ion_mg_per_l, estimated_conductivity_us_cm — verified in snapshot.rs:16-28.",
+      "Conversion constants (NO3_PER_N, NO2_PER_N, NH4_PER_N, NH3_PER_N, PO4_PER_P) are centralized in conversions.rs with molar-mass documentation. 7 unit tests verify reference values, all 5 round-trip conversions within 1e-12, and zero-stays-zero: all pass.",
+      "GH/KH constants (CALCIUM_AS_CACO3_FACTOR, MAGNESIUM_AS_CACO3_FACTOR, MOLAR_MASS_CACO3_G_PER_MOL, etc.) are named and documented in water.rs:10-23. ESTIMATED_TDS_TO_CONDUCTIVITY_DIVISOR has a doc comment explaining the empirical freshwater approximation.",
+      "TDS/conductivity labeled as estimates everywhere: overview.rs:132-134 renders 'Est. TDS (7-ion)' and 'Est. cond'; chemistry.rs:57-63 renders 'Est. TDS (7-ion)' and 'Est. conductivity (7-ion)'. Test overview_labels_tds_and_conductivity_as_estimates verifies and asserts !contains('7-ion TDS').",
+      "Scope lines (ESTIMATED_TDS_SCOPE_LINES) document tracked 7 ions and omitted contributors on both overview and chemistry screens. Test estimated_tds_scope_lines_name_included_and_omitted_species verifies content.",
+      "API backward compatibility: insert_legacy_chemistry_fields() backfills all 8 old field names in snapshot_response_json(), which is used consistently on /snapshot, /time/step, /load, and /scenarios/load. Test snapshot_response_keeps_legacy_chemistry_aliases verifies.",
+      "API metadata: chemistry_field_semantics_json() explains each field's unit basis, estimated_tds_scope_json() lists tracked ions and omitted contributors, legacy_chemistry_aliases_json() maps old->new names. Test chemistry_response_explains_estimate_scope verifies.",
+      "TUI client handles version-skewed servers: normalize_snapshot_object() in api_client.rs maps 8 legacy field names to canonical names. 3 tests verify: legacy-only parsing, canonical-takes-precedence, and /load nested payload compatibility.",
+      "Threshold event summaries use explicit chemistry bases: 'Free ammonia (NH3-N) reached ... mg NH3-N/L' and 'Nitrite-N reached ... mg N/L' — verified in events.rs:24,33. Test threshold_event_summaries_use_explicit_chemistry_units passes.",
+      "cargo test -p tank_api: 3 passed. cargo test -p tank_core conversions: 7 passed. cargo test -p tank_core --test events: 7 passed. cargo test -p tank_core --test concentration_helpers: 10 passed. cargo test -p tank_tui --lib: 7 passed (including the previously-failing rejects_invalid_integer_counts). cargo clippy -p tank_api -p tank_tui -p tank_core -- -D warnings: clean, no warnings."
+    ],
+    "findings_or_gaps": [
+      "The tank_tui test rejects_invalid_integer_counts now passes (prior stages reported it as a pre-existing failure); this is an improvement, not a gap.",
+      "No dedicated render test asserts the exact TUI text of the overview or chemistry screens end-to-end (only the estimate-label test and scope-lines test exist). This is a minor coverage gap but reasonable given the TUI is not a stable API surface.",
+      "The overview screen's hardware panel inserts 3 scope lines, which may cause visual overflow on very small terminals. This is a known aesthetic tradeoff documented in prior review output."
+    ],
+    "follow_up_or_amendments": [],
+    "outcome": "approved"
+  },
+  "family": "Validation"
+}
+```
+
+### Apply Fixes (`apply_fixes`)
+- Payload ID: `run-20260328125529-apply_fixes-c2-a1-cr3`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "No additional fixes were applied in this round because the latest review approved the implementation and provided no follow-up amendments.",
+    "outstanding_risks": [
+      "The worktree may still contain unrelated pre-existing modifications noted in prior stages; this no-op apply-fixes pass did not touch them.",
+      "No new validation commands were run in this round because no code changed; the latest verification remains the targeted test, check, and clippy results recorded in the prior implementation and review stages.",
+      "There is still a minor coverage gap around exact end-to-end TUI render text assertions, but the review accepted the current targeted overview/chemistry coverage."
+    ],
+    "steps": [
+      {
+        "description": "Reviewed the latest plan-and-implement and review outputs to determine whether any additional fixes were requested.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Confirmed the latest review outcome was approved and that the follow-up amendment list was empty.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Skipped code edits because there were no requested fixes to apply in this round.",
+        "order": 2,
+        "status": "skipped"
+      },
+      {
+        "description": "Recorded the no-op outcome and carried forward the latest relevant validation evidence from the prior stages.",
+        "order": 3,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "Review payload `run-20260328125529-review-c2-a1-cr3` reported `outcome: approved` with an empty `follow_up_or_amendments` list.",
+      "Latest existing verification from prior stages remains: `cargo test -p tank_api` passed (3 tests).",
+      "Latest existing verification from prior stages remains: `cargo test -p tank_core conversions` passed (7 tests), `cargo test -p tank_core --test events` passed (7 tests), and `cargo test -p tank_core --test concentration_helpers` passed (10 tests).",
+      "Latest existing verification from prior stages remains: `cargo test -p tank_tui --lib` passed (7 tests), `cargo check -p tank_tui` passed, and `cargo clippy -p tank_api -p tank_tui -p tank_core -- -D warnings` was clean."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Plan and Implement (`plan_and_implement`)
+- Payload ID: `run-20260328125529-plan_and_implement-c2-a1-cr4`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "Compared the four pending amendments against current HEAD and found they are already present: snapshot TDS/conductivity is derived from the fresh carbonate solve, the 7-ion TDS scope metadata is centralized in `tank_core` and consumed by API/TUI, the TUI snapshot parser strips legacy chemistry aliases plus API metadata and has enriched snapshot/load regression coverage, and dissolved-oxygen now has a default-geometry SA/V guard test. No net code changes were needed in this round.",
+    "outstanding_risks": [
+      "The pending-amendment list was stale relative to current HEAD, so this round produced validation rather than a new patch/commit.",
+      "`cargo clippy -p tank_core -p tank_api -p tank_tui -- -D warnings` is still blocked by an unrelated pre-existing warning in `crates/tank_scenarios/src/lib.rs:755` (`clippy::redundant_field_names`).",
+      "Validation was targeted to the amended core/API/TUI paths; I did not rerun the full workspace test matrix."
+    ],
+    "steps": [
+      {
+        "description": "Compared the pending amendment list against the current `tank_core`, `tank_api`, and `tank_tui` sources to determine whether any runtime gaps still remained.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Confirmed that current HEAD already includes the fresh-carbonate snapshot TDS/conductivity path plus shared 7-ion scope metadata exported from `tank_core` and consumed by API/TUI.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Confirmed that the TUI client now strips legacy chemistry aliases and API metadata before deserializing, with regression coverage for enriched `/snapshot` and `/load` payloads, and that dissolved-oxygen includes the default SA/V reference test.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Skipped additional file edits because the repository already satisfied the pending amendment list.",
+        "order": 3,
+        "status": "skipped"
+      },
+      {
+        "description": "Ran targeted formatting and verification commands to validate the existing implementation and record the remaining unrelated clippy blocker.",
+        "order": 4,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "`rustfmt --edition 2021 crates/tank_core/src/systems/chemistry.rs crates/tank_core/src/systems/dissolved_oxygen.rs crates/tank_core/src/types/water.rs crates/tank_core/src/types/snapshot.rs crates/tank_core/src/types/mod.rs crates/tank_api/src/handlers/snapshot.rs crates/tank_tui/src/api_client.rs crates/tank_tui/src/screens/mod.rs` completed successfully.",
+      "`cargo test -p tank_core --lib` passed (47 tests), including `systems::dissolved_oxygen::tests::reference_sa_v_matches_default_tank_geometry` and `types::snapshot::tests::snapshot_tds_and_conductivity_use_fresh_carbonate_projection`.",
+      "`cargo test -p tank_core --test concentration_helpers` passed (10 tests).",
+      "`cargo test -p tank_api` passed (3 tests).",
+      "`cargo test -p tank_tui --lib` passed (9 tests), including enriched snapshot and `/load` compatibility coverage.",
+      "`cargo clippy -p tank_core -p tank_api -p tank_tui -- -D warnings` failed outside this bead because `crates/tank_scenarios/src/lib.rs:755` already triggers `clippy::redundant_field_names`."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Review (`review`)
+- Payload ID: `run-20260328125529-review-c2-a1-cr4`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "evidence": [
+      "All 47 tank_core lib tests pass, including: snapshot_tds_and_conductivity_use_fresh_carbonate_projection, reference_sa_v_matches_default_tank_geometry, snapshot_uses_one_carbonate_solution_for_ph_and_co2.",
+      "All 3 tank_api tests pass: snapshot_response_keeps_legacy_chemistry_aliases, chemistry_response_explains_estimate_scope, biology_snapshot_keeps_total_and_stage_breakdown.",
+      "All 9 tank_tui lib tests pass, including: parses_enriched_api_snapshot_response, parses_load_response_with_enriched_api_snapshot, overview_labels_tds_and_conductivity_as_estimates, estimated_tds_scope_lines_name_included_and_omitted_species.",
+      "All 7 events integration tests pass, including threshold_event_summaries_use_explicit_chemistry_units.",
+      "All 10 concentration_helpers integration tests pass.",
+      "All 7 conversion tests pass: reference_values, 5 round-trip tests (nitrate/nitrite/ammonium/ammonia/phosphate), zero_stays_zero.",
+      "cargo clippy -p tank_core -p tank_api -p tank_tui -- -D warnings passes cleanly with no warnings.",
+      "Snapshot fields verified with explicit unit suffixes: tan_mg_n_per_l, nh3_mg_n_per_l, nitrite_mg_n_per_l, nitrate_mg_n_per_l, phosphate_mg_p_per_l, dissolved_inorganic_carbon_mg_c_per_l, estimated_tds_7_ion_mg_per_l, estimated_conductivity_us_cm (snapshot.rs:33-45).",
+      "Conversion constants centralized in conversions.rs with molar-mass documentation: NO3_PER_N, NO2_PER_N, NH4_PER_N, NH3_PER_N, PO4_PER_P. No magic numbers found in TUI/API rendering code.",
+      "GH/KH constants named and documented in water.rs: CALCIUM_AS_CACO3_FACTOR, MAGNESIUM_AS_CACO3_FACTOR, MG_CACO3_PER_MEQ, MG_CACO3_PER_DEGREE, MOLAR_MASS_CACO3_G_PER_MOL. ESTIMATED_TDS_TO_CONDUCTIVITY_DIVISOR has a 3-line doc comment.",
+      "TDS/conductivity in snapshot.rs from_state() derives bicarbonate from fresh carbonate_eq.hco3_mmol_per_l (lines 104-111), not the stale cache. Uses tds_mg_per_l_with_bicarbonate_total() and conductivity_us_cm_with_bicarbonate_total().",
+      "TDS scope metadata centralized in tank_core (water.rs:25-41): ESTIMATED_TDS_TRACKED_MAJOR_IONS, ESTIMATED_TDS_OMITTED_CONTRIBUTORS, ESTIMATED_TDS_SCOPE_LINES exported via types/mod.rs and consumed by both API and TUI — no duplication.",
+      "API backward compatibility: insert_legacy_chemistry_fields() backfills 8 old field names. snapshot_response_json() confirmed used on /snapshot, /time/step, /load, and /scenarios/load endpoints.",
+      "TUI api_client normalize_snapshot_object (lines 130-145) strips legacy aliases (lines 139-141) and metadata fields (lines 142-144) before deserialization. 5 tests cover legacy, canonical-precedence, enriched snapshot, and load-response paths.",
+      "TUI labels: overview.rs:132 shows 'Est. TDS (7-ion)' and 'Est. cond'; chemistry.rs:57,61 shows 'Est. TDS (7-ion)' and 'Est. conductivity (7-ion)'. Scope lines displayed on both screens.",
+      "Event summaries use explicit bases: 'Free ammonia (NH3-N) reached ... mg NH3-N/L' and 'Nitrite-N reached ... mg N/L' (events.rs:24,33)."
+    ],
+    "findings_or_gaps": [
+      "The previously-failing tank_tui test rejects_invalid_integer_counts now passes — this is an improvement over the state reported in earlier rounds.",
+      "No dedicated end-to-end TUI render test asserts the exact pixel/text output of overview or chemistry screens; only targeted label and scope-line assertions exist. This is a minor gap but acceptable since the TUI is not a stable API surface.",
+      "The overview hardware panel inserts 3 scope lines which may overflow on very small terminals — a known aesthetic tradeoff for scope transparency.",
+      "The unrelated clippy warning in crates/tank_scenarios/src/lib.rs:755 (redundant_field_names) persists but is outside the scope of this bead."
+    ],
+    "follow_up_or_amendments": [],
+    "outcome": "approved"
+  },
+  "family": "Validation"
+}
+```
+
+### Apply Fixes (`apply_fixes`)
+- Payload ID: `run-20260328125529-apply_fixes-c2-a1-cr4`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "No additional fixes were applied in this round because the latest review approved the implementation and provided no follow-up amendments.",
+    "outstanding_risks": [
+      "No new validation commands were run in this round because no code changed; the latest verification remains the targeted test and lint results recorded in the prior implementation and review stages.",
+      "There is still a minor coverage gap around exact end-to-end TUI render text assertions; current tests cover estimate labels and scope lines rather than full-screen render snapshots.",
+      "The overview hardware panel still trades layout space for transparency and may overflow on very small terminals."
+    ],
+    "steps": [
+      {
+        "description": "Reviewed the latest implementation and review outputs to determine whether any additional fixes were requested.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Confirmed the latest review outcome was approved and that the follow-up amendment list was empty.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Skipped code edits because there were no requested fixes to apply in this round.",
+        "order": 2,
+        "status": "skipped"
+      },
+      {
+        "description": "Recorded the no-op outcome and carried forward the latest relevant validation evidence from the prior stages.",
+        "order": 3,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "Review payload `run-20260328125529-review-c2-a1-cr4` reported `outcome: approved` with an empty `follow_up_or_amendments` list.",
+      "Latest existing verification from prior stages remains: `cargo test -p tank_core --lib` passed (47 tests), `cargo test -p tank_core --test concentration_helpers` passed (10 tests), and all targeted conversion/event coverage remained green in review.",
+      "Latest existing verification from prior stages remains: `cargo test -p tank_api` passed (3 tests).",
+      "Latest existing verification from prior stages remains: `cargo test -p tank_tui --lib` passed (9 tests), including enriched snapshot and `/load` compatibility coverage.",
+      "Latest existing verification from prior stages remains: `cargo clippy -p tank_core -p tank_api -p tank_tui -- -D warnings` was reported clean in the latest review evidence."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Plan and Implement (`plan_and_implement`)
+- Payload ID: `run-20260328125529-plan_and_implement-c2-a1-cr5`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "Compared the three pending amendments against current HEAD and found they are already implemented in the repository: the overview and chemistry screens now share the same NH3-N unit wording (`mg NH3-N/L`), `tank_core::TankSnapshot` deserialization now absorbs legacy chemistry aliases with canonical-field precedence so enriched/legacy snapshot payloads deserialize directly, and the public water/state/snapshot TDS-conductivity path now goes through the shared fresh-carbonate projection helpers in `WaterState` instead of diverging from the snapshot path. No net code changes were required in this round because the worktree already matched the needed implementation; I validated the behavior with targeted tests and clippy.",
+    "outstanding_risks": [
+      "The pending-amendment list was stale relative to current HEAD, so this round was verification-only rather than a new patch set.",
+      "The repository still has unrelated untracked workspace artifacts in `.ralph-burning/`; they were left untouched.",
+      "I did not run the full workspace test matrix beyond the targeted `tank_core`, `tank_api`, and `tank_tui` coverage plus clippy for those crates."
+    ],
+    "steps": [
+      {
+        "description": "Compared the pending amendment list against the current `tank_core` and `tank_tui` sources to determine whether any runtime gaps still remained.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Confirmed that `TankSnapshot` now normalizes legacy chemistry aliases during deserialization with canonical precedence, and that API/TUI enriched snapshot payloads no longer require a client-local alias shim to deserialize.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Confirmed that `WaterState`/`TankState` TDS and conductivity accessors now share the same fresh-carbonate projection used by `TankSnapshot`, and that the overview/chemistry screens use the same NH3-N unit wording.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Skipped additional code edits because current HEAD already satisfied all three pending amendments.",
+        "order": 3,
+        "status": "skipped"
+      },
+      {
+        "description": "Ran targeted validation across the touched core, API, and TUI paths to verify the already-landed implementation.",
+        "order": 4,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "`cargo test -p tank_core --lib` passed (49 tests), including `types::snapshot::tests::snapshot_deserializes_legacy_chemistry_aliases`, `types::snapshot::tests::snapshot_deserializes_enriched_api_payload_with_canonical_precedence`, and `types::snapshot::tests::snapshot_tds_and_conductivity_use_fresh_carbonate_projection`.",
+      "`cargo test -p tank_core --test concentration_helpers` passed (11 tests), including `tds_helpers_ignore_stale_bicarbonate_cache`.",
+      "`cargo test -p tank_tui --lib` passed (10 tests), including `api_client::tests::parses_enriched_api_snapshot_response`, `api_client::tests::parses_load_response_with_legacy_snapshot_chemistry_field_names`, and `screens::overview::tests::overview_uses_shared_nh3_n_unit_label`.",
+      "`cargo test -p tank_api` passed (3 tests), covering legacy chemistry aliases and estimate-scope metadata on snapshot responses.",
+      "`cargo clippy -p tank_core -p tank_api -p tank_tui -- -D warnings` completed successfully with no warnings."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Review (`review`)
+- Payload ID: `run-20260328125529-review-c2-a1-cr5`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "evidence": [
+      "All 49 tank_core lib tests pass, including snapshot_tds_and_conductivity_use_fresh_carbonate_projection, snapshot_deserializes_legacy_chemistry_aliases, snapshot_deserializes_enriched_api_payload_with_canonical_precedence, and snapshot_uses_one_carbonate_solution_for_ph_and_co2.",
+      "All 11 concentration_helpers integration tests pass, including tds_helpers_ignore_stale_bicarbonate_cache which proves state.tds_mg_per_l() ignores the cached bicarbonate_mg_total and uses a fresh carbonate solve.",
+      "All 3 tank_api tests pass: snapshot_response_keeps_legacy_chemistry_aliases, chemistry_response_explains_estimate_scope, biology_snapshot_keeps_total_and_stage_breakdown.",
+      "All 10 tank_tui lib tests pass, including overview_uses_shared_nh3_n_unit_label, overview_labels_tds_and_conductivity_as_estimates, parses_enriched_api_snapshot_response, and parses_load_response_with_legacy_snapshot_chemistry_field_names.",
+      "All 7 events integration tests pass, including threshold_event_summaries_use_explicit_chemistry_units.",
+      "cargo clippy -p tank_core -p tank_api -p tank_tui -- -D warnings: clean, zero warnings.",
+      "Snapshot fields verified with explicit unit suffixes: tan_mg_n_per_l, nh3_mg_n_per_l, nitrite_mg_n_per_l, nitrate_mg_n_per_l, phosphate_mg_p_per_l, dissolved_inorganic_carbon_mg_c_per_l, estimated_tds_7_ion_mg_per_l, estimated_conductivity_us_cm (snapshot.rs:30-45).",
+      "Amendment fr-4-2b018d6f (NH3 label) resolved: Both overview.rs and chemistry.rs use shared constant NH3_N_DISPLAY_UNIT = 'mg NH3-N/L' from screens/mod.rs:12. Test overview_uses_shared_nh3_n_unit_label confirms.",
+      "Amendment fr-4-84ddc83e (deserialization compatibility) resolved: normalize_snapshot_object() in tank_core::types::snapshot (lines 206-216) applies legacy alias normalization during TankSnapshot custom Deserialize impl (lines 218-229). Tests snapshot_deserializes_legacy_chemistry_aliases and snapshot_deserializes_enriched_api_payload_with_canonical_precedence confirm any Rust consumer gets automatic compatibility.",
+      "Amendment fr-4-83b30b59 (TDS/conductivity divergence) resolved: WaterState::tds_mg_per_l() now delegates to estimated_dissolved_solids() which calls projected_carbonate_equilibrium() for a fresh solve (water.rs:217-218,234-239). Snapshot test lines 441-450 assert snapshot.estimated_tds_7_ion_mg_per_l == state.tds_mg_per_l() within 1e-12, proving convergence.",
+      "Conversion constants centralized in conversions.rs with molar-mass derivations: NO3_PER_N (62.004/14.007), NO2_PER_N (46.005/14.007), NH4_PER_N (18.039/14.007), NH3_PER_N (17.031/14.007), PO4_PER_P (94.971/30.974). 7 unit tests verify reference values, round-trip accuracy, and zero preservation.",
+      "GH/KH constants named and documented in water.rs: CALCIUM_AS_CACO3_FACTOR, MAGNESIUM_AS_CACO3_FACTOR, MG_CACO3_PER_MEQ, MG_CACO3_PER_DEGREE, MOLAR_MASS_CACO3_G_PER_MOL, etc.",
+      "TDS scope metadata centralized in tank_core (water.rs:29-44): ESTIMATED_TDS_TRACKED_MAJOR_IONS, ESTIMATED_TDS_OMITTED_CONTRIBUTORS, ESTIMATED_TDS_SCOPE_LINES — consumed by both API (estimated_tds_scope_json) and TUI (scope lines on overview and chemistry screens) without duplication.",
+      "API backward compatibility maintained: insert_legacy_chemistry_fields() backfills 8 old field names. snapshot_response_json() used on /snapshot, /time/step, /load, and /scenarios/load endpoints. chemistry_field_semantics, estimated_tds_scope, and legacy_chemistry_aliases metadata included."
+    ],
+    "findings_or_gaps": [
+      "The conversions module is public but has no internal callers — it serves as a library API for external consumers. This is documented behavior per UNITS.md and was rejected as an amendment (fr-4-c9fd9fff) since it is not a correctness defect.",
+      "No dedicated end-to-end TUI render test asserts exact screen output; only targeted label, scope-line, and estimate-prefix assertions exist. Acceptable since the TUI is not a stable API surface.",
+      "The overview hardware panel inserts 3 scope lines which may overflow on very small terminals — a known aesthetic tradeoff for transparency about what the estimate covers.",
+      "An unrelated clippy warning in crates/tank_scenarios/src/lib.rs (redundant_field_names) persists but is outside the scope of this bead."
+    ],
+    "follow_up_or_amendments": [],
+    "outcome": "approved"
+  },
+  "family": "Validation"
+}
+```
+
+### Apply Fixes (`apply_fixes`)
+- Payload ID: `run-20260328125529-apply_fixes-c2-a1-cr5`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "No additional fixes were applied in this round because the latest review approved the implementation and provided no follow-up amendments.",
+    "outstanding_risks": [
+      "No new validation commands were run in this round because no code changed; the latest verification remains the targeted test and lint results recorded in the prior implementation and review stages.",
+      "There is still a minor coverage gap around exact end-to-end TUI render text assertions; current tests cover labels, scope lines, and compatibility behavior rather than full-screen render snapshots.",
+      "The overview hardware panel still trades layout space for estimate-scope transparency and may overflow on very small terminals.",
+      "An unrelated clippy warning in `crates/tank_scenarios/src/lib.rs` remains outside the scope of this bead."
+    ],
+    "steps": [
+      {
+        "description": "Reviewed the latest implementation and review outputs to determine whether any additional fixes were requested.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Confirmed the latest review outcome was approved and that the follow-up amendment list was empty.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Skipped code edits because there were no requested fixes to apply in this round.",
+        "order": 2,
+        "status": "skipped"
+      },
+      {
+        "description": "Recorded the no-op outcome and carried forward the latest relevant validation evidence from the prior stages.",
+        "order": 3,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "Review payload `run-20260328125529-review-c2-a1-cr5` reported `outcome: approved` with an empty `follow_up_or_amendments` list.",
+      "Latest existing verification from prior stages remains: `cargo test -p tank_core --lib` passed (49 tests), including legacy snapshot deserialization and fresh-carbonate TDS/conductivity coverage.",
+      "Latest existing verification from prior stages remains: `cargo test -p tank_core --test concentration_helpers` passed (11 tests), including `tds_helpers_ignore_stale_bicarbonate_cache`.",
+      "Latest existing verification from prior stages remains: `cargo test -p tank_tui --lib` passed (10 tests), including enriched snapshot/load compatibility and shared NH3-N unit-label coverage.",
+      "Latest existing verification from prior stages remains: `cargo test -p tank_api` passed (3 tests), and `cargo clippy -p tank_core -p tank_api -p tank_tui -- -D warnings` completed successfully with no warnings."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Plan and Implement (`plan_and_implement`)
+- Payload ID: `run-20260328125529-plan_and_implement-c2-a1-cr6`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "Inspected the two pending amendments against current HEAD, then fixed both: `TankSnapshotRepr::co2_aq_mmol_per_l` now uses `#[serde(default)]` so pre-field snapshot payloads deserialize as `0.0`, with a dedicated regression test, and the `tank_harness` non-finite envelope regression now exercises `water_temp_c`, which actually survives into `TankSnapshot`, instead of recomputed pH.",
+    "outstanding_risks": [
+      "`cargo test -p tank_core --lib` still fails in the unrelated existing unit test `systems::shrimp::tests::update_condition_treats_full_accessible_ration_as_satiated` at `crates/tank_core/src/systems/shrimp.rs:1008`; this is outside the snapshot/harness amendment scope.",
+      "The worktree still contains unrelated existing changes in `crates/tank_core/tests/plant_algae_integration.rs` and untracked `.ralph-burning/` artifacts; they were left untouched.",
+      "I did not rerun the full workspace or untouched crate suites (`tank_api`, `tank_tui`) because the remediation was isolated to `tank_core` snapshot deserialization and `tank_harness` unit coverage."
+    ],
+    "steps": [
+      {
+        "description": "Inspected `crates/tank_core/src/types/snapshot.rs` and `crates/tank_harness/src/lib.rs` to verify the pending amendments against the current implementation.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Added backward-compatible deserialization for missing `co2_aq_mmol_per_l` on `TankSnapshotRepr` and added a regression test covering legacy snapshot payloads that omit the field.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Reworked `envelope_reports_non_finite_values` to assert a non-finite `temperature_c` path that is copied through `TankSnapshot`, replacing the impossible pH-based expectation.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Ran targeted formatting and validation on the touched snapshot and harness paths, and recorded the remaining unrelated `tank_core` lib-suite failure.",
+        "order": 3,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "`rustfmt --edition 2021 crates/tank_core/src/types/snapshot.rs crates/tank_harness/src/lib.rs` completed successfully.",
+      "`cargo test -p tank_core snapshot_deserializes_payloads_missing_co2_field --lib` passed.",
+      "`cargo test -p tank_core types::snapshot::tests --lib` passed (7 tests), including legacy alias, canonical-precedence, pre-stage-total, and missing-CO2 compatibility coverage.",
+      "`cargo test -p tank_harness --lib` passed (4 tests), including the corrected `envelope_reports_non_finite_values` regression.",
+      "`cargo test -p tank_core --lib` failed only in the unrelated existing test `systems::shrimp::tests::update_condition_treats_full_accessible_ration_as_satiated` (`crates/tank_core/src/systems/shrimp.rs:1008`)."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Review (`review`)
+- Payload ID: `run-20260328125529-review-c2-a1-cr6`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "evidence": [
+      "All 3 tank_api tests pass: snapshot_response_keeps_legacy_chemistry_aliases, chemistry_response_explains_estimate_scope, biology_snapshot_keeps_total_and_stage_breakdown.",
+      "All 11 tank_tui lib tests pass, including: parses_legacy_snapshot_chemistry_field_names, keeps_canonical_snapshot_fields_when_legacy_aliases_are_also_present, parses_enriched_api_snapshot_response, parses_load_response_with_enriched_api_snapshot, parses_load_response_with_legacy_snapshot_chemistry_field_names, overview_labels_tds_and_conductivity_as_estimates, overview_uses_shared_nh3_n_unit_label, estimated_tds_scope_lines_name_included_and_omitted_species.",
+      "All 7 events integration tests pass, including threshold_event_summaries_use_explicit_chemistry_units.",
+      "All 11 concentration_helpers integration tests pass, including tds_helpers_ignore_stale_bicarbonate_cache.",
+      "All 4 tank_harness lib tests pass, including the corrected envelope_reports_non_finite_values test (now exercises temperature_c instead of the recomputed pH).",
+      "cargo clippy -p tank_core -p tank_api -p tank_tui -p tank_harness -- -D warnings: all clean, zero warnings.",
+      "Snapshot fields verified with explicit unit suffixes: tan_mg_n_per_l, nh3_mg_n_per_l, nitrite_mg_n_per_l, nitrate_mg_n_per_l, phosphate_mg_p_per_l, dissolved_inorganic_carbon_mg_c_per_l, co2_aq_mmol_per_l, estimated_tds_7_ion_mg_per_l, estimated_conductivity_us_cm (snapshot.rs:30-45).",
+      "Conversion constants centralized in conversions.rs with molar-mass derivations: NO3_PER_N (62.004/14.007), NO2_PER_N (46.005/14.007), NH4_PER_N (18.039/14.007), NH3_PER_N (17.031/14.007), PO4_PER_P (94.971/30.974).",
+      "GH/KH constants named and documented in water.rs: CALCIUM_AS_CACO3_FACTOR, MAGNESIUM_AS_CACO3_FACTOR, MG_CACO3_PER_MEQ, MG_CACO3_PER_DEGREE, MOLAR_MASS_CACO3_G_PER_MOL. ESTIMATED_TDS_TO_CONDUCTIVITY_DIVISOR has doc comment explaining the empirical freshwater approximation.",
+      "TDS scope metadata centralized in tank_core water.rs: ESTIMATED_TDS_TRACKED_MAJOR_IONS, ESTIMATED_TDS_OMITTED_CONTRIBUTORS, ESTIMATED_TDS_SCOPE_LINES — re-exported via types/mod.rs and consumed by both API and TUI without duplication.",
+      "TDS/conductivity uses fresh carbonate projection: WaterState::estimated_dissolved_solids() calls projected_carbonate_equilibrium() for a fresh solve each time; TankSnapshot::from_state() shares the same fresh carbonate solve for pH, CO2, and TDS.",
+      "API backward compatibility: insert_legacy_chemistry_fields() backfills all 8 old field names. snapshot_response_json() confirmed used on /snapshot, /time/step, /load, and /scenarios/load endpoints. chemistry_field_semantics, estimated_tds_scope, and legacy_chemistry_aliases metadata included in responses.",
+      "TUI labels: overview.rs renders 'Est. TDS (7-ion)' and 'Est. cond'; chemistry.rs renders 'Est. TDS (7-ion)' and 'Est. conductivity (7-ion)'. Scope lines from ESTIMATED_TDS_SCOPE_LINES displayed on both screens.",
+      "TUI api_client normalize_snapshot_object strips legacy aliases and API metadata (chemistry_field_semantics, estimated_tds_scope, legacy_chemistry_aliases) before deserialization. 6 tests cover all compatibility paths.",
+      "Event summaries use explicit chemistry bases: 'Free ammonia (NH3-N) reached ... mg NH3-N/L' and 'Nitrite-N reached ... mg N/L' (events.rs). NH3_N_DISPLAY_UNIT constant shared across TUI screens.",
+      "co2_aq_mmol_per_l field in TankSnapshotRepr now has #[serde(default)], with regression test snapshot_deserializes_payloads_missing_co2_field confirming old payloads parse correctly.",
+      "envelope_reports_non_finite_values test now exercises temperature_c (which is copied through to TankSnapshot) instead of the recomputed pH, making the test sound."
+    ],
+    "findings_or_gaps": [
+      "Pre-existing compile error in crates/tank_core/src/systems/light.rs:78 (ambiguous numeric type on .exp() call) blocks cargo test -p tank_core --lib. This is unrelated to this bead — it is in a light attenuation test function. tank_core integration tests (events, concentration_helpers) compile and pass since they don't trigger the lib test target.",
+      "The conversions.rs module (NO3_PER_N, NO2_PER_N, etc.) is public but has no internal callers outside its own test module. It serves as library infrastructure per UNITS.md. Not a correctness defect, but worth noting as a coverage gap for internal use.",
+      "No dedicated end-to-end TUI render test asserts exact screen output; only targeted label, scope-line, and estimate-prefix assertions exist. Acceptable since the TUI is not a stable API surface."
+    ],
+    "follow_up_or_amendments": [],
+    "outcome": "approved"
+  },
+  "family": "Validation"
+}
+```
+
+## Authoritative JSON Schema
+
+The JSON schema below is authoritative. Return only JSON that conforms exactly to it.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ExecutionStep": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "order": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/definitions/StepStatus"
+        }
+      },
+      "required": [
+        "description",
+        "order",
+        "status"
+      ],
+      "type": "object"
+    },
+    "StepStatus": {
+      "enum": [
+        "intended",
+        "completed",
+        "skipped"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload for execution/update stages.\n\nRequires structured change summaries, intended or completed steps, validation evidence or plans, and outstanding-risk fields.",
+  "properties": {
+    "change_summary": {
+      "type": "string"
+    },
+    "outstanding_risks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/definitions/ExecutionStep"
+      },
+      "type": "array"
+    },
+    "validation_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "change_summary",
+    "outstanding_risks",
+    "steps",
+    "validation_evidence"
+  ],
+  "title": "ExecutionPayload",
+  "type": "object"
+}
+```
+
+--- Context JSON ---
+{
+  "attempt": 1,
+  "completion_round": 6,
+  "cycle": 2
+}
+
+Return ONLY valid JSON matching the following schema:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ExecutionStep": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "order": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/definitions/StepStatus"
+        }
+      },
+      "required": [
+        "description",
+        "order",
+        "status"
+      ],
+      "type": "object"
+    },
+    "StepStatus": {
+      "enum": [
+        "intended",
+        "completed",
+        "skipped"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload for execution/update stages.\n\nRequires structured change summaries, intended or completed steps, validation evidence or plans, and outstanding-risk fields.",
+  "properties": {
+    "change_summary": {
+      "type": "string"
+    },
+    "outstanding_risks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/definitions/ExecutionStep"
+      },
+      "type": "array"
+    },
+    "validation_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "change_summary",
+    "outstanding_risks",
+    "steps",
+    "validation_evidence"
+  ],
+  "title": "ExecutionPayload",
+  "type": "object"
+}
+
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:00 PM.
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:00 PM.

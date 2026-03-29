@@ -1,0 +1,38 @@
+{
+  "payload_id": "run-20260328023528-review-c1-a1-cr1",
+  "stage_id": "review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T03:01:14.311897203Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "`cargo test -p tank_core --test tracing -- --nocapture` passed all 13 tracing integration tests.",
+        "`cargo test -p tank_core tracing -- --nocapture` passed the tracing unit tests plus the retrofitted dissolved-oxygen trace assertion.",
+        "Code inspection shows `SystemTraceEntry.notes` is always filled with `Vec::new()` in `/home/master/p/tank-simulation/crates/tank_core/src/engine.rs:358-362` and `/home/master/p/tank-simulation/crates/tank_core/src/engine.rs:408-412`, with no other writer for notes in the tracing codepath.",
+        "A one-off runtime check with `SimTracer::new(Verbosity::Trace)` printed `ticks=1 systems=7 deltas=9 notes=0`, confirming trace mode currently records no intermediate notes.",
+        "A one-off runtime check with `SimTracer::new(Verbosity::Off)` printed `ticks=1 systems=7 verbosity=Off`, confirming the public `Off` level still records ticks/system entries.",
+        "A day-boundary runtime check with nitrifier biomass present printed `tracked_events=2 entry_events=0 total_events=2 systems=14`, confirming the structured trace misses events emitted after `system:daily_biofilter_maturity` completes."
+      ],
+      "findings_or_gaps": [
+        "High: `Verbosity::Trace` does not implement the bead's intermediate-value contract. The code advertises trace-mode notes in `/home/master/p/tank-simulation/crates/tank_core/src/tracing.rs:9-18` and `/home/master/p/tank-simulation/crates/tank_core/src/tracing.rs:35-43`, but every trace entry is created with `notes: Vec::new()` in `/home/master/p/tank-simulation/crates/tank_core/src/engine.rs:358-362` and `/home/master/p/tank-simulation/crates/tank_core/src/engine.rs:408-412`. Downstream probes cannot consume any key intermediate values because none are ever recorded.",
+        "High: Per-system event capture is incomplete. `events_generated` is computed only inside `maybe_record_stage*` (`/home/master/p/tank-simulation/crates/tank_core/src/engine.rs:355-363` and `/home/master/p/tank-simulation/crates/tank_core/src/engine.rs:405-413`), but `run_daily_update` emits `BiofilmMaturityIncrease` and `CycleProgressing` after the traced `system:daily_biofilter_maturity` call returns (`/home/master/p/tank-simulation/crates/tank_core/src/engine.rs:291-316`). Those events land in `event_log` but not in any `SystemTraceEntry`, which violates the deliverable that traces include generated events.",
+        "Medium: The public `Verbosity::Off` mode is not actually off. `step_one_hour` always creates a `TickTraceBuilder` when a tracer is present (`/home/master/p/tank-simulation/crates/tank_core/src/engine.rs:125-133`), both stage wrappers always append `SystemTraceEntry` when `ctx.trace` exists (`/home/master/p/tank-simulation/crates/tank_core/src/engine.rs:348-363` and `/home/master/p/tank-simulation/crates/tank_core/src/engine.rs:398-413`), and `finish_tick` always stores/emits the tick (`/home/master/p/tank-simulation/crates/tank_core/src/tracing.rs:351-357`). That makes the documented off level in `/home/master/p/tank-simulation/crates/tank_core/src/tracing.rs:9-12` misleading and easy to misuse."
+      ],
+      "follow_up_or_amendments": [
+        "Add a real trace-mode intermediate-value pathway: either let systems return structured notes/intermediates or expose explicit tracer hooks, and add a regression test that `Verbosity::Trace` records at least one non-empty note for a deterministic fixture.",
+        "Make event attribution complete by moving post-stage event emission for daily biofilter maturity inside a traced section or by adding an explicit tracer event-recording API; add a test that those maturity events appear in the corresponding `SystemTraceEntry.events_generated`.",
+        "Either make `Verbosity::Off` a true no-op that records zero ticks and performs no sink writes, or remove/privatize that enum variant and rely solely on `Option<SimTracer>::None`; add coverage for the chosen contract."
+      ],
+      "outcome": "request_changes"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

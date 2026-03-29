@@ -1,0 +1,34 @@
+{
+  "payload_id": "run-20260327155320-final_review-vote-1-c1-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T17:13:11.897832542Z",
+  "payload": {
+    "summary": "All three amendments are technically sound. The shrimp change removes verified dead parameters, the nitrogen-cycle change eliminates an inconsistent hardcoded Monod constant, and the startup-override change fixes a real zero-volume bug that can produce positive water volume with zero dissolved chemistry.",
+    "votes": [
+      {
+        "amendment_id": "fr-2-7ec97029",
+        "decision": "accept",
+        "rationale": "The four cited helper functions in shrimp.rs do still accept `_volume_l: f64`, and that parameter is unused in each case. They derive needed concentrations from `TankState` directly, while `step_daily_shrimp` already keeps the local `volume_l` only for its zero-volume early return. Removing the dead private parameter is a low-risk cleanup that improves clarity and prevents interface drift."
+      },
+      {
+        "amendment_id": "fr-2-b9d261ac",
+        "decision": "accept",
+        "rationale": "`do_total / (do_total + 2.0)` in nitrogen_cycle.rs is a hardcoded decomposer DO half-saturation term, while the other Monod K values in this module are already carried in `ProcessParams`. Extracting it to a field such as `decomposer_k_do_mg` makes the model more consistent, tunable, and self-documented. With the existing serde/default patterns on process params, this is a maintainable change rather than needless churn."
+      },
+      {
+        "amendment_id": "fr-2-7a74aad7",
+        "decision": "accept",
+        "rationale": "This describes a real defect. In the substrate-only override path, `apply_startup_overrides` rescales existing water totals from `old_volume_l` to the new volume, but `WaterState::rescale_totals_for_volume` explicitly uses a zero scale when `old_volume_l <= f64::EPSILON`. For low-fill cases like `medium_planted` at `fill_ratio=0.1`, the original substrate stack fully displaces the water, so switching to a shallower substrate can create a positive final water volume with all dissolved totals left at zero. Rebuilding from the effective source-water profile, or otherwise special-casing 0-to-positive volume changes, plus a regression test, is the correct fix."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

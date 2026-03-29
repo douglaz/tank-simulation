@@ -1,0 +1,110 @@
+{
+  "rollback_id": "5198fe51-58db-4f87-8428-7d672fde4f1c",
+  "created_at": "2026-03-28T13:39:08.769040255Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "19ab8be48d77cf86bb9c21c74f0841c1395d07f8",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260328125535",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 2
+      },
+      "started_at": "2026-03-28T12:55:35.636992546Z",
+      "prompt_hash_at_cycle_start": "9a37772876fa276f",
+      "prompt_hash_at_stage_start": "9a37772876fa276f",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 1
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-28T13:19:07.467166388Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 2,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-1-2857eb23",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "FIX: SUB_ADULT_FEEDING_WEIGHT is defined as 0.65 in crates/tank_core/src/types/biology.rs:148 but 0.67 in crates/tank_core/src/systems/shrimp.rs:15. The shrimp.rs constant is the one used by the actual simulation (feeding, condition, mortality). The biology.rs constant is used by public API methods feeding_units(), add_reserve_by_feeding_units(). These must be unified to a single source-of-truth constant to prevent silent divergence when the public API is called.",
+          "created_at": "2026-03-28T13:39:08.674346481Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "47b3d6ded9f74249a0ab227b1392f7ad6487389070f423b8cd97759a7129201e"
+        },
+        {
+          "amendment_id": "fr-1-b5357512",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "FIX: Test trim_plants_is_closed_system_via_helpers (crates/tank_core/tests/budget_helpers.rs:242-266) asserts N/C conservation for TrimPlantsAndRemove, but the whole purpose of that action variant is to EXPORT biomass from the system. The test should either: (a) use TrimPlantsAndLeaveCuttings instead (which is the conserving variant), or (b) assert that total N/C decreases by exactly the exported amount. Additionally, line 259 searches for budget label 'action:trim_plants' which likely doesn't match the actual label 'action:trim_plants_and_remove'. This test currently FAILS.",
+          "created_at": "2026-03-28T13:39:08.674350238Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "2cab16e841e1c02c742a6b737a8ecec308b96d0d92e4b9869193775928a26d84"
+        },
+        {
+          "amendment_id": "fr-1-264c0ac6",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "Update the stale trim-budget helper test in `crates/tank_core/tests/budget_helpers.rs:242-264`. It still treats `PlayerAction::TrimPlantsAndRemove` as a closed-system redistribution and looks up the old budget label `action:trim_plants`, but the engine now implements export semantics for that action in `crates/tank_core/src/engine.rs:600-639` and records it as `action:trim_plants_and_remove` (`crates/tank_core/src/engine.rs:791-792`). This currently breaks `cargo test` with `trim_plants_is_closed_system_via_helpers`. Either switch the test to `TrimPlantsAndLeaveCuttings` and the new label, or keep `TrimPlantsAndRemove` and assert net N/C export instead of conservation.",
+          "created_at": "2026-03-28T13:39:08.674353604Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "db5e58ae6e26094fd1f66cd646ed5d0496aac57a546b30fb6c3a982537227047"
+        },
+        {
+          "amendment_id": "fr-1-f4085f8d",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "Fix `crates/tank_core/tests/plant_algae_integration.rs:195-217`, which still asserts that `PlayerAction::TrimPlantsAndRemove` increases `fine_detritus_g_total`. That contradicts the implementation in `crates/tank_core/src/engine.rs:600-639`, where only `TrimPlantsAndLeaveCuttings` routes biomass to detritus and `TrimPlantsAndRemove` exports it. The test fails as written; it should either use `TrimPlantsAndLeaveCuttings` for a detritus-routing scenario or change its assertions to verify exported biomass/no detritus increase for the remove variant.",
+          "created_at": "2026-03-28T13:39:08.674356319Z",
+          "batch_sequence": 4,
+          "source": "workflow_stage",
+          "dedup_key": "e3b916eae21a7a0a4844804ec05e5ce55dd561309af6531eeae7e2b7b78f8922"
+        }
+      ],
+      "processed_count": 0
+    },
+    "status_summary": "running: final review restart round 2 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T13:26:43.287088536Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}
