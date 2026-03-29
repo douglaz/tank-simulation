@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-3-e46f2f7d",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 3,
+  "body": "The 6 conservation test fixtures in `conservation_regression.rs` are copied verbatim into `e2e_conservation.rs` (grazing_fixture, feeding_fixture, mortality_senescence_fixture, trim_fixture, water_change_fixture, plus helpers close_gas_exchange, disable_dic_shortcuts, dump_trace). Extract shared fixtures into a `test_fixtures` module (e.g. `crates/tank_core/tests/common/conservation_fixtures.rs`) or a `#[cfg(test)]` module in tank_core that both test files import. This prevents silent divergence when a fixture is updated in one file but not the other.",
+  "created_at": "2026-03-29T22:42:43.999348776Z",
+  "batch_sequence": 1,
+  "source": "workflow_stage",
+  "dedup_key": "368a15222a09a48376e19b5f782cd48f783349700c435dbfd90f7de87120721b"
+}

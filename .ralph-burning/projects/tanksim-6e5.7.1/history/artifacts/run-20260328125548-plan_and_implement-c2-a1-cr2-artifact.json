@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328125548-plan_and_implement-c2-a1-cr2-artifact",
+  "payload_id": "run-20260328125548-plan_and_implement-c2-a1-cr2",
+  "stage_id": "plan_and_implement",
+  "created_at": "2026-03-28T13:51:34.323783741Z",
+  "content": "# Plan and Implement\n\n## Change Summary\n\nCompleted the pending shrimp/budget remediation in the current tree: shrimp feeding and reserve routing now rely on the shared `AnimalState` helper paths, the stale proportional reserve-spend helper was removed, adult shrimp removal semantics are validated against adult-only reserve export, and the structural budget-path coverage now recognizes nested `animal.<stage>.count` and `animal.<stage>.reserve_g` fields. The renamed trim-plants helper coverage was also revalidated via the budget-helper test suite.\n\n## Steps\n\n0. [Completed] Inspected the pending amendments against the current `tank_core` shrimp, engine, and budget-tracking code to determine which regressions still needed implementation versus revalidation.\n1. [Completed] Consolidated shrimp feeding/reserve behavior onto the shared `AnimalState` helpers, removed the unused proportional reserve-spend path, and kept the shrimp unit tests aligned with the shared feeding-unit calculation.\n2. [Completed] Verified the adult-only `RemoveShrimp` reserve semantics and broadened budget coverage expectations so future nested animal cohorts are caught by the structural budget tests.\n3. [Completed] Ran focused `tank_core` library and integration tests covering shrimp routing, shrimp population/removal behavior, budget helpers, and budget tracking.\n\n## Validation Evidence\n\n- `cargo test -p tank_core --lib shrimp` passed: 4 tests passed, 0 failed.\n- `cargo test -p tank_core --test shrimp_population --test budget_tracking --test budget_helpers` passed: 50 tests passed across the three integration targets, 0 failed.\n- `git status --short` showed no tracked-file changes remaining; only unrelated untracked `.ralph-burning/` remains.\n\n## Outstanding Risks\n\n- Budget-path auto-discovery now covers one-segment nested cohort paths like `animal.larvae.count` and `animal.larvae.reserve_g`, but any deeper nesting or array-based animal mass pools would still need explicit helper updates.\n- The worktree still contains an unrelated untracked `.ralph-burning/` directory, which was left untouched.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

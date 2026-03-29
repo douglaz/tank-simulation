@@ -1,0 +1,99 @@
+{
+  "rollback_id": "a5240daf-b24c-4b71-aab5-2ca644850dab",
+  "created_at": "2026-03-28T15:27:44.679180679Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "be3da6eb53abca4374ceb231b5777a57438ae636",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260328125529",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 5
+      },
+      "started_at": "2026-03-28T12:55:29.906804830Z",
+      "prompt_hash_at_cycle_start": "db2f01e328844358",
+      "prompt_hash_at_stage_start": "db2f01e328844358",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 4
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-28T13:24:53.549886964Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 5,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-4-2b018d6f",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 4,
+          "body": "In overview.rs, the NH3 label reads `NH3-N {:.4} mg N/L` while in chemistry.rs it reads `Free NH3-N {:.5} mg NH3-N/L`. The unit suffixes differ: overview says 'mg N/L' (element basis) while chemistry says 'mg NH3-N/L' (which is the same thing but uses a different notation). Both are technically correct for the same quantity, but the inconsistency may confuse users comparing the two screens. Standardize on one label — either 'mg N/L' or 'mg NH3-N/L' — across both screens.",
+          "created_at": "2026-03-28T15:27:44.581104379Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "c5ad3162a769be0360b1e3d304ec93d0e005898a8eef09d701e021812f4dae0d"
+        },
+        {
+          "amendment_id": "fr-4-84ddc83e",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 4,
+          "body": "`crates/tank_core/src/types/snapshot.rs:11-23,26-45` introduces legacy field mappings but does not apply them during `TankSnapshot` deserialization. Compatibility for renamed chemistry keys currently lives only in `crates/tank_tui/src/api_client.rs:119-145`, so any other Rust consumer that deserializes legacy `/snapshot` or `/load` payloads directly into `tank_core::TankSnapshot` will still fail with missing `*_mg_n_per_l` / `*_mg_p_per_l` fields. Move the compatibility into `tank_core` itself (for example with `#[serde(alias = ...)]` or a shared normalizer) instead of making each client reimplement the shim.",
+          "created_at": "2026-03-28T15:27:44.581108256Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "7d0702751bc16039d01f69bc3281871a6b9ba0ef3c3ba1f9bb645b37137bf457"
+        },
+        {
+          "amendment_id": "fr-4-83b30b59",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 4,
+          "body": "`crates/tank_core/src/types/snapshot.rs:87-111` now computes TDS/conductivity from a fresh carbonate solve, but the public state helpers still read the cached `water.bicarbonate_mg_total` via `crates/tank_core/src/types/water.rs:207-240` and `crates/tank_core/src/types/state.rs:317-322`. The new test at `crates/tank_core/src/types/snapshot.rs:256-289` explicitly asserts that snapshot values can exceed the cached helper values. That leaves two public APIs able to report different TDS/conductivity for the same `TankState`, which is a correctness/maintenance trap for any internal caller that does not go through `TankSnapshot`. Factor the fresh carbonate projection into a single shared helper or refresh the cache before every public accessor.",
+          "created_at": "2026-03-28T15:27:44.581112364Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "142f61ebe7ac0cb78a32e0dc8d4c8c663df65e5c0bff609608e7c688fa2f2115"
+        }
+      ],
+      "processed_count": 13
+    },
+    "status_summary": "running: final review restart round 5 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T15:08:32.910278077Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

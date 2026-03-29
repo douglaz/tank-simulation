@@ -1,0 +1,98 @@
+{
+  "payload_id": "run-20260328161717-plan_and_implement-c1-a1-cr1",
+  "stage_id": "plan_and_implement",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T16:37:46.610209468Z",
+  "payload": {
+    "data": {
+      "change_summary": "Replaced the hardcoded 0.5g nitrifier carrying capacity with a habitat-aware formulation: carrying_capacity = Σ(habitat_area_cm2 × flow_exposure × o2_exposure) × nitrifier_base_density_g_per_cm2, summed over all habitat registry entries. Added nitrifier_base_density_g_per_cm2 (default 2.5e-4 g/cm²) to ProcessParams with serde default for backward compatibility. The new public compute_biofilter_carrying_capacity() function is used by both the hourly logistic growth limiter in step_nitrogen_cycle and the daily biofilter maturity update. Default density preserves the ~0.5g capacity on the standard 2000 cm² filter media at full flow/O2 exposure. Six tests validate area scaling, flow scaling, O2 limitation, zero-media edge case, modifier arithmetic, and an integration test showing medium tanks with larger filters cycle faster than nano tanks with small sponge filters.",
+      "outstanding_risks": [
+        "Existing save files with serialized ProcessParams that lack nitrifier_base_density_g_per_cm2 will pick up the serde default (2.5e-4), preserving behavior; however a schema migration bump was not added — if strict schema versioning is enforced, a v6→v7 no-op migration entry may be needed",
+        "The concurrent writer process (tanksim-6e5.5.2 lease) repeatedly reverted nitrogen_cycle.rs during development; if it runs again after this session it may revert the changes — verify the file state after the session lock is released",
+        "The 0.01g capacity floor means even a completely empty tank allows trace nitrifier growth; this is intentional to avoid division-by-zero but may need tuning if zero-capacity scenarios should fully prevent nitrification"
+      ],
+      "steps": [
+        {
+          "description": "Add nitrifier_base_density_g_per_cm2 field to ProcessParams with serde default and default function (2.5e-4 g/cm²)",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Implement public compute_biofilter_carrying_capacity() function in nitrogen_cycle.rs: Σ(area × flow × O2) × density with 0.01g floor",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Replace hardcoded 0.5g capacity in step_nitrogen_cycle logistic factor with compute_biofilter_carrying_capacity call",
+          "order": 3,
+          "status": "completed"
+        },
+        {
+          "description": "Replace hardcoded 0.5g capacity in update_daily_biofilter_maturity with compute_biofilter_carrying_capacity call",
+          "order": 4,
+          "status": "completed"
+        },
+        {
+          "description": "Add nitrifier_base_density_g_per_cm2 initialization in tank_scenarios process_preset_to_params",
+          "order": 5,
+          "status": "completed"
+        },
+        {
+          "description": "Write test_biofilter_capacity_scales_with_media_area: 2x media area → >30% higher capacity + simulation confirms higher biomass at maturity",
+          "order": 6,
+          "status": "completed"
+        },
+        {
+          "description": "Write test_biofilter_capacity_scales_with_flow: same area, 2x flow → measurably higher capacity via flow_exposure modifier",
+          "order": 7,
+          "status": "completed"
+        },
+        {
+          "description": "Write test_biofilter_o2_limitation: aerated vs non-aerated → aerated tank has higher capacity via oxygen_exposure modifier",
+          "order": 8,
+          "status": "completed"
+        },
+        {
+          "description": "Write test_biofilter_zero_media_zero_capacity: disabled filter + no substrate/hardscape → capacity < 0.15g (near floor)",
+          "order": 9,
+          "status": "completed"
+        },
+        {
+          "description": "Write test_habitat_modifiers_applied_correctly: hand-crafted registry entries verify exact area × flow × O2 × density arithmetic",
+          "order": 10,
+          "status": "completed"
+        },
+        {
+          "description": "Write test_cycling_speed_varies_with_biofilter_capacity: nano (500cm²) vs medium (4000cm²) filter → medium cycles faster or has higher biomass",
+          "order": 11,
+          "status": "completed"
+        },
+        {
+          "description": "Verify all 78 existing tests pass (cycling, habitat_registry, filter_cleanliness_decay, dissolved_oxygen, chemistry) with no regressions",
+          "order": 12,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "cargo test --test biofilter_capacity: 6/6 passed (area scaling, flow scaling, O2 limitation, zero media, modifier arithmetic, cycling integration)",
+        "cargo test --test cycling: 18/18 passed (seeded vs unseeded, filter cleaning setback, negative pool guards, siphon detritus, etc.)",
+        "cargo test --test habitat_registry: 33/33 passed (all habitat area/modifier computations unchanged)",
+        "cargo test --test filter_cleanliness_decay: 1/1 passed",
+        "cargo test --test dissolved_oxygen: 5/5 passed",
+        "cargo test --test chemistry: 21/21 passed",
+        "cargo clippy --test biofilter_capacity: 0 warnings",
+        "cargo fmt --check on changed files: clean",
+        "Default density 2.5e-4 g/cm² × 2000 cm² filter × ~1.0 flow × ~0.6 O2 ≈ 0.3g from filter alone, plus glass/substrate contributions ≈ 0.5g total, preserving backward compatibility"
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328125529-apply_fixes-c2-a1-cr2-artifact",
+  "payload_id": "run-20260328125529-apply_fixes-c2-a1-cr2",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-28T14:01:02.225261270Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNo additional fixes were applied in this round because the review stage approved the existing implementation and provided no follow-up amendments.\n\n## Steps\n\n0. [Completed] Reviewed the prior stage outputs to confirm whether the review requested any follow-up amendments.\n1. [Completed] Confirmed the review outcome was approved and that the follow-up amendment list was empty.\n2. [Skipped] Skipped code edits because there were no requested fixes to apply in this round.\n3. [Completed] Recorded the no-op outcome and carried forward the latest relevant validation evidence from the prior stages.\n\n## Validation Evidence\n\n- Review payload `run-20260328125529-review-c2-a1-cr2` reported `outcome: approved` with an empty `follow_up_or_amendments` list.\n- Latest existing verification from prior stages remains: `cargo test -p tank_api` passed (3 tests).\n- Latest existing verification from prior stages remains: `cargo test -p tank_core --test events` passed (7 tests).\n- Latest existing verification from prior stages remains: `cargo check -p tank_tui` passed, while the unrelated pre-existing `screens::actions::tests::rejects_invalid_integer_counts` failure remains outside this change set.\n\n## Outstanding Risks\n\n- The worktree still contains unrelated pre-existing modifications in other files called out by prior stages; they were not touched in this no-op apply-fixes pass.\n- No new validation commands were run in this round because no code changed; the latest verification remains the targeted test and check results recorded in the prior implementation/review stages.\n- The unrelated existing `tank_tui` test failure in `screens::actions::tests::rejects_invalid_integer_counts` remains outside the scope of this bead.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

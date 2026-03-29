@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328125548-final_review-planner-positions-c2-a1-cr5-artifact",
+  "payload_id": "run-20260328125548-final_review-planner-positions-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T16:02:23.414749011Z",
+  "content": "# Final Review Planner Positions\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccepted only fr-5-b7289131. The legacy kinetic `_mg` compatibility issue is real in alias-only deserialization paths, even though some loader/migration paths already convert correctly. Rejected the other two because they are based on outdated premises or describe cleanup rather than a concrete correctness defect.\n\n## Votes\n\n- `fr-5-b737f90d`: Reject\n  `legacy_process_param_normalization()` currently returns `None` for all of the cited process params, so the claimed unit/value mismatch does not actually occur here. Removing `_unit` would be harmless cleanup, but this is not a substantive correctness issue in the current code.\n- `fr-5-60828312`: Reject\n  The cited rename fallout is stale. The current `ProcessParamsPreset` validation paths and `tank_scenarios` materialization already reference the canonical `*_mg_c_per_l` / `*_mg_n_per_l` / `*_mg_per_l` fields, and the present compile failure is elsewhere (`HabitatEnv.depth_attenuation`), not from these field names.\n- `fr-5-b7289131`: Accept\n  The amendment overstates the gap because `parse_process_params_preset()` and the save-schema migration already convert legacy kinetic `_mg` keys. But the underlying problem is real: public alias-only deserialization paths on `ProcessParams` / `ProcessParamsPreset` still give legacy `_mg` payloads the wrong semantics (and one preset alias is inconsistent), so compatibility should rely on an actual migration/conversion path rather than raw aliases.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 5
+}
