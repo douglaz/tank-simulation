@@ -22,9 +22,9 @@ pub const MG_N_PER_MEQ_AMMONIA: f64 = 14.007;
 /// 1 meq per 14.007 mg N ≈ 0.0714 meq/mg N. Approximately half the
 /// nitrification consumption is returned when nitrate is fully reduced.
 ///
-/// Reserved for E4b (denitrification implementation). When wiring, add
-/// `alk_produced = n_denitrified_mg * DENITRIFICATION_ALK_MEQ_PER_MG_N`
-/// symmetrically to the nitrification deduction path.
+/// Used in the denitrification pathway (`nitrogen_cycle.rs`) to restore
+/// alkalinity consumed during nitrification:
+/// `alk_produced = n_denitrified_mg * DENITRIFICATION_ALK_MEQ_PER_MG_N`.
 pub const DENITRIFICATION_ALK_MEQ_PER_MG_N: f64 = 1.0 / 14.007;
 
 pub fn legacy_total_param_to_mg_per_l(value: f64) -> f64 {

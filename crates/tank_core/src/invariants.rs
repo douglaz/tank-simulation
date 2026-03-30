@@ -47,6 +47,8 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
     state.animal.juvenile.clamp_maturation_accum_to_count();
     state.stability_tracker.instability_index =
         state.stability_tracker.instability_index.clamp(0.0, 1.0);
+    state.microbe.denitrifier_activity_index =
+        state.microbe.denitrifier_activity_index.clamp(0.0, 1.0);
 
     for plant in &mut state.plant_guilds {
         plant.health_index = plant.health_index.clamp(0.0, 1.0);
@@ -128,6 +130,7 @@ fn validate_invariants_inner(state: &TankState) -> Result<(), SimError> {
         state.microbe.nitrite_oxidizer_biomass_g,
     )?;
     check_non_negative("comammox_biomass_g", state.microbe.comammox_biomass_g)?;
+    check_non_negative("cumulative_n2_export_mg_n", state.cumulative_n2_export_mg_n)?;
     for plant in &state.plant_guilds {
         check_non_negative("plant.biomass_g", plant.biomass_g)?;
     }
@@ -249,6 +252,26 @@ fn validate_invariants_inner(state: &TankState) -> Result<(), SimError> {
     check_non_negative(
         "process.plant_photosynthesis_o2_mg_per_g_per_hour",
         pp.plant_photosynthesis_o2_mg_per_g_per_hour,
+    )?;
+    check_non_negative(
+        "process.denitrification_vmax_mg_n_per_l_per_hour",
+        pp.denitrification_vmax_mg_n_per_l_per_hour,
+    )?;
+    check_non_negative(
+        "process.denitrification_k_no3_mg_n_per_l",
+        pp.denitrification_k_no3_mg_n_per_l,
+    )?;
+    check_non_negative(
+        "process.denitrification_k_doc_mg_c_per_l",
+        pp.denitrification_k_doc_mg_c_per_l,
+    )?;
+    check_non_negative(
+        "process.denitrification_pore_water_mixing_factor",
+        pp.denitrification_pore_water_mixing_factor,
+    )?;
+    check_non_negative(
+        "process.denitrification_activity_maturation_days",
+        pp.denitrification_activity_maturation_days,
     )?;
     check_open_unit_interval(
         "process.shrimp_assimilation_efficiency",

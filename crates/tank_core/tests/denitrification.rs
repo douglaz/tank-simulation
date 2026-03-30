@@ -77,6 +77,80 @@ fn denitrifying_state(seed: SimSeed) -> TankState {
     state
 }
 
+/// Build a long-horizon nitrifying setup where rooted plants only affect the
+/// substrate O₂ profile, not nutrient uptake, so nitrate differences reflect
+/// denitrification rather than plant assimilation.
+fn long_horizon_denitrification_state(seed: SimSeed, rooted_plants: bool) -> TankState {
+    let mut state = TankState::new(seed);
+    let vol = state.water_volume_l();
+    let footprint_cm2 = state.geometry.footprint_area_cm2();
+
+    state.substrate_layers = vec![SubstrateLayerState {
+        kind: SubstrateKind::ActivePlanted,
+        depth_cm: 8.0,
+        o2_penetration_depth_cm: 8.0,
+        porosity: 0.50,
+        colonizable_area_factor: 0.8,
+        colonizable_area_cm2: footprint_cm2 * 8.0 * 0.8,
+        nutrient_store_mg_n_total: 50.0,
+        nutrient_store_mg_p_total: 10.0,
+        cation_exchange_capacity_index: 0.5,
+        detritus_trapping_index: 0.3,
+        low_oxygen_tendency_index: 0.5,
+        grazing_surface_index: 0.4,
+    }];
+
+    state.water.ammonia_total_mg_n_total = 2.0 * vol;
+    state.water.nitrate_mg_n_total = 0.0;
+    state.water.dissolved_organic_carbon_mg_c_total = 10.0 * vol;
+    state.water.dissolved_organic_nitrogen_mg_n_total = 1.0 * vol;
+
+    state.microbe.ammonia_oxidizer_biomass_g = 0.2;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.1;
+    state.microbe.comammox_biomass_g = 0.03;
+    state.microbe.denitrifier_activity_index = 0.8;
+    state.microbe.decomposer_biomass_g = 0.0;
+    state.filter_state.biofilter_maturity_index = 0.7;
+
+    state
+        .process_params
+        .plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
+    state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
+    state.process_params.plant_max_growth_rate_fast_stem_per_day = 0.0;
+    state
+        .process_params
+        .plant_max_growth_rate_root_rosette_per_day = 0.0;
+    state.process_params.plant_respiration_fraction_per_day = 0.0;
+    state.process_params.plant_senescence_fraction_per_day = 0.0;
+    state.process_params.feed_leach_rate_per_hour = 0.0;
+    state.process_params.fine_detritus_dissolution_rate_per_hour = 0.0;
+    state.process_params.decomposer_vmax_per_hour = 0.0;
+
+    state.detritus.particulate_organics_g_total = 0.0;
+    state.detritus.fine_detritus_g_total = 0.0;
+
+    state.animal.adult.count = 0;
+    state.animal.sub_adult.count = 0;
+    state.animal.juvenile.count = 0;
+    state.algae.suspended_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
+
+    for plant in &mut state.plant_guilds {
+        plant.biomass_g =
+            if rooted_plants && matches!(plant.guild, tank_core::PlantGuild::RootFeedingRosette) {
+                15.0
+            } else {
+                0.0
+            };
+    }
+
+    state.refresh_habitat_registry();
+    tank_core::systems::substrate::step_substrate_zones(&mut state);
+    state
+}
+
 // ---------------------------------------------------------------------------
 // Unit test: suboxic zone with high NO₃ and high DOC yields measurable N removal
 // ---------------------------------------------------------------------------
@@ -282,13 +356,30 @@ fn test_denitrification_tracked_as_export() -> Result<(), Box<dyn std::error::Er
     );
 
     // Verify via engine with budget tracking that the metric appears.
-    let state2 = denitrifying_state(SimSeed(47));
+    let mut state2 = denitrifying_state(SimSeed(47));
+    let volume_l = state2.water_volume_l();
+    state2.water.dissolved_oxygen_mg_total = 2.0 * volume_l;
+    state2.microbe.decomposer_biomass_g = 10.0;
+    state2.refresh_habitat_registry();
+    tank_core::systems::substrate::step_substrate_zones(&mut state2);
+    let export_before = state2.cumulative_n2_export_mg_n;
+    let suboxic_before = state2.substrate_suboxic_pore_volume_cm3();
+    assert!(
+        suboxic_before > 0.0,
+        "Engine scenario should retain a computed suboxic zone before the tick"
+    );
+
     let mut engine = Engine::from_parts(state2, vec![]);
     engine.enable_budget_tracking();
 
-    // Run multiple hours so the substrate zone update doesn't eliminate
-    // the suboxic zone via O₂ recalculation.
     engine.step_hours(1)?;
+
+    let export_after = engine.full_state().cumulative_n2_export_mg_n;
+    let tick_export = export_after - export_before;
+    assert!(
+        engine.full_state().substrate_suboxic_pore_volume_cm3() > 0.0,
+        "Scenario should remain suboxic after engine substrate recalculation"
+    );
 
     let ledger = engine
         .budget_ledger()
@@ -309,12 +400,20 @@ fn test_denitrification_tracked_as_export() -> Result<(), Box<dyn std::error::Er
         .metric("nitrogen_cycle.denitrification_n2_export_mg_n")
         .expect("Budget should track denitrification_n2_export_mg_n metric");
 
-    // The metric should be non-negative (may be 0 if engine's substrate
-    // recalculation made the zone fully oxic).
     assert!(
-        export_metric.value >= 0.0,
-        "Denitrification export metric should be non-negative: {}",
+        export_metric.value > 0.001,
+        "Denitrification export metric should be positive under active denitrification: {}",
         export_metric.value
+    );
+    assert!(
+        (export_metric.value - tick_export).abs() < 1e-9,
+        "Budget metric should match the cumulative N₂ export delta: metric={}, delta={tick_export}",
+        export_metric.value
+    );
+    assert!(
+        nc_entry.delta.nitrogen.net_mg().abs() < 1e-6,
+        "Nitrogen cycle stage should remain budget-balanced once N₂ export is tracked explicitly: net={}",
+        nc_entry.delta.nitrogen.net_mg()
     );
 
     Ok(())
@@ -393,6 +492,7 @@ fn test_denitrification_monod_concentration_based() -> Result<(), Box<dyn std::e
 #[test]
 fn test_denitrification_stoichiometry() -> Result<(), Box<dyn std::error::Error>> {
     let mut state = denitrifying_state(SimSeed(50));
+    let dic_before = state.water.dissolved_inorganic_carbon_mg_c_total;
 
     let output = step_nitrogen_cycle(&mut state);
 
@@ -409,6 +509,12 @@ fn test_denitrification_stoichiometry() -> Result<(), Box<dyn std::error::Error>
     assert!(
         (doc_consumed - expected_doc).abs() < 1e-6,
         "DOC consumed should match stoichiometry: consumed={doc_consumed}, expected={expected_doc}"
+    );
+
+    let dic_produced = state.water.dissolved_inorganic_carbon_mg_c_total - dic_before;
+    assert!(
+        (dic_produced - expected_doc).abs() < 1e-6,
+        "DIC produced should match DOC consumed stoichiometrically: produced={dic_produced}, expected={expected_doc}"
     );
 
     // Alkalinity produced should match stoichiometry
@@ -459,91 +565,42 @@ fn test_denitrification_rate_scales_with_doc() -> Result<(), Box<dyn std::error:
 fn test_denitrification_reduces_nitrate_accumulation() -> Result<(), Box<dyn std::error::Error>> {
     use tank_core::{Engine, SimulationEngine};
 
-    // Compare two identical tanks except one has denitrification enabled
-    // (high activity index + suboxic zone) and the other has it disabled
-    // (zero activity index). Same substrate geometry to keep other systems
-    // (decomposition, habitat capacity, etc.) equal.
-    let mut base_state = TankState::new(SimSeed(60));
-    let vol = base_state.water_volume_l();
-    let footprint_cm2 = base_state.geometry.footprint_area_cm2();
+    let planted = long_horizon_denitrification_state(SimSeed(60), true);
+    let unplanted = long_horizon_denitrification_state(SimSeed(60), false);
+    assert!(
+        planted.substrate_suboxic_pore_volume_cm3() > 0.0,
+        "Planted setup should begin with a suboxic substrate zone"
+    );
+    assert!(
+        unplanted.substrate_suboxic_pore_volume_cm3() < 1e-9,
+        "Unplanted control should begin effectively oxic"
+    );
 
-    // Thick substrate with suboxic zone
-    base_state.substrate_layers = vec![SubstrateLayerState {
-        kind: SubstrateKind::ActivePlanted,
-        depth_cm: 8.0,
-        o2_penetration_depth_cm: 1.5,
-        porosity: 0.50,
-        colonizable_area_factor: 0.8,
-        colonizable_area_cm2: footprint_cm2 * 8.0 * 0.8,
-        nutrient_store_mg_n_total: 50.0,
-        nutrient_store_mg_p_total: 10.0,
-        cation_exchange_capacity_index: 0.5,
-        detritus_trapping_index: 0.3,
-        low_oxygen_tendency_index: 0.5,
-        grazing_surface_index: 0.4,
-    }];
+    let mut engine_planted = Engine::from_parts(planted, vec![]);
+    let mut engine_unplanted = Engine::from_parts(unplanted, vec![]);
 
-    // Significant rooted plant biomass to create substrate O₂ demand.
-    // Root respiration drives O₂ consumption in the substrate, maintaining
-    // a realistic suboxic zone even after the engine recalculates O₂
-    // penetration depth from the Bouldin model.
-    for plant in &mut base_state.plant_guilds {
-        if matches!(plant.guild, tank_core::PlantGuild::RootFeedingRosette) {
-            plant.biomass_g = 15.0;
-        }
-    }
-    // Substantial decomposer biomass in substrate to increase BOD
-    base_state.microbe.decomposer_biomass_g = 0.5;
-    *base_state
-        .microbe
-        .decomposer_by_habitat
-        .entry(tank_core::HabitatKind::SubstrateDeep)
-        .or_insert(0.0) = 0.25;
-    *base_state
-        .microbe
-        .decomposer_by_habitat
-        .entry(tank_core::HabitatKind::SubstrateSurface)
-        .or_insert(0.0) = 0.15;
+    engine_planted.step_hours(500)?;
+    engine_unplanted.step_hours(500)?;
 
-    // Elevated TAN and established nitrifiers to produce NO₃
-    base_state.water.ammonia_total_mg_n_total = 2.0 * vol;
-    base_state.microbe.ammonia_oxidizer_biomass_g = 0.2;
-    base_state.microbe.nitrite_oxidizer_biomass_g = 0.1;
-    base_state.microbe.comammox_biomass_g = 0.03;
-    base_state.filter_state.biofilter_maturity_index = 0.7;
-    // DOC source
-    base_state.detritus.fine_detritus_g_total = 0.5;
-    base_state
-        .process_params
-        .fine_detritus_dissolution_rate_per_hour = 0.02;
-
-    // Tank WITH denitrification
-    let mut with_denit = base_state.clone();
-    with_denit.microbe.denitrifier_activity_index = 0.8;
-
-    // Tank WITHOUT denitrification (same geometry, zero activity)
-    let mut without_denit = base_state;
-    without_denit.microbe.denitrifier_activity_index = 0.0;
-
-    let mut engine_with = Engine::from_parts(with_denit, vec![]);
-    let mut engine_without = Engine::from_parts(without_denit, vec![]);
-
-    engine_with.step_hours(500)?;
-    engine_without.step_hours(500)?;
-
-    let no3_with = engine_with.full_state().water.nitrate_mg_n_total;
-    let no3_without = engine_without.full_state().water.nitrate_mg_n_total;
+    let no3_with = engine_planted.full_state().nitrate_mg_n_per_l();
+    let no3_without = engine_unplanted.full_state().nitrate_mg_n_per_l();
+    let export_with = engine_planted.full_state().cumulative_n2_export_mg_n;
+    let export_without = engine_unplanted.full_state().cumulative_n2_export_mg_n;
 
     assert!(
         no3_with < no3_without,
-        "Tank with active denitrification should have lower NO₃: \
-         with_denit={no3_with:.2}, without_denit={no3_without:.2}"
+        "Planted substrate should finish with lower NO₃ concentration: \
+         planted={no3_with:.2} mg/L, unplanted={no3_without:.2} mg/L"
     );
 
     assert!(
-        engine_with.full_state().cumulative_n2_export_mg_n > 0.01,
-        "Cumulative N₂ export should be measurable: {}",
-        engine_with.full_state().cumulative_n2_export_mg_n
+        export_with > 0.01,
+        "Planted substrate should accumulate measurable N₂ export: {export_with}"
+    );
+    assert!(
+        export_with > export_without + 0.01,
+        "Planted substrate should export more N₂ than the unplanted control: \
+         planted={export_with}, unplanted={export_without}"
     );
 
     Ok(())
