@@ -351,6 +351,22 @@ pub struct ShrimpRuntimeParams {
     /// Instability index threshold above which egg dropping can occur.
     #[serde(default = "default_egg_drop_instability_threshold")]
     pub egg_drop_instability_threshold: f64,
+    /// pH swing per day that contributes a full unit of instability pressure.
+    #[serde(default = "default_instability_ph_swing")]
+    pub instability_ph_swing: f64,
+    /// GH swing (°dGH per day) that contributes a full unit of instability pressure.
+    #[serde(default = "default_instability_gh_swing_d")]
+    pub instability_gh_swing_d: f64,
+    /// Dissolved oxygen swing (mg/L per day) that contributes a full unit of
+    /// instability pressure.
+    #[serde(default = "default_instability_do_swing_mg_l")]
+    pub instability_do_swing_mg_l: f64,
+    /// Smoothing applied when instability is rising.
+    #[serde(default = "default_instability_rise_smoothing")]
+    pub instability_rise_smoothing: f64,
+    /// Smoothing applied when instability is decaying.
+    #[serde(default = "default_instability_decay_smoothing")]
+    pub instability_decay_smoothing: f64,
 }
 
 /// Tracks recent chemistry swings for shrimp stress calculations.
@@ -722,6 +738,11 @@ impl Default for ShrimpRuntimeParams {
             no2_repro_threshold_mg_n_per_l: default_no2_repro_threshold_mg_n_per_l(),
             egg_drop_temp_swing_c: default_egg_drop_temp_swing_c(),
             egg_drop_instability_threshold: default_egg_drop_instability_threshold(),
+            instability_ph_swing: default_instability_ph_swing(),
+            instability_gh_swing_d: default_instability_gh_swing_d(),
+            instability_do_swing_mg_l: default_instability_do_swing_mg_l(),
+            instability_rise_smoothing: default_instability_rise_smoothing(),
+            instability_decay_smoothing: default_instability_decay_smoothing(),
         }
     }
 }
@@ -855,6 +876,26 @@ fn default_egg_drop_temp_swing_c() -> f64 {
 
 fn default_egg_drop_instability_threshold() -> f64 {
     0.5
+}
+
+fn default_instability_ph_swing() -> f64 {
+    0.5
+}
+
+fn default_instability_gh_swing_d() -> f64 {
+    3.0
+}
+
+fn default_instability_do_swing_mg_l() -> f64 {
+    3.0
+}
+
+fn default_instability_rise_smoothing() -> f64 {
+    0.3
+}
+
+fn default_instability_decay_smoothing() -> f64 {
+    0.1
 }
 
 impl Default for StabilityTracker {

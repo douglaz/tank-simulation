@@ -188,6 +188,7 @@ pub fn update_stability_tracker(state: &mut TankState) {
     let chemistry = state.concentrations();
     let gh_d = chemistry.gh_d();
     let do_mg_l = chemistry.do_mg_per_l();
+    let params = &state.shrimp_params;
 
     let tracker = &mut state.stability_tracker;
 
@@ -198,14 +199,22 @@ pub fn update_stability_tracker(state: &mut TankState) {
     tracker.last_temp_swing_c = temp_swing;
 
     // Weighted instability normalised to 0..1
-    let raw_instability =
-        (temp_swing / 3.0 + ph_swing / 0.5 + gh_swing / 3.0 + do_swing / 3.0).clamp(0.0, 1.0);
+    let raw_instability = (temp_swing / 3.0_f64.max(0.01)
+        + ph_swing / params.instability_ph_swing.max(0.01)
+        + gh_swing / params.instability_gh_swing_d.max(0.01)
+        + do_swing / params.instability_do_swing_mg_l.max(0.01))
+    .clamp(0.0, 1.0);
+
+    let rise_smoothing = params.instability_rise_smoothing.clamp(0.0, 1.0);
+    let decay_smoothing = params.instability_decay_smoothing.clamp(0.0, 1.0);
 
     // Rises quickly, decays slowly
     if raw_instability > tracker.instability_index {
-        tracker.instability_index += 0.3 * (raw_instability - tracker.instability_index);
+        tracker.instability_index +=
+            rise_smoothing * (raw_instability - tracker.instability_index);
     } else {
-        tracker.instability_index += 0.1 * (raw_instability - tracker.instability_index);
+        tracker.instability_index +=
+            decay_smoothing * (raw_instability - tracker.instability_index);
     }
     tracker.instability_index = tracker.instability_index.clamp(0.0, 1.0);
 
