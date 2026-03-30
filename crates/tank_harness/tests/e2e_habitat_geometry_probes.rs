@@ -277,7 +277,8 @@ fn probe_artifact_label(base: &str, suffix: Option<&str>) -> String {
 // already executes each multi-day scenario once in ordinary `cargo test` runs.
 #[test]
 #[ignore = "run explicitly with -- --ignored when iterating on a single habitat probe"]
-fn probe_biofilter_scaling_bigger_media_higher_capacity() -> Result<(), Box<dyn std::error::Error>> {
+fn probe_biofilter_scaling_bigger_media_higher_capacity() -> Result<(), Box<dyn std::error::Error>>
+{
     require_probe_pass(run_probe_biofilter_scaling_bigger_media_higher_capacity())
 }
 
