@@ -1072,20 +1072,29 @@ fn run_vs07_nitrate_removal() -> Result<ProbeResult, Box<dyn std::error::Error>>
 
     let planted_snap = planted_run.snapshot();
     let bare_snap = bare_run.snapshot();
-    let planted_state = planted_run.engine().full_state();
-    let bare_state = bare_run.engine().full_state();
-    let planted_n2 = planted_state.cumulative_n2_export_mg_n;
-    let bare_n2 = bare_state.cumulative_n2_export_mg_n;
+    // Extract values before mutable borrows for record_failure.
+    let planted_n2 = planted_run.engine().full_state().cumulative_n2_export_mg_n;
+    let bare_n2 = bare_run.engine().full_state().cumulative_n2_export_mg_n;
+    let planted_denitrifier_act = planted_run
+        .engine()
+        .full_state()
+        .microbe
+        .denitrifier_activity_index;
+    let bare_denitrifier_act = bare_run
+        .engine()
+        .full_state()
+        .microbe
+        .denitrifier_activity_index;
 
     let observed = format!(
         "planted: NO3={:.2} N2_export={:.2}mg_N denitrifier_act={:.3} | \
          bare: NO3={:.2} N2_export={:.2}mg_N denitrifier_act={:.3}",
         planted_snap.nitrate_mg_n_per_l,
         planted_n2,
-        planted_state.microbe.denitrifier_activity_index,
+        planted_denitrifier_act,
         bare_snap.nitrate_mg_n_per_l,
         bare_n2,
-        bare_state.microbe.denitrifier_activity_index,
+        bare_denitrifier_act,
     );
 
     // The planted arm has both denitrification (removing NO₃) and additional
@@ -1113,12 +1122,11 @@ fn run_vs07_nitrate_removal() -> Result<ProbeResult, Box<dyn std::error::Error>>
         );
     }
 
-    if planted_state.microbe.denitrifier_activity_index <= 0.1 {
+    if planted_denitrifier_act <= 0.1 {
         planted_run.record_failure(
             "denitrifier_active",
             format!(
-                "planted denitrifier activity should be > 0.1, got {:.3}",
-                planted_state.microbe.denitrifier_activity_index,
+                "planted denitrifier activity should be > 0.1, got {planted_denitrifier_act:.3}",
             ),
         );
     }

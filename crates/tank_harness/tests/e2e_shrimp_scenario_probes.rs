@@ -376,6 +376,8 @@ fn breeding_success_state(seed: SimSeed) -> TankState {
     state.water.magnesium_mg_total = 10.0 * vol;
     state.water.alkalinity_meq_total = 12.0 * vol;
     state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * vol;
+    // Keep DOC/DON as low absolute totals so mineralization does not inject
+    // a transient ammonia pulse into the otherwise stable breeding baseline.
     state.water.dissolved_organic_carbon_mg_c_total = 5.0;
     state.water.dissolved_organic_nitrogen_mg_n_total = 0.8;
     state.water.dissolved_oxygen_mg_total = 8.0 * vol;

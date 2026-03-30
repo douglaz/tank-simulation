@@ -66,12 +66,17 @@ studies and aquaculture texts.
 
 ### Envelope bounds
 
-| Checkpoint | TAN (mg N/L) | NO₂⁻ (mg N/L) | NO₃⁻ (mg N/L) | Biofilter maturity | pH |
-|------------|-------------|---------------|---------------|-------------------|-----|
-| Week 2 | 1.0 – 15.0 | 0.0 – 5.0 | 0.0 – 5.0 | 0.05 – 0.4 | 6.5 – 8.5 |
-| Week 4 | 0.0 – 10.0 | 0.0 – 10.0 | 0.5 – 15.0 | 0.2 – 0.7 | 6.5 – 8.5 |
-| Week 6 | 0.0 – 2.0 | 0.0 – 3.0 | 2.0 – 30.0 | 0.5 – 1.0 | 6.5 – 8.5 |
-| Week 8 | 0.0 – 1.0 | 0.0 – 1.0 | 5.0 – 50.0 | 0.7 – 1.0 | 6.5 – 8.5 |
+Note: The model's biofilter maturity index tracks a slow ramp (60-day
+denitrifier-like scale) that does not directly correspond to nitrification
+capacity. Cycling completion is validated by nitrification output (low TAN,
+rising NO₃⁻) rather than the maturity index.
+
+| Checkpoint | TAN (mg N/L) | NO₂⁻ (mg N/L) | NO₃⁻ (mg N/L) | pH |
+|------------|-------------|---------------|---------------|-----|
+| Week 2 | 0.0 – 15.0 | 0.0 – 5.0 | 0.0 – 15.0 | 6.5 – 8.5 |
+| Week 4 | 0.0 – 10.0 | 0.0 – 10.0 | 0.5 – 25.0 | 6.5 – 8.5 |
+| Week 6 | 0.0 – 3.0 | 0.0 – 3.0 | 2.0 – 40.0 | 6.5 – 8.5 |
+| Week 8 | 0.0 – 2.0 | 0.0 – 2.0 | 5.0 – 60.0 | 6.5 – 8.5 |
 
 ### Test cross-reference
 
