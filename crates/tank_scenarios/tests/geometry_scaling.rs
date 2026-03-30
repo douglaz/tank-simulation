@@ -449,3 +449,200 @@ fn small_tank_microbes_use_defaults() -> Result<(), Box<dyn std::error::Error>> 
 
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Combined 100L acceptance check (filter + heater + plant biomass)
+// ---------------------------------------------------------------------------
+
+/// AC: a 100L tank auto-scales to filter_flow ~1000 lph, heater ~75W, and
+/// plant_biomass ~15g (proportional to footprint). Verifies all three together.
+#[test]
+fn combined_100l_scaling_produces_expected_hardware_and_biomass(
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Scale medium_planted (57.6L base, 2 guilds) to ~100L
+    let scale = (100.0_f64 / 57.6).cbrt();
+    let state = medium_planted_at_scale(scale);
+
+    let volume_l = state.geometry.gross_water_volume_l();
+    assert!(
+        (volume_l - 100.0).abs() < 1.0,
+        "volume should be ~100L, got {volume_l:.1}L"
+    );
+
+    // Filter flow ≈ 1000 lph
+    assert!(
+        (state.hardware.filter.flow_lph - 1000.0).abs() < 15.0,
+        "filter flow should be ~1000 lph, got {:.1}",
+        state.hardware.filter.flow_lph
+    );
+
+    // Heater ≈ 75W
+    assert!(
+        (state.hardware.heater.max_watts - 75.0).abs() < 2.0,
+        "heater should be ~75W, got {:.1}W",
+        state.hardware.heater.max_watts
+    );
+
+    // Plant biomass ≈ 15g total (2 guilds × footprint-scaled per-guild)
+    let footprint = state.geometry.footprint_area_cm2();
+    let expected_per_guild = footprint * PLANT_BIOMASS_G_PER_1000_CM2_FOOTPRINT / 1000.0;
+    let expected_total = expected_per_guild * state.plant_guilds.len() as f64;
+    let actual_total: f64 = state.plant_guilds.iter().map(|g| g.biomass_g).sum();
+
+    assert!(
+        (actual_total - expected_total).abs() < 0.5,
+        "total plant biomass should be ~{expected_total:.1}g, got {actual_total:.1}g"
+    );
+    assert!(
+        (actual_total - 15.0).abs() < 3.0,
+        "total plant biomass should be ~15g for 100L, got {actual_total:.1}g"
+    );
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Light intensity independence
+// ---------------------------------------------------------------------------
+
+/// Reviewer AC: light intensity (PAR at water surface) is a property of the
+/// light fixture, not the tank. Verify it doesn't scale with volume.
+#[test]
+fn light_intensity_independent_of_tank_size() -> Result<(), Box<dyn std::error::Error>> {
+    let state_1x = medium_planted_at_scale(1.0);
+    let state_2x = medium_planted_at_scale(2.0);
+    let state_nano = nano_at_scale(1.0);
+
+    // Intensity index should be identical across all sizes
+    assert!(
+        (state_1x.hardware.light.intensity_index - state_2x.hardware.light.intensity_index).abs()
+            < f64::EPSILON,
+        "light intensity should not change with scale: 1×={:.2}, 2×={:.2}",
+        state_1x.hardware.light.intensity_index,
+        state_2x.hardware.light.intensity_index
+    );
+    assert!(
+        (state_1x.hardware.light.intensity_index - state_nano.hardware.light.intensity_index).abs()
+            < f64::EPSILON,
+        "light intensity should not change between scenarios: medium={:.2}, nano={:.2}",
+        state_1x.hardware.light.intensity_index,
+        state_nano.hardware.light.intensity_index
+    );
+
+    // Photoperiod should also be a fixture property, not tank-scaled
+    assert!(
+        (state_1x.hardware.light.photoperiod_hours - state_2x.hardware.light.photoperiod_hours)
+            .abs()
+            < f64::EPSILON,
+        "photoperiod should not change with scale: 1×={:.1}h, 2×={:.1}h",
+        state_1x.hardware.light.photoperiod_hours,
+        state_2x.hardware.light.photoperiod_hours
+    );
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Substrate depth independence
+// ---------------------------------------------------------------------------
+
+/// Reviewer AC: default substrate depth (cm) is the same regardless of tank
+/// footprint. Total substrate volume scales with footprint, but depth is fixed.
+#[test]
+fn substrate_depth_independent_of_tank_size() -> Result<(), Box<dyn std::error::Error>> {
+    let state_1x = medium_planted_at_scale(1.0);
+    let state_2x = medium_planted_at_scale(2.0);
+
+    // Both should have the same substrate layers
+    assert_eq!(
+        state_1x.substrate_layers.len(),
+        state_2x.substrate_layers.len(),
+        "same scenario should have same number of substrate layers"
+    );
+
+    // Each layer's depth_cm should be identical regardless of scale
+    for (layer_1x, layer_2x) in state_1x
+        .substrate_layers
+        .iter()
+        .zip(state_2x.substrate_layers.iter())
+    {
+        assert!(
+            (layer_1x.depth_cm - layer_2x.depth_cm).abs() < f64::EPSILON,
+            "substrate depth should not scale: 1×={:.2}cm, 2×={:.2}cm",
+            layer_1x.depth_cm,
+            layer_2x.depth_cm
+        );
+    }
+
+    // Verify footprint actually differs (sanity check)
+    let fp_ratio = state_2x.geometry.footprint_area_cm2() / state_1x.geometry.footprint_area_cm2();
+    assert!(
+        (fp_ratio - 4.0).abs() < 0.01,
+        "footprint should be 4× for 2× geometry: ratio={fp_ratio:.3}"
+    );
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Aeration effect via habitat registry
+// ---------------------------------------------------------------------------
+
+/// Reviewer AC: aeration effect scales with surface area and volume, not just
+/// a fixed rate. The aeration *setting* (intensity) is fixture-level, but the
+/// physical effect in the habitat registry should scale with geometry.
+#[test]
+fn aeration_effect_scales_via_habitat_registry() -> Result<(), Box<dyn std::error::Error>> {
+    use tank_core::HabitatKind;
+
+    let state_1x = seeded_state_with_full_overrides(
+        SimSeed(400),
+        "medium_planted",
+        StartupOverrides {
+            aeration_enabled: Some(true),
+            ..StartupOverrides::default()
+        },
+    )?;
+    let state_2x = seeded_state_with_full_overrides(
+        SimSeed(400),
+        "medium_planted",
+        StartupOverrides {
+            geometry: ScenarioGeometryOverrides {
+                size_scale: 2.0,
+                fill_ratio: 1.0,
+            },
+            aeration_enabled: Some(true),
+            ..StartupOverrides::default()
+        },
+    )?;
+
+    // Aeration intensity setting should be the same (fixture property)
+    assert!(
+        (state_1x.hardware.aeration.intensity - state_2x.hardware.aeration.intensity).abs()
+            < f64::EPSILON,
+        "aeration intensity setting should not scale"
+    );
+
+    // But colonizable areas (which determine aeration's physical effect) should
+    // scale with geometry. Substrate surface area scales with footprint (4× for 2×).
+    let substrate_area_1x = state_1x
+        .habitat_registry
+        .iter()
+        .filter(|h| h.kind == HabitatKind::SubstrateSurface)
+        .map(|h| h.colonizable_area_cm2)
+        .sum::<f64>();
+    let substrate_area_2x = state_2x
+        .habitat_registry
+        .iter()
+        .filter(|h| h.kind == HabitatKind::SubstrateSurface)
+        .map(|h| h.colonizable_area_cm2)
+        .sum::<f64>();
+
+    let area_ratio = substrate_area_2x / substrate_area_1x;
+    assert!(
+        area_ratio > 3.0 && area_ratio < 5.0,
+        "substrate colonizable area should scale ~4× with 2× geometry: ratio={area_ratio:.2}"
+    );
+
+    Ok(())
+}
