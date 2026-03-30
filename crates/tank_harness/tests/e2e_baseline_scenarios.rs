@@ -1093,7 +1093,7 @@ fn controlled_ideal_reproduction_path_still_hatches() -> Result<(), Box<dyn std:
                     .do_min(7.0)
                     .shrimp_count(20, 80)
                     .berried_females_count(1, 5)
-                    .shrimp_reproductive_readiness(0.35, 0.85),
+                    .shrimp_reproductive_readiness(0.25, 0.85),
             );
         }
         if day == 60 {
