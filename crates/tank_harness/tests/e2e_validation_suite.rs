@@ -15,9 +15,8 @@
 
 use tank_core::{
     systems::chemistry::resolve_carbonate_state, systems::light::is_light_on, Engine, EventKind,
-    JsonLinesSink, PlantGuild, PlayerAction, ProcessParams, SimSeed, SimTracer,
-    SimulationEngine, SourceWaterProfile, TankGeometry, TankSnapshot, TankState, TraceSink,
-    Verbosity, WaterState,
+    JsonLinesSink, PlantGuild, PlayerAction, ProcessParams, SimSeed, SimTracer, SimulationEngine,
+    SourceWaterProfile, TankGeometry, TankSnapshot, TankState, TraceSink, Verbosity, WaterState,
 };
 use tank_harness::{Envelope, HarnessRun};
 use tank_scenarios::{
@@ -407,10 +406,18 @@ fn run_vs03_day_night_ph_swing() -> Result<ProbeResult, tank_core::SimError> {
     // This scenario targets a high-productivity planted tank rather than the
     // simulator's default moderate-growth baseline, so scale the explicit
     // DIC/O2 chemistry rates accordingly while preserving stoichiometric pairs.
-    state.process_params.background_bod_mg_o2_per_g_biomass_per_hour = 0.08;
-    state.process_params.respiration_dic_rate_mg_c_per_g_per_hour = 0.03;
-    state.process_params.plant_photosynthesis_o2_mg_per_g_per_hour = 0.4;
-    state.process_params.photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.15;
+    state
+        .process_params
+        .background_bod_mg_o2_per_g_biomass_per_hour = 0.08;
+    state
+        .process_params
+        .respiration_dic_rate_mg_c_per_g_per_hour = 0.03;
+    state
+        .process_params
+        .plant_photosynthesis_o2_mg_per_g_per_hour = 0.4;
+    state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.15;
 
     // Zero K_LA to isolate biological DIC effects.
     state.process_params.reaeration_kla_base = 0.0;
@@ -1024,16 +1031,21 @@ fn run_vs07_nitrate_removal() -> Result<ProbeResult, Box<dyn std::error::Error>>
         planted_overrides,
     )?;
 
-    planted_state
-        .source_water_catalog
-        .insert(VS07_WATER_CHANGE_SOURCE.to_string(), buffered_source.clone());
+    planted_state.source_water_catalog.insert(
+        VS07_WATER_CHANGE_SOURCE.to_string(),
+        buffered_source.clone(),
+    );
     prepare_vs07_biology(&mut planted_state);
 
     // Mature denitrifiers plus a deep, low-porosity bed create the suboxic
     // volume needed to keep the planted arm below the bare control.
     planted_state.microbe.denitrifier_activity_index = 1.0;
-    planted_state.process_params.denitrification_vmax_mg_n_per_l_per_hour = 0.2;
-    planted_state.process_params.denitrification_pore_water_mixing_factor = 1.0;
+    planted_state
+        .process_params
+        .denitrification_vmax_mg_n_per_l_per_hour = 0.2;
+    planted_state
+        .process_params
+        .denitrification_pore_water_mixing_factor = 1.0;
     for layer in &mut planted_state.substrate_layers {
         layer.depth_cm = 10.0;
         layer.porosity = 0.32;
@@ -1083,8 +1095,12 @@ fn run_vs07_nitrate_removal() -> Result<ProbeResult, Box<dyn std::error::Error>>
 
     // Remove substrate entirely to eliminate any denitrification pathway.
     bare_state.substrate_layers.clear();
-    bare_state.process_params.denitrification_vmax_mg_n_per_l_per_hour = 0.2;
-    bare_state.process_params.denitrification_pore_water_mixing_factor = 1.0;
+    bare_state
+        .process_params
+        .denitrification_vmax_mg_n_per_l_per_hour = 0.2;
+    bare_state
+        .process_params
+        .denitrification_pore_water_mixing_factor = 1.0;
 
     // Match initial nitrate and DOC with planted arm.
     let bare_vol = bare_state.water_volume_l();

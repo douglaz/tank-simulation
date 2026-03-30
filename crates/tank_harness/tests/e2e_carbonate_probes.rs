@@ -484,10 +484,18 @@ fn run_probe_day_night_ph_drift() -> Result<ProbeResult, tank_core::SimError> {
 
     // High-light planted-tank chemistry: scale the explicit DIC/O2 rates while
     // preserving the simulator's stoichiometric carbon/oxygen pairings.
-    state.process_params.background_bod_mg_o2_per_g_biomass_per_hour = 0.08;
-    state.process_params.respiration_dic_rate_mg_c_per_g_per_hour = 0.03;
-    state.process_params.plant_photosynthesis_o2_mg_per_g_per_hour = 0.4;
-    state.process_params.photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.15;
+    state
+        .process_params
+        .background_bod_mg_o2_per_g_biomass_per_hour = 0.08;
+    state
+        .process_params
+        .respiration_dic_rate_mg_c_per_g_per_hour = 0.03;
+    state
+        .process_params
+        .plant_photosynthesis_o2_mg_per_g_per_hour = 0.4;
+    state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.15;
 
     // Zero K_LA to isolate biological DIC effects from atmospheric exchange.
     state.process_params.reaeration_kla_base = 0.0;
