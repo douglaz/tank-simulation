@@ -9,8 +9,7 @@
 
 use tank_core::{PlayerAction, SimSeed, TankSnapshot, TankState};
 use tank_harness::calibration::{
-    check_classified, CalibrationReport, CalibrationRun, CheckStatus, ComparisonReport,
-    ScenarioRow,
+    check_classified, CalibrationReport, CalibrationRun, CheckStatus, ComparisonReport, ScenarioRow,
 };
 use tank_harness::{Envelope, HarnessRun};
 
@@ -22,8 +21,8 @@ use tank_harness::{Envelope, HarnessRun};
 /// observed_values, envelope_bounds, pass/marginal/fail status.
 #[test]
 fn test_calibration_report_structure() -> Result<(), Box<dyn std::error::Error>> {
-    let run = HarnessRun::new(SimSeed(9001), "medium_planted")?
-        .with_artifact_label("report_structure");
+    let run =
+        HarnessRun::new(SimSeed(9001), "medium_planted")?.with_artifact_label("report_structure");
     let mut cal = CalibrationRun::new(run, "default_params");
     cal.enable_instrumentation();
     cal.step_hours(168)?;
@@ -54,9 +53,8 @@ fn test_calibration_report_structure() -> Result<(), Box<dyn std::error::Error>>
 
     for field in &cp.fields {
         assert!(!field.field.is_empty());
-        // observed, envelope_min, envelope_max are always present (f64).
         assert!(
-            field.observed.is_finite() || field.status == CheckStatus::Fail,
+            field.observed.is_some() || field.status == CheckStatus::Fail,
             "non-finite observed value should be classified as fail"
         );
         assert!(matches!(
@@ -75,14 +73,11 @@ fn test_calibration_report_structure() -> Result<(), Box<dyn std::error::Error>>
 /// Report output is valid JSON that can be parsed programmatically.
 #[test]
 fn test_report_machine_readable() -> Result<(), Box<dyn std::error::Error>> {
-    let run = HarnessRun::new(SimSeed(9002), "medium_planted")?
-        .with_artifact_label("machine_readable");
+    let run =
+        HarnessRun::new(SimSeed(9002), "medium_planted")?.with_artifact_label("machine_readable");
     let mut cal = CalibrationRun::new(run, "test_params");
     cal.step_hours(24)?;
-    cal.check_envelope(
-        "day_1",
-        &Envelope::default().ph(4.0, 10.0).do_min(2.0),
-    );
+    cal.check_envelope("day_1", &Envelope::default().ph(4.0, 10.0).do_min(2.0));
 
     let row = cal.finish();
     let report = CalibrationReport::from_rows("test_params", vec![row]);
@@ -122,10 +117,7 @@ fn test_report_includes_artifact_paths() -> Result<(), Box<dyn std::error::Error
 
     let mut cal = CalibrationRun::new(run, "test_params");
     cal.enable_instrumentation();
-    cal.check_envelope(
-        "hot_check",
-        &Envelope::default().temperature_c(20.0, 30.0),
-    );
+    cal.check_envelope("hot_check", &Envelope::default().temperature_c(20.0, 30.0));
 
     let row = cal.finish();
 
@@ -301,8 +293,8 @@ fn test_marginal_classification() -> Result<(), Box<dyn std::error::Error>> {
 /// reimplementing scenario execution.
 #[test]
 fn test_report_uses_shared_harness() -> Result<(), Box<dyn std::error::Error>> {
-    let run = HarnessRun::new(SimSeed(9006), "medium_planted")?
-        .with_artifact_label("shared_harness");
+    let run =
+        HarnessRun::new(SimSeed(9006), "medium_planted")?.with_artifact_label("shared_harness");
     let mut cal = CalibrationRun::new(run, "test_params");
     cal.enable_instrumentation();
     cal.step_hours(24)?;

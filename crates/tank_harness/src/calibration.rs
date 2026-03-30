@@ -73,12 +73,19 @@ impl fmt::Display for CheckStatus {
 // ---------------------------------------------------------------------------
 
 /// Result of checking a single field against its envelope bounds.
+/// Result of checking a single field against its envelope bounds.
+///
+/// Bounds use `Option<f64>`: `None` means unbounded (e.g., `do_min` has no
+/// upper bound). `observed` is `None` when the snapshot value was non-finite.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FieldCheck {
     pub field: String,
-    pub observed: f64,
-    pub envelope_min: f64,
-    pub envelope_max: f64,
+    /// Observed value from the snapshot. `None` if non-finite (NaN/Inf).
+    pub observed: Option<f64>,
+    /// Lower envelope bound. `None` if unbounded.
+    pub envelope_min: Option<f64>,
+    /// Upper envelope bound. `None` if unbounded.
+    pub envelope_max: Option<f64>,
     pub status: CheckStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
@@ -484,13 +491,24 @@ pub fn check_classified(snap: &TankSnapshot, envelope: &Envelope) -> Vec<FieldCh
 // Classification helpers
 // ---------------------------------------------------------------------------
 
+fn finite_or_none(v: f64) -> Option<f64> {
+    if v.is_finite() {
+        Some(v)
+    } else {
+        None
+    }
+}
+
 fn classify_f64(field: &str, value: f64, min: f64, max: f64) -> FieldCheck {
+    let envelope_min = finite_or_none(min);
+    let envelope_max = finite_or_none(max);
+
     if !value.is_finite() {
         return FieldCheck {
             field: field.to_owned(),
-            observed: value,
-            envelope_min: min,
-            envelope_max: max,
+            observed: None,
+            envelope_min,
+            envelope_max,
             status: CheckStatus::Fail,
             detail: Some(format!("{field} is non-finite")),
         };
@@ -499,9 +517,9 @@ fn classify_f64(field: &str, value: f64, min: f64, max: f64) -> FieldCheck {
     if value < min || value > max {
         return FieldCheck {
             field: field.to_owned(),
-            observed: value,
-            envelope_min: min,
-            envelope_max: max,
+            observed: Some(value),
+            envelope_min,
+            envelope_max,
             status: CheckStatus::Fail,
             detail: Some(format!("{field} {value:.4} outside [{min:.4}, {max:.4}]")),
         };
@@ -514,9 +532,9 @@ fn classify_f64(field: &str, value: f64, min: f64, max: f64) -> FieldCheck {
     if near_lower || near_upper {
         FieldCheck {
             field: field.to_owned(),
-            observed: value,
-            envelope_min: min,
-            envelope_max: max,
+            observed: Some(value),
+            envelope_min,
+            envelope_max,
             status: CheckStatus::Marginal,
             detail: Some(format!(
                 "{field} {value:.4} within 10% of envelope boundary"
@@ -525,9 +543,9 @@ fn classify_f64(field: &str, value: f64, min: f64, max: f64) -> FieldCheck {
     } else {
         FieldCheck {
             field: field.to_owned(),
-            observed: value,
-            envelope_min: min,
-            envelope_max: max,
+            observed: Some(value),
+            envelope_min,
+            envelope_max,
             status: CheckStatus::Pass,
             detail: None,
         }
