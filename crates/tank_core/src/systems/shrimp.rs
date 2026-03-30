@@ -27,6 +27,21 @@ struct FailedMoltDiagnostics {
     reserve_target_g: f64,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct NitriteStressDiagnostics {
+    pub nitrite_mg_l: f64,
+    pub chloride_mg_l: f64,
+    pub effective_hazard_mg_l: f64,
+    pub hourly_stress_increment: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct MortalityProbabilities {
+    adult: f64,
+    sub_adult: f64,
+    juvenile: f64,
+}
+
 // ── Hourly ──────────────────────────────────────────────────────────────────
 
 /// Computes the effective nitrite hazard after chloride protection.
@@ -55,6 +70,29 @@ pub fn compute_effective_nitrite_hazard(
     nitrite_mg_l / (1.0 + chloride_protection_factor.max(0.0) * cl_no2_ratio)
 }
 
+fn compute_hourly_nitrite_stress_increment(effective_nitrite_mg_l: f64) -> f64 {
+    if effective_nitrite_mg_l > 0.5 {
+        (effective_nitrite_mg_l - 0.5) * 0.5 / 24.0
+    } else {
+        0.0
+    }
+}
+
+pub(crate) fn compute_nitrite_stress_diagnostics(
+    nitrite_mg_l: f64,
+    chloride_mg_l: f64,
+    chloride_protection_factor: f64,
+) -> NitriteStressDiagnostics {
+    let effective_hazard_mg_l =
+        compute_effective_nitrite_hazard(nitrite_mg_l, chloride_mg_l, chloride_protection_factor);
+    NitriteStressDiagnostics {
+        nitrite_mg_l: nitrite_mg_l.max(0.0),
+        chloride_mg_l: chloride_mg_l.max(0.0),
+        effective_hazard_mg_l,
+        hourly_stress_increment: compute_hourly_nitrite_stress_increment(effective_hazard_mg_l),
+    }
+}
+
 /// Accumulates NH3, nitrite, low-DO, heat, and instability stress each hour.
 /// Runs after chemistry/DO updates, before hourly event emission.
 pub fn step_hourly_shrimp_stress(state: &mut TankState) {
@@ -81,13 +119,13 @@ pub fn step_hourly_shrimp_stress(state: &mut TankState) {
     }
 
     // Nitrite stress with chloride protection (threshold 0.5 mg/L effective hazard)
-    let effective_nitrite = compute_effective_nitrite_hazard(
+    let nitrite_diagnostics = compute_nitrite_stress_diagnostics(
         nitrite_mg_l,
         chloride_mg_l,
         state.shrimp_params.chloride_protection_factor,
     );
-    if effective_nitrite > 0.5 {
-        state.animal.hourly_nitrite_stress_accum += (effective_nitrite - 0.5) * 0.5 / 24.0;
+    if nitrite_diagnostics.hourly_stress_increment > 0.0 {
+        state.animal.hourly_nitrite_stress_accum += nitrite_diagnostics.hourly_stress_increment;
     }
 
     // Low DO stress (threshold 5.0 mg/L)
@@ -356,12 +394,12 @@ fn update_condition(state: &mut TankState) {
     };
     let do_factor = (do_mg_l / 6.0).clamp(0.0, 1.0);
     let nh3_factor = (1.0 - nh3_mg_l * 3.0).clamp(0.0, 1.0);
-    let effective_nitrite = compute_effective_nitrite_hazard(
+    let nitrite_diagnostics = compute_nitrite_stress_diagnostics(
         nitrite_mg_l,
         chloride_mg_l,
         state.shrimp_params.chloride_protection_factor,
     );
-    let nitrite_factor = (1.0 - effective_nitrite * 0.5).clamp(0.0, 1.0);
+    let nitrite_factor = (1.0 - nitrite_diagnostics.effective_hazard_mg_l * 0.5).clamp(0.0, 1.0);
 
     let params = &state.shrimp_params;
     let temp_factor = temp_condition_factor(temp, params);
@@ -968,49 +1006,25 @@ fn subadult_to_adult(state: &mut TankState) {
 }
 
 fn mortality(state: &mut TankState) {
-    let base_rate = state.process_params.shrimp_base_mortality_per_day;
-    let stress_scale = state.process_params.shrimp_stress_mortality_scale;
-
-    let pop_condition = state.animal.population_condition_index();
-    let stress_total = state.animal.hourly_nh3_stress_accum
-        + state.animal.hourly_nitrite_stress_accum
-        + state.animal.hourly_low_do_stress_accum
-        + state.animal.hourly_heat_stress_accum
-        + (state.animal.molt_stress_index - 0.5).max(0.0)
-        + (0.5 - pop_condition).max(0.0);
-
-    // Failed molt accumulator contribution to mortality
-    let molt_mortality =
-        state.animal.failed_molt_accum * state.shrimp_params.failed_molt_mortality_scale;
-
-    let p_adult_death = (base_rate + stress_total * stress_scale + molt_mortality).clamp(0.0, 0.5);
-
-    let sub_adult_sensitivity = state.shrimp_params.sub_adult_sensitivity;
-    let p_sub_adult_death =
-        (base_rate + stress_total * stress_scale * sub_adult_sensitivity + molt_mortality)
-            .clamp(0.0, 0.5);
-
-    let juv_sensitivity = state.shrimp_params.juvenile_sensitivity;
-    let p_juv_death = (base_rate + stress_total * stress_scale * juv_sensitivity + molt_mortality)
-        .clamp(0.0, 0.5);
+    let mortality_probabilities = compute_mortality_probabilities(state);
 
     let mut adult_deaths = 0u32;
     for _ in 0..state.animal.adult.count {
-        if state.rng.next_f64() < p_adult_death {
+        if state.rng.next_f64() < mortality_probabilities.adult {
             adult_deaths += 1;
         }
     }
 
     let mut sub_adult_deaths = 0u32;
     for _ in 0..state.animal.sub_adult.count {
-        if state.rng.next_f64() < p_sub_adult_death {
+        if state.rng.next_f64() < mortality_probabilities.sub_adult {
             sub_adult_deaths += 1;
         }
     }
 
     let mut juv_deaths = 0u32;
     for _ in 0..state.animal.juvenile.count {
-        if state.rng.next_f64() < p_juv_death {
+        if state.rng.next_f64() < mortality_probabilities.juvenile {
             juv_deaths += 1;
         }
     }
@@ -1037,6 +1051,37 @@ fn mortality(state: &mut TankState) {
 
     // Preserve berried_females <= adults invariant (also trims egg cohorts)
     state.animal.clamp_berried_to_adults();
+}
+
+fn compute_mortality_probabilities(state: &TankState) -> MortalityProbabilities {
+    let base_rate = state.process_params.shrimp_base_mortality_per_day;
+    let stress_scale = state.process_params.shrimp_stress_mortality_scale;
+
+    let pop_condition = state.animal.population_condition_index();
+    let stress_total = state.animal.hourly_nh3_stress_accum
+        + state.animal.hourly_nitrite_stress_accum
+        + state.animal.hourly_low_do_stress_accum
+        + state.animal.hourly_heat_stress_accum
+        + (state.animal.molt_stress_index - 0.5).max(0.0)
+        + (0.5 - pop_condition).max(0.0);
+
+    let molt_mortality =
+        state.animal.failed_molt_accum * state.shrimp_params.failed_molt_mortality_scale;
+    let adult = (base_rate + stress_total * stress_scale + molt_mortality).clamp(0.0, 0.5);
+    let sub_adult = (base_rate
+        + stress_total * stress_scale * state.shrimp_params.sub_adult_sensitivity
+        + molt_mortality)
+        .clamp(0.0, 0.5);
+    let juvenile = (base_rate
+        + stress_total * stress_scale * state.shrimp_params.juvenile_sensitivity
+        + molt_mortality)
+        .clamp(0.0, 0.5);
+
+    MortalityProbabilities {
+        adult,
+        sub_adult,
+        juvenile,
+    }
 }
 
 /// Routes dead shrimp body biomass and reserve into fine_detritus_g_total.
@@ -1406,9 +1451,10 @@ fn molt_condition_breakdown(
 #[cfg(test)]
 mod tests {
     use super::{
-        compute_effective_nitrite_hazard, refresh_carbonate_state, route_consumed_food,
-        shrimp_feeding, shrimp_grazing_access_factor, shrimp_target_food_route_g,
-        step_daily_shrimp, step_hourly_shrimp_stress, update_condition, MG_N_PER_MEQ_AMMONIA,
+        compute_effective_nitrite_hazard, compute_mortality_probabilities,
+        refresh_carbonate_state, route_consumed_food, shrimp_feeding,
+        shrimp_grazing_access_factor, shrimp_target_food_route_g, step_daily_shrimp,
+        step_hourly_shrimp_stress, update_condition, MG_N_PER_MEQ_AMMONIA,
     };
     use crate::{algae_detrital_mass_g, SimSeed, TankState, WaterState};
 
@@ -1823,6 +1869,14 @@ mod tests {
             low_cl.animal.hourly_nitrite_stress_accum
                 > 3.0 * high_cl.animal.hourly_nitrite_stress_accum,
             "at 100 mg/L Cl and cpf=0.5, protection should be substantial"
+        );
+
+        let low_cl_mortality = compute_mortality_probabilities(&low_cl).adult;
+        let high_cl_mortality = compute_mortality_probabilities(&high_cl).adult;
+        assert!(
+            low_cl_mortality > high_cl_mortality,
+            "low chloride should produce higher adult mortality probability: \
+             low_cl={low_cl_mortality}, high_cl={high_cl_mortality}"
         );
     }
 }
