@@ -19,3 +19,13 @@ this the best nitrifier habitat substrate. Moderate nutrient charge (10 mg \
 N, 3 mg P) supplements active_planted in the medium_planted scenario. High \
 detritus_trapping_index (0.7) captures organic matter for microfauna."""
 
+[param_meta.colonizable_area_factor]
+unit = "dimensionless factor"
+source = "Starter preset pack habitat-scaling heuristic"
+confidence = "heuristic"
+valid_range = [0.75, 1.1]
+notes = """\
+Primary habitat/biofilter scaling knob for porous media. 0.9 intentionally \
+sits at the top of the shipped substrate range so footprint-scaled \
+colonizable area tracks this preset's role as the strongest nitrifier \
+attachment substrate in the starter pack."""
