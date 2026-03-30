@@ -296,6 +296,7 @@ impl StartupSelection {
             heater_preset: Some(self.heater_preset),
             aeration_enabled: Some(self.aeration_enabled),
             initial_adult_shrimp_count: Some(self.initial_shrimp_count),
+            ..StartupOverrides::default()
         }
     }
 
