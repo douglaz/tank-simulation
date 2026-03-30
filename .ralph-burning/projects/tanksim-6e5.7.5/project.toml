@@ -1,7 +1,0 @@
-id = "tanksim-6e5.7.5"
-name = "Developer docs update"
-flow = "docs_change"
-prompt_reference = "prompt.md"
-prompt_hash = "7be06a8d38a79648"
-created_at = "2026-03-30T13:16:14.176115942Z"
-status_summary = "created"

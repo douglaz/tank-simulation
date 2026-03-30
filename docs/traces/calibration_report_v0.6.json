@@ -1,0 +1,686 @@
+{
+  "generated_at": "2026-03-30T13:38:11Z",
+  "parameter_set": "default",
+  "summary": {
+    "total": 8,
+    "passed": 6,
+    "marginal": 2,
+    "failed": 0
+  },
+  "scenarios": [
+    {
+      "scenario_id": "vs01_cycling_timeline",
+      "scenario_name": "Fishless cycling timeline",
+      "seed": 7301,
+      "parameter_variant": "default",
+      "domain": "Chemistry / Microbiology",
+      "confidence": "high",
+      "provenance_status": "validated_directionally",
+      "status": "marginal",
+      "observed_summary": "week8: TAN=1.067 NO2=0.002 NO3=7.879 pH=8.500 maturity=0.005",
+      "checkpoints": [
+        {
+          "label": "week_2",
+          "day": 14,
+          "hour": 2,
+          "checkpoint_hours": 338,
+          "status": "marginal",
+          "fields": [
+            {
+              "field": "ph",
+              "observed": 8.5,
+              "envelope_min": 6.5,
+              "envelope_max": 8.5,
+              "status": "marginal",
+              "detail": "ph 8.5000 within 10% of envelope boundary"
+            },
+            {
+              "field": "tan_mg_n_per_l",
+              "observed": 0.30626691419189034,
+              "envelope_min": 0.0,
+              "envelope_max": 15.0,
+              "status": "marginal",
+              "detail": "tan_mg_n_per_l 0.3063 within 10% of envelope boundary"
+            },
+            {
+              "field": "nitrite_mg_n_per_l",
+              "observed": 0.0012433247500394922,
+              "envelope_min": 0.0,
+              "envelope_max": 5.0,
+              "status": "marginal",
+              "detail": "nitrite_mg_n_per_l 0.0012 within 10% of envelope boundary"
+            },
+            {
+              "field": "nitrate_mg_n_per_l",
+              "observed": 7.93991489635671,
+              "envelope_min": 0.0,
+              "envelope_max": 15.0,
+              "status": "pass"
+            },
+            {
+              "field": "do_mg_l",
+              "observed": 8.380048814904368,
+              "envelope_min": 6.0,
+              "envelope_max": null,
+              "status": "pass"
+            }
+          ],
+          "artifact_path": "/tmp/tank_harness/medium_planted_vs01_cycling_timeline_seed7301"
+        },
+        {
+          "label": "week_4",
+          "day": 28,
+          "hour": 4,
+          "checkpoint_hours": 676,
+          "status": "marginal",
+          "fields": [
+            {
+              "field": "ph",
+              "observed": 8.5,
+              "envelope_min": 6.5,
+              "envelope_max": 8.5,
+              "status": "marginal",
+              "detail": "ph 8.5000 within 10% of envelope boundary"
+            },
+            {
+              "field": "tan_mg_n_per_l",
+              "observed": 0.649948777048782,
+              "envelope_min": 0.0,
+              "envelope_max": 10.0,
+              "status": "marginal",
+              "detail": "tan_mg_n_per_l 0.6499 within 10% of envelope boundary"
+            },
+            {
+              "field": "nitrite_mg_n_per_l",
+              "observed": 0.002193664599397101,
+              "envelope_min": 0.0,
+              "envelope_max": 10.0,
+              "status": "marginal",
+              "detail": "nitrite_mg_n_per_l 0.0022 within 10% of envelope boundary"
+            },
+            {
+              "field": "nitrate_mg_n_per_l",
+              "observed": 7.927891572806911,
+              "envelope_min": 0.5,
+              "envelope_max": 25.0,
+              "status": "pass"
+            },
+            {
+              "field": "do_mg_l",
+              "observed": 8.376817662910367,
+              "envelope_min": 5.5,
+              "envelope_max": null,
+              "status": "pass"
+            }
+          ],
+          "artifact_path": "/tmp/tank_harness/medium_planted_vs01_cycling_timeline_seed7301"
+        },
+        {
+          "label": "week_6",
+          "day": 42,
+          "hour": 6,
+          "checkpoint_hours": 1014,
+          "status": "marginal",
+          "fields": [
+            {
+              "field": "ph",
+              "observed": 8.5,
+              "envelope_min": 6.5,
+              "envelope_max": 8.5,
+              "status": "marginal",
+              "detail": "ph 8.5000 within 10% of envelope boundary"
+            },
+            {
+              "field": "tan_mg_n_per_l",
+              "observed": 0.9058406699860347,
+              "envelope_min": 0.0,
+              "envelope_max": 3.0,
+              "status": "pass"
+            },
+            {
+              "field": "nitrite_mg_n_per_l",
+              "observed": 0.0024995180400539047,
+              "envelope_min": 0.0,
+              "envelope_max": 3.0,
+              "status": "marginal",
+              "detail": "nitrite_mg_n_per_l 0.0025 within 10% of envelope boundary"
+            },
+            {
+              "field": "nitrate_mg_n_per_l",
+              "observed": 7.908848113849715,
+              "envelope_min": 2.0,
+              "envelope_max": 40.0,
+              "status": "pass"
+            },
+            {
+              "field": "do_mg_l",
+              "observed": 8.376219415513681,
+              "envelope_min": 5.5,
+              "envelope_max": null,
+              "status": "pass"
+            }
+          ],
+          "artifact_path": "/tmp/tank_harness/medium_planted_vs01_cycling_timeline_seed7301"
+        },
+        {
+          "label": "week_8",
+          "day": 56,
+          "hour": 8,
+          "checkpoint_hours": 1352,
+          "status": "marginal",
+          "fields": [
+            {
+              "field": "ph",
+              "observed": 8.5,
+              "envelope_min": 6.5,
+              "envelope_max": 8.5,
+              "status": "marginal",
+              "detail": "ph 8.5000 within 10% of envelope boundary"
+            },
+            {
+              "field": "tan_mg_n_per_l",
+              "observed": 1.0671380673547817,
+              "envelope_min": 0.0,
+              "envelope_max": 2.0,
+              "status": "pass"
+            },
+            {
+              "field": "nitrite_mg_n_per_l",
+              "observed": 0.0023925721574440816,
+              "envelope_min": 0.0,
+              "envelope_max": 2.0,
+              "status": "marginal",
+              "detail": "nitrite_mg_n_per_l 0.0024 within 10% of envelope boundary"
+            },
+            {
+              "field": "nitrate_mg_n_per_l",
+              "observed": 7.878549114370681,
+              "envelope_min": 5.0,
+              "envelope_max": 60.0,
+              "status": "marginal",
+              "detail": "nitrate_mg_n_per_l 7.8785 within 10% of envelope boundary"
+            },
+            {
+              "field": "do_mg_l",
+              "observed": 8.403155896887455,
+              "envelope_min": 5.5,
+              "envelope_max": null,
+              "status": "pass"
+            }
+          ],
+          "artifact_path": "/tmp/tank_harness/medium_planted_vs01_cycling_timeline_seed7301"
+        }
+      ],
+      "artifact_path": "/tmp/tank_harness/medium_planted_vs01_cycling_timeline_seed7301",
+      "artifacts": [
+        {
+          "label": "harness",
+          "path": "/tmp/tank_harness/medium_planted_vs01_cycling_timeline_seed7301"
+        }
+      ]
+    },
+    {
+      "scenario_id": "vs02_aeration_effects",
+      "scenario_name": "Aeration effects (DO + pH)",
+      "seed": 7302,
+      "parameter_variant": "default",
+      "domain": "Physics / Chemistry",
+      "confidence": "high",
+      "provenance_status": "validated_directionally",
+      "status": "pass",
+      "observed_summary": "aerated: DO=8.45 pH=8.330 | passive: DO=4.17 pH=6.730 | DO_gap=4.28 pH_gap=1.600",
+      "checkpoints": [
+        {
+          "label": "comparison_24h",
+          "day": 1,
+          "hour": 0,
+          "checkpoint_hours": 24,
+          "status": "pass",
+          "fields": [
+            {
+              "field": "aerated_do_mg_l",
+              "observed": 8.445400191208046,
+              "envelope_min": null,
+              "envelope_max": null,
+              "status": "pass"
+            },
+            {
+              "field": "passive_do_mg_l",
+              "observed": 4.170172315055598,
+              "envelope_min": null,
+              "envelope_max": null,
+              "status": "pass"
+            },
+            {
+              "field": "do_gap_mg_l",
+              "observed": 4.2752278761524485,
+              "envelope_min": 0.5,
+              "envelope_max": null,
+              "status": "pass"
+            },
+            {
+              "field": "aerated_ph",
+              "observed": 8.33011641240269,
+              "envelope_min": null,
+              "envelope_max": null,
+              "status": "pass"
+            },
+            {
+              "field": "passive_ph",
+              "observed": 6.730211509494891,
+              "envelope_min": null,
+              "envelope_max": null,
+              "status": "pass"
+            },
+            {
+              "field": "ph_gap",
+              "observed": 1.5999049029077987,
+              "envelope_min": 0.2,
+              "envelope_max": null,
+              "status": "pass"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scenario_id": "vs03_day_night_ph_swing",
+      "scenario_name": "Day/night pH swing",
+      "seed": 7303,
+      "parameter_variant": "default",
+      "domain": "Chemistry / Plant biology",
+      "confidence": "high",
+      "provenance_status": "validated_directionally",
+      "status": "pass",
+      "observed_summary": "light_max_pH=8.500 dark_min_pH=7.580 swing=0.920 (samples: light=2, dark=2)",
+      "checkpoints": [
+        {
+          "label": "day_night_cycles",
+          "day": 4,
+          "hour": 0,
+          "checkpoint_hours": 96,
+          "status": "pass",
+          "fields": [
+            {
+              "field": "light_sample_count",
+              "observed": 2.0,
+              "envelope_min": null,
+              "envelope_max": null,
+              "status": "pass"
+            },
+            {
+              "field": "dark_sample_count",
+              "observed": 2.0,
+              "envelope_min": null,
+              "envelope_max": null,
+              "status": "pass"
+            },
+            {
+              "field": "ph_swing",
+              "observed": 0.9199599414225137,
+              "envelope_min": 0.2,
+              "envelope_max": 1.0,
+              "status": "pass"
+            },
+            {
+              "field": "cycle_1_light_minus_dark",
+              "observed": 0.9199599414225137,
+              "envelope_min": 0.001,
+              "envelope_max": null,
+              "status": "pass"
+            },
+            {
+              "field": "cycle_2_light_minus_dark",
+              "observed": 0.7717055407519089,
+              "envelope_min": 0.001,
+              "envelope_max": null,
+              "status": "pass"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scenario_id": "vs04_source_water_differentiation",
+      "scenario_name": "Source-water differentiation",
+      "seed": 7304,
+      "parameter_variant": "default",
+      "domain": "Chemistry",
+      "confidence": "high",
+      "provenance_status": "validated_directionally",
+      "status": "pass",
+      "observed_summary": "hard_shrimp: pH=8.257 | ro_like: pH=6.732 | gap=1.525",
+      "checkpoints": [
+        {
+          "label": "equilibrium_100h",
+          "day": 4,
+          "hour": 4,
+          "checkpoint_hours": 100,
+          "status": "pass",
+          "fields": [
+            {
+              "field": "hard_shrimp_ph",
+              "observed": 8.256977003154834,
+              "envelope_min": 7.0,
+              "envelope_max": 8.5,
+              "status": "pass"
+            },
+            {
+              "field": "ro_like_ph",
+              "observed": 6.731613737936004,
+              "envelope_min": 5.5,
+              "envelope_max": 7.0,
+              "status": "pass"
+            },
+            {
+              "field": "ph_gap",
+              "observed": 1.5253632652188296,
+              "envelope_min": 1.0,
+              "envelope_max": null,
+              "status": "pass"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scenario_id": "vs05_shrimp_breeding_thermal_window",
+      "scenario_name": "Shrimp breeding thermal window",
+      "seed": 7305,
+      "parameter_variant": "default",
+      "domain": "Animal behavior",
+      "confidence": "high",
+      "provenance_status": "validated_directionally",
+      "status": "pass",
+      "observed_summary": "cool: pop=260 cycles=10 juv=206 sub=35 readiness=0.915 | warm: pop=10 juv=0 sub=0 readiness=0.017",
+      "checkpoints": [
+        {
+          "label": "day_60",
+          "day": 60,
+          "hour": 12,
+          "checkpoint_hours": 1452,
+          "status": "pass",
+          "fields": [
+            {
+              "field": "cool_final_population",
+              "observed": 260.0,
+              "envelope_min": 11.0,
+              "envelope_max": null,
+              "status": "pass"
+            },
+            {
+              "field": "cool_complete_cycles",
+              "observed": 10.0,
+              "envelope_min": 2.0,
+              "envelope_max": null,
+              "status": "pass"
+            },
+            {
+              "field": "cool_offspring_count",
+              "observed": 241.0,
+              "envelope_min": 1.0,
+              "envelope_max": null,
+              "status": "pass"
+            },
+            {
+              "field": "cool_minus_warm_offspring",
+              "observed": 241.0,
+              "envelope_min": 0.001,
+              "envelope_max": null,
+              "status": "pass"
+            },
+            {
+              "field": "cool_minus_warm_readiness",
+              "observed": 0.8980576173804334,
+              "envelope_min": 0.001,
+              "envelope_max": null,
+              "status": "pass"
+            },
+            {
+              "field": "warm_final_population",
+              "observed": 10.0,
+              "envelope_min": null,
+              "envelope_max": null,
+              "status": "pass"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scenario_id": "vs06_algae_plant_competition",
+      "scenario_name": "Algae-plant competition",
+      "seed": 7306,
+      "parameter_variant": "default",
+      "domain": "Ecology",
+      "confidence": "medium",
+      "provenance_status": "still_heuristic",
+      "status": "pass",
+      "observed_summary": "plants: 8.00g->1.73g health: 0.800->0.000 | algae: 2.500g->1.749g nuisance: 0.100->0.583",
+      "checkpoints": [
+        {
+          "label": "day_90",
+          "day": 90,
+          "hour": 0,
+          "checkpoint_hours": 2160,
+          "status": "pass",
+          "fields": [
+            {
+              "field": "algae_fraction_of_initial",
+              "observed": 0.6997895501098965,
+              "envelope_min": 0.5,
+              "envelope_max": null,
+              "status": "pass"
+            },
+            {
+              "field": "plant_biomass_multiplier",
+              "observed": 0.2163651856536033,
+              "envelope_min": null,
+              "envelope_max": 1.2,
+              "status": "pass"
+            },
+            {
+              "field": "plant_health_drop",
+              "observed": 0.8,
+              "envelope_min": 0.001,
+              "envelope_max": null,
+              "status": "pass"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scenario_id": "vs07_nitrate_removal_denitrification",
+      "scenario_name": "Nitrate removal (denitrification)",
+      "seed": 7307,
+      "parameter_variant": "default",
+      "domain": "Microbiology / Chemistry",
+      "confidence": "medium",
+      "provenance_status": "still_heuristic",
+      "status": "pass",
+      "observed_summary": "planted: NO3=0.13 N2_export=87.11mg_N denitrifier_act=0.213 | bare: NO3=0.24 N2_export=0.00mg_N",
+      "checkpoints": [
+        {
+          "label": "day_120",
+          "day": 120,
+          "hour": 17,
+          "checkpoint_hours": 2897,
+          "status": "pass",
+          "fields": [
+            {
+              "field": "bare_minus_planted_no3_mg_n_per_l",
+              "observed": 0.10720394813131237,
+              "envelope_min": 0.001,
+              "envelope_max": null,
+              "status": "pass"
+            },
+            {
+              "field": "planted_n2_export_mg_n",
+              "observed": 87.10702449122911,
+              "envelope_min": 1.0,
+              "envelope_max": null,
+              "status": "pass"
+            },
+            {
+              "field": "bare_n2_export_mg_n",
+              "observed": 0.0,
+              "envelope_min": null,
+              "envelope_max": 0.1,
+              "status": "pass"
+            },
+            {
+              "field": "planted_denitrifier_activity",
+              "observed": 0.21304435721733161,
+              "envelope_min": 0.1,
+              "envelope_max": null,
+              "status": "pass"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scenario_id": "vs08_stocking_density_crash",
+      "scenario_name": "Stocking density crash",
+      "seed": 7308,
+      "parameter_variant": "default",
+      "domain": "Toxicology / Husbandry",
+      "confidence": "high",
+      "provenance_status": "validated_directionally",
+      "status": "marginal",
+      "observed_summary": "initial=20, final=0, TAN=275.50, NO2=21.69, pH=5.500",
+      "checkpoints": [
+        {
+          "label": "week_1",
+          "day": 7,
+          "hour": 0,
+          "checkpoint_hours": 168,
+          "status": "pass",
+          "fields": [
+            {
+              "field": "ph",
+              "observed": 7.895815601740918,
+              "envelope_min": 5.0,
+              "envelope_max": 8.5,
+              "status": "pass"
+            },
+            {
+              "field": "tan_mg_n_per_l",
+              "observed": 5.09460264308796,
+              "envelope_min": 1.0,
+              "envelope_max": 30.0,
+              "status": "pass"
+            },
+            {
+              "field": "shrimp_count",
+              "observed": 10.0,
+              "envelope_min": 5.0,
+              "envelope_max": 20.0,
+              "status": "pass"
+            }
+          ]
+        },
+        {
+          "label": "week_2",
+          "day": 14,
+          "hour": 0,
+          "checkpoint_hours": 336,
+          "status": "pass",
+          "fields": [
+            {
+              "field": "ph",
+              "observed": 7.692400956620771,
+              "envelope_min": 4.5,
+              "envelope_max": 8.5,
+              "status": "pass"
+            },
+            {
+              "field": "tan_mg_n_per_l",
+              "observed": 12.716573459271736,
+              "envelope_min": 3.0,
+              "envelope_max": 60.0,
+              "status": "pass"
+            },
+            {
+              "field": "shrimp_count",
+              "observed": 3.0,
+              "envelope_min": 0.0,
+              "envelope_max": 15.0,
+              "status": "pass"
+            }
+          ]
+        },
+        {
+          "label": "week_4",
+          "day": 28,
+          "hour": 0,
+          "checkpoint_hours": 672,
+          "status": "marginal",
+          "fields": [
+            {
+              "field": "ph",
+              "observed": 6.9950444597401,
+              "envelope_min": 4.5,
+              "envelope_max": 8.5,
+              "status": "pass"
+            },
+            {
+              "field": "tan_mg_n_per_l",
+              "observed": 58.401098297161774,
+              "envelope_min": 5.0,
+              "envelope_max": 100.0,
+              "status": "pass"
+            },
+            {
+              "field": "shrimp_count",
+              "observed": 0.0,
+              "envelope_min": 0.0,
+              "envelope_max": 5.0,
+              "status": "marginal",
+              "detail": "shrimp_count 0.0000 within 10% of envelope boundary"
+            }
+          ],
+          "artifact_path": "/tmp/tank_harness/vs08_stocking_density_crash_seed7308"
+        },
+        {
+          "label": "week_8",
+          "day": 56,
+          "hour": 0,
+          "checkpoint_hours": 1344,
+          "status": "pass",
+          "fields": [
+            {
+              "field": "ph",
+              "observed": 5.5,
+              "envelope_min": 4.5,
+              "envelope_max": 8.5,
+              "status": "pass"
+            },
+            {
+              "field": "tan_mg_n_per_l",
+              "observed": 275.4989367826031,
+              "envelope_min": 10.0,
+              "envelope_max": 400.0,
+              "status": "pass"
+            },
+            {
+              "field": "shrimp_count",
+              "observed": 0.0,
+              "envelope_min": 0.0,
+              "envelope_max": 0.0,
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "artifact_path": "/tmp/tank_harness/vs08_stocking_density_crash_seed7308",
+      "artifacts": [
+        {
+          "label": "harness",
+          "path": "/tmp/tank_harness/vs08_stocking_density_crash_seed7308"
+        }
+      ]
+    }
+  ]
+}

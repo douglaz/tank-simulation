@@ -1,0 +1,78 @@
+============================================================
+  CALIBRATION REPORT — Tank Simulator
+============================================================
+Generated: 2026-03-30T13:38:11Z
+Parameter set: default
+Summary: total=8 pass=6 marginal=2 fail=0
+
+[marginal] Fishless cycling timeline (vs01_cycling_timeline)
+  Domain: Chemistry / Microbiology | Confidence: high | Provenance: validated directionally
+  Seed: 7301 | Variant: default
+  Observed: week8: TAN=1.067 NO2=0.002 NO3=7.879 pH=8.500 maturity=0.005
+  Checkpoints:
+    - week_2 @ 338h [marginal] ph=8.500 [6.5..8.5], tan_mg_n_per_l=0.306 [0..15], nitrite_mg_n_per_l=0.001 [0..5], nitrate_mg_n_per_l=7.940 [0..15], do_mg_l=8.380 [>= 6]
+      artifact: /tmp/tank_harness/medium_planted_vs01_cycling_timeline_seed7301
+    - week_4 @ 676h [marginal] ph=8.500 [6.5..8.5], tan_mg_n_per_l=0.650 [0..10], nitrite_mg_n_per_l=0.002 [0..10], nitrate_mg_n_per_l=7.928 [0.5..25], do_mg_l=8.377 [>= 5.5]
+      artifact: /tmp/tank_harness/medium_planted_vs01_cycling_timeline_seed7301
+    - week_6 @ 1014h [marginal] ph=8.500 [6.5..8.5], tan_mg_n_per_l=0.906 [0..3], nitrite_mg_n_per_l=0.002 [0..3], nitrate_mg_n_per_l=7.909 [2..40], do_mg_l=8.376 [>= 5.5]
+      artifact: /tmp/tank_harness/medium_planted_vs01_cycling_timeline_seed7301
+    - week_8 @ 1352h [marginal] ph=8.500 [6.5..8.5], tan_mg_n_per_l=1.067 [0..2], nitrite_mg_n_per_l=0.002 [0..2], nitrate_mg_n_per_l=7.879 [5..60], do_mg_l=8.403 [>= 5.5]
+      artifact: /tmp/tank_harness/medium_planted_vs01_cycling_timeline_seed7301
+  Artifacts:
+    - harness: /tmp/tank_harness/medium_planted_vs01_cycling_timeline_seed7301
+
+[pass] Aeration effects (DO + pH) (vs02_aeration_effects)
+  Domain: Physics / Chemistry | Confidence: high | Provenance: validated directionally
+  Seed: 7302 | Variant: default
+  Observed: aerated: DO=8.45 pH=8.330 | passive: DO=4.17 pH=6.730 | DO_gap=4.28 pH_gap=1.600
+  Checkpoints:
+    - comparison_24h @ 24h [pass] aerated_do_mg_l=8.445, passive_do_mg_l=4.170, do_gap_mg_l=4.275 [>= 0.5], aerated_ph=8.330, passive_ph=6.730, ph_gap=1.600 [>= 0.2]
+
+[pass] Day/night pH swing (vs03_day_night_ph_swing)
+  Domain: Chemistry / Plant biology | Confidence: high | Provenance: validated directionally
+  Seed: 7303 | Variant: default
+  Observed: light_max_pH=8.500 dark_min_pH=7.580 swing=0.920 (samples: light=2, dark=2)
+  Checkpoints:
+    - day_night_cycles @ 96h [pass] light_sample_count=2.000, dark_sample_count=2.000, ph_swing=0.920 [0.2..1], cycle_1_light_minus_dark=0.920 [>= 0.001], cycle_2_light_minus_dark=0.772 [>= 0.001]
+
+[pass] Source-water differentiation (vs04_source_water_differentiation)
+  Domain: Chemistry | Confidence: high | Provenance: validated directionally
+  Seed: 7304 | Variant: default
+  Observed: hard_shrimp: pH=8.257 | ro_like: pH=6.732 | gap=1.525
+  Checkpoints:
+    - equilibrium_100h @ 100h [pass] hard_shrimp_ph=8.257 [7..8.5], ro_like_ph=6.732 [5.5..7], ph_gap=1.525 [>= 1]
+
+[pass] Shrimp breeding thermal window (vs05_shrimp_breeding_thermal_window)
+  Domain: Animal behavior | Confidence: high | Provenance: validated directionally
+  Seed: 7305 | Variant: default
+  Observed: cool: pop=260 cycles=10 juv=206 sub=35 readiness=0.915 | warm: pop=10 juv=0 sub=0 readiness=0.017
+  Checkpoints:
+    - day_60 @ 1452h [pass] cool_final_population=260.000 [>= 11], cool_complete_cycles=10.000 [>= 2], cool_offspring_count=241.000 [>= 1], cool_minus_warm_offspring=241.000 [>= 0.001], cool_minus_warm_readiness=0.898 [>= 0.001], warm_final_population=10.000
+
+[pass] Algae-plant competition (vs06_algae_plant_competition)
+  Domain: Ecology | Confidence: medium | Provenance: still heuristic
+  Seed: 7306 | Variant: default
+  Observed: plants: 8.00g->1.73g health: 0.800->0.000 | algae: 2.500g->1.749g nuisance: 0.100->0.583
+  Checkpoints:
+    - day_90 @ 2160h [pass] algae_fraction_of_initial=0.700 [>= 0.5], plant_biomass_multiplier=0.216 [<= 1.2], plant_health_drop=0.800 [>= 0.001]
+
+[pass] Nitrate removal (denitrification) (vs07_nitrate_removal_denitrification)
+  Domain: Microbiology / Chemistry | Confidence: medium | Provenance: still heuristic
+  Seed: 7307 | Variant: default
+  Observed: planted: NO3=0.13 N2_export=87.11mg_N denitrifier_act=0.213 | bare: NO3=0.24 N2_export=0.00mg_N
+  Checkpoints:
+    - day_120 @ 2897h [pass] bare_minus_planted_no3_mg_n_per_l=0.107 [>= 0.001], planted_n2_export_mg_n=87.107 [>= 1], bare_n2_export_mg_n=0.000 [<= 0.1], planted_denitrifier_activity=0.213 [>= 0.1]
+
+[marginal] Stocking density crash (vs08_stocking_density_crash)
+  Domain: Toxicology / Husbandry | Confidence: high | Provenance: validated directionally
+  Seed: 7308 | Variant: default
+  Observed: initial=20, final=0, TAN=275.50, NO2=21.69, pH=5.500
+  Checkpoints:
+    - week_1 @ 168h [pass] ph=7.896 [5..8.5], tan_mg_n_per_l=5.095 [1..30], shrimp_count=10.000 [5..20]
+    - week_2 @ 336h [pass] ph=7.692 [4.5..8.5], tan_mg_n_per_l=12.717 [3..60], shrimp_count=3.000 [0..15]
+    - week_4 @ 672h [marginal] ph=6.995 [4.5..8.5], tan_mg_n_per_l=58.401 [5..100], shrimp_count=0.000 [0..5]
+      artifact: /tmp/tank_harness/vs08_stocking_density_crash_seed7308
+    - week_8 @ 1344h [pass] ph=5.500 [4.5..8.5], tan_mg_n_per_l=275.499 [10..400], shrimp_count=0.000 [0..0]
+  Artifacts:
+    - harness: /tmp/tank_harness/vs08_stocking_density_crash_seed7308
+
