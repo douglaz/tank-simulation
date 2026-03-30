@@ -640,6 +640,14 @@ impl HarnessRun {
         std::env::temp_dir().join("tank_harness").join(dir_name)
     }
 
+    /// Persist the current artifact bundle even when the run has not failed.
+    ///
+    /// Summary runners can use this to archive checkpoints, budget ledgers,
+    /// and `trace.jsonl` for successful executions before calling [`finish`].
+    pub fn persist_artifacts(&self) -> PathBuf {
+        self.write_artifacts()
+    }
+
     /// Finalize the run.
     ///
     /// - If `TANK_E2E_VERBOSE=1` is set, dumps full trace to stderr even on success.
@@ -909,6 +917,44 @@ mod tests {
         assert!(err.contains("expected higher nitrifier capacity"));
         assert!(artifact_dir.join("metadata.json").exists());
         assert!(artifact_dir.join("assertion_summary.txt").exists());
+
+        let _ = std::fs::remove_dir_all(artifact_dir);
+    }
+
+    #[test]
+    fn successful_runs_can_persist_artifacts_for_summary_reporting() {
+        let state = TankState::new(SimSeed(8_006));
+        let mut run = HarnessRun::from_state(SimSeed(8_006), "medium_planted", state)
+            .with_artifact_label("summary_capture");
+        let artifact_dir = run.artifact_dir();
+        let _ = std::fs::remove_dir_all(&artifact_dir);
+
+        run.enable_instrumentation();
+        run.checkpoint("initial");
+        run.step_hours(1).expect("summary capture run should step");
+        run.checkpoint("final");
+
+        let persisted_dir = run.persist_artifacts();
+        assert_eq!(persisted_dir, artifact_dir);
+        assert!(artifact_dir.join("metadata.json").exists());
+        assert!(artifact_dir.join("checkpoints.json").exists());
+        assert!(artifact_dir.join("budget_ledger.json").exists());
+        assert!(artifact_dir.join("trace.jsonl").exists());
+
+        let meta_raw = std::fs::read_to_string(artifact_dir.join("metadata.json"))
+            .expect("metadata should be readable");
+        let meta: serde_json::Value =
+            serde_json::from_str(&meta_raw).expect("metadata should parse as json");
+        assert_eq!(
+            meta["assertion_failures"]
+                .as_array()
+                .expect("assertion_failures should be an array")
+                .len(),
+            0
+        );
+
+        run.finish()
+            .expect("persisting successful artifacts should not fail finish");
 
         let _ = std::fs::remove_dir_all(artifact_dir);
     }

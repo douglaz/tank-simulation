@@ -13,14 +13,12 @@
 //!
 //! Exit codes: 0 = all pass, non-zero = envelope violation.
 
-use std::collections::BTreeSet;
-
 use tank_core::{
     systems::chemistry::resolve_carbonate_state,
     systems::light::is_light_on,
-    EggCohort, Engine, EventKind, JsonLinesSink, PlayerAction, ProcessParams, SimSeed, SimTracer,
-    SimulationEngine, SourceWaterProfile, SubstrateKind, SubstrateLayerState, TankGeometry,
-    TankSnapshot, TankState, TraceSink, Verbosity, WaterState,
+    Engine, EventKind, JsonLinesSink, PlayerAction, ProcessParams, SimSeed, SimTracer,
+    SimulationEngine, SourceWaterProfile, TankGeometry, TankSnapshot, TankState, TraceSink,
+    Verbosity, WaterState,
 };
 use tank_harness::{Envelope, HarnessRun};
 use tank_scenarios::{
@@ -743,7 +741,7 @@ fn run_vs05_shrimp_breeding() -> Result<ProbeResult, Box<dyn std::error::Error>>
     let cool_snap = cool_run.snapshot();
     let warm_snap = warm_run.snapshot();
     let cool_state = cool_run.engine().full_state().clone();
-    let warm_state = warm_run.engine().full_state().clone();
+    let _warm_state = warm_run.engine().full_state();
 
     let cool_cycles: usize = cool_state
         .event_log
@@ -968,7 +966,8 @@ fn run_vs07_nitrate_removal() -> Result<ProbeResult, Box<dyn std::error::Error>>
             .with_artifact_label("vs07_planted");
     enable_instrumentation(&mut planted_run);
 
-    // Bare-bottom arm: same scenario but no substrate, no plants.
+    // Bare-bottom arm: construct state then strip substrate before wrapping
+    // in HarnessRun, since Engine does not expose mutable state access.
     let bare_overrides = StartupOverrides {
         geometry: ScenarioGeometryOverrides {
             size_scale: 2.0,
@@ -984,17 +983,15 @@ fn run_vs07_nitrate_removal() -> Result<ProbeResult, Box<dyn std::error::Error>>
         initial_adult_shrimp_count: Some(0),
         ..StartupOverrides::default()
     };
-    let mut bare_run =
-        HarnessRun::with_overrides(SimSeed(7307), "medium_planted", bare_overrides)?
-            .with_artifact_label("vs07_bare");
-    enable_instrumentation(&mut bare_run);
+    let mut bare_state =
+        tank_scenarios::seeded_state_with_full_overrides(SimSeed(7307), "medium_planted", bare_overrides)?;
+    // Remove substrate layers to suppress denitrification pathway entirely.
+    bare_state.substrate_layers.clear();
+    bare_state.refresh_habitat_registry();
 
-    // Remove substrate layers from bare-bottom to suppress denitrification.
-    bare_run.engine_mut().state_mut().substrate_layers.clear();
-    bare_run
-        .engine_mut()
-        .state_mut()
-        .refresh_habitat_registry();
+    let mut bare_run = HarnessRun::from_state(SimSeed(7307), "vs07_bare", bare_state)
+        .with_artifact_label("vs07_bare");
+    enable_instrumentation(&mut bare_run);
 
     // 56 days of feeding with weekly water changes.
     for day in 1..=56 {
@@ -1034,8 +1031,6 @@ fn run_vs07_nitrate_removal() -> Result<ProbeResult, Box<dyn std::error::Error>>
         bare_n2,
         bare_state.microbe.denitrifier_activity_index,
     );
-
-    let mut failures = Vec::new();
 
     // Planted-substrate NO₃ should be lower than bare-bottom.
     if planted_snap.nitrate_mg_n_per_l >= bare_snap.nitrate_mg_n_per_l {
@@ -1143,7 +1138,6 @@ fn run_vs08_stocking_density_crash() -> Result<ProbeResult, Box<dyn std::error::
 
         let week = day / 7;
         if day % 7 == 0 {
-            let snap = run.snapshot();
             run.checkpoint(&format!("week_{week}"));
 
             match week {
