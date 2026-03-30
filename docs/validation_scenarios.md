@@ -505,6 +505,8 @@ each scenario and recording observed values against the envelope bounds.
 
 SCENARIO 1: Fishless cycling timeline
   Status: PASS / FAIL
+  Note: biofilter maturity may be recorded as an observability field, but it is
+        not scored for pass/fail.
   Checkpoints:
     Week 2: TAN=X.XX NO2=X.XX NO3=X.XX pH=X.XX  [PASS/FAIL]
     Week 4: TAN=X.XX NO2=X.XX NO3=X.XX pH=X.XX  [PASS/FAIL]
