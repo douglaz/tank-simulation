@@ -1,0 +1,190 @@
+=== stdout ===
+=== stderr ===
+OpenAI Codex v0.117.0 (research preview)
+--------
+workdir: /home/master/p/tank-simulation
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019d327f-fde1-7330-bc35-4edc2b23d347
+--------
+user
+Contract: final_review:voter
+Role: Planner
+
+# Planner Positions
+
+You are evaluating proposed amendments to this project. Assess each amendment on its technical merit — correctness, safety, robustness, and maintainability.
+
+## Instructions
+
+1. Consider each amendment carefully on its own merits.
+2. If planner positions are provided below, weigh them as additional context when forming your decision.
+3. Vote ACCEPT or REJECT for each amendment with a clear rationale.
+4. Do NOT reject amendments because they are "out of scope" or "beyond the original spec" — any real bug or safety issue is valid regardless of scope.
+5. Do NOT dismiss concurrency or isolation issues as "theoretical" just because they don't currently cause failures — shared mutable state is a defect even if current callers happen to be read-only.
+
+## Proposed Amendments
+
+## Amendment: fr-1-3497098b
+
+In `route_dead_shrimp_to_detritus` (shrimp.rs:644-648), shrimp body mass is converted to detrital grams via `shrimp_body_detrital_mass_g` using species-specific `body_nitrogen_mg_per_g_wet_mass` and `body_carbon_mg_per_g_wet_mass`. However, the budget system reads `fine_detritus_g_total` N/C using the global `feed_n_to_c_ratio` (budget.rs:302-303). At default values these are algebraically identical (both produce a 0.16 N:C ratio), so conservation holds today. But if anyone customizes `body_nitrogen_mg_per_g_wet_mass` or `body_carbon_mg_per_g_wet_mass` to a ratio different from `feed_n_to_c_ratio`, the N and C deposited from dead shrimp will be measured differently by the budget than what was removed from the shrimp body pool, silently violating mass conservation. At minimum, add a `debug_assert!` in `route_dead_shrimp_to_detritus` that validates the implied body N:C ratio matches `feed_n_to_c_ratio` (or within tolerance), so the invariant is enforced until the detritus pool tracks its own composition. Alternatively, document the coupling constraint on the new body composition params.
+
+## Amendment: fr-1-56d18670
+
+In `fund_live_shrimp_biomass` (shrimp.rs:666-678), newly hatched/matured shrimp reserve cost is computed as `biomass_g * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G` (fixed at 0.20). The death path uses species-specific `body_nitrogen_mg_per_g_wet_mass + body_carbon_mg_per_g_wet_mass` (sum = 200 mg/g = 0.20 at defaults) to compute body detrital mass. If body composition is customized, the sum may no longer equal `LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G * 1000`, creating an asymmetry between reserve funding and body accounting. Either derive the reserve cost from the same body composition params, or add a `debug_assert!` ensuring `(body_N + body_C) / 1000 == LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G`.
+
+## Amendment: fr-1-7cbb4b10
+
+The `with_budget_debug_env` function (budget_helpers.rs:151-163) uses `std::env::set_var` and `std::env::remove_var` which are unsound under Rust 2024 edition rules and deprecated since Rust 1.66 because they can cause data races with concurrent env reads on other threads. The mutex only serializes callers of this function, not arbitrary `std::env::var` reads elsewhere. For test-only code this is pragmatically acceptable, but add a comment acknowledging the soundness limitation and consider using a `Cell`/`AtomicBool` config flag instead of env vars for the debug toggle.
+
+## Amendment: fr-1-33d5638a
+
+Custom shrimp body composition is not preserved once a carcass enters `fine_detritus_g_total`. `route_dead_shrimp_to_detritus` converts shrimp N+C into a generic detritus mass in `crates/tank_core/src/systems/shrimp.rs:642-648`, but every downstream consumer of `fine_detritus_g_total` re-derives N/C from `feed_n_to_c_ratio` (`crates/tank_core/src/types/budget.rs:301-304`, `crates/tank_core/src/types/budget.rs:395-396`, `crates/tank_core/src/types/budget.rs:520-535`, `crates/tank_core/src/systems/nitrogen_cycle.rs:73-85`). Any non-default `body_nitrogen_mg_per_g_wet_mass` / `body_carbon_mg_per_g_wet_mass` will therefore create or destroy N/C at death and during later detritus dissolution. Either validate the new body-composition fields against the detritus stoichiometry, or carry carcass-specific stoichiometry through the detritus path.
+
+## Amendment: fr-1-e278818e
+
+The new shrimp body-composition fields are also incompatible with live biomass funding. `fund_live_shrimp_biomass` still charges a fixed `biomass_g * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G` reserve cost in `crates/tank_core/src/systems/shrimp.rs:666-677`, while adults/juveniles are budgeted with `body_nitrogen_mg_per_g_wet_mass` and `body_carbon_mg_per_g_wet_mass` in `crates/tank_core/src/types/budget.rs:275-288` and `crates/tank_core/src/types/budget.rs:368-381`. If those body-composition parameters differ from the old implicit 200 mg organic matter per gram wet mass, hatching and maturation will create or delete tracked matter. The new parameters need invariants that lock them to the reserve stoichiometry, or the reserve funding logic must derive directly from them.
+
+## Authoritative JSON Schema
+
+The JSON schema below is authoritative. Return only JSON that conforms exactly to it.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "FinalReviewVote": {
+      "description": "A vote on a single amendment.",
+      "properties": {
+        "amendment_id": {
+          "type": "string"
+        },
+        "decision": {
+          "$ref": "#/definitions/FinalReviewVoteDecision"
+        },
+        "rationale": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "amendment_id",
+        "decision",
+        "rationale"
+      ],
+      "type": "object"
+    },
+    "FinalReviewVoteDecision": {
+      "description": "Per-amendment vote used by both the planner-position step and reviewer voting.",
+      "enum": [
+        "accept",
+        "reject"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload returned by the planner-position step and each reviewer voting pass.",
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "votes": {
+      "items": {
+        "$ref": "#/definitions/FinalReviewVote"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "summary",
+    "votes"
+  ],
+  "title": "FinalReviewVotePayload",
+  "type": "object"
+}
+```
+
+--- Context JSON ---
+{
+  "amendments": [
+    {
+      "amendment_id": "fr-1-3497098b",
+      "body": "In `route_dead_shrimp_to_detritus` (shrimp.rs:644-648), shrimp body mass is converted to detrital grams via `shrimp_body_detrital_mass_g` using species-specific `body_nitrogen_mg_per_g_wet_mass` and `body_carbon_mg_per_g_wet_mass`. However, the budget system reads `fine_detritus_g_total` N/C using the global `feed_n_to_c_ratio` (budget.rs:302-303). At default values these are algebraically identical (both produce a 0.16 N:C ratio), so conservation holds today. But if anyone customizes `body_nitrogen_mg_per_g_wet_mass` or `body_carbon_mg_per_g_wet_mass` to a ratio different from `feed_n_to_c_ratio`, the N and C deposited from dead shrimp will be measured differently by the budget than what was removed from the shrimp body pool, silently violating mass conservation. At minimum, add a `debug_assert!` in `route_dead_shrimp_to_detritus` that validates the implied body N:C ratio matches `feed_n_to_c_ratio` (or within tolerance), so the invariant is enforced until the detritus pool tracks its own composition. Alternatively, document the coupling constraint on the new body composition params."
+    },
+    {
+      "amendment_id": "fr-1-56d18670",
+      "body": "In `fund_live_shrimp_biomass` (shrimp.rs:666-678), newly hatched/matured shrimp reserve cost is computed as `biomass_g * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G` (fixed at 0.20). The death path uses species-specific `body_nitrogen_mg_per_g_wet_mass + body_carbon_mg_per_g_wet_mass` (sum = 200 mg/g = 0.20 at defaults) to compute body detrital mass. If body composition is customized, the sum may no longer equal `LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G * 1000`, creating an asymmetry between reserve funding and body accounting. Either derive the reserve cost from the same body composition params, or add a `debug_assert!` ensuring `(body_N + body_C) / 1000 == LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G`."
+    },
+    {
+      "amendment_id": "fr-1-7cbb4b10",
+      "body": "The `with_budget_debug_env` function (budget_helpers.rs:151-163) uses `std::env::set_var` and `std::env::remove_var` which are unsound under Rust 2024 edition rules and deprecated since Rust 1.66 because they can cause data races with concurrent env reads on other threads. The mutex only serializes callers of this function, not arbitrary `std::env::var` reads elsewhere. For test-only code this is pragmatically acceptable, but add a comment acknowledging the soundness limitation and consider using a `Cell`/`AtomicBool` config flag instead of env vars for the debug toggle."
+    },
+    {
+      "amendment_id": "fr-1-33d5638a",
+      "body": "Custom shrimp body composition is not preserved once a carcass enters `fine_detritus_g_total`. `route_dead_shrimp_to_detritus` converts shrimp N+C into a generic detritus mass in `crates/tank_core/src/systems/shrimp.rs:642-648`, but every downstream consumer of `fine_detritus_g_total` re-derives N/C from `feed_n_to_c_ratio` (`crates/tank_core/src/types/budget.rs:301-304`, `crates/tank_core/src/types/budget.rs:395-396`, `crates/tank_core/src/types/budget.rs:520-535`, `crates/tank_core/src/systems/nitrogen_cycle.rs:73-85`). Any non-default `body_nitrogen_mg_per_g_wet_mass` / `body_carbon_mg_per_g_wet_mass` will therefore create or destroy N/C at death and during later detritus dissolution. Either validate the new body-composition fields against the detritus stoichiometry, or carry carcass-specific stoichiometry through the detritus path."
+    },
+    {
+      "amendment_id": "fr-1-e278818e",
+      "body": "The new shrimp body-composition fields are also incompatible with live biomass funding. `fund_live_shrimp_biomass` still charges a fixed `biomass_g * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G` reserve cost in `crates/tank_core/src/systems/shrimp.rs:666-677`, while adults/juveniles are budgeted with `body_nitrogen_mg_per_g_wet_mass` and `body_carbon_mg_per_g_wet_mass` in `crates/tank_core/src/types/budget.rs:275-288` and `crates/tank_core/src/types/budget.rs:368-381`. If those body-composition parameters differ from the old implicit 200 mg organic matter per gram wet mass, hatching and maturation will create or delete tracked matter. The new parameters need invariants that lock them to the reserve stoichiometry, or the reserve funding logic must derive directly from them."
+    }
+  ]
+}
+
+Return ONLY valid JSON matching the following schema:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "FinalReviewVote": {
+      "description": "A vote on a single amendment.",
+      "properties": {
+        "amendment_id": {
+          "type": "string"
+        },
+        "decision": {
+          "$ref": "#/definitions/FinalReviewVoteDecision"
+        },
+        "rationale": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "amendment_id",
+        "decision",
+        "rationale"
+      ],
+      "type": "object"
+    },
+    "FinalReviewVoteDecision": {
+      "description": "Per-amendment vote used by both the planner-position step and reviewer voting.",
+      "enum": [
+        "accept",
+        "reject"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload returned by the planner-position step and each reviewer voting pass.",
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "votes": {
+      "items": {
+        "$ref": "#/definitions/FinalReviewVote"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "summary",
+    "votes"
+  ],
+  "title": "FinalReviewVotePayload",
+  "type": "object"
+}
+
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 4:47 AM.
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 4:47 AM.

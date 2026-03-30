@@ -1,0 +1,79 @@
+{
+  "payload_id": "run-20260328125548-final_review-aggregate-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T16:07:15.554033334Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-5-b7289131"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-5-b737f90d",
+        "normalized_body": "In `legacy_process_param_normalization` (crates/tank_data/src/presets.rs:1192), the `_unit` parameter is accepted but completely ignored — normalization is purely name-based. This means if a developer attaches param_meta to `aob_k_tan_mg` with `unit = \"mg total\"` instead of `unit = \"mg N/L\"`, the system will still normalize the value to a concentration, creating a mismatch between the stated unit and the displayed value. Consider either (a) removing the unused `_unit` parameter to avoid implying it influences behavior, or (b) adding a debug assertion or warning when the attached unit doesn't match the expected normalization target (e.g., warn if a `_mg` legacy field has `unit` set to something other than a per-liter concentration).",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-60828312",
+        "normalized_body": "Finish the kinetic-field rename consistently across the data/scenario codepaths. `ProcessParamsPreset` now defines canonical `*_mg_c_per_l` / `*_mg_n_per_l` / `*_mg_per_l` fields in `crates/tank_data/src/presets.rs:760-801`, but validation/tests still dereference removed names in `crates/tank_data/src/presets.rs:1565-1579` and `crates/tank_data/src/presets.rs:2339`, and scenario materialization still reads the removed fields in `crates/tank_scenarios/src/lib.rs:367-386`. The branch does not build: `cargo test -p tank_data -q` and `cargo test -p tank_scenarios -q` both fail with `E0609` on these lines.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-b7289131",
+        "normalized_body": "Restore a real migration path for legacy kinetic `_mg` process keys instead of treating them as raw mg/L aliases. The runtime/data structs now only add `serde(alias = \"..._mg\")` for `decomposer_*`, `aob_*`, `nob_*`, and `comammox_*` in `crates/tank_core/src/types/process.rs:59-111` and `crates/tank_data/src/presets.rs:763-801`, while `parse_process_params_preset()` only renormalizes the plant/algae `*_mg_total` keys in `crates/tank_data/src/presets.rs:1186-1291`. `legacy_process_param_normalization()` no longer returns `LegacyMgPerL` for any renamed kinetic parameter in `crates/tank_data/src/presets.rs:1345-1365`, so a legacy file such as `aob_k_tan_mg = 0.5` is now interpreted as `0.5 mg N/L` instead of the previous `0.025 mg N/L`. The still-stale regression in `crates/tank_data/src/lib.rs:316-335` expecting `aob_k_tan_mg = 200.0` to report `value 10` shows the old 20 L compatibility contract was intended to remain intact.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-5-b7289131",
+        "normalized_body": "Restore a real migration path for legacy kinetic `_mg` process keys instead of treating them as raw mg/L aliases. The runtime/data structs now only add `serde(alias = \"..._mg\")` for `decomposer_*`, `aob_*`, `nob_*`, and `comammox_*` in `crates/tank_core/src/types/process.rs:59-111` and `crates/tank_data/src/presets.rs:763-801`, while `parse_process_params_preset()` only renormalizes the plant/algae `*_mg_total` keys in `crates/tank_data/src/presets.rs:1186-1291`. `legacy_process_param_normalization()` no longer returns `LegacyMgPerL` for any renamed kinetic parameter in `crates/tank_data/src/presets.rs:1345-1365`, so a legacy file such as `aob_k_tan_mg = 0.5` is now interpreted as `0.5 mg N/L` instead of the previous `0.025 mg N/L`. The still-stale regression in `crates/tank_data/src/lib.rs:316-335` expecting `aob_k_tan_mg = 200.0` to report `value 10` shows the old 20 L compatibility contract was intended to remain intact.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 5,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-5-b737f90d",
+      "fr-5-60828312"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 1 amendment(s); restart required.",
+    "total_proposed_amendments": 3,
+    "total_reviewers": 2,
+    "unique_amendment_count": 3
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 5
+}

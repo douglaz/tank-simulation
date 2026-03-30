@@ -1,0 +1,7 @@
+id = "tanksim-6e5.6.2"
+name = "Structured shrimp population"
+flow = "quick_dev"
+prompt_reference = "prompt.md"
+prompt_hash = "edd2f683d0046c28"
+created_at = "2026-03-28T12:55:40.181437214Z"
+status_summary = "created"

@@ -1,0 +1,77 @@
+{
+  "rollback_id": "51d5791f-0317-49b1-93aa-50d0b1362290",
+  "created_at": "2026-03-28T02:36:26.169689736Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "0c2b8387831ec2517bafc6a6ed0e82605abd4d8d",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260327232421",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 6
+      },
+      "started_at": "2026-03-27T23:24:21.388593983Z",
+      "prompt_hash_at_cycle_start": "e27b6e04094528ad",
+      "prompt_hash_at_stage_start": "e27b6e04094528ad",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 5
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-27T23:45:30.046668008Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 6,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-5-847e2a07",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 5,
+          "body": "`crates/tank_core/src/save.rs:324-331` makes the schema-3 to schema-4 migration a no-op, so every legacy save loads with `animal.reserve_g = 0`. That would be safe only if reserve were optional, but it is now the sole funding source for retained biomass and for both hatching and juvenile maturation (`crates/tank_core/src/systems/shrimp.rs:252-260`, `crates/tank_core/src/systems/shrimp.rs:469-475`, `crates/tank_core/src/systems/shrimp.rs:555-562`, `crates/tank_core/src/systems/shrimp.rs:650-656`). A valid v3 colony with near-hatch egg cohorts or ready-to-mature juveniles will therefore stall or fail those transitions immediately after upgrade until later feeding rebuilds reserve, so the resumed simulation diverges from the pre-upgrade state even though loading succeeds. `crates/tank_core/tests/save_load.rs:274-320` currently codifies that zero-reserve migration, so this compatibility regression would persist unnoticed.",
+          "created_at": "2026-03-28T02:36:26.117353717Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "3855dc25992c8d860774a52fd096328c6aa9950b24187f760c65bc238738b9bf"
+        }
+      ],
+      "processed_count": 13
+    },
+    "status_summary": "running: final review restart round 6 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T02:15:20.871493659Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

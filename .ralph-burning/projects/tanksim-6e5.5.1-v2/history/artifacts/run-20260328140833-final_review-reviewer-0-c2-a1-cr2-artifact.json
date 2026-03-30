@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328140833-final_review-reviewer-0-c2-a1-cr2-artifact",
+  "payload_id": "run-20260328140833-final_review-reviewer-0-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T15:13:16.649584440Z",
+  "content": "# Final Review Proposal\n**Producer:** agent:claude/claude-opus-4-6\n\n## Summary\n\nThorough review of the habitat registry implementation (habitat.rs, state.rs, substrate.rs, geometry.rs, engine.rs, actions.rs, invariants.rs, save.rs, snapshot.rs, and 780-line test file). All 30 habitat tests pass. The implementation is correct and well-integrated: HabitatKind/HabitatEntry types are properly serialized, colonizable areas are derived from geometry/hardware/plant state (not hardcoded), all three exposure modifiers (flow, oxygen, light) are bounded in [0,1] via both computation-time clamping and invariant enforcement, and the registry is refreshed at every relevant lifecycle point (construction, save/load, daily update, player actions via `affects_habitat_registry()`). The only issue found is a misleading hardcoded default for `SubstrateLayerState::colonizable_area_cm2` that creates a potential future correctness trap. No bugs, safety problems, or significant maintainability risks identified.\n\n## Amendments\n\n1. In `SubstrateLayerState::default()` (substrate.rs:56), `colonizable_area_cm2` is hardcoded to `100.0`, but the derived value for default geometry (40×25cm, InertSand, 3cm depth) is `1500.0` — a 15× discrepancy. While `refresh_habitat_registry()` always overwrites this, any code that constructs substrate layers via `..Default::default()` and reads `colonizable_area_cm2` before engine initialization will silently get a wrong value. Fix: compute the default via `Self::derived_colonizable_area_cm2` using `TankGeometry::default().footprint_area_cm2()`, or replace the field default with `0.0` and document it as derived-only to make stale reads immediately obvious.\n   Rationale: The current default creates a silent correctness trap for downstream beads that may construct substrate layers outside the normal `TankState::new()` path. The field is a cached derived value, so a self-consistent or clearly-sentinel default (like 0.0) would prevent latent misuse without any behavioral change to existing code paths.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}

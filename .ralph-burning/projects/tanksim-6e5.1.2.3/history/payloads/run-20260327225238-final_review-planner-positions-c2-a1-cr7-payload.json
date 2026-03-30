@@ -1,0 +1,24 @@
+{
+  "payload_id": "run-20260327225238-final_review-planner-positions-c2-a1-cr7-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T01:21:30.013427520Z",
+  "payload": {
+    "summary": "Rejected the amendment because its stated reserve-boundary root cause does not match the current fixture, and the proposed changes would be redundant or risk masking a different brittle test condition.",
+    "votes": [
+      {
+        "amendment_id": "fr-7-9009f857",
+        "decision": "reject",
+        "rationale": "The amendment's main premise is factually weak: the reproduction fixture already seeds animal reserve mass with a substantial buffer, so hatching is not obviously sitting at a reserve-feasibility boundary. Because of that, adding more initial reserve would be redundant at best and could hide the real cause if there is a genuine intermittent failure. If this test is brittle, the more likely issue is the end-state assertion on juveniles after a 60-day run rather than insufficient starting reserve. A speculative diagnostic message alone is not enough to justify accepting the amendment as written."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 7
+}

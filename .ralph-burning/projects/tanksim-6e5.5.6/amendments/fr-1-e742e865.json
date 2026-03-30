@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-1-e742e865",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 1,
+  "body": "Remove or justify the `size_scale.powf(2.5).min(2.0)` multiplier in the per-adult daily feed calculation in `collect_stocked_metrics` (e2e_geometry_scaling.rs:162-164). This factor causes larger tanks to receive more feed per adult per day (1× at scale 1.0 vs 2× at scale 2.0), introducing a non-linear nitrogen load per liter that confounds the scaling comparison. If the intent is to test equal per-liter loading, feed per adult should be constant across scales.",
+  "created_at": "2026-03-30T03:48:50.328507064Z",
+  "batch_sequence": 3,
+  "source": "workflow_stage",
+  "dedup_key": "81b00f142e2aed685048457008cac908f8d6c229060c85baf9e1381fb2aa55d5"
+}

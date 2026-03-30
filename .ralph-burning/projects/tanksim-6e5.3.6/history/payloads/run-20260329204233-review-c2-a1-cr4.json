@@ -1,0 +1,43 @@
+{
+  "payload_id": "run-20260329204233-review-c2-a1-cr4",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-29T22:51:38.339914943Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All 6 conservation_regression tests pass: grazing, feeding, mortality/senescence, trim-and-remove, trim-and-leave, water-change (6 passed, 0 failed).",
+        "E2e conservation suite passes all 6 scenarios: closed-system scenarios (grazing, feeding, mortality_senescence, trim_and_leave) show +0.000000000 drift; open-system scenarios (trim_and_remove: dN=-38.5, dC=-240.625; water_change: dN=+21.1875, dC=+97.5) show expected import/export deltas.",
+        "cargo clippy -p tank_core -p tank_harness -- -D warnings passes cleanly with no warnings.",
+        "cargo fmt --all --check passes with no formatting issues.",
+        "Shared test_fixtures module exists at crates/tank_core/src/test_fixtures.rs (317 lines), exported as `pub mod test_fixtures` from lib.rs. Both conservation_regression.rs and e2e_conservation.rs import all 5 fixtures + dump_trace_to_subdir from this module. No duplicated local fixture definitions remain.",
+        "All 6 tests have descriptive doc comments: grazing (lines 139-146), feeding (lines 207-217), mortality (lines 290-301), trim-remove (lines 385-391), trim-leave (lines 474-479), water-change (lines 562-571).",
+        "TOL = 1e-6 used consistently across all conservation checks, satisfying the '<1e-6 mg per tick for deterministic runs' criterion.",
+        "All 6 tests call enable_tracing(&mut engine) with Detail verbosity; failures dump JSONL trace to /tmp/tank_conservation_traces/ or /tmp/tank_conservation_e2e_traces/ via assert_or_dump/assert_close_or_dump/assert_trace_delta helpers.",
+        "Export actions tracked via is_open_system_action_label() covering feed, water_change, siphon_detritus, add_shrimp, remove_shrimp, and trim_plants_and_remove — distinct from internal routing.",
+        "Trim-and-remove test (line 393) verifies budget entry for action:trim_plants_and_remove shows net negative N and C (explicit export). Water-change test (line 573) verifies gross import/export flows match expected source water concentrations × exchanged volume.",
+        "Mortality/senescence test has 6 assert_trace_delta calls including system:daily_shrimp -> animal.adults (delta < 0) and system:daily_shrimp -> detritus.fine_g (delta > 0), explicitly verifying shrimp death routing to fine detritus.",
+        "E2e runner produces formatted ASCII summary table (pass/fail per scenario with dN/dC magnitudes) and exits non-zero on failure via assert_eq!(failed_count, 0, ...).",
+        "Water-change fixture seeds non-zero source.nitrite_mg_n_per_l = 0.25, exercising the nitrite import term end-to-end.",
+        "Both N and C are checked in all 6 scenarios (feeding pathway assertions include DIC/nitrate trace deltas for carbon and nitrogen respectively)."
+      ],
+      "findings_or_gaps": [
+        "The test_fixtures module is exported unconditionally (`pub mod test_fixtures` in lib.rs) rather than behind `#[cfg(test)]` or a feature gate. This means the fixture code is compiled into release builds. While not a correctness issue, gating it behind `#[cfg(test)]` or a `test-support` feature would be cleaner. This is minor and does not block approval.",
+        "The e2e trim-and-remove and trim-and-leave scenarios do not include trace-level pathway assertions (only total-mass and budget-entry checks). The conservation_regression.rs counterparts also lack trim-specific trace assertions. This is acceptable given that trimming is a single discrete action rather than a multi-step routing chain, but it is worth noting for future coverage expansion."
+      ],
+      "follow_up_or_amendments": [
+        "Consider gating `pub mod test_fixtures` behind `#[cfg(any(test, feature = \"test-support\"))]` so fixture code is excluded from release builds. This is a minor housekeeping item, not a blocking concern."
+      ],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 4
+}

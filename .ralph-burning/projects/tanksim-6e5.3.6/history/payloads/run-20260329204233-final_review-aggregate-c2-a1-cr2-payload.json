@@ -1,0 +1,115 @@
+{
+  "payload_id": "run-20260329204233-final_review-aggregate-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-29T22:10:39.429526226Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-2-adf10e30"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-2-7a419098",
+        "normalized_body": "The change to non-zero DIC rate defaults (respiration_dic_rate: 0.0→0.01875, photosynthesis_dic_rate: 0.0→0.075) breaks 7 existing closed-system carbon conservation tests across two test files:\n\n**budget_tracking.rs** (5 failures):\n- test_closed_system_c_conservation\n- test_closed_system_shrimp_mortality_conserves_n_and_c\n- test_trim_plants_and_leave_cuttings_preserves_n_and_c\n- test_trim_plants_and_remove_exports_n_and_c\n- test_clean_filter_routes_removed_microbes_to_dissolved_organics\n\n**budget_helpers.rs** (2 failures):\n- closed_system_n_and_c_conserved_via_helpers\n- trim_plants_and_leave_cuttings_is_closed_system_via_helpers\n\nRoot cause: The shared helper `close_budget_gas_exchange()` in budget_tracking.rs (line 21-30) zeroes reaeration/aeration but does NOT zero the DIC shortcut rates. Before this change, those rates defaulted to 0.0 so it was harmless. Now they default to non-zero values, injecting carbon into closed-system tests.\n\nFix: Add `state.process_params.respiration_dic_rate_mg_c_per_g_per_hour = 0.0;` and `state.process_params.photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;` to `close_budget_gas_exchange()`. The same fix is needed for the budget_helpers.rs test fixtures. The conservation_regression.rs tests already have `disable_dic_shortcuts()` and pass correctly — the pattern just wasn't propagated to all test files.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-3d4163b8",
+        "normalized_body": "The water change test fixtures in both conservation_regression.rs (line 882-886) and e2e_conservation.rs (line 680-684) calculate `expected_n_export` using only dissolved N species (ammonia, nitrite, nitrate, DON), while the production budget code in water_change.rs:112-117 also includes `algae_nitrogen_mg(state.algae.suspended_biomass_g)`. Similarly, `expected_c_export` omits suspended algae carbon while water_change.rs:118-121 includes it.\n\nThis is currently safe because both fixtures zero `suspended_biomass_g`. However, it creates a maintenance trap: if any future change adds non-zero suspended algae to the water change fixture, the test's expected values will silently diverge from the actual budget calculation, and conservation assertions will fail for the wrong reason.\n\nFix: Either add a comment documenting the dependency (e.g., `// NOTE: expected_n_export omits suspended algae N — safe only because fixture sets suspended_biomass_g = 0.0`) or include the algae terms with the zero value to make the formula match the production code exactly.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-adf10e30",
+        "normalized_body": "Align the shipped default process preset with the new named stoichiometric constant. `ProcessParams::default()` now uses `NITRIFICATION_ALK_MEQ_PER_MG_N` in `crates/tank_core/src/types/process.rs:337-338`, but the runtime default preset loaded from `crates/tank_data/data/process/default.toml:52-54` still hard-codes `0.1428`, and scenario startup converts that preset into live params in `crates/tank_scenarios/src/lib.rs:346-349`. As written, two code paths that both claim to use the default process parameters will consume different alkalinity and can diverge in deterministic comparisons.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-4dda3423",
+        "normalized_body": "Rename or recompute the new `nitrogen_cycle.total_n_nitrified_mg` trace so it matches what is actually happening. The trace emission added in `crates/tank_core/src/engine.rs:232-238` logs `output.total_mg_n_nitrified`, but `crates/tank_core/src/systems/nitrogen_cycle.rs:343-346` only counts `nob_step + comammox`. If AOB oxidizes TAN to nitrite and NOB is limited, alkalinity and O2 are still consumed but the trace reports zero nitrification, which makes the new diagnostics misleading in partial-nitrification cases.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-abc5b76f",
+        "normalized_body": "Fix alkalinity assertion messages to use `meq` consistently. `crates/tank_core/src/budget_helpers.rs:471-476` and `crates/tank_core/src/budget_helpers.rs:494-507` still hard-code `mg` in the per-system and per-stage lines, so a failing `Element::Alkalinity` assertion prints the wrong unit even though the headline/before-after lines were updated to `meq`.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [
+      "fr-2-7a419098",
+      "fr-2-abc5b76f"
+    ],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-2-adf10e30",
+        "normalized_body": "Align the shipped default process preset with the new named stoichiometric constant. `ProcessParams::default()` now uses `NITRIFICATION_ALK_MEQ_PER_MG_N` in `crates/tank_core/src/types/process.rs:337-338`, but the runtime default preset loaded from `crates/tank_data/data/process/default.toml:52-54` still hard-codes `0.1428`, and scenario startup converts that preset into live params in `crates/tank_scenarios/src/lib.rs:346-349`. As written, two code paths that both claim to use the default process parameters will consume different alkalinity and can diverge in deterministic comparisons.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-abc5b76f",
+        "normalized_body": "Fix alkalinity assertion messages to use `meq` consistently. `crates/tank_core/src/budget_helpers.rs:471-476` and `crates/tank_core/src/budget_helpers.rs:494-507` still hard-code `mg` in the per-system and per-stage lines, so a failing `Element::Alkalinity` assertion prints the wrong unit even though the headline/before-after lines were updated to `meq`.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 2,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-2-3d4163b8",
+      "fr-2-4dda3423"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 2 amendment(s); restart required.",
+    "total_proposed_amendments": 5,
+    "total_reviewers": 2,
+    "unique_amendment_count": 5
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 2
+}

@@ -1,0 +1,49 @@
+{
+  "payload_id": "run-20260330014558-final_review-planner-positions-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T03:43:00.423123844Z",
+  "payload": {
+    "summary": "Accepted 3 amendments and rejected 3. The accepted items identify real correctness or validation issues in zero-DO substrate handling and the geometry-scaling regression tests. The rejected items rely on outdated code snapshots or ignore already-committed geometry-scaling behavior, alkalinity regression tests, and the existing split between TAN-oxidation and nitrate-production tracing.",
+    "votes": [
+      {
+        "amendment_id": "fr-1-8c8de1cf",
+        "decision": "accept",
+        "rationale": "`compute_o2_penetration_depth_cm` currently returns full layer depth when `do_mg_per_cm3 <= 0.0`, which inverts the model at zero surface oxygen. `effective_o2_penetration_depth_cm` also treats `<= 0.0` as \"uncomputed,\" so a legitimate 0 cm penetration cannot be represented at all. That is a real correctness bug in anoxic cases; the fix just needs an explicit uninitialized representation that is safe for persistence."
+      },
+      {
+        "amendment_id": "fr-1-588146f5",
+        "decision": "accept",
+        "rationale": "The test module and bead acceptance criteria both say the scaling comparison should hold within 20%, but peak TAN and DO range are actually asserted with a 65% tolerance. The inline comment explains why these metrics are sensitive, but it does not justify changing the requirement from 20% to 65%. As written, the test no longer enforces the stated contract, so either the tolerance or the documented requirement needs to change."
+      },
+      {
+        "amendment_id": "fr-1-e742e865",
+        "decision": "accept",
+        "rationale": "`adult_shrimp_count` already scales with filled volume through auto-stocking, so multiplying per-adult daily feed by `size_scale.powf(2.5).min(2.0)` adds an extra size-dependent load on top of the density scaling. That makes the parity test hard to interpret, because concentration differences can come from deliberately different nitrogen input rather than from geometry-scaled defaults. If that heavier-load scenario is intentional, it needs explicit justification and documentation."
+      },
+      {
+        "amendment_id": "fr-1-e342ebd3",
+        "decision": "reject",
+        "rationale": "Current code already implements the geometry-aware startup scaling this amendment says is missing. `scale_hardware_to_geometry` scales filter flow and heater watts from geometry, `build_plant_guilds` scales plant biomass by footprint, and `apply_startup_overrides` auto-stocks shrimp from filled volume. The remaining 200 lph and 50 W values in type defaults are just base defaults that scenario materialization overwrites, so this amendment is based on an outdated snapshot."
+      },
+      {
+        "amendment_id": "fr-1-00cf5af0",
+        "decision": "reject",
+        "rationale": "The tracked runtime guard still only enforces N/C residuals, but that matches the design of the conserved N/C/O element ledger; alkalinity is recorded as stage metrics rather than as a conserved element. More importantly, committed regression coverage already exists in `crates/tank_core/tests/nitrification_alkalinity.rs`, so the claim that the only alkalinity-focused test file is untracked and CI will miss regressions is incorrect. A stronger runtime alkalinity invariant could be a future enhancement, but the defect as stated is not present."
+      },
+      {
+        "amendment_id": "fr-1-1e3d685c",
+        "decision": "reject",
+        "rationale": "Current code does not expose a single ambiguous `total_n_nitrified_mg` trace. `NitrogenCycleOutput` explicitly separates `tan_oxidized_mg` as the alkalinity-driving TAN-oxidation basis from `nitrate_produced_mg_n` as the amount that actually reached nitrate, and engine tracing logs both. That split already addresses the nitrite-accumulation ambiguity described here."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

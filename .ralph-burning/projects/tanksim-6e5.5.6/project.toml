@@ -1,0 +1,7 @@
+id = "tanksim-6e5.5.6"
+name = "Geometry scaling defaults"
+flow = "quick_dev"
+prompt_reference = "prompt.md"
+prompt_hash = "d2a579a91dbc936c"
+created_at = "2026-03-30T01:45:58.159242154Z"
+status_summary = "created"

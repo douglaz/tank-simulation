@@ -1,0 +1,50 @@
+{
+  "payload_id": "run-20260327192401-apply_fixes-c1-a1-cr7",
+  "stage_id": "apply_fixes",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T23:57:29.995353935Z",
+  "payload": {
+    "data": {
+      "change_summary": "No additional fixes were applied in this Apply Fixes stage. The latest review approved the explicit chemistry-budget and residual carbon-guard work without any actionable amendments for this bead; the only follow-up item was an unrelated `hatch_produces_juveniles` failure attributed to later shrimp-metabolism beads, so the budget-ledger implementation remains unchanged.",
+      "outstanding_risks": [
+        "The structural canonical-helper coverage guard is still convention-based rather than reflective; future explicit N/C-bearing fields with non-standard names or fields hidden in empty-by-default collections will require extending the discovery rules and tests.",
+        "Complex multi-process stages such as `system:nitrogen_cycle` still rely on snapshot-derived gross component budgets, so same-component turnover inside a single pass can remain collapsed until those stages emit fully explicit source/sink deltas.",
+        "Shrimp eggs remain implicit until hatch; mass is conserved by debiting dissolved pools on hatch and maturation, but a future phase may still want an explicit egg or clutch biomass pool for clearer persistence and tracing.",
+        "The branch currently has an unrelated `hatch_produces_juveniles` failure on HEAD tied to later shrimp-metabolism work, so full-suite cleanliness depends on that separate bead being resolved."
+      ],
+      "steps": [
+        {
+          "description": "Reviewed the latest validation output and confirmed the review approved this bead's budget-ledger work with no required amendments.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Verified that the only follow-up item was an unrelated `shrimp_population` regression owned by later beads, so no code or documentation edits were necessary for this task.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Rerun validation after applying fixes.",
+          "order": 3,
+          "status": "skipped"
+        }
+      ],
+      "validation_evidence": [
+        "Review outcome was `approved` with no follow-up amendments for this bead's scope.",
+        "No new validation commands were run in this stage because no code changed.",
+        "The latest review recorded `cargo test -p tank_core --test budget_tracking` passing on HEAD (18 tests).",
+        "The latest review recorded `cargo clippy -p tank_core -- -D warnings` passing on HEAD.",
+        "The latest review also documented that the remaining `hatch_produces_juveniles` failure is pre-existing on HEAD and attributed to later shrimp-metabolism beads rather than this budget-ledger work."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 7
+}
