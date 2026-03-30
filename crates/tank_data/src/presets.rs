@@ -2548,7 +2548,10 @@ mod tests {
     use tank_core::types::provenance::{
         check_param_range, format_param, ConfidenceLevel, ParamMeta,
     };
-    use tank_core::{legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2};
+    use tank_core::{
+        legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2,
+        NITRIFICATION_ALK_MEQ_PER_MG_N,
+    };
 
     fn default_process_preset() -> ProcessParamsPreset {
         parse_process_params_preset(include_str!("../data/process/default.toml"))
