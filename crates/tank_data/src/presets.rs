@@ -3094,15 +3094,16 @@ valid_range = [0.1, 5.0]
     /// AC 5: Existing TOML data files WITHOUT provenance metadata still load.
     #[test]
     fn test_backward_compatible_loading() -> Result<(), Box<dyn std::error::Error>> {
-        // The shipped default.toml has no param_meta section.
+        // The shipped default.toml now carries param_meta (added in 6e5.7.2).
+        // Verify it loads and validates successfully with the metadata present.
         let preset = default_process_preset();
         assert!(
-            preset.param_meta.is_empty(),
-            "legacy file should load with empty param_meta"
+            !preset.param_meta.is_empty(),
+            "shipped default.toml should carry param_meta entries"
         );
         preset
             .validate()
-            .expect("legacy file should still validate");
+            .expect("default file with param_meta should still validate");
 
         // Also verify a minimal TOML with only required fields.
         let minimal = r#"
@@ -3330,10 +3331,12 @@ unit = "mg N total"
     fn test_process_preset_format_param_without_meta_shows_raw_value() {
         let preset = default_process_preset();
 
+        // aob_k_tan_mg_n_per_l now carries param_meta in shipped default.toml,
+        // so use a parameter that does NOT have param_meta for this test.
         let display = preset
-            .format_param("aob_k_tan_mg_n_per_l")
+            .format_param("feed_leach_rate_per_hour")
             .expect("parameter should format");
-        assert_eq!(display, "aob_k_tan_mg_n_per_l: 1");
+        assert_eq!(display, "feed_leach_rate_per_hour: 0.12");
     }
 
     #[test]
