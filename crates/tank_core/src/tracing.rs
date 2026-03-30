@@ -412,6 +412,10 @@ impl PoolSnapshot {
                     state.stability_tracker.prev_do_mg_l,
                 ),
                 (
+                    "stability.last_temp_swing_c",
+                    state.stability_tracker.last_temp_swing_c,
+                ),
+                (
                     "stability.instability_index",
                     state.stability_tracker.instability_index,
                 ),
@@ -656,6 +660,7 @@ const TRACKED_POOL_NAMES: &[&str] = &[
     "stability.prev_ph",
     "stability.prev_gh_d",
     "stability.prev_do_mg_l",
+    "stability.last_temp_swing_c",
     "stability.instability_index",
 ];
 

@@ -195,6 +195,7 @@ pub fn update_stability_tracker(state: &mut TankState) {
     let ph_swing = (state.water.ph - tracker.prev_ph).abs();
     let gh_swing = (gh_d - tracker.prev_gh_d).abs();
     let do_swing = (do_mg_l - tracker.prev_do_mg_l).abs();
+    tracker.last_temp_swing_c = temp_swing;
 
     // Weighted instability normalised to 0..1
     let raw_instability =
@@ -696,6 +697,13 @@ fn spawning(state: &mut TankState) {
     let params = &state.shrimp_params;
     let gh_d = state.concentrations().gh_d();
     let f_mineral = gh_mineral_factor(gh_d, params);
+    let volume_l = state.water_volume_l();
+    let density_per_l = if volume_l > f64::EPSILON {
+        f64::from(state.animal.total_count()) / volume_l
+    } else {
+        0.0
+    };
+    let density_factor = density_repro_factor(state.animal.total_count(), volume_l, params);
     let spawn_rate =
         (params.base_spawn_rate * state.animal.reproductive_readiness_index * f_mineral)
             .clamp(0.0, 1.0);
@@ -710,14 +718,25 @@ fn spawning(state: &mut TankState) {
             progress_days: 0.0,
         });
 
+        let mut causes = vec![EventCause::RoutineAction];
+        let density_detail = if density_factor < 1.0 - f64::EPSILON {
+            causes.push(EventCause::HighDensity);
+            format!(
+                ", density {:.2}/L (factor {:.2})",
+                density_per_l, density_factor
+            )
+        } else {
+            String::new()
+        };
+
         crate::systems::events::emit_once_per_day_pub(
             state,
             EventSeverity::Info,
             EventKind::ShrimpBerried,
-            vec![EventCause::RoutineAction],
+            causes,
             format!(
-                "{new_berried} female(s) became berried (readiness {:.2})",
-                state.animal.reproductive_readiness_index,
+                "{new_berried} female(s) became berried (readiness {:.2}{density_detail})",
+                state.animal.reproductive_readiness_index
             ),
         );
     }
@@ -726,11 +745,11 @@ fn spawning(state: &mut TankState) {
 /// Egg dropping: berried females may lose their clutch when the
 /// environment is unstable (temperature swings, chemistry swings).
 ///
-/// The stability tracker is updated *before* the daily shrimp pipeline,
-/// so `instability_index` already reflects today's chemistry/temperature
-/// swings. A temperature swing > `egg_drop_temp_swing_c` in 24 hours
-/// pushes `instability_index` well above `egg_drop_instability_threshold`,
-/// triggering proportional clutch loss.
+/// The stability tracker is updated *before* the daily shrimp pipeline, so
+/// `instability_index` already reflects today's chemistry/temperature swings.
+/// `last_temp_swing_c` preserves the unsmoothed thermal shock so a first-day
+/// 4 C jump can still drop eggs even if the smoothed instability index has not
+/// risen above the broader instability threshold yet.
 fn egg_dropping(state: &mut TankState) {
     if state.animal.egg_cohorts.is_empty() || state.animal.berried_females_count == 0 {
         return;
@@ -738,18 +757,11 @@ fn egg_dropping(state: &mut TankState) {
 
     let params = &state.shrimp_params;
     let instability = state.stability_tracker.instability_index;
+    let temp_swing_c = state.stability_tracker.last_temp_swing_c;
 
-    // Egg dropping probability scales with how far instability exceeds the
-    // species tolerance threshold. A 2°C temperature swing in 24h
-    // contributes ~0.67 raw instability (temp_swing/3.0), which after
-    // smoothing puts the index well above the default 0.5 threshold.
-    let drop_prob = if instability > params.egg_drop_instability_threshold {
-        ((instability - params.egg_drop_instability_threshold)
-            / (1.0 - params.egg_drop_instability_threshold).max(0.01))
-        .clamp(0.0, 0.6)
-    } else {
-        0.0
-    };
+    let instability_pressure = egg_drop_instability_pressure(instability, params);
+    let temp_swing_pressure = egg_drop_temp_swing_pressure(temp_swing_c, params);
+    let drop_prob = instability_pressure.max(temp_swing_pressure).clamp(0.0, 0.6);
 
     if drop_prob <= f64::EPSILON {
         return;
@@ -777,6 +789,20 @@ fn egg_dropping(state: &mut TankState) {
             .berried_females_count
             .saturating_sub(total_dropped);
 
+        let mut details = Vec::new();
+        if instability_pressure > 0.0 {
+            details.push(format!(
+                "instability {instability:.2}>{:.2}",
+                params.egg_drop_instability_threshold
+            ));
+        }
+        if temp_swing_pressure > 0.0 {
+            details.push(format!(
+                "temp swing {temp_swing_c:.1}>{:.1} C/day",
+                params.egg_drop_temp_swing_c
+            ));
+        }
+
         let causes = vec![EventCause::ChemistryInstability];
 
         crate::systems::events::emit_once_per_day_pub(
@@ -786,8 +812,8 @@ fn egg_dropping(state: &mut TankState) {
             causes,
             format!(
                 "{total_dropped} berried female(s) dropped eggs \
-                 (instability {instability:.2}, threshold {:.2})",
-                params.egg_drop_instability_threshold,
+                 ({}; p={drop_prob:.2})",
+                details.join(", "),
             ),
         );
     }
@@ -1509,6 +1535,26 @@ fn density_repro_factor(total_count: u32, volume_l: f64, params: &ShrimpRuntimeP
             - params.density_repro_threshold_per_l)
             .max(0.01);
         (1.0 / (1.0 + excess / half)).clamp(0.05, 1.0)
+    }
+}
+
+fn egg_drop_instability_pressure(instability: f64, params: &ShrimpRuntimeParams) -> f64 {
+    if instability > params.egg_drop_instability_threshold {
+        ((instability - params.egg_drop_instability_threshold)
+            / (1.0 - params.egg_drop_instability_threshold).max(0.01))
+        .clamp(0.0, 1.0)
+    } else {
+        0.0
+    }
+}
+
+fn egg_drop_temp_swing_pressure(temp_swing_c: f64, params: &ShrimpRuntimeParams) -> f64 {
+    if temp_swing_c > params.egg_drop_temp_swing_c {
+        ((temp_swing_c - params.egg_drop_temp_swing_c)
+            / params.egg_drop_temp_swing_c.max(0.01))
+        .clamp(0.0, 1.0)
+    } else {
+        0.0
     }
 }
 

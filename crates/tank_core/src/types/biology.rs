@@ -360,6 +360,8 @@ pub struct StabilityTracker {
     pub prev_ph: f64,
     pub prev_gh_d: f64,
     pub prev_do_mg_l: f64,
+    #[serde(default)]
+    pub last_temp_swing_c: f64,
     pub instability_index: f64,
 }
 
@@ -862,6 +864,7 @@ impl Default for StabilityTracker {
             prev_ph: 7.0,
             prev_gh_d: 7.0,
             prev_do_mg_l: 8.0,
+            last_temp_swing_c: 0.0,
             instability_index: 0.0,
         }
     }
@@ -875,6 +878,7 @@ impl StabilityTracker {
         self.prev_ph = water.ph;
         self.prev_gh_d = water.gh_d(volume_l);
         self.prev_do_mg_l = water.do_mg_per_l(volume_l);
+        self.last_temp_swing_c = 0.0;
         self.instability_index = 0.0;
     }
 }
