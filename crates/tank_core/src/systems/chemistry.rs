@@ -14,6 +14,11 @@ use tracing::debug;
 // `docs/PROVENANCE_STATUS.md` until a code-constant metadata registry exists.
 
 /// Atmospheric CO2 concentration in ppm.
+///
+/// Source: rounded NOAA background-atmosphere anchor from the late-2010s /
+/// ~2020 global mean envelope.
+/// Confidence: expert. Held fixed for the current model scope rather than
+/// updated as a live climate input.
 const ATMOSPHERIC_CO2_PPM: f64 = 410.0;
 
 /// Henry's law constant for CO2 at 25°C in mol/(L·atm).

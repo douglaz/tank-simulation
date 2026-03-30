@@ -255,6 +255,120 @@ notes = """\
 Less well-characterized than AOB/NOB DO Ks. 0.6 is an intermediate estimate \
 between AOB and NOB values, reflecting comammox's Nitrospira lineage."""
 
+# ── Biomass-rate and turnover controls ───────────────────────────────
+[param_meta.decomposer_vmax_per_hour]
+unit = "per hour"
+source = "Wetzel 2001; aquarium DOC-turnover calibration"
+confidence = "heuristic"
+valid_range = [0.005, 0.08]
+notes = """\
+Maximum DOC-processing capacity per g decomposer biomass. Because the model \
+compresses all heterotrophic activity into one DOC pool and one biomass guild, \
+0.02 is treated as a calibration anchor rather than a portable literature constant."""
+
+[param_meta.decomposer_growth_yield]
+unit = "g biomass / g DOC"
+source = "Rittmann & McCarty 2001; heterotroph attached-growth yield envelopes"
+confidence = "expert"
+valid_range = [0.2, 0.6]
+notes = """\
+Yield is set toward the lower half of standard heterotroph ranges because the \
+aquarium DOC pool is more refractory than readily biodegradable lab substrates."""
+
+[param_meta.decomposer_decay_rate_per_hour]
+unit = "per hour"
+source = "ASM-style heterotroph decay envelopes; aquarium starvation smoothing"
+confidence = "expert"
+valid_range = [0.0005, 0.01]
+notes = """\
+Hourly starvation/maintenance decay for decomposer biomass. This is a stability \
+and persistence knob more than a directly observed aquarium-specific constant."""
+
+[param_meta.aob_vmax_mg_n_per_g_per_hour]
+unit = "mg N / g biomass / h"
+source = "Rittmann & McCarty 2001; aquarium cycling calibration"
+confidence = "heuristic"
+valid_range = [0.3, 3.0]
+notes = """\
+Biomass-normalized TAN oxidation ceiling for AOB. 1.5 is chosen to reproduce \
+the expected fishless-cycling TAN decline with the model's coarse biomass units \
+rather than to mirror any single pure-culture assay."""
+
+[param_meta.aob_growth_yield]
+unit = "g biomass / mg N oxidized"
+source = "Henze et al. 2008 (ASM models); Rittmann & McCarty 2001"
+confidence = "literature"
+valid_range = [0.03, 0.08]
+notes = """\
+AOB growth yield sits in the standard autotrophic nitrifier envelope used in \
+wastewater and biofilm texts. The value is relatively well anchored even though \
+the associated vmax remains model-structural."""
+
+[param_meta.aob_decay_rate_per_hour]
+unit = "per hour"
+source = "ASM-style nitrifier decay envelopes"
+confidence = "expert"
+valid_range = [0.001, 0.01]
+notes = """\
+AOB decay is slower than fast heterotroph turnover but still material over long \
+starvation windows. 0.003/h is a first-pass persistence anchor for aquarium biofilms."""
+
+[param_meta.nob_vmax_mg_n_per_g_per_hour]
+unit = "mg N / g biomass / h"
+source = "Blackburne et al. 2007; aquarium nitrite-clearance calibration"
+confidence = "heuristic"
+valid_range = [0.2, 2.5]
+notes = """\
+Biomass-normalized NOB rate ceiling. 1.2 keeps nitrite peaks transient rather \
+than instantly cleared while respecting the model's coarse nitrifier biomass scale."""
+
+[param_meta.nob_growth_yield]
+unit = "g biomass / mg N oxidized"
+source = "Henze et al. 2008 (ASM models); Blackburne et al. 2007"
+confidence = "literature"
+valid_range = [0.02, 0.06]
+notes = """\
+NOB yield is slightly below the AOB yield, consistent with common activated-sludge \
+and biofilm formulations for nitrite oxidizers."""
+
+[param_meta.nob_decay_rate_per_hour]
+unit = "per hour"
+source = "ASM-style nitrifier decay envelopes; Nitrospira/Nitrobacter persistence heuristics"
+confidence = "expert"
+valid_range = [0.001, 0.01]
+notes = """\
+Decay shares the same order of magnitude as AOB because both guilds represent \
+slow-growing nitrifier biofilms rather than rapidly cycling plankton."""
+
+[param_meta.comammox_vmax_fraction]
+unit = "fraction of AOB vmax"
+source = "Kits et al. 2017; first-pass scaling for the comammox low-ammonia niche"
+confidence = "heuristic"
+valid_range = [0.2, 0.8]
+notes = """\
+Comammox uses a relative vmax because the model treats it as a specialization of \
+the existing nitrifier biomass scaffold. 0.4 preserves slower high-load kinetics \
+while allowing dominance once TAN falls below the AOB Ks."""
+
+[param_meta.comammox_growth_yield]
+unit = "g biomass / mg N oxidized"
+source = "Kits et al. 2017; heuristic transfer from Nitrospira-centered nitrifier yields"
+confidence = "heuristic"
+valid_range = [0.02, 0.06]
+notes = """\
+Direct comammox biomass-yield measurements remain sparse, so 0.03 is a cautious \
+first-pass value that stays close to the NOB/autotroph envelope without implying \
+high-confidence strain-specific physiology."""
+
+[param_meta.comammox_decay_rate_per_hour]
+unit = "per hour"
+source = "Nitrospira lineage analogy; aquarium persistence calibration"
+confidence = "heuristic"
+valid_range = [0.001, 0.01]
+notes = """\
+Comammox decay is kept slightly above the AOB/NOB values to avoid a permanent \
+late-cycle takeover from the simplified shared biomass representation."""
+
 # ── Denitrification kinetics ─────────────────────────────────────────
 [param_meta.denitrification_vmax_mg_n_per_l_per_hour]
 unit = "mg N/L/h"

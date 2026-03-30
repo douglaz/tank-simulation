@@ -56,7 +56,8 @@ dosing (~2 mg N/L/day equivalent):
 2. TAN peaks and begins declining by weeks 2–4 as AOB biomass grows.
 3. Nitrite appears as an intermediate, peaking after TAN begins to fall.
 4. By weeks 4–8, both TAN and NO₂⁻ are near zero; NO₃⁻ accumulates.
-5. Biofilter maturity index reaches ≥ 0.7 by week 6.
+5. The biofilter maturity index can be reported for observability, but pass/fail
+   remains anchored to nitrification output rather than the maturity scalar.
 
 ### Confidence: **high**
 
@@ -505,10 +506,10 @@ each scenario and recording observed values against the envelope bounds.
 SCENARIO 1: Fishless cycling timeline
   Status: PASS / FAIL
   Checkpoints:
-    Week 2: TAN=X.XX NO2=X.XX NO3=X.XX maturity=X.XX pH=X.XX  [PASS/FAIL]
-    Week 4: TAN=X.XX NO2=X.XX NO3=X.XX maturity=X.XX pH=X.XX  [PASS/FAIL]
-    Week 6: TAN=X.XX NO2=X.XX NO3=X.XX maturity=X.XX pH=X.XX  [PASS/FAIL]
-    Week 8: TAN=X.XX NO2=X.XX NO3=X.XX maturity=X.XX pH=X.XX  [PASS/FAIL]
+    Week 2: TAN=X.XX NO2=X.XX NO3=X.XX pH=X.XX  [PASS/FAIL]
+    Week 4: TAN=X.XX NO2=X.XX NO3=X.XX pH=X.XX  [PASS/FAIL]
+    Week 6: TAN=X.XX NO2=X.XX NO3=X.XX pH=X.XX  [PASS/FAIL]
+    Week 8: TAN=X.XX NO2=X.XX NO3=X.XX pH=X.XX  [PASS/FAIL]
   Violations: <list or "none">
 
 SCENARIO 2: Aeration effects

@@ -30,6 +30,26 @@ tuning and validation work can focus on the weakest assumptions first.
 | `o2_per_mg_n_nitrified` | 4.57 | mg O₂/mg N | Stoichiometric (64/14) |
 | `alkalinity_meq_per_mg_n_nitrified` | 0.1428 | meq/mg N | Stoichiometric (2/14.007) |
 
+### Biomass-rate and turnover controls
+These coefficients now carry `param_meta`, but they remain more model-structural than the
+half-saturation anchors above because the biomass units and guild aggregation are simplified.
+Future calibration should prioritize the heuristic rows first.
+
+| Parameter | Value | Unit | Confidence | Notes |
+|-----------|-------|------|------------|-------|
+| `decomposer_vmax_per_hour` | 0.02 | per hour | heuristic | Biomass-normalized DOC-processing ceiling calibrated to aquarium DOC turnover rather than a portable literature constant |
+| `decomposer_growth_yield` | 0.3 | g biomass / g DOC | expert | Lower-half heterotroph yield anchor for refractory aquarium DOC |
+| `decomposer_decay_rate_per_hour` | 0.002 | per hour | expert | Starvation/persistence knob rather than a tightly measured aquarium constant |
+| `aob_vmax_mg_n_per_g_per_hour` | 1.5 | mg N / g biomass / h | heuristic | Chosen to reproduce fishless-cycling TAN decline with the model's coarse nitrifier biomass units |
+| `aob_growth_yield` | 0.05 | g biomass / mg N oxidized | literature | Standard autotrophic nitrifier yield envelope from ASM / biofilm texts |
+| `aob_decay_rate_per_hour` | 0.003 | per hour | expert | First-pass nitrifier persistence anchor for aquarium biofilms |
+| `nob_vmax_mg_n_per_g_per_hour` | 1.2 | mg N / g biomass / h | heuristic | Tuned so nitrite peaks remain transient instead of instantly cleared |
+| `nob_growth_yield` | 0.04 | g biomass / mg N oxidized | literature | Slightly below the AOB yield, consistent with common NOB formulations |
+| `nob_decay_rate_per_hour` | 0.003 | per hour | expert | Same order-of-magnitude persistence assumption as AOB |
+| `comammox_vmax_fraction` | 0.4 | fraction of AOB vmax | heuristic | Relative-rate proxy used because comammox rides on the shared nitrifier biomass scaffold |
+| `comammox_growth_yield` | 0.03 | g biomass / mg N oxidized | heuristic | Sparse direct measurements; held near the Nitrospira/NOB envelope |
+| `comammox_decay_rate_per_hour` | 0.004 | per hour | heuristic | Slightly faster turnover prevents a permanent simplified late-cycle takeover |
+
 ### Provisional (heuristic)
 | Parameter | Value | Unit | Why provisional |
 |-----------|-------|------|-----------------|
@@ -76,7 +96,7 @@ Interpretation:
 - `calcium_mg_per_l` and `magnesium_mg_per_l` are stronger expert-curated anchors. They are
   still preset defaults, but they now explicitly stand apart from the heuristic carbonate values.
 
-### Code-resident solver constants (`crates/tank_core/src/systems/chemistry.rs`)
+### Code-resident solver and boundary constants (`crates/tank_core/src/systems/chemistry.rs`)
 
 These coefficients stay in code rather than TOML `param_meta` because every source-water
 preset shares the same carbonate solver. Canonical provenance currently lives in the
@@ -85,6 +105,7 @@ registry exists.
 
 | Constant | Value | Confidence | Source | Notes |
 |----------|-------|------------|--------|-------|
+| `ATMOSPHERIC_CO2_PPM` | `410 ppm` | expert | Rounded NOAA background-atmosphere mean from the late-2010s / ~2020 envelope | Fixed boundary condition for current scope, not a live yearly climate input |
 | `KH_CO2_25C_MOL_PER_L_ATM` | `3.4e-2 mol/(L·atm)` | literature | Stumm & Morgan 1996 | 25°C Henry-law anchor for atmospheric CO₂ coupling |
 | `KH_TEMP_FACTOR_K` | `2400 K` | expert | First-pass van 't Hoff fit for the 15-35°C aquarium envelope | Revisit if salinity or temperature envelope expands |
 | `pKa1(T)` | `3404.71/T + 0.032786*T - 14.8435` (`T` in K); `pKa1(25°C) ≈ 6.35` | literature | Harned & Davis 1943 | Full temperature correction across the current freshwater range |

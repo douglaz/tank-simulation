@@ -2172,34 +2172,63 @@ fn normalize_legacy_process_params_preset(value: &mut toml::Value) {
         .get_mut("param_meta")
         .and_then(toml::Value::as_table_mut)
     {
-        move_legacy_process_param_meta_key(
+        migrate_legacy_process_param_meta_key(
             param_meta,
             "plant_half_saturation_n_mg_total",
             "plant_half_saturation_n_mg_n_per_l",
+            "mg N/L",
+            legacy_total_param_to_mg_per_l,
         );
-        move_legacy_process_param_meta_key(
+        migrate_legacy_process_param_meta_key(
             param_meta,
             "plant_half_saturation_p_mg_total",
             "plant_half_saturation_p_mg_p_per_l",
+            "mg P/L",
+            legacy_total_param_to_mg_per_l,
         );
-        move_legacy_process_param_meta_key(
+        migrate_legacy_process_param_meta_key(
             param_meta,
             "plant_half_saturation_c_mg_total",
             "plant_half_saturation_c_mg_c_per_l",
+            "mg C/L",
+            legacy_total_param_to_mg_per_l,
         );
-        move_legacy_process_param_meta_key(
+        migrate_legacy_process_param_meta_key(
             param_meta,
             "algae_half_saturation_n_mg_total",
             "algae_half_saturation_n_mg_n_per_l",
+            "mg N/L",
+            legacy_total_param_to_mg_per_l,
         );
-        move_legacy_process_param_meta_key(
+        migrate_legacy_process_param_meta_key(
             param_meta,
             "algae_half_saturation_p_mg_total",
             "algae_half_saturation_p_mg_p_per_l",
+            "mg P/L",
+            legacy_total_param_to_mg_per_l,
         );
         // Also move nitrogen-cycle param_meta keys.
-        for &(legacy, canonical) in nitrogen_legacy_renames {
-            move_legacy_process_param_meta_key(param_meta, legacy, canonical);
+        for &(legacy, canonical, unit) in &[
+            (
+                "decomposer_k_doc_mg",
+                "decomposer_k_doc_mg_c_per_l",
+                "mg C/L",
+            ),
+            ("decomposer_k_do_mg", "decomposer_k_do_mg_per_l", "mg O₂/L"),
+            ("aob_k_tan_mg", "aob_k_tan_mg_n_per_l", "mg N/L"),
+            ("aob_k_do_mg", "aob_k_do_mg_per_l", "mg O₂/L"),
+            ("nob_k_nitrite_mg", "nob_k_nitrite_mg_n_per_l", "mg N/L"),
+            ("nob_k_do_mg", "nob_k_do_mg_per_l", "mg O₂/L"),
+            ("comammox_k_tan_mg", "comammox_k_tan_mg_n_per_l", "mg N/L"),
+            ("comammox_k_do_mg", "comammox_k_do_mg_per_l", "mg O₂/L"),
+        ] {
+            migrate_legacy_process_param_meta_key(
+                param_meta,
+                legacy,
+                canonical,
+                unit,
+                legacy_total_param_to_mg_per_l,
+            );
         }
     }
 }
@@ -2225,17 +2254,54 @@ fn toml_numeric_value(value: &toml::Value) -> Option<f64> {
     }
 }
 
-fn move_legacy_process_param_meta_key(
+fn migrate_legacy_process_param_meta_key(
     table: &mut toml::map::Map<String, toml::Value>,
     legacy_key: &'static str,
     canonical_key: &'static str,
+    canonical_unit: &'static str,
+    transform: fn(f64) -> f64,
 ) {
-    let Some(legacy_value) = table.remove(legacy_key) else {
+    let Some(mut legacy_value) = table.remove(legacy_key) else {
         return;
     };
+    normalize_legacy_process_param_meta(&mut legacy_value, canonical_unit, transform);
     table
         .entry(canonical_key.to_string())
         .or_insert(legacy_value);
+}
+
+fn normalize_legacy_process_param_meta(
+    value: &mut toml::Value,
+    canonical_unit: &'static str,
+    transform: fn(f64) -> f64,
+) {
+    let Some(table) = value.as_table_mut() else {
+        return;
+    };
+
+    table.insert(
+        "unit".to_string(),
+        toml::Value::String(canonical_unit.to_string()),
+    );
+
+    let Some(valid_range) = table
+        .get_mut("valid_range")
+        .and_then(toml::Value::as_array_mut)
+    else {
+        return;
+    };
+    if valid_range.len() != 2 {
+        return;
+    }
+
+    let Some(lower) = toml_numeric_value(&valid_range[0]).map(transform) else {
+        return;
+    };
+    let Some(upper) = toml_numeric_value(&valid_range[1]).map(transform) else {
+        return;
+    };
+    valid_range[0] = toml::Value::from(lower);
+    valid_range[1] = toml::Value::from(upper);
 }
 
 /// Legacy process `_mg` / `_mg_total` keys are normalized onto canonical
@@ -3440,6 +3506,7 @@ algae_half_saturation_p_mg_total = {legacy_p_total}
 
 [param_meta.algae_half_saturation_n_mg_total]
 unit = "mg N total"
+valid_range = [2.0, 10.0]
 "#
         );
 
@@ -3458,6 +3525,58 @@ unit = "mg N total"
         assert!(!preset
             .param_meta
             .contains_key("algae_half_saturation_n_mg_total"));
+        let meta = preset
+            .param_meta
+            .get("algae_half_saturation_n_mg_n_per_l")
+            .expect("canonical metadata should exist");
+        assert_eq!(meta.unit.as_deref(), Some("mg N/L"));
+        assert_eq!(meta.valid_range, Some([0.1, 0.5]));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_process_preset_parser_migrates_legacy_nitrogen_param_meta_range_units(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let legacy_aob_total = 20.0;
+        let toml_str = format!(
+            r#"
+id = "legacy"
+name = "Legacy"
+mineralization_rate_per_day = 0.15
+nitrification_vmax = 0.08
+reaeration_kla_base = 0.35
+aeration_kla_boost = 0.9
+background_bod_mg_o2_per_g_biomass_per_hour = 0.05
+plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
+respiration_dic_rate_mg_c_per_g_per_hour = 0.0
+photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0
+k_surface_w_per_m2_k = 10.0
+k_wall_w_per_m2_k = 5.0
+aob_k_tan_mg = {legacy_aob_total}
+
+[param_meta.aob_k_tan_mg]
+unit = "mg N total"
+source = "legacy test source"
+confidence = "literature"
+valid_range = [10.0, 40.0]
+"#
+        );
+
+        let preset = parse_process_params_preset(&toml_str)?;
+        assert_eq!(
+            preset.aob_k_tan_mg_n_per_l,
+            legacy_total_param_to_mg_per_l(legacy_aob_total)
+        );
+        assert!(!preset.param_meta.contains_key("aob_k_tan_mg"));
+        let meta = preset
+            .param_meta
+            .get("aob_k_tan_mg_n_per_l")
+            .expect("canonical metadata should exist");
+        assert_eq!(meta.unit.as_deref(), Some("mg N/L"));
+        assert_eq!(meta.valid_range, Some([0.5, 2.0]));
+        assert_eq!(meta.source.as_deref(), Some("legacy test source"));
+        assert_eq!(meta.confidence, Some(ConfidenceLevel::Literature));
 
         Ok(())
     }
@@ -3874,6 +3993,46 @@ valid_range = [20.0, 40.0]
                 .and_then(|meta| meta.confidence),
             Some(ConfidenceLevel::Expert)
         );
+    }
+
+    #[test]
+    fn shipped_process_biomass_rate_controls_have_provenance_metadata() {
+        let preset = default_process_preset();
+
+        preset
+            .validate()
+            .expect("shipped process preset should validate");
+
+        for (name, confidence) in [
+            ("decomposer_vmax_per_hour", ConfidenceLevel::Heuristic),
+            ("decomposer_growth_yield", ConfidenceLevel::Expert),
+            ("decomposer_decay_rate_per_hour", ConfidenceLevel::Expert),
+            ("aob_vmax_mg_n_per_g_per_hour", ConfidenceLevel::Heuristic),
+            ("aob_growth_yield", ConfidenceLevel::Literature),
+            ("aob_decay_rate_per_hour", ConfidenceLevel::Expert),
+            ("nob_vmax_mg_n_per_g_per_hour", ConfidenceLevel::Heuristic),
+            ("nob_growth_yield", ConfidenceLevel::Literature),
+            ("nob_decay_rate_per_hour", ConfidenceLevel::Expert),
+            ("comammox_vmax_fraction", ConfidenceLevel::Heuristic),
+            ("comammox_growth_yield", ConfidenceLevel::Heuristic),
+            ("comammox_decay_rate_per_hour", ConfidenceLevel::Heuristic),
+        ] {
+            let meta = preset
+                .param_meta
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} metadata should exist"));
+            assert_eq!(
+                meta.confidence,
+                Some(confidence),
+                "{name} should keep its shipped confidence tier"
+            );
+            assert!(meta.source.is_some(), "{name} should document a source");
+            assert!(meta.notes.is_some(), "{name} should document rationale");
+            assert!(
+                meta.valid_range.is_some(),
+                "{name} should carry a valid range"
+            );
+        }
     }
 
     #[test]

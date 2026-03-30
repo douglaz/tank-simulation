@@ -554,19 +554,20 @@ fn molt_cycle(state: &mut TankState) {
     let critical_gh_deficit =
         params.gh_min_d > 0.0 && (gh_d / params.gh_min_d.max(0.01)) < params.critical_molt_gh_ratio;
     let raw_temp_factor = temp_condition_factor(state.water.temperature_c, &params);
-    let cadence_temp_factor = raw_temp_factor
-        .max(params.temp_condition_min_factor)
-        .max(0.01);
+    // Allow an explicit zero cadence floor to halt molt progression completely
+    // instead of silently advancing via a hidden epsilon floor.
+    let cadence_temp_factor = raw_temp_factor.max(params.temp_condition_min_factor);
+    let cadence_frozen = cadence_temp_factor <= 0.0;
     let thermal_factor = raw_temp_factor;
     let instability_factor = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
 
-    if state.animal.juvenile.count > 0 {
+    if !cadence_frozen && state.animal.juvenile.count > 0 {
         state.animal.juvenile.molt_timer_days += 1.0;
     }
-    if state.animal.sub_adult.count > 0 {
+    if !cadence_frozen && state.animal.sub_adult.count > 0 {
         state.animal.sub_adult.molt_timer_days += 1.0;
     }
-    if state.animal.adult.count > 0 {
+    if !cadence_frozen && state.animal.adult.count > 0 {
         state.animal.adult.molt_timer_days += 1.0;
     }
 
@@ -629,8 +630,12 @@ fn molt_cycle(state: &mut TankState) {
             continue;
         }
 
-        let effective_interval = (base_interval_days / cadence_temp_factor).max(1.0);
-        let readiness = (timer_days / effective_interval).clamp(0.0, 1.0);
+        let readiness = if cadence_frozen {
+            0.0
+        } else {
+            let effective_interval = (base_interval_days / cadence_temp_factor).max(1.0);
+            (timer_days / effective_interval).clamp(0.0, 1.0)
+        };
         max_readiness = max_readiness.max(readiness);
 
         if readiness >= 1.0 {
@@ -1377,8 +1382,12 @@ fn emit_molt_failure(
     let params = &state.shrimp_params;
     let mut causes = Vec::new();
     let mut details = Vec::new();
-    let gh_ratio = gh_d / params.gh_min_d.max(0.01);
-    let critical_gh_failure = gh_ratio < params.critical_molt_gh_ratio;
+    let gh_ratio = if params.gh_min_d > 0.0 {
+        Some(gh_d / params.gh_min_d.max(0.01))
+    } else {
+        None
+    };
+    let critical_gh_failure = gh_ratio.is_some_and(|ratio| ratio < params.critical_molt_gh_ratio);
 
     if gh_d < params.gh_min_d {
         causes.push(EventCause::LowMinerals);
@@ -1433,7 +1442,7 @@ fn emit_molt_failure(
             failed_diagnostics.min_reserve_factor
         ));
     }
-    if critical_gh_failure {
+    if let Some(gh_ratio) = gh_ratio.filter(|_| critical_gh_failure) {
         details.push(format!(
             "critical GH ratio {:.2}<{:.2}",
             gh_ratio, params.critical_molt_gh_ratio

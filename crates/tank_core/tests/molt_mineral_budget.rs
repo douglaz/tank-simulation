@@ -854,6 +854,41 @@ fn test_temp_condition_min_factor_controls_molt_cadence_floor() {
 }
 
 #[test]
+fn test_zero_temp_condition_min_factor_freezes_molt_progress() {
+    let mut state = molt_test_state(SimSeed(9_105));
+    configure_stage_locked_population(&mut state, 10, 0, 0);
+    set_minerals(&mut state, 40.0, 10.0);
+    state.animal.set_population_condition_index(0.95);
+    seed_molt_reserves(&mut state);
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.water.temperature_c = 10.0;
+    state.environment.ambient_temp_c = 10.0;
+    state.shrimp_params.temp_condition_min_factor = 0.0;
+    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days / 0.01 - 1.0;
+    let frozen_timer = state.animal.adult.molt_timer_days;
+
+    step_daily_shrimp(&mut state);
+
+    assert!(
+        (state.animal.adult.molt_timer_days - frozen_timer).abs() < 1e-9,
+        "a zero cadence floor should freeze molt timer progress under severe cold stress"
+    );
+    assert!(
+        state.animal.molt_readiness.abs() < 1e-9,
+        "a zero cadence floor should freeze molt readiness at 0"
+    );
+    assert!(
+        state
+            .event_log
+            .iter()
+            .all(|event| event.kind != EventKind::MoltFailure),
+        "a frozen cadence floor should not resolve a molt and emit a failure event"
+    );
+}
+
+#[test]
 fn test_molt_failure_reports_reserve_shortfall() {
     let mut state = molt_test_state(SimSeed(9_101));
     configure_stage_locked_population(&mut state, 10, 0, 0);
@@ -872,6 +907,35 @@ fn test_molt_failure_reports_reserve_shortfall() {
         .expect("reserve-limited molt failure should emit an event");
     assert!(failure.cause_codes.contains(&EventCause::Starvation));
     assert!(failure.summary.contains("reserve"));
+}
+
+#[test]
+fn test_disabled_gh_min_omits_critical_gh_ratio_detail() {
+    let mut state = molt_test_state(SimSeed(9_107));
+    configure_stage_locked_population(&mut state, 10, 0, 0);
+    set_minerals(&mut state, 0.0, 0.0);
+    state.animal.set_population_condition_index(0.95);
+    seed_molt_reserves(&mut state);
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.shrimp_params.gh_min_d = 0.0;
+    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days;
+
+    step_daily_shrimp(&mut state);
+
+    let failure = state
+        .event_log
+        .iter()
+        .find(|event| event.kind == EventKind::MoltFailure)
+        .expect("low Ca/Mg should still emit a molt failure when GH minimums are disabled");
+    assert!(
+        failure.cause_codes.contains(&EventCause::LowMinerals),
+        "Ca/Mg deficiency should still classify as a low-minerals failure"
+    );
+    assert!(
+        !failure.summary.contains("critical GH ratio"),
+        "disabled GH minimums should suppress the critical-GH hard-fail detail: {}",
+        failure.summary
+    );
 }
 
 #[test]
