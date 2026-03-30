@@ -1,0 +1,22 @@
+{
+  "sessions": [
+    {
+      "role": "implementer",
+      "backend_family": "claude",
+      "model_id": "claude-opus-4-6",
+      "session_id": "c7df356c-b043-4147-b116-26c067b5a748",
+      "created_at": "2026-03-30T07:03:03.928875277Z",
+      "last_used_at": "2026-03-30T07:03:03.928875277Z",
+      "invocation_count": 1
+    },
+    {
+      "role": "reviewer",
+      "backend_family": "claude",
+      "model_id": "claude-opus-4-6",
+      "session_id": "c96cdee1-5ee7-4397-b303-8664bf2adbe3",
+      "created_at": "2026-03-30T07:37:13.757806311Z",
+      "last_used_at": "2026-03-30T08:26:01.002291089Z",
+      "invocation_count": 7
+    }
+  ]
+}

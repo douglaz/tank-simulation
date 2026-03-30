@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330064830-apply_fixes-c2-a1-cr2-artifact",
+  "payload_id": "run-20260330064830-apply_fixes-c2-a1-cr2",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-30T07:53:42.945639264Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNo additional code changes were required in this Apply Fixes pass. The prior amendments already delivered the habitat-aware, saturating root-zone oxygenation path, reused the computed `SubstrateOxygenationBreakdown` for tracing, and added the requested rootable-area clarification comment; the subsequent review approved the implementation with no blocking follow-up.\n\n## Steps\n\n1. [Completed] Inspect the approved review results and confirm whether any blocking follow-up fixes were requested for the root-zone oxygenation work.\n2. [Skipped] Apply additional code changes for review follow-up items.\n3. [Completed] Record the approved validation state for the substrate, root-zone oxygenation, denitrification, and lint coverage.\n\n## Validation Evidence\n\n- Review outcome was `approved` with no blocking amendments required.\n- Approved review confirmed `cargo test -p tank_core` passed across all unit and integration test binaries.\n- `cargo test -p tank_core --lib systems::substrate::tests -- --nocapture` passed.\n- `cargo test -p tank_core --test root_zone_oxygenation -- --nocapture` passed.\n- `cargo test -p tank_core --test denitrification -- --nocapture` passed.\n- `cargo clippy -p tank_core` produced zero warnings.\n\n## Outstanding Risks\n\n- Cross-crate workspace tests were not rerun in this stage; validation remains scoped to `tank_core`, which contains the touched implementation.\n- The remaining review notes are non-blocking cleanup opportunities: initialization-time code still discards the returned breakdown, and `root_oxygenation_active_biomass_g()` still recomputes the habitat registry internally.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

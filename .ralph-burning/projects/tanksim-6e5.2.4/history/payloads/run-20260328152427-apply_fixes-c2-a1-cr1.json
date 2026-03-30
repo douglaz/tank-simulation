@@ -1,0 +1,56 @@
+{
+  "payload_id": "run-20260328152427-apply_fixes-c2-a1-cr1",
+  "stage_id": "apply_fixes",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T15:59:53.250308986Z",
+  "payload": {
+    "data": {
+      "change_summary": "Added backward-compat handling for the renamed plant half-saturation parameters in both save loading and process preset loading. Legacy save payloads now migrate `plant_half_saturation_{n,p,c}_mg_total` into the explicit water-column fields and derive the new substrate N/P fields from the same legacy values, and process preset loading now rewrites the legacy plant TOML keys before deserialization so non-default values are preserved instead of falling back to defaults. I also added targeted regressions for the legacy save and preset cases, plus small stale call-site alignments in scenario/cycling code that were needed to get the targeted validation path compiling on the current branch.",
+      "outstanding_risks": [
+        "Broader `tank_core` save-load regression coverage is still blocked by an unrelated compile break in `crates/tank_core/src/types/habitat.rs` where `HabitatEnv.depth_attenuation` is referenced but not present, so I only validated the targeted compatibility regressions.",
+        "The worktree contains concurrent non-fix edits in the same save/preset area; this update was validated against the exact plant-compat regression paths, not the full workspace test suite."
+      ],
+      "steps": [
+        {
+          "description": "Inspected the current save migration chain and process preset loading path to confirm the legacy plant half-saturation keys were silently falling back to defaults.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Added save compatibility logic so legacy plant half-saturation total fields are converted into the explicit concentration/areal fields during load.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Added a process preset compatibility parser and routed `load_process_params_with_diagnostics` through it so legacy plant TOML keys are rewritten before deserialization.",
+          "order": 3,
+          "status": "completed"
+        },
+        {
+          "description": "Added targeted regression coverage for a legacy save payload and a legacy process preset TOML, and aligned stale renamed-parameter call sites that were blocking those targeted test paths.",
+          "order": 4,
+          "status": "completed"
+        },
+        {
+          "description": "Attempted broader save-load regression validation beyond the exact compatibility tests, but that path is currently blocked by the unrelated `HabitatEnv.depth_attenuation` compile error in the worktree.",
+          "order": 5,
+          "status": "skipped"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo test -p tank_core --test save_load legacy_schema_v7_saves_migrate_renamed_plant_half_saturation_fields -- --exact` passed.",
+        "`cargo test -p tank_data test_process_preset_parser_migrates_legacy_plant_half_saturation_keys -- --exact` passed.",
+        "Attempted `cargo test -p tank_core --test save_load save_load_roundtrip -- --exact`, but it is currently blocked by an unrelated compile failure in `crates/tank_core/src/types/habitat.rs` referencing missing field `HabitatEnv.depth_attenuation`."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

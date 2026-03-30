@@ -1,0 +1,91 @@
+{
+  "payload_id": "run-20260330051540-final_review-aggregate-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T06:01:44.203885942Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-1-5075c6ab"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-1-5075c6ab",
+        "normalized_body": "Add validation for `chloride_protection_factor` in `validate_shrimp_runtime_params()` (invariants.rs). Currently `critical_molt_gh_ratio`, `molt_success_threshold`, and all other named shrimp parameters are validated, but `chloride_protection_factor` has no bounds check. A negative or NaN value would silently break the hazard formula (the `.max(0.0)` inside `compute_effective_nitrite_hazard` handles negatives at runtime, but NaN/Infinity would propagate). Add `check_non_negative(\"shrimp_params.chloride_protection_factor\", params.chloride_protection_factor)?;` alongside the existing parameter checks, and add a corresponding invalid-value test case to the `malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected` and `step_hours_rejects_invalid_molt_mineral_parameters_before_simulation` tests.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-290c3e44",
+        "normalized_body": "In `salt_treatment_source_profile()` (tests/shrimp_chloride_protection.rs:69-89), the helper constructs a `SourceWaterProfile` using `WaterState::default_for_volume_l(1.0)` to extract per-liter defaults. Several fields use `base.<field>_total` as concentrations, which works only because volume is 1.0L. The `bicarbonate_mg_total` field in particular is solver-derived and initialized to 0.0 in `default_for_volume_l` before `resolve_carbonate_state` runs, so the profile's `bicarbonate_mg_per_l` will be whatever the solver yields for 1L — not a clean default. Add a brief inline comment documenting the 1L-total-equals-concentration pattern to prevent confusion in future maintenance, or consider using explicit numeric constants instead of extracting from the WaterState.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-70b84642",
+        "normalized_body": "Implement the actual chloride-aware nitrite hazard requested by tanksim-6e5.6.5 before merging. The current patch only adds alkalinity bookkeeping/tracing in `crates/tank_core/src/systems/nitrogen_cycle.rs:12-23,366-385`, `crates/tank_core/src/types/process.rs:10-27,335-338`, and related budget helpers, while the shrimp nitrite path is still the old chloride-blind logic in `crates/tank_core/src/systems/shrimp.rs:18-43,274-315,748-773`. There is still no `chloride_protection_factor`, no chloride-adjusted effective hazard, and no integration into `hourly_nitrite_stress_accum`, so equal-NO2 scenarios with different chloride levels will behave identically and the bead’s acceptance criteria are still unmet.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-a6050caf",
+        "normalized_body": "If the alkalinity budget work is intentional, extend the runtime budget guard to validate alkalinity too. The patch promotes alkalinity to a first-class tracked quantity in `crates/tank_core/src/types/budget.rs:68-123` and exposes it through inspection/debug helpers in `crates/tank_core/src/budget_helpers.rs:64-203,418-478,533-640`, but `enforce_tracked_tick_budget_guard` still only checks nitrogen and carbon in `crates/tank_core/src/engine.rs:845-909`. That leaves the new alkalinity accounting informational only: future stage bugs or incorrect explicit deltas can silently drift alkalinity without tripping the engine’s safety check.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-1-5075c6ab",
+        "normalized_body": "Add validation for `chloride_protection_factor` in `validate_shrimp_runtime_params()` (invariants.rs). Currently `critical_molt_gh_ratio`, `molt_success_threshold`, and all other named shrimp parameters are validated, but `chloride_protection_factor` has no bounds check. A negative or NaN value would silently break the hazard formula (the `.max(0.0)` inside `compute_effective_nitrite_hazard` handles negatives at runtime, but NaN/Infinity would propagate). Add `check_non_negative(\"shrimp_params.chloride_protection_factor\", params.chloride_protection_factor)?;` alongside the existing parameter checks, and add a corresponding invalid-value test case to the `malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected` and `step_hours_rejects_invalid_molt_mineral_parameters_before_simulation` tests.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 1,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-1-290c3e44",
+      "fr-1-70b84642",
+      "fr-1-a6050caf"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 1 amendment(s); restart required.",
+    "total_proposed_amendments": 4,
+    "total_reviewers": 2,
+    "unique_amendment_count": 4
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 1
+}

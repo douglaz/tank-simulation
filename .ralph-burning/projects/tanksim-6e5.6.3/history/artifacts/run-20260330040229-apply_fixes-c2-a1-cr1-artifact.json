@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330040229-apply_fixes-c2-a1-cr1-artifact",
+  "payload_id": "run-20260330040229-apply_fixes-c2-a1-cr1",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-30T05:03:43.934074885Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nStabilized the new molt/mineral regressions so they isolate mineral effects deterministically and updated the shrimp reproduction budget fixture to seed explicit Ca/Mg support required by the molt model. The 1000-hour `hard_shrimp` vs `ro_like` survival comparison, failed-molt mortality regression, and broader closed-system budget coverage now pass against the existing stage-aware molt implementation in this branch.\n\n## Steps\n\n1. [Completed] Adjusted the long-horizon molt/mineral tests to freeze condition drift and feeding noise so the soft-vs-hard water and failed-molt mortality assertions measure mineral-driven behavior deterministically.\n2. [Completed] Updated the shrimp reproduction budget fixture to include explicit calcium and magnesium support so the closed-system reproduction conservation test remains valid with mineral-gated molting.\n3. [Completed] Ran targeted regressions plus full `tank_core`, `tank_data`, and `tank_scenarios` test suites to verify the fixes end to end.\n\n## Validation Evidence\n\n- `cargo test -p tank_core --test molt_mineral_budget -- --nocapture`\n- `cargo test -p tank_core step_hours_rejects_invalid_molt_mineral_parameters_before_simulation -- --nocapture`\n- `cargo test -p tank_core malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected -- --nocapture`\n- `cargo test -p tank_core inverted_stage_molt_intervals -- --nocapture`\n- `cargo test -p tank_core test_closed_system_shrimp_reproduction_conserves_n_and_c -- --nocapture`\n- `cargo test -p tank_core`\n- `cargo test -p tank_data`\n- `cargo test -p tank_scenarios`\n\n## Outstanding Risks\n\nNone identified.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

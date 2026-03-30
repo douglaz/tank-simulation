@@ -1,0 +1,71 @@
+{
+  "payload_id": "run-20260328032847-plan_and_implement-c1-a1-cr1",
+  "stage_id": "plan_and_implement",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T03:40:05.505957706Z",
+  "payload": {
+    "data": {
+      "change_summary": "Created `tank_harness` crate providing a reusable deterministic scientific-regression harness. The crate exposes `HarnessRun` (seeded scenario runner with checkpoint capture, envelope assertions, and failure artifact packaging) and `Envelope` (builder for snapshot bound constraints). Failure artifacts are written to a deterministic temp path (`/tmp/tank_harness/<scenario>_seed<N>/`) containing metadata.json, checkpoints.json, assertion_summary.txt, budget_ledger.json, and trace.jsonl — all reusing the existing A2b budget ledger and A2d simulation tracer rather than inventing new formats. `TANK_E2E_VERBOSE=1` triggers full trace dumps on success. Four exemplar e2e tests across two test files demonstrate the harness end-to-end: weekly-maintenance envelope checks, determinism verification, artifact capture on strict-envelope violations, and gentle-care passing runs. Also fixed a pre-existing compilation error in tank_scenarios (missing microfauna budget fields in process_preset_to_params).",
+      "outstanding_risks": [
+        "TANK_E2E_VERBOSE=1 dumps trace to stderr which may produce large output in CI; downstream beads may want to configure a file sink instead for CI artifact collection.",
+        "Artifact directory is not cleaned up automatically on success — long-running CI will accumulate old artifacts from prior failing runs at the same seed+scenario path. Downstream beads may want a CI job to prune /tmp/tank_harness/.",
+        "The microfauna budget field defaults added to tank_scenarios (0.50, 0.70, 0.10, 0.20) match ProcessParams::default() but are hardcoded — if those defaults change in tank_core, tank_scenarios must be updated in sync."
+      ],
+      "steps": [
+        {
+          "description": "Explored codebase to understand existing budget/tracing surfaces (A2b BudgetLedger, A2d SimTracer), scenario system, engine API, and test patterns across 25 integration test files.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Created `crates/tank_harness/` crate with Cargo.toml (depends on tank_core, tank_data, tank_scenarios, serde, serde_json) and added it to the workspace Cargo.toml.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Implemented `src/lib.rs` with HarnessRun (seeded scenario builder, checkpoint recording, enable_instrumentation for budget+tracing, assert_envelope, assert_snapshot, artifact writing, verbose trace dump), Envelope (builder-pattern bounds on 8 snapshot fields with check method), HarnessError, Checkpoint, AssertionFailure, and ArtifactMetadata types.",
+          "order": 3,
+          "status": "completed"
+        },
+        {
+          "description": "Fixed pre-existing compilation error in tank_scenarios: added 4 missing microfauna budget fields (assimilation_efficiency, respiration/excretion/growth fraction) to process_preset_to_params with correct default values.",
+          "order": 4,
+          "status": "completed"
+        },
+        {
+          "description": "Created `tests/e2e_medium_planted.rs` with two tests: (1) medium_planted_weekly_maintenance_envelope — 30-day fishless cycle + 8 weeks of stocked maintenance with periodic envelope assertions, (2) medium_planted_determinism — verifies same seed produces identical checkpoint JSON across two runs.",
+          "order": 5,
+          "status": "completed"
+        },
+        {
+          "description": "Created `tests/e2e_nano_neglect.rs` with two tests: (1) nano_neglect_artifacts_on_violation — overfeeds then abandons a nano tank, asserts strict envelope triggers failures, verifies all 5 artifact files are written with correct content and deterministic path, (2) nano_healthy_no_violations — gentle care with wide envelope passes cleanly.",
+          "order": 6,
+          "status": "completed"
+        },
+        {
+          "description": "Ran cargo clippy -D warnings (clean), cargo fmt --check (clean), and cargo test (all 4 harness tests pass, all existing tank_core and tank_scenarios tests pass).",
+          "order": 7,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "cargo clippy -p tank_harness -- -D warnings: 0 warnings, 0 errors",
+        "cargo fmt -p tank_harness --check: no diffs",
+        "cargo test -p tank_harness: 4 tests passed (medium_planted_weekly_maintenance_envelope, medium_planted_determinism, nano_neglect_artifacts_on_violation, nano_healthy_no_violations)",
+        "cargo test -p tank_core: all existing tests pass (no regressions from tank_scenarios fix)",
+        "cargo test -p tank_scenarios: 3 tests pass (compilation fix for missing microfauna fields)",
+        "nano_neglect_artifacts_on_violation test verifies: metadata.json, checkpoints.json, assertion_summary.txt, budget_ledger.json, trace.jsonl all exist with correct content; deterministic path = /tmp/tank_harness/nano_cycle_seed77",
+        "medium_planted_determinism test verifies: same seed (99) + same schedule → identical checkpoint JSON across independent runs"
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

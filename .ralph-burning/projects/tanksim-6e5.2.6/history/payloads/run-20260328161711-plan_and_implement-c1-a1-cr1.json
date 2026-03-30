@@ -1,0 +1,77 @@
+{
+  "payload_id": "run-20260328161711-plan_and_implement-c1-a1-cr1",
+  "stage_id": "plan_and_implement",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T16:35:27.063598653Z",
+  "payload": {
+    "data": {
+      "change_summary": "Retuned process parameters and documented all data files after Phase 1A normalization (tanksim-6e5.2.3 through 6e5.2.5). The normalization commits changed all kinetic half-saturation constants from whole-tank totals (divided by 20 L reference at runtime) to direct concentration-based values (mg/L). This was a unit-correction, not new science — old effective Ks values were far below any literature range. Updated 15 data files (process/default.toml, 4 source water profiles, 4 substrate profiles, 2 plant profiles, 1 shrimp profile, 3 scenario presets) with inline retuning rationale, literature range annotations, and expected post-normalization behavior summaries. Archived retuning traces to docs/traces/retuning_6e5_2_6/ with discovery baselines and a parameter change summary table.",
+      "outstanding_risks": [
+        "Pre-existing save_load_with_active_cycle_state determinism test fails on HEAD — tiny floating-point divergence in RNG state, unrelated to this retuning work but should be investigated separately",
+        "HEAD commit a4b2122 (tanksim-6e5.5.5) introduced nitrifier_base_density_g_per_cm2 field incompletely — source code from e102f62 was used for validation; the HEAD source does not compile cleanly",
+        "DIC rate discrepancy between Default impl (0.0) and TOML preset (0.08/0.12) is now documented in default.toml but not resolved — scenarios that skip TOML loading will get different DIC behavior",
+        "Retuning values are Phase 1 temporary envelopes — later habitat (E6/E7) and carbonate (Phase 2) work may require further parameter adjustment as noted in default.toml provenance",
+        "Substrate nutrient_charge_mg_n_total and nutrient_charge_mg_p_total remain as absolute totals — future geometry-scaling work (E6) should consider whether these need to scale with tank footprint"
+      ],
+      "steps": [
+        {
+          "description": "Updated process/default.toml: added section headers, marked reserved parameters (mineralization_rate_per_day, nitrification_vmax) as unused, documented DIC rate Default-vs-TOML discrepancy, added retuning notes for each kinetic section (decomposer, AOB, NOB, comammox, plant, algae) showing old effective → new values and classification as unit-correction. Updated provenance to reflect post-normalization state.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Updated 4 source water profiles (soft_acidic, moderate, hard_shrimp, ro_like): documented alkalinity values in context of nitrification buffering capacity, noted how each profile interacts with the concentration-normalized Ks values, and explained expected cycling behavior per profile.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Updated 4 substrate profiles (inert_sand, inert_gravel, coarse_porous, active_planted): clarified that nutrient_charge values are absolute mg totals (not per-liter or per-m²), explained how each substrate interacts with the new areal Ks (mg/m²) for root-feeding rosettes, and noted role in shipped scenarios.",
+          "order": 3,
+          "status": "completed"
+        },
+        {
+          "description": "Updated 2 plant profiles (fast_stem, root_rosette): documented how growth_rate_index, water_column_uptake_bias, and substrate_uptake_bias interact with the normalized concentration-based and areal Ks values, and described expected guild competition behavior post-normalization.",
+          "order": 4,
+          "status": "completed"
+        },
+        {
+          "description": "Updated shrimp profile (neocaridina_davidi): documented that body_nitrogen and body_carbon are stoichiometric constants unaffected by kinetics normalization, and noted no Ks changes in this file.",
+          "order": 5,
+          "status": "completed"
+        },
+        {
+          "description": "Updated 3 scenario presets (nano_cycle, medium_planted, warm_room): added quantitative post-normalization behavior summaries with actual checkpoint values (TAN at day 30, biofilter maturity, plant biomass trajectories) and named the qualitative story each scenario tests.",
+          "order": 6,
+          "status": "completed"
+        },
+        {
+          "description": "Archived retuning traces: created docs/traces/retuning_6e5_2_6/ with discover_baselines.txt (75-line checkpoint trace from all 3 scenarios) and RETUNING_SUMMARY.md (parameter change table with old effective vs new values, scenario verification results, key observations).",
+          "order": 7,
+          "status": "completed"
+        },
+        {
+          "description": "Verified all 9 envelope tests pass (nano_cycle_baseline, medium_planted_baseline, warm_room_baseline, cross_scenario_relative, thermal_inertia, do_dips_at_night, shrimp_husbandry_fixture, controlled_ideal_reproduction, biofilter_maturation_floors). Also verified 32/32 tank_data tests and 267+ tank_core tests pass. Pre-existing save_load_with_active_cycle_state failure confirmed unrelated to this work.",
+          "order": 8,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "All 9 e2e_baseline_scenarios tests pass: nano_cycle_baseline_envelope, medium_planted_baseline_envelope, warm_room_baseline_envelope, cross_scenario_relative_behaviors, thermal_inertia_scales_with_tank_size, do_dips_at_night_in_planted_tank, shrimp_husbandry_fixture_reaches_berried_window, controlled_ideal_reproduction_path_still_hatches, biofilter_reaches_scenario_specific_cycle_floors",
+        "32/32 tank_data tests pass (including shipped_param_meta_loaders_return_no_diagnostics which validates TOML parsing)",
+        "267+ tank_core tests pass across 19 test modules (cycling, determinism, dissolved_oxygen, plant_algae_integration, shrimp_population, etc.)",
+        "Discovery baseline traces archived at docs/traces/retuning_6e5_2_6/discover_baselines.txt showing quantitative behavior: nano_cycle TAN=16.6 at day 30, medium_planted TAN=6.9 at day 30, warm_room TAN=8.2 at day 30 — all within envelope bounds",
+        "All parameter values verified within published literature ranges: AOB K_TAN 1.0 mg N/L (lit 0.5–2.0), NOB K_NO2 0.5 mg N/L (lit 0.2–1.0), decomposer K_DOC 3.0 mg C/L (lit 1–10), algae K_N 0.25 mg N/L (lit 0.05–0.5)",
+        "Pre-existing save_load_with_active_cycle_state failure confirmed present on clean HEAD commit (unrelated to data file changes)"
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

@@ -1,0 +1,81 @@
+{
+  "active_run": null,
+  "interrupted_run": {
+    "run_id": "run-20260327232428",
+    "stage_cursor": {
+      "stage": "final_review",
+      "cycle": 2,
+      "attempt": 1,
+      "completion_round": 7
+    },
+    "started_at": "2026-03-27T23:24:28.209316216Z",
+    "prompt_hash_at_cycle_start": "5abde49e7a84a16b",
+    "prompt_hash_at_stage_start": "5abde49e7a84a16b",
+    "qa_iterations_current_cycle": 0,
+    "review_iterations_current_cycle": 0,
+    "final_review_restart_count": 6,
+    "stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T03:28:14.006319468Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  },
+  "status": "failed",
+  "cycle_history": [
+    {
+      "cycle": 2,
+      "stage_id": "apply_fixes",
+      "started_at": "2026-03-27T23:59:18.757877469Z",
+      "completed_at": null
+    }
+  ],
+  "completion_rounds": 7,
+  "rollback_point_meta": {
+    "last_rollback_id": null,
+    "rollback_count": 0
+  },
+  "amendment_queue": {
+    "pending": [],
+    "processed_count": 23
+  },
+  "status_summary": "failed at Final Review: backend invocation failed for contract 'final_review:reviewer' via 'codex': codex exited with code 1: OpenAI Codex v0.117.0 (research preview)\n--------\nworkdir: /home/master/p/tank-simulation\nmodel: gpt-5.4\nprovider: openai\napproval: never\nsandbox: danger-full-access\nreasoning effort: xhigh\nreasoning summaries: none\nsession id: 019d3281-8d1f-7f43-af6d-94114951b658\n--------\nuser\nContract: final_review:reviewer\nRole: Reviewer\n\n# Final Review Proposals\n\nYou are a code reviewer. Review the changes in this project for correctness, safety, and robustness.\n\nRun `git diff` to see all changes, then read the key implementation files end-to-end. For each issue found, cite specific files and line numbers.\n\nIgnore style and cosmetics — only report real bugs, safety problems, correctness gaps, and significant maintainability risks.\n\n## Project Prompt\n\n○ tanksim-6e5.4.2 · Implement explicit carbonate equilibrium and pH solver   [● P0 · OPEN]\nOwner: master · Type: task\nCreated: 2026-03-26 · Updated: 2026-03-27\nLabels: carbonates, chemistry, pH, phase-2, scientific-core\n\nContext:\n- After D1 chooses the state contract, the engine needs a real equilibrium update instead of the current 6.3 + log10(alkalinity) - log10(DIC) shortcut.\n- This is the core chemistry change that unlocks more believable pH differentiation and gas-exchange effects.\n\nDeliverable:\n- Implement the carbonate-state contract chosen in D1 around DIC, alkalinity, temperature, and any clearly-defined derived species outputs.\n- Add the explicit equilibrium/pH solver with temperature-dependent constants and validate it against reference cases plus representative edge-condition sweeps.\n- Replace the live gameplay pH shortcut in the chemistry step with the new solver.\n- Update WaterState, snapshot/API outputs, and save/migration paths as needed so the new contract is inspectable and old saves still load cleanly.\n- Keep the implementation numerically stable within the expected aquarium parameter ranges (roughly pH 5.5-8.5, alkalinity 0-10 meq/L, temperature 15-35 C).\n\nLikely touch points:\n- crates/tank_core/src/systems/chemistry.rs\n- crates/tank_core/src/types/water.rs\n- crates/tank_core/src/types/state.rs\n- crates/tank_core/src/save.rs\n- crates/tank_core/src/types/snapshot.rs\n\n## Acceptance Criteria\n\nAcceptance Criteria:\n- WaterState/save/snapshot clearly distinguish stored carbonate inputs from derived outputs, and any required migration/default path loads old saves successfully.\n- gameplay pH is computed from the new carbonate solver rather than the old shortcut, and shipped source waters now produce meaningfully differentiated pH values.\n- the solver is deterministic and numerically stable across the reference cases and representative sweep/edge bounds (no NaN/Inf, reasonable pH bounds, directionally correct temperature response).\n- snapshot/API outputs expose at least pH and CO2(aq) or an equivalent derived solver result so the new chemistry is inspectable by users and tests.\n\nDependencies:\n  -> tanksim-6e5.4.1 (blocks) - Define carbonate-state contract and solver strategy\n  -> tanksim-6e5.2.2 (blocks) - Implement canonical concentration and compartment helper APIs\n  -> tanksim-6e5.1.2.3 (blocks) - Add save-schema versioning and migration scaffolding\n  -> tanksim-6e5.4 (parent-child) - Phase 2 — carbonate chemistry, CO2 exchange, and pH realism\n\nDependents:\n  <- tanksim-6e5.4.3 (blocks) - Integrate CO2 gas exchange with aeration, surface exchange, and ambient coupling\n  <- tanksim-6e5.4.7 (blocks) - Validate nitrification-driven alkalinity depletion with the carbonate solver, expose diagnostics, and prepare the denitrification return path\n  <- tanksim-6e5.7.2 (blocks) - Attach provenance and confidence metadata to high-value chemistry and ecology parameters\n  <- tanksim-6e5.4.5 (blocks) - Upgrade source-water profiles to carry carbonate-relevant inputs and differentiated defaults\n  <- tanksim-6e5.4.4 (blocks) - Connect photosynthesis and respiration to DIC / CO2 and day–night pH behavior\n\nComments:\n  [2026-03-26 20:44 UTC] master: Canonicalization note: merged former D2a-D2d into canonical D2. The state contract, solver, live chemistry swap, and save/snapshot implications are one chemistry change; D1 remains the design spike and D6 remains downstream validation.\n  [2026-03-26 13:46 UTC] backlog-planner: Future-self notes:\n- The goal is a robust aquarium-focused solver, not a general geochemistry package.\n- Preserve debuggability: intermediate values and assumptions should be inspectable in tests or dev snapshots.\n- Do not bury important constants in magic numbers; keep them named and traceable.\n- The existing dissolved_inorganic_carbon_mg_c_total field in WaterState can continue as the DIC state variable. The solver derives CO2(aq), HCO3-, CO3--, and pH from it + alkalinity + temperature.\n\n## Authoritative JSON Schema\n\nThe JSON schema below is authoritative. Return only JSON that conforms exactly to it.\n\n```json\n{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"definitions\": {\n    \"FinalReviewProposal\": {\n      \"description\": \"A raw amendment proposal returned by a final-review reviewer.\",\n      \"properties\": {\n        \"body\": {\n          \"description\": \"The free-form amendment body. This is canonicalized and deduplicated by the orchestration layer before voting.\",\n          \"type\": \"string\"\n        },\n        \"rationale\": {\n          \"description\": \"Optional reviewer-provided rationale for why this amendment matters.\",\n          \"type\": [\n            \"string\",\n            \"null\"\n          ]\n        }\n      },\n      \"required\": [\n        \"body\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"description\": \"Payload returned by each final-review reviewer during proposal collection.\",\n  \"properties\": {\n    \"amendments\": {\n      \"description\": \"Proposed amendments. An empty list means \\\"no amendments\\\".\",\n      \"items\": {\n        \"$ref\": \"#/definitions/FinalReviewProposal\"\n      },\n      \"type\": \"array\"\n    },\n    \"summary\": {\n      \"description\": \"Summary of the reviewer pass.\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"amendments\",\n    \"summary\"\n  ],\n  \"title\": \"FinalReviewProposalPayload\",\n  \"type\": \"object\"\n}\n```\n\nReturn ONLY valid JSON matching the following schema:\n{\n  \"$schema\": \"http://json-schema.org/draft-07/schema#\",\n  \"definitions\": {\n    \"FinalReviewProposal\": {\n      \"description\": \"A raw amendment proposal returned by a final-review reviewer.\",\n      \"properties\": {\n        \"body\": {\n          \"description\": \"The free-form amendment body. This is canonicalized and deduplicated by the orchestration layer before voting.\",\n          \"type\": \"string\"\n        },\n        \"rationale\": {\n          \"description\": \"Optional reviewer-provided rationale for why this amendment matters.\",\n          \"type\": [\n            \"string\",\n            \"null\"\n          ]\n        }\n      },\n      \"required\": [\n        \"body\"\n      ],\n      \"type\": \"object\"\n    }\n  },\n  \"description\": \"Payload returned by each final-review reviewer during proposal collection.\",\n  \"properties\": {\n    \"amendments\": {\n      \"description\": \"Proposed amendments. An empty list means \\\"no amendments\\\".\",\n      \"items\": {\n        \"$ref\": \"#/definitions/FinalReviewProposal\"\n      },\n      \"type\": \"array\"\n    },\n    \"summary\": {\n      \"description\": \"Summary of the reviewer pass.\",\n      \"type\": \"string\"\n    }\n  },\n  \"required\": [\n    \"amendments\",\n    \"summary\"\n  ],\n  \"title\": \"FinalReviewProposalPayload\",\n  \"type\": \"object\"\n}\n\nERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 4:47 AM.\nERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 4:47 AM.\n",
+  "last_stage_resolution_snapshot": {
+    "stage_id": "final_review",
+    "resolved_at": "2026-03-28T03:28:14.006319468Z",
+    "final_review_reviewers": [
+      {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      },
+      {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    ],
+    "final_review_planner": {
+      "backend_family": "codex",
+      "model_id": "gpt-5.4"
+    },
+    "final_review_arbiter": {
+      "backend_family": "codex",
+      "model_id": "gpt-5.4"
+    }
+  }
+}

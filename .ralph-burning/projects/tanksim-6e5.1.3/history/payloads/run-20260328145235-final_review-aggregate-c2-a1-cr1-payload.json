@@ -1,0 +1,169 @@
+{
+  "payload_id": "run-20260328145235-final_review-aggregate-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T15:41:00.868481730Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-1-32fa1988",
+      "fr-1-423a179e",
+      "fr-1-3081f78c",
+      "fr-1-fe5ff040",
+      "fr-1-7371c682",
+      "fr-1-2d8bb6d0"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-1-32fa1988",
+        "normalized_body": "Several NO3 envelope bounds in medium_planted and warm_room scenarios are extremely narrow — e.g., (4.0, 5.5), (4.5, 5.5), (4.5, 6.0) — representing only 1–1.5 mg N/L of range. These track the source water nitrate concentration (moderate.toml: 5.0 mg N/L) rather than meaningful biological behavior. Downstream beads (tanksim-6e5.2.3, 2.4, 2.5) will normalize nitrogen-cycle kinetics and plant uptake, which will shift NO3 dynamics. Widen these bounds to at least ±2–3 mg/L (e.g., (2.0, 8.0)) so they catch real regressions without breaking on every parameter tune. Document that NO3 bounds for moderate/warm_room scenarios include a source-water contribution of ~5 mg N/L.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-423a179e",
+        "normalized_body": "Envelope::check silently passes NaN values in all f64 fields (pH, DO, TAN, NO2, NO3, reproductive_readiness, plant_biomass, algae_nuisance, biofilter_maturity, periphyton_biomass, fast_stem_biomass) because NaN comparisons return false in IEEE 754. Add a NaN/Inf guard at the top of the check method: for every constrained f64 field, if the snapshot value is not finite, push a violation like 'pH is NaN (expected [{min}, {max}])'. The existing final_finite assertions only catch NaN at the end of multi-hour runs, not at intermediate checkpoints where the root cause would be easier to diagnose.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-3081f78c",
+        "normalized_body": "The maintained_medium_variant_reaches_reproduction_window test zeroes out both shrimp_base_mortality_per_day and shrimp_stress_mortality_scale, forces periphyton biomass to ≥5g, forces adult reserve to ≥3g, forces reproductive_readiness to ≥0.5, and extends maturation to 120 days. This amount of state manipulation means the test doesn't protect the natural reproduction pathway — it only proves reproduction can happen under artificially perfect conditions. Add a doc comment explicitly stating this is a 'controlled ideal' test (not a naturalistic baseline), and consider adding a companion test with at most mortality zeroed (no other manipulations) to verify that at least adult survival is achievable under maintained-tank conditions without rigging reserves and readiness.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-fe5ff040",
+        "normalized_body": "`enforce_invariants` now repairs shrimp egg bookkeeping on every simulation step by calling `reconcile_egg_cohort_counts()` (`crates/tank_core/src/invariants.rs:42-48`; `crates/tank_core/src/engine.rs:789-794`). When `berried_females_count` is larger than the cohort sum, that helper fabricates a new `EggCohort` at the current `egg_progress_days` (`crates/tank_core/src/types/biology.rs:600-620`), and the new validation test explicitly blesses that behavior (`crates/tank_core/tests/validation.rs:263-300`). This means a transient bookkeeping bug or partially migrated state can silently create near-hatching clutches instead of surfacing an invariant violation, which changes live simulation outcomes and can duplicate births. Please keep this kind of repair at load/migration boundaries only, or fail runtime invariant enforcement on mismatches instead of synthesizing eggs.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-7371c682",
+        "normalized_body": "The new e2e suite introduces multiple `medium_planted` runs with the same seed (`crates/tank_harness/tests/e2e_baseline_scenarios.rs:245-247`, `crates/tank_harness/tests/e2e_baseline_scenarios.rs:778-780`, `crates/tank_harness/tests/e2e_baseline_scenarios.rs:833-860`), but `HarnessRun::artifact_dir()` keys failure artifacts only by `scenario_id` and seed (`crates/tank_harness/src/lib.rs:546-553`). In a failing or parallel run, those tests all write to the same `/tmp/tank_harness/medium_planted_seed42` directory and can overwrite each other’s `trace.jsonl`, ledger, and metadata. Because `from_state()` still records the maintained variant as plain `medium_planted` (`crates/tank_harness/src/lib.rs:408-419`), the surviving artifact is also ambiguous. Give each harness run an explicit artifact/test label and include it in the artifact path/metadata.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-2d8bb6d0",
+        "normalized_body": "`maintained_medium_variant_reaches_reproduction_window` is presented as a reproduction guardrail, but it is not actually baselining current scenario behavior: it manually boosts periphyton, adult reserve, and reproductive readiness, then disables shrimp mortality entirely (`crates/tank_harness/tests/e2e_baseline_scenarios.rs:849-858`). That means the test can still pass after regressions in the real survival/stress model, because adults are prevented from dying and start with artificial hidden-state headroom. If reproduction needs its own envelope, it should be a named scenario/fixture built from public startup parameters with normal mortality semantics left on.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-1-32fa1988",
+        "normalized_body": "Several NO3 envelope bounds in medium_planted and warm_room scenarios are extremely narrow — e.g., (4.0, 5.5), (4.5, 5.5), (4.5, 6.0) — representing only 1–1.5 mg N/L of range. These track the source water nitrate concentration (moderate.toml: 5.0 mg N/L) rather than meaningful biological behavior. Downstream beads (tanksim-6e5.2.3, 2.4, 2.5) will normalize nitrogen-cycle kinetics and plant uptake, which will shift NO3 dynamics. Widen these bounds to at least ±2–3 mg/L (e.g., (2.0, 8.0)) so they catch real regressions without breaking on every parameter tune. Document that NO3 bounds for moderate/warm_room scenarios include a source-water contribution of ~5 mg N/L.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-423a179e",
+        "normalized_body": "Envelope::check silently passes NaN values in all f64 fields (pH, DO, TAN, NO2, NO3, reproductive_readiness, plant_biomass, algae_nuisance, biofilter_maturity, periphyton_biomass, fast_stem_biomass) because NaN comparisons return false in IEEE 754. Add a NaN/Inf guard at the top of the check method: for every constrained f64 field, if the snapshot value is not finite, push a violation like 'pH is NaN (expected [{min}, {max}])'. The existing final_finite assertions only catch NaN at the end of multi-hour runs, not at intermediate checkpoints where the root cause would be easier to diagnose.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-3081f78c",
+        "normalized_body": "The maintained_medium_variant_reaches_reproduction_window test zeroes out both shrimp_base_mortality_per_day and shrimp_stress_mortality_scale, forces periphyton biomass to ≥5g, forces adult reserve to ≥3g, forces reproductive_readiness to ≥0.5, and extends maturation to 120 days. This amount of state manipulation means the test doesn't protect the natural reproduction pathway — it only proves reproduction can happen under artificially perfect conditions. Add a doc comment explicitly stating this is a 'controlled ideal' test (not a naturalistic baseline), and consider adding a companion test with at most mortality zeroed (no other manipulations) to verify that at least adult survival is achievable under maintained-tank conditions without rigging reserves and readiness.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-fe5ff040",
+        "normalized_body": "`enforce_invariants` now repairs shrimp egg bookkeeping on every simulation step by calling `reconcile_egg_cohort_counts()` (`crates/tank_core/src/invariants.rs:42-48`; `crates/tank_core/src/engine.rs:789-794`). When `berried_females_count` is larger than the cohort sum, that helper fabricates a new `EggCohort` at the current `egg_progress_days` (`crates/tank_core/src/types/biology.rs:600-620`), and the new validation test explicitly blesses that behavior (`crates/tank_core/tests/validation.rs:263-300`). This means a transient bookkeeping bug or partially migrated state can silently create near-hatching clutches instead of surfacing an invariant violation, which changes live simulation outcomes and can duplicate births. Please keep this kind of repair at load/migration boundaries only, or fail runtime invariant enforcement on mismatches instead of synthesizing eggs.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-7371c682",
+        "normalized_body": "The new e2e suite introduces multiple `medium_planted` runs with the same seed (`crates/tank_harness/tests/e2e_baseline_scenarios.rs:245-247`, `crates/tank_harness/tests/e2e_baseline_scenarios.rs:778-780`, `crates/tank_harness/tests/e2e_baseline_scenarios.rs:833-860`), but `HarnessRun::artifact_dir()` keys failure artifacts only by `scenario_id` and seed (`crates/tank_harness/src/lib.rs:546-553`). In a failing or parallel run, those tests all write to the same `/tmp/tank_harness/medium_planted_seed42` directory and can overwrite each other’s `trace.jsonl`, ledger, and metadata. Because `from_state()` still records the maintained variant as plain `medium_planted` (`crates/tank_harness/src/lib.rs:408-419`), the surviving artifact is also ambiguous. Give each harness run an explicit artifact/test label and include it in the artifact path/metadata.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-2d8bb6d0",
+        "normalized_body": "`maintained_medium_variant_reaches_reproduction_window` is presented as a reproduction guardrail, but it is not actually baselining current scenario behavior: it manually boosts periphyton, adult reserve, and reproductive readiness, then disables shrimp mortality entirely (`crates/tank_harness/tests/e2e_baseline_scenarios.rs:849-858`). That means the test can still pass after regressions in the real survival/stress model, because adults are prevented from dying and start with artificial hidden-state headroom. If reproduction needs its own envelope, it should be a named scenario/fixture built from public startup parameters with normal mortality semantics left on.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 1,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [],
+    "restart_required": true,
+    "summary": "Final review accepted 6 amendment(s); restart required.",
+    "total_proposed_amendments": 6,
+    "total_reviewers": 2,
+    "unique_amendment_count": 6
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 1
+}

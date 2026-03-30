@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330040229-final_review-vote-0-c2-a1-cr2-artifact",
+  "payload_id": "run-20260330040229-final_review-vote-0-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T05:52:48.828947373Z",
+  "content": "# Final Review Votes\n**Producer:** agent:claude/claude-opus-4-6\n\n## Summary\n\nAll three amendments are verified against the source code and identify real correctness issues. The carbonate profile fixture produces invalid pH at the validation boundary, the unconditional runtime molt-timer fallback defeats the schema-guarded migration, and the chloride protection test is confounded by multiple chemistry changes from the replacement water with no control run.\n\n## Votes\n\n- `fr-2-27e2dd70`: Accept\n  Verified: salt_treatment_source_profile() uses WaterState::default_for_volume_l(1.0) giving DIC=20.0 mg C/L and alkalinity=1.5 meq/L. The carbonate solver derives pH=8.5 from these values, and validate_source_water_carbonate_profile() at chemistry.rs:477 rejects pH >= CARBONATE_PH_MAX (8.5) unless the status is ZeroDicBufferedLimit — which won't trigger with DIC=20.0. The fixture is genuinely invalid and needs adjustment to produce a pH strictly below 8.5.\n- `fr-2-8281d091`: Accept\n  Verified: shrimp.rs lines 508-523 contain an unconditional fallback that copies inter_molt_timer_days into per-stage timers whenever all three are zero. save.rs lines 960-976 contain identical logic but guarded by source_schema_version < PER_STAGE_MOLT_TIMER_SCHEMA_VERSION (13). Because the runtime fallback runs every molt_cycle() call with no version guard, it overrides zero stage timers from schema-14+ saves on the first simulation step, making the migration guard in save.rs partially dead code for the runtime path. This should be guarded or removed.\n- `fr-2-f0846ba3`: Accept\n  Verified: The helper at line 70 constructs replacement water from WaterState::default_for_volume_l(1.0), which sets DIC=20.0, DO=8.0, alkalinity=1.5, DOC=0.0, DON=0.0. The 50% water change mixes all of these into the tank, changing multiple chemistry parameters beyond chloride and sodium. The assertion compares pre-treatment vs post-treatment mortality within the same evolving run rather than against a matched control. Since improved DO, reduced organics, and alkalinity changes independently affect shrimp condition and mortality via the update_condition() pathway, the test cannot isolate whether chloride protection specifically reduced mortality. A parallel control tank or chemistry-matched water change that differs only in chloride/sodium is needed.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}
