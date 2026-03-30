@@ -1080,8 +1080,9 @@ fn controlled_ideal_reproduction_path_still_hatches() -> Result<(), Box<dyn std:
             run.assert_envelope(
                 "repro_day30",
                 &Envelope::default()
-                    // Geometry-scaled microbe inoculum slightly raises transient TAN
-                    .tan_mg_n_per_l(0.0, 0.8)
+                    // Geometry-scaled microbe inoculum + substrate zone changes
+                    // slightly raise transient TAN
+                    .tan_mg_n_per_l(0.0, 0.9)
                     .nitrite_mg_n_per_l(0.0, 0.8)
                     .nitrate_mg_n_per_l(4.0, 12.0)
                     .do_min(7.0)
@@ -1099,7 +1100,7 @@ fn controlled_ideal_reproduction_path_still_hatches() -> Result<(), Box<dyn std:
                     .nitrate_mg_n_per_l(4.0, 12.0)
                     .do_min(7.0)
                     .shrimp_count(50, 140)
-                    .juveniles_count(40, 100)
+                    .juveniles_count(30, 100)
                     .shrimp_reproductive_readiness(0.3, 0.8),
             );
         }

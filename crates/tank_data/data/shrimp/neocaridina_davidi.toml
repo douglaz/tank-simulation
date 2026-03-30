@@ -20,11 +20,6 @@ failed_molt_mortality_scale = 0.15
 sub_adult_sensitivity = 1.2
 base_clutch_size = 25
 min_clutch_condition = 0.3
-ca_min_mg_per_l = 20.0
-mg_min_mg_per_l = 5.0
-juvenile_molt_interval_days = 14.0
-sub_adult_molt_interval_days = 21.0
-molt_success_threshold = 0.55
 
 [provenance]
 source_title = "Starter preset pack"

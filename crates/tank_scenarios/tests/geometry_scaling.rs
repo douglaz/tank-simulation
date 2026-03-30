@@ -501,8 +501,7 @@ fn microbe_biomass_scales_with_geometry_for_large_tanks() -> Result<(), Box<dyn 
         state_2x.microbe.ammonia_oxidizer_biomass_g / state_1x.microbe.ammonia_oxidizer_biomass_g;
     let nob_ratio =
         state_2x.microbe.nitrite_oxidizer_biomass_g / state_1x.microbe.nitrite_oxidizer_biomass_g;
-    let comammox_ratio =
-        state_2x.microbe.comammox_biomass_g / state_1x.microbe.comammox_biomass_g;
+    let comammox_ratio = state_2x.microbe.comammox_biomass_g / state_1x.microbe.comammox_biomass_g;
 
     // Decomposers track gross water volume so feed/DOC mineralization stays
     // close to a constant per-liter startup intensity across scaled tanks.
