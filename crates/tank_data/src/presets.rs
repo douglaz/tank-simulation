@@ -1002,7 +1002,6 @@ impl ShrimpPreset {
                 "temp_condition_high_divisor_c",
                 self.temp_condition_high_divisor_c,
             ),
-            ("temp_condition_min_factor", self.temp_condition_min_factor),
             ("ca_min_mg_per_l", self.ca_min_mg_per_l),
             ("mg_min_mg_per_l", self.mg_min_mg_per_l),
             ("molt_reserve_fraction", self.molt_reserve_fraction),
@@ -3944,5 +3943,15 @@ valid_range = [20.0, 40.0]
             nh3_threshold.notes.is_some(),
             "NH3 threshold should document rationale"
         );
+    }
+
+    #[test]
+    fn shrimp_preset_allows_zero_temp_condition_min_factor() {
+        let mut preset = shrimp_preset(include_str!("../data/shrimp/neocaridina_davidi.toml"));
+        preset.temp_condition_min_factor = Some(0.0);
+
+        preset
+            .validate()
+            .expect("zero temp_condition_min_factor should remain valid");
     }
 }
