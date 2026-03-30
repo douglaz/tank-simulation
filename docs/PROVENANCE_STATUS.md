@@ -62,28 +62,57 @@ and in `tank_core::types::process` default-value doc comments.
 
 ---
 
-## Carbonate Chemistry (source_water/*.toml)
+## Carbonate Chemistry
 
-### Annotated in hard_shrimp.toml and moderate.toml (heuristic)
-| Parameter | hard_shrimp | moderate | Unit | Notes |
-|-----------|-------------|----------|------|-------|
-| `dic_mg_c_per_l` | 36.0 | 20.0 | mg C/L | Derived from target KH via carbonate equilibrium |
-| `alkalinity_meq_per_l` | 2.857 | 1.429 | meq/L | KH 8.0 / KH 4.0 respectively |
-| `bicarbonate_mg_per_l` | 174.3 | 87.2 | mg/L | = alkalinity × 61.02 |
-| `calcium_mg_per_l` | 42.0 | 25.0 | mg/L | Set for molt success margin |
-| `magnesium_mg_per_l` | 15.0 | 10.0 | mg/L | Ca:Mg ratio 2.8:1 / 2.5:1 |
-| `chloride_mg_per_l` | 20.0 | 18.0 | mg/L | Sets Cl:NO₂ protection baseline |
+### Source-water presets (`hard_shrimp.toml`, `moderate.toml`)
+| Parameter | hard_shrimp | moderate | Confidence | Notes |
+|-----------|-------------|----------|------------|-------|
+| `dic_mg_c_per_l` | 36.0 | 20.0 | heuristic | Derived from target KH plus carbonate equilibrium preview |
+| `alkalinity_meq_per_l` | 2.857 | 1.429 | heuristic | KH 8.0 / KH 4.0 respectively |
+| `bicarbonate_mg_per_l` | 174.3 | 87.2 | heuristic | Explicit reservoir view: alkalinity × 61.02 |
+| `calcium_mg_per_l` | 42.0 | 25.0 | expert | Mineral targets chosen to clear shrimp molt minima with explicit margin |
+| `magnesium_mg_per_l` | 15.0 | 10.0 | expert | Paired with Ca to keep shrimp-safe Ca:Mg ratios |
+| `chloride_mg_per_l` | 20.0 | 18.0 | heuristic | Sets the Cl:NO₂ protection baseline |
 
-All carbonate-related source water parameters are **heuristic** — derived from target
-KH/GH values and equilibrium math rather than measured from specific water supplies.
-This is appropriate for preset defaults but means the exact values are not scientifically
-citable. The equilibrium *relationships* between DIC, alkalinity, and bicarbonate are
-literature-backed (Stumm & Morgan 1996).
+Interpretation:
+- `dic_mg_c_per_l`, `alkalinity_meq_per_l`, `bicarbonate_mg_per_l`, and `chloride_mg_per_l`
+  are preset heuristics. They are derived from target KH/GH bands and utility-water style
+  assumptions rather than measured from a named source.
+- `calcium_mg_per_l` and `magnesium_mg_per_l` are stronger expert-curated anchors. They are
+  still preset defaults, but they now explicitly stand apart from the heuristic carbonate values.
+
+### Code-resident solver constants (`crates/tank_core/src/systems/chemistry.rs`)
+
+These coefficients stay in code rather than TOML `param_meta` because every source-water
+preset shares the same carbonate solver. Canonical provenance currently lives in the
+doc comments in `chemistry.rs` and in this table until a dedicated code-constant metadata
+registry exists.
+
+| Constant | Value | Confidence | Source | Notes |
+|----------|-------|------------|--------|-------|
+| `KH_CO2_25C_MOL_PER_L_ATM` | `3.4e-2 mol/(L·atm)` | literature | Stumm & Morgan 1996 | 25°C Henry-law anchor for atmospheric CO₂ coupling |
+| `KH_TEMP_FACTOR_K` | `2400 K` | expert | First-pass van 't Hoff fit for the 15-35°C aquarium envelope | Revisit if salinity or temperature envelope expands |
+| `pKa1(T)` | `3404.71/T + 0.032786*T - 14.8435` (`T` in K) | literature | Harned & Davis 1943 | Full temperature correction across the current freshwater range |
+| `PKA2` | `10.33` | expert | 25°C freshwater carbonate tables; `docs/carbonate_state_contract.md` | Literature-consistent anchor, but the fixed-temperature use is still a first-pass simplification |
 
 ### Not Yet Annotated
 - `soft_acidic.toml` and `ro_like.toml` source water profiles do not yet carry `param_meta`.
   These are lower-priority because their extreme values (very low KH/GH) are less likely
   to be cited as representative defaults.
+
+---
+
+## Habitat / Biofilter Scaling (substrate/*.toml)
+
+### Representative annotated presets
+| Preset | Parameter | Value | Confidence | Notes |
+|--------|-----------|-------|------------|-------|
+| `active_planted.toml` | `colonizable_area_factor` | 0.8 | heuristic | Rooted aquasoil sits above inert gravel but below dedicated porous media for attachment area |
+| `coarse_porous.toml` | `colonizable_area_factor` | 0.9 | heuristic | Highest shipped factor; directly signals this preset's role as the strongest nitrifier habitat substrate |
+
+`colonizable_area_factor` is the current load-bearing substrate scaling knob because
+`footprint × colonizable_area_factor` feeds colonizable area and downstream biofilm/periphyton
+capacity. Other substrate indices and nutrient-charge fields are still pending annotation.
 
 ---
 
@@ -116,11 +145,12 @@ literature-backed (Stumm & Morgan 1996).
 
 ## Parameters Not Yet Annotated
 
-The following parameter families have no `param_meta` entries yet and are candidates for
-future annotation beads:
+The following parameter families still need additional `param_meta` coverage and remain
+candidates for future annotation beads:
 
-- **Substrate presets** (inert_sand, inert_gravel, active_planted, coarse_porous): colonizable
-  area factors, detritus trapping indices, nutrient charges
+- **Substrate presets** (`inert_sand`, `inert_gravel`, plus non-`colonizable_area_factor`
+  fields in `active_planted` / `coarse_porous`): detritus trapping indices, nutrient charges,
+  and secondary habitat modifiers
 - **Plant presets** (fast_stem, root_rosette): growth_rate_index, uptake bias weights
 - **Remaining source water** (soft_acidic, ro_like): full chemistry profiles
 - **Process routing fractions**: shrimp/microfauna assimilation, respiration, excretion splits
@@ -132,8 +162,9 @@ future annotation beads:
 
 1. **Before making a scientific claim**: check that the parameter's confidence is `literature`.
    If it's `heuristic` or `placeholder`, the claim needs qualification.
-2. **Before tuning a parameter**: check its `valid_range` in the TOML `param_meta`. Tuning
-   outside the range will produce a loader warning.
+2. **Before tuning a parameter**: check its `valid_range` in the TOML `param_meta`. For
+   code-resident constants such as the carbonate solver coefficients, check the doc comments
+   in `crates/tank_core/src/systems/chemistry.rs` and the table above instead.
 3. **When adding new parameters**: add a `[param_meta.name]` entry in the same TOML file.
    Use the `ConfidenceLevel` enum: `literature`, `expert`, `heuristic`, or `placeholder`.
 4. **When a parameter graduates**: update its `confidence` and `source` fields in the TOML.

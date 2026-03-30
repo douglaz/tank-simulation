@@ -3577,4 +3577,68 @@ valid_range = [20.0, 40.0]
             "ro-like pH {ro_ph:.3} out of band"
         );
     }
+
+    #[test]
+    fn shipped_source_water_priority_metadata_matches_summary() {
+        let moderate = source_preset(include_str!("../data/source_water/moderate.toml"));
+        let hard = source_preset(include_str!("../data/source_water/hard_shrimp.toml"));
+
+        for preset in [&moderate, &hard] {
+            preset.validate().expect("shipped preset should validate");
+        }
+
+        for name in [
+            "dic_mg_c_per_l",
+            "alkalinity_meq_per_l",
+            "bicarbonate_mg_per_l",
+            "chloride_mg_per_l",
+        ] {
+            assert_eq!(
+                moderate
+                    .param_meta
+                    .get(name)
+                    .and_then(|meta| meta.confidence),
+                Some(ConfidenceLevel::Heuristic),
+                "moderate.{name} should stay heuristic"
+            );
+            assert_eq!(
+                hard.param_meta.get(name).and_then(|meta| meta.confidence),
+                Some(ConfidenceLevel::Heuristic),
+                "hard_shrimp.{name} should stay heuristic"
+            );
+        }
+
+        for name in ["calcium_mg_per_l", "magnesium_mg_per_l"] {
+            assert_eq!(
+                moderate
+                    .param_meta
+                    .get(name)
+                    .and_then(|meta| meta.confidence),
+                Some(ConfidenceLevel::Expert),
+                "moderate.{name} should be expert-curated"
+            );
+            assert_eq!(
+                hard.param_meta.get(name).and_then(|meta| meta.confidence),
+                Some(ConfidenceLevel::Expert),
+                "hard_shrimp.{name} should be expert-curated"
+            );
+        }
+    }
+
+    #[test]
+    fn shipped_substrate_presets_expose_colonizable_area_metadata() {
+        let active = substrate_preset(include_str!("../data/substrate/active_planted.toml"));
+        let porous = substrate_preset(include_str!("../data/substrate/coarse_porous.toml"));
+
+        for preset in [&active, &porous] {
+            preset.validate().expect("shipped preset should validate");
+            let meta = preset
+                .param_meta
+                .get("colonizable_area_factor")
+                .expect("colonizable area metadata should exist");
+            assert_eq!(meta.confidence, Some(ConfidenceLevel::Heuristic));
+            assert!(meta.source.is_some(), "source should be documented");
+            assert!(meta.notes.is_some(), "notes should be documented");
+        }
+    }
 }
