@@ -99,6 +99,7 @@ fn shrimp_runtime_default_param_value(name: &str) -> Option<f64> {
         }
         "failed_molt_stress_blend" => Some(defaults.failed_molt_stress_blend),
         "sub_adult_sensitivity" => Some(defaults.sub_adult_sensitivity),
+        "low_temp_repro_ramp_width_c" => Some(defaults.low_temp_repro_ramp_width_c),
         "base_clutch_size" => Some(f64::from(defaults.base_clutch_size)),
         "min_clutch_condition" => Some(defaults.min_clutch_condition),
         "ca_min_mg_per_l" => Some(defaults.ca_min_mg_per_l),
@@ -139,7 +140,13 @@ fn shrimp_runtime_default_param_value(name: &str) -> Option<f64> {
             Some(defaults.density_repro_half_suppression_per_l)
         }
         "tan_repro_threshold_mg_n_per_l" => Some(defaults.tan_repro_threshold_mg_n_per_l),
+        "tan_repro_full_suppression_mg_n_per_l" => {
+            Some(defaults.tan_repro_full_suppression_mg_n_per_l)
+        }
         "no2_repro_threshold_mg_n_per_l" => Some(defaults.no2_repro_threshold_mg_n_per_l),
+        "no2_repro_full_suppression_mg_n_per_l" => {
+            Some(defaults.no2_repro_full_suppression_mg_n_per_l)
+        }
         "egg_drop_temp_swing_c" => Some(defaults.egg_drop_temp_swing_c),
         "egg_drop_instability_threshold" => Some(defaults.egg_drop_instability_threshold),
         "egg_drop_max_probability" => Some(defaults.egg_drop_max_probability),
@@ -507,6 +514,8 @@ pub struct ShrimpPreset {
     #[serde(default = "default_shrimp_high_temp_repro_penalty_full")]
     pub high_temp_repro_penalty_full_c: f64,
     #[serde(default)]
+    pub low_temp_repro_ramp_width_c: Option<f64>,
+    #[serde(default)]
     pub body_nitrogen_mg_per_g_wet_mass: Option<f64>,
     #[serde(default)]
     pub body_carbon_mg_per_g_wet_mass: Option<f64>,
@@ -595,7 +604,11 @@ pub struct ShrimpPreset {
     #[serde(default)]
     pub tan_repro_threshold_mg_n_per_l: Option<f64>,
     #[serde(default)]
+    pub tan_repro_full_suppression_mg_n_per_l: Option<f64>,
+    #[serde(default)]
     pub no2_repro_threshold_mg_n_per_l: Option<f64>,
+    #[serde(default)]
+    pub no2_repro_full_suppression_mg_n_per_l: Option<f64>,
     #[serde(default)]
     pub egg_drop_temp_swing_c: Option<f64>,
     #[serde(default)]
@@ -753,6 +766,10 @@ impl ShrimpPreset {
             ),
             ("failed_molt_stress_blend", self.failed_molt_stress_blend),
             ("sub_adult_sensitivity", self.sub_adult_sensitivity),
+            (
+                "low_temp_repro_ramp_width_c",
+                self.low_temp_repro_ramp_width_c,
+            ),
             ("min_clutch_condition", self.min_clutch_condition),
             ("ca_min_mg_per_l", self.ca_min_mg_per_l),
             ("mg_min_mg_per_l", self.mg_min_mg_per_l),
@@ -848,8 +865,16 @@ impl ShrimpPreset {
                 self.tan_repro_threshold_mg_n_per_l,
             ),
             (
+                "tan_repro_full_suppression_mg_n_per_l",
+                self.tan_repro_full_suppression_mg_n_per_l,
+            ),
+            (
                 "no2_repro_threshold_mg_n_per_l",
                 self.no2_repro_threshold_mg_n_per_l,
+            ),
+            (
+                "no2_repro_full_suppression_mg_n_per_l",
+                self.no2_repro_full_suppression_mg_n_per_l,
             ),
             ("egg_drop_temp_swing_c", self.egg_drop_temp_swing_c),
             (
@@ -901,6 +926,10 @@ impl ShrimpPreset {
             ("juvenile_to_subadult_days", self.juvenile_to_subadult_days),
             ("subadult_to_adult_days", self.subadult_to_adult_days),
             ("base_molt_interval_days", self.base_molt_interval_days),
+            (
+                "low_temp_repro_ramp_width_c",
+                self.low_temp_repro_ramp_width_c,
+            ),
             ("ca_min_mg_per_l", self.ca_min_mg_per_l),
             ("mg_min_mg_per_l", self.mg_min_mg_per_l),
             ("molt_reserve_fraction", self.molt_reserve_fraction),
@@ -919,6 +948,14 @@ impl ShrimpPreset {
             (
                 "density_repro_half_suppression_per_l",
                 self.density_repro_half_suppression_per_l,
+            ),
+            (
+                "tan_repro_full_suppression_mg_n_per_l",
+                self.tan_repro_full_suppression_mg_n_per_l,
+            ),
+            (
+                "no2_repro_full_suppression_mg_n_per_l",
+                self.no2_repro_full_suppression_mg_n_per_l,
             ),
             ("egg_drop_temp_swing_c", self.egg_drop_temp_swing_c),
             ("egg_oxygen_reference_mg_l", self.egg_oxygen_reference_mg_l),
@@ -1098,6 +1135,28 @@ impl ShrimpPreset {
         if density_repro_threshold_per_l >= density_repro_half_suppression_per_l {
             return Err(format!(
                 "density_repro_threshold_per_l ({density_repro_threshold_per_l}) must be < density_repro_half_suppression_per_l ({density_repro_half_suppression_per_l})"
+            ));
+        }
+        let tan_repro_threshold_mg_n_per_l = self
+            .tan_repro_threshold_mg_n_per_l
+            .unwrap_or(ShrimpRuntimeParams::default().tan_repro_threshold_mg_n_per_l);
+        let tan_repro_full_suppression_mg_n_per_l = self
+            .tan_repro_full_suppression_mg_n_per_l
+            .unwrap_or(ShrimpRuntimeParams::default().tan_repro_full_suppression_mg_n_per_l);
+        if tan_repro_threshold_mg_n_per_l >= tan_repro_full_suppression_mg_n_per_l {
+            return Err(format!(
+                "tan_repro_threshold_mg_n_per_l ({tan_repro_threshold_mg_n_per_l}) must be < tan_repro_full_suppression_mg_n_per_l ({tan_repro_full_suppression_mg_n_per_l})"
+            ));
+        }
+        let no2_repro_threshold_mg_n_per_l = self
+            .no2_repro_threshold_mg_n_per_l
+            .unwrap_or(ShrimpRuntimeParams::default().no2_repro_threshold_mg_n_per_l);
+        let no2_repro_full_suppression_mg_n_per_l = self
+            .no2_repro_full_suppression_mg_n_per_l
+            .unwrap_or(ShrimpRuntimeParams::default().no2_repro_full_suppression_mg_n_per_l);
+        if no2_repro_threshold_mg_n_per_l >= no2_repro_full_suppression_mg_n_per_l {
+            return Err(format!(
+                "no2_repro_threshold_mg_n_per_l ({no2_repro_threshold_mg_n_per_l}) must be < no2_repro_full_suppression_mg_n_per_l ({no2_repro_full_suppression_mg_n_per_l})"
             ));
         }
         let min_clutch_condition = self

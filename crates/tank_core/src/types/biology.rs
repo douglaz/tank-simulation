@@ -815,6 +815,7 @@ impl Default for ShrimpRuntimeParams {
             juvenile_sensitivity: 1.5,
             high_temp_repro_penalty_start_c: 28.0,
             high_temp_repro_penalty_full_c: 33.0,
+            low_temp_repro_ramp_width_c: default_low_temp_repro_ramp_width_c(),
             body_nitrogen_mg_per_g_wet_mass: default_shrimp_body_nitrogen_mg_per_g_wet_mass(),
             body_carbon_mg_per_g_wet_mass: default_shrimp_body_carbon_mg_per_g_wet_mass(),
             juvenile_to_subadult_days: default_juvenile_to_subadult_days(),
@@ -864,7 +865,11 @@ impl Default for ShrimpRuntimeParams {
             density_repro_threshold_per_l: default_density_repro_threshold_per_l(),
             density_repro_half_suppression_per_l: default_density_repro_half_suppression_per_l(),
             tan_repro_threshold_mg_n_per_l: default_tan_repro_threshold_mg_n_per_l(),
+            tan_repro_full_suppression_mg_n_per_l:
+                default_tan_repro_full_suppression_mg_n_per_l(),
             no2_repro_threshold_mg_n_per_l: default_no2_repro_threshold_mg_n_per_l(),
+            no2_repro_full_suppression_mg_n_per_l:
+                default_no2_repro_full_suppression_mg_n_per_l(),
             egg_drop_temp_swing_c: default_egg_drop_temp_swing_c(),
             egg_drop_instability_threshold: default_egg_drop_instability_threshold(),
             egg_drop_max_probability: default_egg_drop_max_probability(),
@@ -946,6 +951,10 @@ fn default_failed_molt_stress_blend() -> f64 {
 
 fn default_sub_adult_sensitivity() -> f64 {
     1.2
+}
+
+fn default_low_temp_repro_ramp_width_c() -> f64 {
+    4.0
 }
 
 fn default_base_clutch_size() -> u32 {
@@ -1076,8 +1085,16 @@ fn default_tan_repro_threshold_mg_n_per_l() -> f64 {
     1.0
 }
 
+fn default_tan_repro_full_suppression_mg_n_per_l() -> f64 {
+    2.0
+}
+
 fn default_no2_repro_threshold_mg_n_per_l() -> f64 {
     0.5
+}
+
+fn default_no2_repro_full_suppression_mg_n_per_l() -> f64 {
+    1.0
 }
 
 fn default_egg_drop_temp_swing_c() -> f64 {

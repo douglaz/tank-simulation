@@ -368,6 +368,10 @@ fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), Si
         params.high_temp_repro_penalty_full_c,
     )?;
     check_positive(
+        "shrimp_params.low_temp_repro_ramp_width_c",
+        params.low_temp_repro_ramp_width_c,
+    )?;
+    check_positive(
         "shrimp_params.body_nitrogen_mg_per_g_wet_mass",
         params.body_nitrogen_mg_per_g_wet_mass,
     )?;
@@ -555,9 +559,29 @@ fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), Si
         "shrimp_params.tan_repro_threshold_mg_n_per_l",
         params.tan_repro_threshold_mg_n_per_l,
     )?;
+    check_positive(
+        "shrimp_params.tan_repro_full_suppression_mg_n_per_l",
+        params.tan_repro_full_suppression_mg_n_per_l,
+    )?;
+    check_strictly_increasing(
+        "shrimp_params.tan_repro_threshold_mg_n_per_l",
+        params.tan_repro_threshold_mg_n_per_l,
+        "shrimp_params.tan_repro_full_suppression_mg_n_per_l",
+        params.tan_repro_full_suppression_mg_n_per_l,
+    )?;
     check_non_negative(
         "shrimp_params.no2_repro_threshold_mg_n_per_l",
         params.no2_repro_threshold_mg_n_per_l,
+    )?;
+    check_positive(
+        "shrimp_params.no2_repro_full_suppression_mg_n_per_l",
+        params.no2_repro_full_suppression_mg_n_per_l,
+    )?;
+    check_strictly_increasing(
+        "shrimp_params.no2_repro_threshold_mg_n_per_l",
+        params.no2_repro_threshold_mg_n_per_l,
+        "shrimp_params.no2_repro_full_suppression_mg_n_per_l",
+        params.no2_repro_full_suppression_mg_n_per_l,
     )?;
     check_positive(
         "shrimp_params.egg_drop_temp_swing_c",

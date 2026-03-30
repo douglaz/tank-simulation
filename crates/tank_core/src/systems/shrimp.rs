@@ -1539,6 +1539,10 @@ pub(crate) fn dominant_repro_suppression_label(state: &TankState) -> &'static st
     }
 }
 
+const LOW_TEMP_REPRO_MIN_FACTOR: f64 = 0.1;
+const HIGH_TEMP_REPRO_SHOULDER_FACTOR: f64 = 0.5;
+const MIN_REPRO_SUPPRESSION_FACTOR: f64 = 0.05;
+
 /// Temperature factor for reproduction.
 /// Best 22-26 C, clearly worse by 30 C, near-zero by 33 C.
 fn temp_repro_factor(temp: f64, params: &ShrimpRuntimeParams) -> f64 {
@@ -1546,21 +1550,30 @@ fn temp_repro_factor(temp: f64, params: &ShrimpRuntimeParams) -> f64 {
     let opt_max = params.optimal_temp_max_c;
     let penalty_start = params.high_temp_repro_penalty_start_c;
     let penalty_full = params.high_temp_repro_penalty_full_c;
+    let cold_ramp_width = params.low_temp_repro_ramp_width_c.max(0.01);
 
-    if temp < opt_min - 4.0 {
-        0.1
+    if temp < opt_min - cold_ramp_width {
+        LOW_TEMP_REPRO_MIN_FACTOR
     } else if temp < opt_min {
-        0.1 + 0.9 * (temp - (opt_min - 4.0)) / 4.0
+        LOW_TEMP_REPRO_MIN_FACTOR
+            + (1.0 - LOW_TEMP_REPRO_MIN_FACTOR) * (temp - (opt_min - cold_ramp_width))
+                / cold_ramp_width
     } else if temp <= opt_max {
         1.0
     } else if temp <= penalty_start {
         let range = (penalty_start - opt_max).max(0.01);
-        1.0 - 0.5 * (temp - opt_max) / range
+        // Keep the warm-side curve anchored at fixed, interpretable factors for
+        // the first-pass model: 1.0 at the optimal edge, 0.5 at the warm-stress
+        // shoulder, and 0.05 beyond the full-penalty point.
+        1.0 - (1.0 - HIGH_TEMP_REPRO_SHOULDER_FACTOR) * (temp - opt_max) / range
     } else if temp <= penalty_full {
         let range = (penalty_full - penalty_start).max(0.01);
-        0.5 - 0.45 * (temp - penalty_start) / range
+        HIGH_TEMP_REPRO_SHOULDER_FACTOR
+            - (HIGH_TEMP_REPRO_SHOULDER_FACTOR - MIN_REPRO_SUPPRESSION_FACTOR)
+                * (temp - penalty_start)
+                / range
     } else {
-        0.05
+        MIN_REPRO_SUPPRESSION_FACTOR
     }
 }
 
@@ -1620,7 +1633,10 @@ fn tan_repro_factor(tan_mg_n_per_l: f64, params: &ShrimpRuntimeParams) -> f64 {
         1.0
     } else {
         let excess = tan_mg_n_per_l - params.tan_repro_threshold_mg_n_per_l;
-        (1.0 - excess / (params.tan_repro_threshold_mg_n_per_l.max(0.01) * 2.0)).clamp(0.05, 1.0)
+        let span = (params.tan_repro_full_suppression_mg_n_per_l
+            - params.tan_repro_threshold_mg_n_per_l)
+            .max(0.01);
+        (1.0 - excess / span).clamp(MIN_REPRO_SUPPRESSION_FACTOR, 1.0)
     }
 }
 
@@ -1631,18 +1647,27 @@ fn no2_repro_factor(no2_mg_n_per_l: f64, params: &ShrimpRuntimeParams) -> f64 {
         1.0
     } else {
         let excess = no2_mg_n_per_l - params.no2_repro_threshold_mg_n_per_l;
-        (1.0 - excess / (params.no2_repro_threshold_mg_n_per_l.max(0.01) * 2.0)).clamp(0.05, 1.0)
+        let span = (params.no2_repro_full_suppression_mg_n_per_l
+            - params.no2_repro_threshold_mg_n_per_l)
+            .max(0.01);
+        (1.0 - excess / span).clamp(MIN_REPRO_SUPPRESSION_FACTOR, 1.0)
     }
 }
 
 /// GH/mineral factor for spawning and condition.
+/// Reuses the shared molt mineral floor/divisor so GH penalties stay aligned
+/// across molt and reproduction tuning.
 fn gh_mineral_factor(gh_d: f64, params: &ShrimpRuntimeParams) -> f64 {
+    let mineral_factor_floor = params.molt_mineral_factor_floor.clamp(0.0, 1.0);
+    let gh_excess_penalty_divisor = params.molt_gh_excess_penalty_divisor.max(0.01);
+
     if gh_d >= params.gh_min_d && gh_d <= params.gh_max_d {
         1.0
     } else if gh_d < params.gh_min_d {
-        (gh_d / params.gh_min_d.max(0.01)).clamp(0.3, 1.0)
+        (gh_d / params.gh_min_d.max(0.01)).clamp(mineral_factor_floor, 1.0)
     } else {
-        (1.0 - (gh_d - params.gh_max_d) / 10.0).clamp(0.3, 1.0)
+        (1.0 - (gh_d - params.gh_max_d) / gh_excess_penalty_divisor)
+            .clamp(mineral_factor_floor, 1.0)
     }
 }
 
