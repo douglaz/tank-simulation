@@ -33,6 +33,7 @@ fn default_overrides() -> StartupOverrides {
         heater_preset: Some(StartupHeaterPreset::Celsius25),
         aeration_enabled: Some(false),
         initial_adult_shrimp_count: Some(10),
+        ..StartupOverrides::default()
     }
 }
 

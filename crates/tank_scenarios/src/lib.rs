@@ -7,6 +7,39 @@ use tank_core::{
 };
 use tank_data::{load_scenario, ScenarioPreset, ShrimpPreset};
 
+// ---------------------------------------------------------------------------
+// Geometry-aware scaling constants
+// ---------------------------------------------------------------------------
+// These named constants define how hardware and biomass defaults scale with
+// tank geometry. Each formula is documented inline. Scenario-authored overrides
+// always win over auto-scaled values.
+
+/// Filter flow rate: 10 turnovers of total volume per hour.
+/// Standard aquarium guideline is 5–10×; we use the upper end for adequate
+/// circulation in planted shrimp tanks.
+pub const FILTER_FLOW_TURNOVERS_PER_HOUR: f64 = 10.0;
+
+/// Filter biological media surface area: 200 cm² per liter of tank volume.
+/// Proportional to bioload capacity — a larger tank needs proportionally more
+/// biological filtration surface for equivalent nitrifier colonization per liter.
+pub const FILTER_MEDIA_CM2_PER_LITER: f64 = 200.0;
+
+/// Heater maximum wattage: 0.75 W per liter.
+/// Standard recommendation is 0.5–1.0 W/L depending on ambient-to-target delta;
+/// 0.75 balances heating speed against overshoot risk.
+pub const HEATER_WATTS_PER_LITER: f64 = 0.75;
+
+/// Initial plant biomass per guild: 6.0 g per 1000 cm² of substrate footprint.
+/// Within the "moderately planted" guideline of 5–15 g/1000 cm². Total initial
+/// plant mass equals this density × footprint / 1000 × number of guilds.
+pub const PLANT_BIOMASS_G_PER_1000_CM2_FOOTPRINT: f64 = 6.0;
+
+/// Conservative startup shrimp density for auto-stocking mode: 0.2 adults per liter.
+/// Well below the mature colony range of 2–5/L, calibrated to current happy-path
+/// scenarios (100 L → ~20 adults, 10 L → ~2 adults). Only used when
+/// `auto_stock_shrimp` is enabled and no explicit count is provided.
+pub const AUTO_STOCK_ADULTS_PER_LITER: f64 = 0.2;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ScenarioGeometryOverrides {
     pub size_scale: f64,
@@ -198,6 +231,10 @@ pub struct StartupOverrides {
     pub heater_preset: Option<StartupHeaterPreset>,
     pub aeration_enabled: Option<bool>,
     pub initial_adult_shrimp_count: Option<u32>,
+    /// When true and `initial_adult_shrimp_count` is `None`, auto-stock using
+    /// a conservative density of [`AUTO_STOCK_ADULTS_PER_LITER`] adults per liter.
+    /// Explicit counts always take priority over auto-stocking.
+    pub auto_stock_shrimp: bool,
 }
 
 pub fn default_scenario_ids() -> &'static [&'static str] {
@@ -318,6 +355,7 @@ pub fn startup_defaults_for_scenario(
         heater_preset: Some(heater_preset),
         aeration_enabled: Some(aeration_enabled),
         initial_adult_shrimp_count: Some(initial_adult_shrimp_count),
+        auto_stock_shrimp: false,
     })
 }
 
@@ -457,6 +495,35 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
     }
 }
 
+/// Scales hardware defaults to match the current tank geometry.
+///
+/// Called once during materialization so that hardware is proportional to tank
+/// size before any explicit overrides are applied. Explicit scenario overrides
+/// in [`apply_startup_overrides`] always take priority.
+///
+/// **Scaling rules applied:**
+/// - Filter flow: `volume_l × FILTER_FLOW_TURNOVERS_PER_HOUR` (10 turnovers/hr)
+/// - Filter media area: `volume_l × FILTER_MEDIA_CM2_PER_LITER` (200 cm²/L)
+/// - Heater max watts: `volume_l × HEATER_WATTS_PER_LITER` (0.75 W/L)
+///
+/// Properties that do **not** scale automatically:
+/// - Light intensity/photoperiod (fixture property, independent of tank size)
+/// - Aeration intensity (setting property; physical effect already scales via
+///   the habitat registry's surface-area calculations)
+/// - Substrate depth (preset property, independent of tank footprint)
+fn scale_hardware_to_geometry(state: &mut TankState) {
+    let volume_l = state.geometry.gross_water_volume_l();
+
+    // Filter: flow and media area scale with volume
+    if state.hardware.filter.enabled {
+        state.hardware.filter.flow_lph = volume_l * FILTER_FLOW_TURNOVERS_PER_HOUR;
+        state.hardware.filter.media_area_cm2 = volume_l * FILTER_MEDIA_CM2_PER_LITER;
+    }
+
+    // Heater: max wattage scales with volume (thermal mass)
+    state.hardware.heater.max_watts = volume_l * HEATER_WATTS_PER_LITER;
+}
+
 /// Materializes a scenario preset into a fully resolved `TankState`.
 ///
 /// - Geometry comes from the scenario.
@@ -516,8 +583,9 @@ fn materialize_scenario(
     let process_preset = tank_data::load_process_params(&scenario.process_params_id)?;
     let process_params = process_preset_to_params(&process_preset);
 
-    // Plant guilds
-    let plant_guilds = build_plant_guilds(&scenario.plant_ids, &substrate_layers, true)?;
+    // Plant guilds — biomass scales with substrate footprint
+    let plant_guilds =
+        build_plant_guilds(&scenario.plant_ids, &substrate_layers, true, geometry.footprint_area_cm2())?;
 
     // Shrimp species parameters
     let shrimp_preset = tank_data::load_shrimp(&scenario.shrimp_profile_id)?;
@@ -538,6 +606,7 @@ fn materialize_scenario(
         notes: Some(scenario.name),
     };
     state.geometry = geometry;
+    scale_hardware_to_geometry(&mut state);
     state.environment = environment;
     state.water = water;
     state.substrate_layers = substrate_layers;
@@ -625,6 +694,7 @@ fn apply_startup_overrides(
         heater_preset,
         aeration_enabled,
         initial_adult_shrimp_count,
+        auto_stock_shrimp,
     } = overrides;
 
     let effective_source_profile =
@@ -663,7 +733,12 @@ fn apply_startup_overrides(
                 })
                 .collect::<Vec<_>>()
         };
-        state.plant_guilds = build_plant_guilds(&plant_ids, &state.substrate_layers, false)?;
+        state.plant_guilds = build_plant_guilds(
+            &plant_ids,
+            &state.substrate_layers,
+            false,
+            state.geometry.footprint_area_cm2(),
+        )?;
     }
 
     if let Some(profile) = effective_source_profile {
@@ -674,8 +749,12 @@ fn apply_startup_overrides(
     if let Some(filter_enabled) = filter_enabled {
         state.hardware.filter.enabled = filter_enabled;
         if filter_enabled {
+            // Geometry-scaled flow was already set by scale_hardware_to_geometry();
+            // only override if flow is somehow zero (e.g. filter was previously disabled).
             if state.hardware.filter.flow_lph <= 0.0 {
-                state.hardware.filter.flow_lph = 200.0;
+                let volume_l = state.geometry.gross_water_volume_l();
+                state.hardware.filter.flow_lph = volume_l * FILTER_FLOW_TURNOVERS_PER_HOUR;
+                state.hardware.filter.media_area_cm2 = volume_l * FILTER_MEDIA_CM2_PER_LITER;
             }
         } else {
             state.hardware.filter.flow_lph = 0.0;
@@ -707,7 +786,13 @@ fn apply_startup_overrides(
     }
 
     if let Some(initial_adult_shrimp_count) = initial_adult_shrimp_count {
+        // Explicit scenario-authored count always wins.
         state.animal = AnimalState::with_adults(initial_adult_shrimp_count);
+    } else if auto_stock_shrimp {
+        // Conservative auto-stocking based on tank volume.
+        let volume_l = state.geometry.gross_water_volume_l();
+        let count = (volume_l * AUTO_STOCK_ADULTS_PER_LITER).round().max(1.0) as u32;
+        state.animal = AnimalState::with_adults(count);
     }
 
     // Reseed stability baselines so that overridden water chemistry is not
@@ -788,6 +873,7 @@ fn build_plant_guilds(
     plant_ids: &[String],
     substrate_layers: &[SubstrateLayerState],
     include_default_when_empty: bool,
+    footprint_cm2: f64,
 ) -> Result<Vec<PlantGuildState>, tank_data::PresetError> {
     let mut plant_guilds = Vec::new();
     for plant_id in plant_ids {
@@ -803,9 +889,11 @@ fn build_plant_guilds(
                 });
             }
         };
+        let biomass_g =
+            (footprint_cm2 * PLANT_BIOMASS_G_PER_1000_CM2_FOOTPRINT / 1000.0).max(1.0);
         plant_guilds.push(PlantGuildState {
             guild,
-            biomass_g: 5.0,
+            biomass_g,
             health_index: 0.8,
             crowding_index: 0.1,
             habitat_index: if guild == PlantGuild::RootFeedingRosette {

@@ -20,6 +20,7 @@ fn startup_overrides_apply_heater_and_initial_shrimp() {
             heater_preset: Some(StartupHeaterPreset::Celsius26),
             aeration_enabled: Some(false),
             initial_adult_shrimp_count: Some(10),
+            ..StartupOverrides::default()
         },
     )
     .expect("startup overrides should materialize");
@@ -35,15 +36,8 @@ fn startup_overrides_replace_source_water_profile() {
         SimSeed(502),
         "nano_cycle",
         StartupOverrides {
-            geometry: tank_scenarios::ScenarioGeometryOverrides::default(),
             source_water_profile_id: Some("ro_like".to_string()),
-            substrate_preset: None,
-            plant_selection: None,
-            filter_enabled: None,
-            light_preset: None,
-            heater_preset: None,
-            aeration_enabled: None,
-            initial_adult_shrimp_count: None,
+            ..StartupOverrides::default()
         },
     )
     .expect("source water override should materialize");
@@ -112,6 +106,7 @@ fn startup_overrides_keep_habitat_registry_current() {
             aeration_enabled: Some(true),
             source_water_profile_id: Some("hard_shrimp".to_string()),
             initial_adult_shrimp_count: Some(12),
+            ..StartupOverrides::default()
         },
     )
     .expect("startup overrides should materialize");

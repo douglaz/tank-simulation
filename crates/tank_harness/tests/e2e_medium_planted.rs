@@ -13,10 +13,6 @@ use tank_scenarios::{
 #[test]
 fn medium_planted_weekly_maintenance_envelope() -> Result<(), Box<dyn std::error::Error>> {
     let overrides = StartupOverrides {
-        geometry: ScenarioGeometryOverrides {
-            size_scale: 1.0,
-            fill_ratio: 1.0,
-        },
         source_water_profile_id: Some("moderate".to_string()),
         substrate_preset: Some(StartupSubstratePreset::ActivePlanted),
         plant_selection: Some(StartupPlantSelection::BothGuilds),
@@ -25,6 +21,7 @@ fn medium_planted_weekly_maintenance_envelope() -> Result<(), Box<dyn std::error
         heater_preset: Some(StartupHeaterPreset::Celsius25),
         aeration_enabled: Some(false),
         initial_adult_shrimp_count: Some(10),
+        ..StartupOverrides::default()
     };
 
     let mut run = HarnessRun::with_overrides(SimSeed(42), "medium_planted", overrides)?

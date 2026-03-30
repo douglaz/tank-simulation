@@ -26,6 +26,7 @@ fn nano_neglect_artifacts_on_violation() -> Result<(), Box<dyn std::error::Error
         heater_preset: Some(StartupHeaterPreset::Celsius25),
         aeration_enabled: Some(false),
         initial_adult_shrimp_count: Some(5),
+        ..StartupOverrides::default()
     };
 
     let mut run = HarnessRun::with_overrides(SimSeed(77), "nano_cycle", overrides)?

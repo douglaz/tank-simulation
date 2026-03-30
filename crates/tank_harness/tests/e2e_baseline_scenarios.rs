@@ -39,6 +39,7 @@ fn medium_planted_shrimp_husbandry_overrides(initial_adult_shrimp_count: u32) ->
         heater_preset: Some(StartupHeaterPreset::Celsius25),
         aeration_enabled: Some(true),
         initial_adult_shrimp_count: Some(initial_adult_shrimp_count),
+        ..StartupOverrides::default()
     }
 }
 
@@ -1031,6 +1032,7 @@ fn controlled_ideal_reproduction_path_still_hatches() -> Result<(), Box<dyn std:
         heater_preset: Some(StartupHeaterPreset::Celsius25),
         aeration_enabled: Some(true),
         initial_adult_shrimp_count: Some(10),
+        ..StartupOverrides::default()
     };
     let mut state =
         tank_scenarios::seeded_state_with_full_overrides(SimSeed(42), "medium_planted", overrides)?;

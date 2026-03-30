@@ -389,10 +389,6 @@ fn test_source_water_ph_story() -> Result<(), SimError> {
 
     // Run nano_cycle scenario twice: once with soft_acidic, once with hard_shrimp
     let soft_overrides = StartupOverrides {
-        geometry: ScenarioGeometryOverrides {
-            size_scale: 1.0,
-            fill_ratio: 1.0,
-        },
         source_water_profile_id: Some("soft_acidic".to_string()),
         substrate_preset: Some(StartupSubstratePreset::InertSand),
         plant_selection: Some(StartupPlantSelection::FastStemOnly),
@@ -401,6 +397,7 @@ fn test_source_water_ph_story() -> Result<(), SimError> {
         heater_preset: Some(StartupHeaterPreset::Celsius25),
         aeration_enabled: Some(false),
         initial_adult_shrimp_count: Some(0),
+        ..StartupOverrides::default()
     };
 
     let hard_overrides = StartupOverrides {
