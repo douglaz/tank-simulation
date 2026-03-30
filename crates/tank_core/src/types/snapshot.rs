@@ -3,7 +3,8 @@ use serde_json::{Map, Value};
 
 use super::{PlantGuild, SimEvent, TankState};
 use crate::systems::{
-    chemistry::compute_nh3_mg_n_per_l, shrimp::compute_effective_nitrite_hazard,
+    chemistry::compute_nh3_mg_n_per_l,
+    shrimp::{compute_effective_nitrite_hazard, dominant_repro_suppression_label},
     temperature::do_sat_mg_l,
 };
 
@@ -335,7 +336,7 @@ impl TankSnapshot {
             shrimp_condition_index: state.animal.population_condition_index(),
             shrimp_molt_stress_index: state.animal.molt_stress_index,
             shrimp_reproductive_readiness: state.animal.reproductive_readiness_index,
-            repro_dominant_suppression: dominant_repro_suppression(state, volume_l),
+            repro_dominant_suppression: dominant_repro_suppression_label(state).to_string(),
             microfauna_population_index: state.microfauna.population_index,
             microfauna_grazing_pressure_index: state.microfauna.grazing_pressure_index,
             total_plant_biomass_g: state.plant_guilds.iter().map(|plant| plant.biomass_g).sum(),
@@ -366,68 +367,6 @@ impl TankSnapshot {
             last_heater_output_w: state.hardware.heater.last_output_w,
             recent_events,
         }
-    }
-}
-
-/// Identify the single factor most responsible for suppressing reproduction.
-/// Compares each factor's deviation from 1.0 and returns the name of the
-/// lowest one, or "none" when all factors are above 0.8.
-fn dominant_repro_suppression(state: &TankState, volume_l: f64) -> String {
-    let params = &state.shrimp_params;
-    let temp = state.water.temperature_c;
-    let chemistry = state.concentrations();
-
-    // Inline factor computations (mirrors shrimp system logic)
-    let f_temp = crate::systems::shrimp::temp_repro_factor_pub(temp, params);
-    let f_condition = state.animal.adult.condition_index;
-    let f_stability = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
-    let f_density = if volume_l > f64::EPSILON && state.animal.total_count() > 0 {
-        let density = f64::from(state.animal.total_count()) / volume_l;
-        if density <= params.density_repro_threshold_per_l {
-            1.0
-        } else {
-            let excess = density - params.density_repro_threshold_per_l;
-            let half = (params.density_repro_half_suppression_per_l
-                - params.density_repro_threshold_per_l)
-                .max(0.01);
-            (1.0 / (1.0 + excess / half)).clamp(0.05, 1.0)
-        }
-    } else {
-        1.0
-    };
-    let tan = chemistry.tan_mg_n_per_l();
-    let f_chemistry = if tan > params.tan_repro_threshold_mg_n_per_l {
-        let excess = tan - params.tan_repro_threshold_mg_n_per_l;
-        (1.0 - excess / (params.tan_repro_threshold_mg_n_per_l.max(0.01) * 2.0)).clamp(0.05, 1.0)
-    } else {
-        1.0
-    }
-    .min(
-        if chemistry.nitrite_mg_n_per_l() > params.no2_repro_threshold_mg_n_per_l {
-            let excess = chemistry.nitrite_mg_n_per_l() - params.no2_repro_threshold_mg_n_per_l;
-            (1.0 - excess / (params.no2_repro_threshold_mg_n_per_l.max(0.01) * 2.0))
-                .clamp(0.05, 1.0)
-        } else {
-            1.0
-        },
-    );
-
-    let factors: [(&str, f64); 5] = [
-        ("temperature", f_temp),
-        ("condition", f_condition),
-        ("stability", f_stability),
-        ("density", f_density),
-        ("chemistry", f_chemistry),
-    ];
-
-    let (name, val) = factors
-        .iter()
-        .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
-        .unwrap();
-    if *val < 0.8 {
-        name.to_string()
-    } else {
-        "none".to_string()
     }
 }
 

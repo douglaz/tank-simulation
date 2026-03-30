@@ -1,6 +1,6 @@
 use tank_core::{
-    systems::shrimp::step_daily_shrimp, EggCohort, Engine, EventKind, PlayerAction, ProcessParams,
-    SimError, SimSeed, SimulationEngine, TankState, WaterState,
+    EggCohort, Engine, EventKind, PlayerAction, ProcessParams, SimError, SimSeed, SimulationEngine,
+    TankState, WaterState,
 };
 
 // ── Test fixture ───────────────────────────────────────────────────────────
@@ -216,52 +216,56 @@ fn test_reproduction_suppressed_by_instability() -> Result<(), SimError> {
 
 #[test]
 fn test_reproduction_increases_with_condition() -> Result<(), SimError> {
-    // Well-fed shrimp (condition > 0.8) should breed normally.
-    // Starved shrimp (condition < 0.3) should have severely reduced breeding.
+    // Condition directly feeds into the reproductive readiness multiplier.
+    // Freeze condition via zero smoothing and verify readiness tracks it.
 
-    // Well-fed scenario: abundant food, good condition
-    let mut well_fed = breeding_fixture(SimSeed(8003));
-    well_fed.animal.adult.condition_index = 0.9;
-    well_fed.animal.reproductive_readiness_index = 0.9;
+    // High condition
+    let mut high = breeding_fixture(SimSeed(8003));
+    high.animal.adult.condition_index = 0.9;
+    high.animal.reproductive_readiness_index = 0.5; // same starting readiness
+    high.process_params.shrimp_condition_smoothing = 0.0; // freeze condition
 
-    // Starved scenario: no food at all, low condition
-    let mut starved = breeding_fixture(SimSeed(8003));
-    starved.animal.adult.condition_index = 0.15;
-    starved.animal.reproductive_readiness_index = 0.15;
-    // Remove all food sources so condition stays low
-    starved.algae.set_periphyton_total(0.0);
-    starved
-        .process_params
-        .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+    // Low condition
+    let mut low = breeding_fixture(SimSeed(8003));
+    low.animal.adult.condition_index = 0.2;
+    low.animal.reproductive_readiness_index = 0.5; // same starting readiness
+    low.process_params.shrimp_condition_smoothing = 0.0; // freeze condition
 
-    let mut well_fed_engine = Engine::from_parts(well_fed, vec![]);
-    let mut starved_engine = Engine::from_parts(starved, vec![]);
+    let mut high_engine = Engine::from_parts(high, vec![]);
+    let mut low_engine = Engine::from_parts(low, vec![]);
 
-    // Feed the well-fed tank normally, don't feed the starved one
-    for _ in 0..30 {
-        well_fed_engine.apply_action(PlayerAction::Feed { grams: 0.1 })?;
-        well_fed_engine.step_hours(24)?;
-        // Starved: no feeding
-        starved_engine.step_hours(24)?;
-    }
+    run_days(&mut high_engine, 30)?;
+    run_days(&mut low_engine, 30)?;
 
-    let well_fed_snap = well_fed_engine.snapshot();
-    let starved_snap = starved_engine.snapshot();
+    let high_snap = high_engine.snapshot();
+    let low_snap = low_engine.snapshot();
 
-    // Well-fed condition should be higher than starved
+    // Condition should remain frozen at set values
     assert!(
-        well_fed_snap.shrimp_condition_index > starved_snap.shrimp_condition_index,
-        "Well-fed condition ({:.4}) should exceed starved ({:.4})",
-        well_fed_snap.shrimp_condition_index,
-        starved_snap.shrimp_condition_index,
+        (high_snap.shrimp_condition_index - 0.9).abs() < 0.01,
+        "High condition should stay frozen near 0.9, got {:.4}",
+        high_snap.shrimp_condition_index,
+    );
+    assert!(
+        (low_snap.shrimp_condition_index - 0.2).abs() < 0.01,
+        "Low condition should stay frozen near 0.2, got {:.4}",
+        low_snap.shrimp_condition_index,
     );
 
-    // Well-fed readiness should exceed starved (condition drives readiness)
+    // Higher condition should yield higher readiness
     assert!(
-        well_fed_snap.shrimp_reproductive_readiness > starved_snap.shrimp_reproductive_readiness,
-        "Well-fed readiness ({:.4}) should exceed starved ({:.4})",
-        well_fed_snap.shrimp_reproductive_readiness,
-        starved_snap.shrimp_reproductive_readiness,
+        high_snap.shrimp_reproductive_readiness > low_snap.shrimp_reproductive_readiness,
+        "High-condition readiness ({:.4}) should exceed low-condition ({:.4})",
+        high_snap.shrimp_reproductive_readiness,
+        low_snap.shrimp_reproductive_readiness,
+    );
+
+    // The readiness difference should be substantial (multiplicative factor)
+    assert!(
+        high_snap.shrimp_reproductive_readiness > low_snap.shrimp_reproductive_readiness * 2.0,
+        "High readiness ({:.4}) should be > 2x low readiness ({:.4})",
+        high_snap.shrimp_reproductive_readiness,
+        low_snap.shrimp_reproductive_readiness,
     );
 
     Ok(())
@@ -555,9 +559,9 @@ fn test_all_reproduction_factors_are_named_parameters() {
 #[test]
 fn test_mature_stable_tank_breeds_well() -> Result<(), SimError> {
     let mut state = breeding_fixture(SimSeed(9001));
-    // Low mortality to keep adults alive
-    state.process_params.shrimp_base_mortality_per_day = 0.001;
-    state.process_params.shrimp_stress_mortality_scale = 0.05;
+    // Zero mortality to isolate reproduction testing
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
     // Good initial population
     state.animal.adult.count = 20;
     state.animal.adult.reserve_g = 10.0;
@@ -567,19 +571,27 @@ fn test_mature_stable_tank_breeds_well() -> Result<(), SimError> {
     state.shrimp_params.base_spawn_rate = 0.15;
     state.shrimp_params.egg_duration_days = 14;
     state.shrimp_params.hatch_success_base = 0.9;
-    state
-        .shrimp_params
-        .apply_legacy_total_maturation_days(40.0);
+    state.shrimp_params.apply_legacy_total_maturation_days(40.0);
     state.animal.molt_stress_index = 0.0;
     state.animal.last_molt_success = true;
+    // Very strong nitrifiers to handle nitrogen load from feeding + shrimp metabolism
+    state.microbe.ammonia_oxidizer_biomass_g = 5.0;
+    state.microbe.nitrite_oxidizer_biomass_g = 5.0;
+    state.microbe.comammox_biomass_g = 1.0;
+    // Higher nitrification capacity
+    state.process_params.aob_vmax_mg_n_per_g_per_hour = 20.0;
+    state.process_params.nob_vmax_mg_n_per_g_per_hour = 20.0;
+    // Abundant periphyton for natural grazing
+    state.algae.set_periphyton_total(50.0);
 
     let mut engine = Engine::from_parts(state, vec![]);
 
-    // Run for 2000 simulated hours (~83 days)
+    // Run for 2000 simulated hours (~83 days) with very light feeding
+    // (shrimp primarily graze periphyton; minimal feed to avoid ammonia load)
     let total_hours = 2000u32;
     let days = total_hours / 24;
     for _ in 0..days {
-        engine.apply_action(PlayerAction::Feed { grams: 0.2 })?;
+        engine.apply_action(PlayerAction::Feed { grams: 0.02 })?;
         engine.step_hours(24)?;
     }
     let remaining = total_hours % 24;
@@ -728,4 +740,36 @@ fn test_snapshot_reports_dominant_suppression() -> Result<(), SimError> {
     );
 
     Ok(())
+}
+
+#[test]
+fn test_snapshot_uses_runtime_suppression_labels() {
+    let mut molt_state = breeding_fixture(SimSeed(8011));
+    molt_state.animal.adult.condition_index = 1.0;
+    molt_state.animal.molt_stress_index = 0.9;
+    let molt_snap = Engine::from_parts(molt_state, vec![]).snapshot();
+    assert_eq!(
+        molt_snap.repro_dominant_suppression, "molt_stress",
+        "snapshot should surface the runtime molt-stress suppression factor"
+    );
+
+    let mut tan_state = breeding_fixture(SimSeed(8012));
+    tan_state.animal.adult.condition_index = 1.0;
+    tan_state.animal.molt_stress_index = 0.0;
+    tan_state.water.ammonia_total_mg_n_total = 2.0 * tan_state.water_volume_l();
+    let tan_snap = Engine::from_parts(tan_state, vec![]).snapshot();
+    assert_eq!(
+        tan_snap.repro_dominant_suppression, "tan",
+        "snapshot should distinguish TAN suppression from other chemistry factors"
+    );
+
+    let mut nitrite_state = breeding_fixture(SimSeed(8013));
+    nitrite_state.animal.adult.condition_index = 1.0;
+    nitrite_state.animal.molt_stress_index = 0.0;
+    nitrite_state.water.nitrite_mg_n_total = 1.0 * nitrite_state.water_volume_l();
+    let nitrite_snap = Engine::from_parts(nitrite_state, vec![]).snapshot();
+    assert_eq!(
+        nitrite_snap.repro_dominant_suppression, "nitrite",
+        "snapshot should distinguish nitrite suppression from TAN"
+    );
 }

@@ -449,19 +449,21 @@ fn update_molt_stress(state: &mut TankState) {
     let mg_mg_per_l = chemistry.magnesium_mg_per_l();
     let params = &state.shrimp_params;
     let gh_min_d = params.gh_min_d.max(0.01);
+    let ca_min_mg_per_l = params.ca_min_mg_per_l.max(0.01);
+    let mg_min_mg_per_l = params.mg_min_mg_per_l.max(0.01);
 
     let gh_stress = if gh_d < params.gh_min_d {
         (params.gh_min_d - gh_d) / gh_min_d
     } else {
         0.0
     };
-    let ca_stress = if ca_mg_per_l < params.ca_min_mg_per_l {
-        (params.ca_min_mg_per_l - ca_mg_per_l) / params.ca_min_mg_per_l
+    let ca_stress = if params.ca_min_mg_per_l > 0.0 && ca_mg_per_l < params.ca_min_mg_per_l {
+        (params.ca_min_mg_per_l - ca_mg_per_l) / ca_min_mg_per_l
     } else {
         0.0
     };
-    let mg_stress = if mg_mg_per_l < params.mg_min_mg_per_l {
-        (params.mg_min_mg_per_l - mg_mg_per_l) / params.mg_min_mg_per_l
+    let mg_stress = if params.mg_min_mg_per_l > 0.0 && mg_mg_per_l < params.mg_min_mg_per_l {
+        (params.mg_min_mg_per_l - mg_mg_per_l) / mg_min_mg_per_l
     } else {
         0.0
     };
@@ -668,21 +670,7 @@ fn molt_cycle(state: &mut TankState) {
 }
 
 fn update_reproductive_readiness(state: &mut TankState) {
-    let temp = state.water.temperature_c;
-    let params = &state.shrimp_params;
-    let chemistry = state.concentrations();
-    let volume_l = chemistry.volume_l();
-
-    let f_temp = temp_repro_factor(temp, params);
-    let f_condition = state.animal.adult.condition_index;
-    let f_stability = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
-    let f_molt = (1.0 - state.animal.molt_stress_index).clamp(0.0, 1.0);
-    let f_density = density_repro_factor(state.animal.total_count(), volume_l, params);
-    let f_tan = tan_repro_factor(chemistry.tan_mg_n_per_l(), params);
-    let f_no2 = no2_repro_factor(chemistry.nitrite_mg_n_per_l(), params);
-
-    let target =
-        (f_temp * f_condition * f_stability * f_molt * f_density * f_tan * f_no2).clamp(0.0, 1.0);
+    let target = reproductive_readiness_target(state);
 
     state.animal.reproductive_readiness_index +=
         0.1 * (target - state.animal.reproductive_readiness_index);
@@ -758,7 +746,7 @@ fn egg_dropping(state: &mut TankState) {
     let drop_prob = if instability > params.egg_drop_instability_threshold {
         ((instability - params.egg_drop_instability_threshold)
             / (1.0 - params.egg_drop_instability_threshold).max(0.01))
-            .clamp(0.0, 0.6)
+        .clamp(0.0, 0.6)
     } else {
         0.0
     };
@@ -1411,7 +1399,60 @@ fn reset_hourly_accumulators(state: &mut TankState) {
 
 // ── Factor functions ────────────────────────────────────────────────────────
 
-/// Public accessor for the temperature reproduction factor (used by snapshot).
+fn reproductive_readiness_factors(state: &TankState) -> [(&'static str, f64); 7] {
+    let chemistry = state.concentrations();
+    let params = &state.shrimp_params;
+
+    [
+        (
+            "temperature",
+            temp_repro_factor(state.water.temperature_c, params),
+        ),
+        ("condition", state.animal.adult.condition_index),
+        (
+            "stability",
+            (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0),
+        ),
+        (
+            "molt_stress",
+            (1.0 - state.animal.molt_stress_index).clamp(0.0, 1.0),
+        ),
+        (
+            "density",
+            density_repro_factor(state.animal.total_count(), chemistry.volume_l(), params),
+        ),
+        ("tan", tan_repro_factor(chemistry.tan_mg_n_per_l(), params)),
+        (
+            "nitrite",
+            no2_repro_factor(chemistry.nitrite_mg_n_per_l(), params),
+        ),
+    ]
+}
+
+fn reproductive_readiness_target(state: &TankState) -> f64 {
+    reproductive_readiness_factors(state)
+        .iter()
+        .map(|(_, factor)| *factor)
+        .product::<f64>()
+        .clamp(0.0, 1.0)
+}
+
+/// Keep snapshot diagnostics and runtime readiness updates on the same factor set.
+pub(crate) fn dominant_repro_suppression_label(state: &TankState) -> &'static str {
+    let (label, factor) = reproductive_readiness_factors(state)
+        .iter()
+        .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        .copied()
+        .expect("reproductive factor list is non-empty");
+
+    if factor < 0.8 {
+        label
+    } else {
+        "none"
+    }
+}
+
+/// Public accessor for the temperature reproduction factor.
 pub fn temp_repro_factor_pub(temp: f64, params: &ShrimpRuntimeParams) -> f64 {
     temp_repro_factor(temp, params)
 }
@@ -1546,6 +1587,8 @@ pub fn molt_mineral_modifier(
     params: &ShrimpRuntimeParams,
 ) -> f64 {
     let gh_min_d = params.gh_min_d.max(0.01);
+    let ca_min_mg_per_l = params.ca_min_mg_per_l.max(0.01);
+    let mg_min_mg_per_l = params.mg_min_mg_per_l.max(0.01);
     let gh_factor = if gh_d >= params.gh_min_d && gh_d <= params.gh_max_d {
         1.0
     } else if gh_d < params.gh_min_d {
@@ -1554,8 +1597,16 @@ pub fn molt_mineral_modifier(
     } else {
         (1.0 - (gh_d - params.gh_max_d) / 10.0).clamp(0.3, 1.0)
     };
-    let ca_factor = (ca_mg_per_l / params.ca_min_mg_per_l).clamp(0.3, 1.0);
-    let mg_factor = (mg_mg_per_l / params.mg_min_mg_per_l).clamp(0.3, 1.0);
+    let ca_factor = if params.ca_min_mg_per_l <= 0.0 {
+        1.0
+    } else {
+        (ca_mg_per_l / ca_min_mg_per_l).clamp(0.3, 1.0)
+    };
+    let mg_factor = if params.mg_min_mg_per_l <= 0.0 {
+        1.0
+    } else {
+        (mg_mg_per_l / mg_min_mg_per_l).clamp(0.3, 1.0)
+    };
 
     (gh_factor * ca_factor.sqrt() * mg_factor.sqrt()).clamp(0.0, 1.0)
 }

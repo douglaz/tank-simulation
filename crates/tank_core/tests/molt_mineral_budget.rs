@@ -345,6 +345,39 @@ fn test_zero_gh_min_parameter_uses_defensive_guard() {
 }
 
 #[test]
+fn test_zero_ca_and_mg_min_parameters_use_defensive_guards() {
+    let mut params = ShrimpRuntimeParams::default();
+    params.gh_min_d = 0.0;
+    params.ca_min_mg_per_l = 0.0;
+    params.mg_min_mg_per_l = 0.0;
+
+    let modifier = molt_mineral_modifier(0.0, 0.0, 0.0, &params);
+    assert!(
+        modifier.is_finite(),
+        "zero Ca/Mg minimums should not produce NaN"
+    );
+    assert!(
+        (modifier - 1.0).abs() < 1e-9,
+        "zero Ca/Mg minimums should behave like unbounded healthy lower floors, got {modifier}"
+    );
+
+    let mut state = molt_test_state(SimSeed(8_347));
+    configure_stage_locked_population(&mut state, 10, 0, 0);
+    set_minerals(&mut state, 0.0, 0.0);
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.shrimp_params.gh_min_d = 0.0;
+    state.shrimp_params.ca_min_mg_per_l = 0.0;
+    state.shrimp_params.mg_min_mg_per_l = 0.0;
+
+    step_daily_shrimp(&mut state);
+
+    assert!(
+        state.animal.molt_stress_index.is_finite(),
+        "zero Ca/Mg minimums should not destabilize molt stress calculations"
+    );
+}
+
+#[test]
 fn test_molt_condition_modifier_named_parameters() {
     let run_case = |configure: fn(&mut TankState)| {
         let mut state = molt_test_state(SimSeed(8_345));
