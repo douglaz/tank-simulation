@@ -2,19 +2,24 @@
 
 `tank-simulation` is a Rust workspace for a deterministic freshwater planted shrimp tank simulator. It models the aquarium as an ecosystem rather than a scripted event loop: water chemistry, biofilter succession, plant growth, algae pressure, detritus, ambient temperature, and `Neocaridina davidi` population dynamics all feed back on each other over time.
 
-The current codebase is a strong v0.1 foundation. The engine, data layer, scenarios, TUI, and HTTP API are already separated cleanly, and the repository has meaningful automated coverage. The main remaining work is in the scientific core, not the architecture. A fuller review and next-step plan live in [docs/aquarium_sim_review_vnext.md](docs/aquarium_sim_review_vnext.md), and the canonical unit/display policy now lives in [docs/UNITS.md](docs/UNITS.md).
+The simulator has undergone a scientific-core upgrade across phases 2-5, resolving the main limitations of the original v0.1 foundation. The architecture overview and reading guide live in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), the canonical unit/display policy in [docs/UNITS.md](docs/UNITS.md), and parameter confidence annotations in [docs/PROVENANCE_STATUS.md](docs/PROVENANCE_STATUS.md).
 
 ## What it does
 
-The simulator currently supports:
+The simulator supports:
 
 - deterministic simulation with seed/save-load support
 - configurable tank geometry and fill height
 - source-water profiles with hardness, alkalinity, and tracked ions
 - substrate presets and rooted plant guilds
-- nitrogen cycling with distinct microbial groups
+- nitrogen cycling with distinct microbial groups (AOB, NOB, comammox, decomposers)
+- carbonate equilibrium with temperature-corrected pKa1 and closed-form quadratic pH solver
+- five-zone habitat registry (filter media, glass/hardscape, plant surfaces, substrate surface, substrate deep) with flow, oxygen, and light exposure modifiers
+- stage-structured shrimp population (juvenile, sub-adult, adult) with per-stage reserves, molt cycle, reproduction, and mineral stress
 - dissolved oxygen, temperature, lighting, heater, filter, and aeration effects
-- shrimp stocking and maintenance actions such as feeding, water changes, plant trimming, siphoning, and filter cleaning
+- parameter provenance with four-tier confidence metadata (literature, expert, heuristic, placeholder)
+- envelope-based calibration harness with eight validation scenarios
+- shrimp stocking and maintenance actions such as feeding, water changes, plant trimming (export or leave cuttings), siphoning, and filter cleaning
 - long-horizon scenario stepping through a terminal UI or over an HTTP API
 
 Representative shipped presets include:
@@ -31,21 +36,23 @@ Representative shipped presets include:
 - `crates/tank_scenarios`: scenario materialization and startup overrides
 - `crates/tank_api`: Axum-based HTTP server that exposes snapshots, actions, stepping, scenarios, and save/load
 - `crates/tank_tui`: terminal UI client that connects to `tank_api`
-- `docs/`: scientific notes, design review, and implementation guidance
+- `crates/tank_harness`: calibration harness and validation suite
+- `docs/`: scientific documentation, contracts, and implementation guidance (see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for reading guide)
 - `.beads/issues.jsonl`: authoritative backlog used with `br`
 
-## Status
+## Scope and fidelity
 
-The project is intentionally engine-first and deterministic, and it already covers many of the behaviors that matter for a tank sim: cycling, oxygen stress, ambient temperature shifts, tank-size thermal response, source-water changes, substrate effects, and shrimp population outcomes.
+The simulator is intentionally engine-first and deterministic. It aims to teach what it knows and flag what it is still approximating.
 
-The main known limitations are documented rather than hidden:
+**What the model measures** — deterministic mass-balance chemistry: nitrogen cycling (TAN, nitrite, nitrate with AOB/NOB/comammox guilds), carbonate equilibrium (DIC + alkalinity to pH via closed-form quadratic solver with temperature-corrected pKa1), dissolved oxygen dynamics, and seven tracked major ions (Ca, Mg, Na, K, HCO3, Cl, SO4). Stage-structured shrimp population dynamics with per-stage reserves, condition-dependent molt and reproduction, and mineral stress. Habitat-aware biofilm ecology across five zones with geometry-derived colonizable areas and exposure modifiers.
 
-- several kinetics still need concentration-normalized treatment instead of total-mass treatment
-- some grazing and detritus paths still need tighter mass conservation
-- pH and carbonate chemistry are still simplified
-- habitat-specific biofilms, denitrification, and deeper shrimp ecology are planned but not fully implemented
+**What it estimates** — TDS and conductivity are derived from the seven tracked ions, explicitly omitting trace species, organics, and nitrogen/phosphorus species. GH and KH are ion-derived proxies. Free ammonia (NH3) is speciated from TAN using pH and temperature. All estimates are labeled as such in the TUI and API.
 
-A structured scientific roadmap covering units/kinetics normalization, mass conservation, carbonate chemistry, habitat-aware ecology, shrimp life history, and calibration is tracked as an 80-bead backlog in `.beads/issues.jsonl` (use `br list --pretty` or `bv` to browse). For background on the review that motivated the roadmap, see [docs/aquarium_sim_review_vnext.md](docs/aquarium_sim_review_vnext.md), [docs/scientific_specs.md](docs/scientific_specs.md), and [docs/UNITS.md](docs/UNITS.md).
+**What it deliberately approximates** — a well-mixed water column with no stratification, a quadratic carbonate solver without activity corrections (sufficient for the freshwater 15-35 C envelope), guild-based biology rather than individual-based models, and fixed atmospheric CO2. Microfauna grazing uses a simpler mass-conservation approximation than the full shrimp routing.
+
+**Where parameters are provisional** — the [parameter provenance status](docs/PROVENANCE_STATUS.md) documents which values are literature-anchored, which are expert-curated, and which are heuristic calibration fits. Heuristic-tier parameters (some decomposer rates, plant growth ceilings, shrimp thermal thresholds) are calibrated to literature envelopes but not field-validated. Placeholder-tier parameters must be resolved before any scientific claim depends on them.
+
+Active planning lives in `.beads/issues.jsonl` (use `br list --pretty` or `bv` to browse). For background on the review that motivated the scientific-core upgrade, see [docs/aquarium_sim_review_vnext.md](docs/aquarium_sim_review_vnext.md).
 
 ## Quick start
 

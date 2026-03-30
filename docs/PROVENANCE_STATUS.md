@@ -1,8 +1,25 @@
 # Parameter Provenance Status
 
-Developer-facing summary of parameter provenance annotations as of tanksim-6e5.7.2.
-This document distinguishes strong anchors from provisional approximations so future
-tuning and validation work can focus on the weakest assumptions first.
+Developer-facing summary of parameter provenance annotations. Originally written for
+tanksim-6e5.7.2, verified current as of tanksim-6e5.7.5. This document distinguishes
+strong anchors from provisional approximations so future tuning and validation work
+can focus on the weakest assumptions first.
+
+## Coverage Summary
+
+| Parameter family | File(s) | Annotated? | Notes |
+|---|---|---|---|
+| Nitrogen kinetics (Ks, Vmax, yields, decay) | `process/default.toml` | Yes (32 entries) | Mix of literature, expert, and heuristic |
+| Denitrification | `process/default.toml` | Yes | 5 parameters |
+| Carbonate solver constants | `chemistry.rs` (code) | Documented here + code comments | Not TOML-backed |
+| Source water: hard_shrimp, moderate | `source_water/*.toml` | Yes (6 entries each) | Heuristic and expert |
+| Source water: soft_acidic, ro_like | `source_water/*.toml` | **No** | Lower priority |
+| Substrate: active_planted, coarse_porous | `substrate/*.toml` | Partial (colonizable_area_factor only) | Other indices pending |
+| Substrate: inert_sand, inert_gravel | `substrate/*.toml` | **No** | |
+| Shrimp biology | `shrimp/neocaridina_davidi.toml` | Yes (22 entries) | Literature anchors + heuristic thresholds |
+| Plant presets | `plants/*.toml` | **No** | Growth rates, uptake biases |
+| Process routing fractions | `process/default.toml` | **No** | Assimilation, respiration, excretion splits |
+| Thermal transport | `process/default.toml` | **No** | k_surface, k_wall |
 
 ## Confidence Tiers
 

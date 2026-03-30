@@ -266,11 +266,27 @@ These types should live in a focused units module and require explicit conversio
 
 Do not introduce a full wrapper-type forest yet. Temperature, hardness, alkalinity-display, and other derived units can wait until the chemistry/API contracts stabilize. The policy preference is a small set of high-value types plus disciplined naming, not type maximalism.
 
+## Display Policy Compliance Summary
+
+As of tanksim-6e5.7.5, TUI and API labels have been audited against this policy:
+
+| Policy requirement | TUI status | API status |
+|---|---|---|
+| Nitrogen fields display as "mg N/L" | Compliant: TAN, NO2, NO3 all show "mg N/L"; NH3-N shows "mg NH3-N/L" | Compliant: field semantics document basis |
+| TDS labeled as estimate | Compliant: "Est. TDS (7-ion)" | Compliant: `estimated_tds_7_ion_mg_per_l` with scope object |
+| Conductivity labeled as estimate | Compliant: "Est. cond" / "Est. conductivity (7-ion)" | Compliant: `estimated_conductivity_us_cm` |
+| GH/KH labeled as derived | Compliant: "GH (Ca+Mg)", "KH (alkalinity)" | Compliant: semantics note Ca+Mg and alkalinity derivation |
+| Precision defaults | Mostly compliant (see note below) | N/A (API returns full precision) |
+
+Precision note: the chemistry detail screen displays pH at 3 decimals (policy says 2). This is acceptable for a detail view; the overview screen uses the policy default of 2. Free ammonia uses 4 decimals on overview and 5 on chemistry detail, both within the "up to 5" policy allowance.
+
 ## Migration and Test Expectations
 
-- `tanksim-6e5.2.2` should add canonical concentration helpers and net-volume accessors.
-- `tanksim-6e5.2.3`, `tanksim-6e5.2.4`, and `tanksim-6e5.2.5` should migrate nitrification, plant, and algae kinetics to concentration-based parameter names.
-- `tanksim-6e5.2.7` should rename snapshot/API chemistry fields, add the scientific-versus-ion display policy, and relabel estimated TDS/conductivity in the TUI.
+All migration beads referenced below have been completed:
+
+- ~~`tanksim-6e5.2.2` should add canonical concentration helpers and net-volume accessors.~~ **Done.**
+- ~~`tanksim-6e5.2.3`, `tanksim-6e5.2.4`, and `tanksim-6e5.2.5` should migrate nitrification, plant, and algae kinetics to concentration-based parameter names.~~ **Done.** See the parameter rename table above.
+- ~~`tanksim-6e5.2.7` should rename snapshot/API chemistry fields, add the scientific-versus-ion display policy, and relabel estimated TDS/conductivity in the TUI.~~ **Done.** Legacy aliases maintained via `LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES`.
 - Save/schema work that renames serialized fields must use explicit migration handling such as `serde(alias)` during transition or a schema-version bump with a loader migration.
 - Tests that lock serialized snapshots or exact JSON field names must be updated alongside those schema changes; tests should never preserve an ambiguous chemistry name merely for backward compatibility.
 
