@@ -351,6 +351,10 @@ pub struct ShrimpRuntimeParams {
     /// Instability index threshold above which egg dropping can occur.
     #[serde(default = "default_egg_drop_instability_threshold")]
     pub egg_drop_instability_threshold: f64,
+    /// Temperature swing (°C per day) that contributes a full unit of
+    /// instability pressure.
+    #[serde(default = "default_instability_temp_swing_c")]
+    pub instability_temp_swing_c: f64,
     /// pH swing per day that contributes a full unit of instability pressure.
     #[serde(default = "default_instability_ph_swing")]
     pub instability_ph_swing: f64,
@@ -738,6 +742,7 @@ impl Default for ShrimpRuntimeParams {
             no2_repro_threshold_mg_n_per_l: default_no2_repro_threshold_mg_n_per_l(),
             egg_drop_temp_swing_c: default_egg_drop_temp_swing_c(),
             egg_drop_instability_threshold: default_egg_drop_instability_threshold(),
+            instability_temp_swing_c: default_instability_temp_swing_c(),
             instability_ph_swing: default_instability_ph_swing(),
             instability_gh_swing_d: default_instability_gh_swing_d(),
             instability_do_swing_mg_l: default_instability_do_swing_mg_l(),
@@ -876,6 +881,10 @@ fn default_egg_drop_temp_swing_c() -> f64 {
 
 fn default_egg_drop_instability_threshold() -> f64 {
     0.5
+}
+
+fn default_instability_temp_swing_c() -> f64 {
+    3.0
 }
 
 fn default_instability_ph_swing() -> f64 {

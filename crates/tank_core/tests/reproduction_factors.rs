@@ -1,6 +1,6 @@
 use tank_core::{
     EggCohort, Engine, EventCause, EventKind, PlayerAction, ProcessParams, SimError, SimSeed,
-    SimulationEngine, TankState, WaterState,
+    SimulationEngine, TankGeometry, TankState, WaterState,
 };
 
 // ── Test fixture ───────────────────────────────────────────────────────────
@@ -9,7 +9,7 @@ use tank_core::{
 /// All suppression factors are at their baseline so individual factors can be
 /// isolated by the caller.
 fn breeding_fixture(seed: SimSeed) -> TankState {
-    let geometry = tank_core::TankGeometry {
+    let geometry = TankGeometry {
         length_cm: 60.0,
         width_cm: 40.0,
         height_cm: 40.0,
@@ -91,11 +91,67 @@ fn breeding_fixture(seed: SimSeed) -> TankState {
     state
 }
 
+fn breeding_fixture_with_volume(seed: SimSeed, target_volume_l: f64) -> TankState {
+    let mut state = breeding_fixture(seed);
+
+    let (length_cm, width_cm, fill_height_cm) = if target_volume_l <= 20.0 {
+        let side_cm = 20.0;
+        let fill_height_cm = target_volume_l * 1000.0 / (side_cm * side_cm);
+        (side_cm, side_cm, fill_height_cm)
+    } else {
+        let length_cm = 50.0;
+        let width_cm = 40.0;
+        let fill_height_cm = target_volume_l * 1000.0 / (length_cm * width_cm);
+        (length_cm, width_cm, fill_height_cm)
+    };
+
+    state.geometry = TankGeometry {
+        length_cm,
+        width_cm,
+        height_cm: fill_height_cm + 5.0,
+        fill_height_cm,
+        glass_thickness_mm: 5.0,
+        open_top: true,
+        lid_exchange_factor: 0.25,
+        hardscape_area_cm2: 0.0,
+    };
+    state.water = WaterState::default_for_volume_l(state.water_volume_l());
+    state.water.temperature_c = 24.0;
+    state.environment.ambient_temp_c = 24.0;
+
+    let vol = state.water_volume_l();
+    state.water.calcium_mg_total = 40.0 * vol;
+    state.water.magnesium_mg_total = 10.0 * vol;
+    state.water.alkalinity_meq_total = 10.0 * vol;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * vol;
+    state.water.dissolved_organic_carbon_mg_c_total = 5.0;
+    state.water.dissolved_organic_nitrogen_mg_n_total = 0.8;
+    state.water.dissolved_oxygen_mg_total = 8.0 * vol;
+    state.water.bicarbonate_mg_total = 400.0 * vol;
+    state.water.ammonia_total_mg_n_total = 0.0;
+    state.water.nitrite_mg_n_total = 0.0;
+    state.water.nitrate_mg_n_total = 5.0;
+
+    state.stability_tracker.prev_temp_c = state.water.temperature_c;
+    state.stability_tracker.prev_gh_d = state.gh_d();
+    state.stability_tracker.prev_do_mg_l = state.do_mg_per_l();
+    state.stability_tracker.prev_ph = 7.5;
+    state.stability_tracker.instability_index = 0.0;
+    state.hardware.heater.enabled = false;
+
+    state
+}
+
+fn run_day(engine: &mut Engine, feed_grams: f64) -> Result<(), SimError> {
+    engine.apply_action(PlayerAction::Feed { grams: feed_grams })?;
+    engine.step_hours(24)?;
+    Ok(())
+}
+
 /// Run the engine for the given number of days with light feeding.
 fn run_days(engine: &mut Engine, days: u32) -> Result<(), SimError> {
     for _ in 0..days {
-        engine.apply_action(PlayerAction::Feed { grams: 0.1 })?;
-        engine.step_hours(24)?;
+        run_day(engine, 0.1)?;
     }
     Ok(())
 }

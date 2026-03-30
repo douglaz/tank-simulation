@@ -199,7 +199,7 @@ pub fn update_stability_tracker(state: &mut TankState) {
     tracker.last_temp_swing_c = temp_swing;
 
     // Weighted instability normalised to 0..1
-    let raw_instability = (temp_swing / 3.0_f64.max(0.01)
+    let raw_instability = (temp_swing / params.instability_temp_swing_c.max(0.01)
         + ph_swing / params.instability_ph_swing.max(0.01)
         + gh_swing / params.instability_gh_swing_d.max(0.01)
         + do_swing / params.instability_do_swing_mg_l.max(0.01))
