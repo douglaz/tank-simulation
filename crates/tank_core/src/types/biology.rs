@@ -756,10 +756,8 @@ impl Default for ShrimpRuntimeParams {
             molt_reserve_factor_floor: default_molt_reserve_factor_floor(),
             molt_condition_weight: default_molt_condition_weight(),
             molt_reserve_weight: default_molt_reserve_weight(),
-            molt_failure_poor_condition_threshold:
-                default_molt_failure_poor_condition_threshold(),
-            molt_failure_instability_threshold:
-                default_molt_failure_instability_threshold(),
+            molt_failure_poor_condition_threshold: default_molt_failure_poor_condition_threshold(),
+            molt_failure_instability_threshold: default_molt_failure_instability_threshold(),
             juvenile_molt_interval_days: default_juvenile_molt_interval_days(),
             sub_adult_molt_interval_days: default_sub_adult_molt_interval_days(),
             molt_success_threshold: default_molt_success_threshold(),

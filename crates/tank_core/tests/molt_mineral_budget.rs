@@ -309,10 +309,15 @@ fn test_mineral_modifier_named_parameters() {
 
     assert_eq!(params.molt_success_threshold, 0.55);
     assert_eq!(params.critical_molt_gh_ratio, 0.3);
+    assert_eq!(params.failed_molt_accum_increase_per_failed_stage, 0.3);
+    assert_eq!(params.failed_molt_accum_recovery_per_successful_stage, 0.35);
+    assert_eq!(params.failed_molt_stress_blend, 0.5);
     assert_eq!(params.molt_reserve_fraction, 0.1);
     assert_eq!(params.molt_reserve_factor_floor, 0.4);
     assert_eq!(params.molt_condition_weight, 0.75);
     assert_eq!(params.molt_reserve_weight, 0.25);
+    assert_eq!(params.molt_failure_poor_condition_threshold, 0.65);
+    assert_eq!(params.molt_failure_instability_threshold, 0.3);
     assert!(params.juvenile_molt_interval_days < params.sub_adult_molt_interval_days);
     assert!(params.sub_adult_molt_interval_days < params.base_molt_interval_days);
 }
@@ -503,10 +508,116 @@ fn test_mixed_stage_molt_days_do_not_reduce_failed_molt_accum() {
 }
 
 #[test]
+fn test_failed_molt_accumulation_parameters_are_named() {
+    let mut default_failure = molt_test_state(SimSeed(8_451));
+    configure_stage_locked_population(&mut default_failure, 10, 0, 0);
+    set_minerals(&mut default_failure, 40.0, 10.0);
+    default_failure.process_params.shrimp_condition_smoothing = 0.0;
+    default_failure.animal.adult.condition_index = 0.05;
+    default_failure.animal.adult.reserve_g = 0.0;
+    default_failure.animal.adult.molt_timer_days =
+        default_failure.shrimp_params.base_molt_interval_days;
+
+    let mut gentle_failure = default_failure.clone();
+    gentle_failure
+        .shrimp_params
+        .failed_molt_accum_increase_per_failed_stage = 0.1;
+
+    step_daily_shrimp(&mut default_failure);
+    step_daily_shrimp(&mut gentle_failure);
+
+    assert!(
+        default_failure.animal.failed_molt_accum > gentle_failure.animal.failed_molt_accum,
+        "lowering the named failed-molt increment should soften accumulation ({:.3} > {:.3})",
+        default_failure.animal.failed_molt_accum,
+        gentle_failure.animal.failed_molt_accum
+    );
+
+    let mut default_recovery = molt_test_state(SimSeed(8_452));
+    configure_stage_locked_population(&mut default_recovery, 10, 0, 0);
+    set_minerals(&mut default_recovery, 40.0, 10.0);
+    default_recovery.process_params.shrimp_condition_smoothing = 0.0;
+    default_recovery.animal.set_population_condition_index(0.95);
+    seed_molt_reserves(&mut default_recovery);
+    default_recovery.animal.failed_molt_accum = 0.6;
+    default_recovery.animal.adult.molt_timer_days =
+        default_recovery.shrimp_params.base_molt_interval_days;
+
+    let mut slow_recovery = default_recovery.clone();
+    slow_recovery
+        .shrimp_params
+        .failed_molt_accum_recovery_per_successful_stage = 0.1;
+
+    step_daily_shrimp(&mut default_recovery);
+    step_daily_shrimp(&mut slow_recovery);
+
+    assert!(
+        default_recovery.animal.failed_molt_accum < slow_recovery.animal.failed_molt_accum,
+        "lowering the named recovery rate should keep failed-molt accumulation elevated ({:.3} < {:.3})",
+        default_recovery.animal.failed_molt_accum,
+        slow_recovery.animal.failed_molt_accum
+    );
+}
+
+#[test]
+fn test_molt_failure_reports_marginal_gap_when_no_specific_cause() {
+    let mut state = molt_test_state(SimSeed(9_103));
+    configure_stage_locked_population(&mut state, 10, 0, 0);
+    set_minerals(&mut state, 40.0, 10.0);
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.animal.adult.condition_index = 0.6;
+    seed_molt_reserves(&mut state);
+    state.stability_tracker.instability_index = 0.24;
+    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days;
+
+    step_daily_shrimp(&mut state);
+
+    let failure = state
+        .event_log
+        .iter()
+        .find(|event| event.kind == EventKind::MoltFailure)
+        .expect("marginal molt failure should emit an event");
+    assert!(failure.cause_codes.contains(&EventCause::MarginalFailure));
+    assert!(!failure.cause_codes.contains(&EventCause::PoorCondition));
+    assert!(!failure
+        .cause_codes
+        .contains(&EventCause::ChemistryInstability));
+    assert!(failure.summary.contains("score"));
+}
+
+#[test]
+fn test_molt_failure_diagnostic_thresholds_are_named() {
+    let mut state = molt_test_state(SimSeed(9_104));
+    configure_stage_locked_population(&mut state, 10, 0, 0);
+    set_minerals(&mut state, 40.0, 10.0);
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.animal.adult.condition_index = 0.6;
+    seed_molt_reserves(&mut state);
+    state.stability_tracker.instability_index = 0.24;
+    state.shrimp_params.molt_failure_poor_condition_threshold = 0.75;
+    state.shrimp_params.molt_failure_instability_threshold = 0.2;
+    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days;
+
+    step_daily_shrimp(&mut state);
+
+    let failure = state
+        .event_log
+        .iter()
+        .find(|event| event.kind == EventKind::MoltFailure)
+        .expect("threshold-tuned molt failure should emit an event");
+    assert!(failure.cause_codes.contains(&EventCause::PoorCondition));
+    assert!(failure
+        .cause_codes
+        .contains(&EventCause::ChemistryInstability));
+    assert!(failure.summary.contains("condition 0.60<0.75"));
+    assert!(failure.summary.contains("instability 0.24>0.20"));
+}
+
+#[test]
 fn test_soft_vs_hard_water_shrimp_survival() -> Result<(), SimError> {
-    let run_profile = |profile_id: &str, seed: u64| -> Result<TankState, SimError> {
+    let run_profile = |profile: &SourceWaterProfile, seed: u64| -> Result<TankState, SimError> {
         let mut state = molt_test_state(SimSeed(seed));
-        apply_source_profile(&mut state, &load_source_profile(profile_id));
+        apply_source_profile(&mut state, profile);
         configure_stage_locked_population(&mut state, 12, 12, 12);
         state.animal.set_population_condition_index(0.8);
         seed_molt_reserves(&mut state);
@@ -517,8 +628,13 @@ fn test_soft_vs_hard_water_shrimp_survival() -> Result<(), SimError> {
         run_hours_with_daily_feed(state, 1000, 0.0)
     };
 
-    let hard_state = run_profile("hard_shrimp", 9_000)?;
-    let soft_state = run_profile("ro_like", 9_001)?;
+    let hard_profile = load_source_profile("hard_shrimp");
+    let mut soft_profile = load_source_profile("ro_like");
+    soft_profile.calcium_mg_per_l = 10.0;
+    soft_profile.magnesium_mg_per_l = 2.0;
+
+    let hard_state = run_profile(&hard_profile, 9_000)?;
+    let soft_state = run_profile(&soft_profile, 9_001)?;
 
     let hard_population = hard_state.animal.total_count();
     let soft_population = soft_state.animal.total_count();
@@ -530,7 +646,7 @@ fn test_soft_vs_hard_water_shrimp_survival() -> Result<(), SimError> {
 
     assert!(
         hard_population > soft_population,
-        "hard_shrimp should outperform ro_like over 1000 hours ({hard_population} > {soft_population})"
+        "hard_shrimp should outperform the mineral-poor soft-water profile over 1000 hours ({hard_population} > {soft_population})"
     );
     assert!(
         hard_population.saturating_sub(soft_population) >= 5,
@@ -538,14 +654,16 @@ fn test_soft_vs_hard_water_shrimp_survival() -> Result<(), SimError> {
     );
     assert!(
         !soft_molt_failures.is_empty(),
-        "the ro_like case should log molt failures tied to the source-water minerals"
+        "the mineral-poor soft-water case should log molt failures tied to the source-water minerals"
     );
     assert!(soft_molt_failures
         .iter()
         .any(|event| { event.cause_codes.contains(&EventCause::LowMinerals) }));
     assert!(soft_molt_failures
         .iter()
-        .any(|event| event.summary.contains("GH")));
+        .any(|event| event.summary.contains("GH")
+            && event.summary.contains("Ca")
+            && event.summary.contains("Mg")));
 
     Ok(())
 }

@@ -1097,6 +1097,17 @@ fn malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected() -> 
         ("shrimp_params.molt_reserve_fraction", 0.0),
         ("shrimp_params.molt_condition_weight", 1.2),
         ("shrimp_params.molt_reserve_weight", -0.1),
+        (
+            "shrimp_params.failed_molt_accum_increase_per_failed_stage",
+            -0.1,
+        ),
+        (
+            "shrimp_params.failed_molt_accum_recovery_per_successful_stage",
+            -0.1,
+        ),
+        ("shrimp_params.failed_molt_stress_blend", 1.2),
+        ("shrimp_params.molt_failure_poor_condition_threshold", 1.2),
+        ("shrimp_params.molt_failure_instability_threshold", -0.1),
         ("shrimp_params.juvenile_molt_interval_days", 0.0),
         ("shrimp_params.sub_adult_molt_interval_days", 0.0),
         ("shrimp_params.molt_success_threshold", 1.2),
@@ -1117,6 +1128,25 @@ fn malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected() -> 
             }
             "shrimp_params.molt_reserve_weight" => {
                 state.shrimp_params.molt_reserve_weight = value;
+            }
+            "shrimp_params.failed_molt_accum_increase_per_failed_stage" => {
+                state
+                    .shrimp_params
+                    .failed_molt_accum_increase_per_failed_stage = value;
+            }
+            "shrimp_params.failed_molt_accum_recovery_per_successful_stage" => {
+                state
+                    .shrimp_params
+                    .failed_molt_accum_recovery_per_successful_stage = value;
+            }
+            "shrimp_params.failed_molt_stress_blend" => {
+                state.shrimp_params.failed_molt_stress_blend = value;
+            }
+            "shrimp_params.molt_failure_poor_condition_threshold" => {
+                state.shrimp_params.molt_failure_poor_condition_threshold = value;
+            }
+            "shrimp_params.molt_failure_instability_threshold" => {
+                state.shrimp_params.molt_failure_instability_threshold = value;
             }
             "shrimp_params.juvenile_molt_interval_days" => {
                 state.shrimp_params.juvenile_molt_interval_days = value;

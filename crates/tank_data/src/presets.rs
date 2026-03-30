@@ -109,9 +109,7 @@ fn shrimp_runtime_default_param_value(name: &str) -> Option<f64> {
         "molt_failure_poor_condition_threshold" => {
             Some(defaults.molt_failure_poor_condition_threshold)
         }
-        "molt_failure_instability_threshold" => {
-            Some(defaults.molt_failure_instability_threshold)
-        }
+        "molt_failure_instability_threshold" => Some(defaults.molt_failure_instability_threshold),
         "juvenile_molt_interval_days" => Some(defaults.juvenile_molt_interval_days),
         "sub_adult_molt_interval_days" => Some(defaults.sub_adult_molt_interval_days),
         "molt_success_threshold" => Some(defaults.molt_success_threshold),
@@ -741,10 +739,7 @@ impl ShrimpPreset {
             ("molt_reserve_factor_floor", self.molt_reserve_factor_floor),
             ("molt_condition_weight", self.molt_condition_weight),
             ("molt_reserve_weight", self.molt_reserve_weight),
-            (
-                "failed_molt_stress_blend",
-                self.failed_molt_stress_blend,
-            ),
+            ("failed_molt_stress_blend", self.failed_molt_stress_blend),
             (
                 "molt_failure_poor_condition_threshold",
                 self.molt_failure_poor_condition_threshold,

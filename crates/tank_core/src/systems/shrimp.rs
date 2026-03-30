@@ -1416,7 +1416,8 @@ fn emit_molt_stress_warning(state: &mut TankState) {
     } else if gh_d > state.shrimp_params.gh_max_d {
         causes.push(EventCause::HighMinerals);
     }
-    if state.stability_tracker.instability_index > state.shrimp_params.molt_failure_instability_threshold
+    if state.stability_tracker.instability_index
+        > state.shrimp_params.molt_failure_instability_threshold
     {
         causes.push(EventCause::ChemistryInstability);
     }

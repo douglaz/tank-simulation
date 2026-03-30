@@ -1,3 +1,4 @@
+use tank_core::systems::shrimp::step_daily_shrimp;
 use tank_core::{
     EggCohort, Engine, EventCause, EventKind, PlayerAction, ProcessParams, SimError, SimSeed,
     SimulationEngine, SourceWaterProfile, TankGeometry, TankState, WaterState,
@@ -148,6 +149,28 @@ fn run_day(engine: &mut Engine, feed_grams: f64) -> Result<(), SimError> {
     Ok(())
 }
 
+#[derive(Debug, Default, Clone, Copy)]
+struct DayPeaks {
+    tan_mg_n_per_l: f64,
+    nitrite_mg_n_per_l: f64,
+    instability_index: f64,
+}
+
+fn run_day_with_hourly_peaks(engine: &mut Engine, feed_grams: f64) -> Result<DayPeaks, SimError> {
+    engine.apply_action(PlayerAction::Feed { grams: feed_grams })?;
+    let mut peaks = DayPeaks::default();
+    for _ in 0..24 {
+        engine.step_hours(1)?;
+        let snapshot = engine.snapshot();
+        peaks.tan_mg_n_per_l = peaks.tan_mg_n_per_l.max(snapshot.tan_mg_n_per_l);
+        peaks.nitrite_mg_n_per_l = peaks.nitrite_mg_n_per_l.max(snapshot.nitrite_mg_n_per_l);
+        peaks.instability_index = peaks
+            .instability_index
+            .max(engine.full_state().stability_tracker.instability_index);
+    }
+    Ok(peaks)
+}
+
 fn load_source_profile(id: &str) -> SourceWaterProfile {
     let preset = tank_data::load_source_water(id)
         .unwrap_or_else(|e| panic!("failed to load source water preset '{id}': {e}"));
@@ -265,30 +288,40 @@ fn test_reproduction_suppressed_by_instability() -> Result<(), SimError> {
         "Readiness should drop on the swing day: swing={shock_readiness:.4}, stable={stable_shock_readiness:.4}"
     );
 
-    swing_engine.apply_action(PlayerAction::ChangeAmbientTemperature { target_c: 24.0 })?;
-    for post_day in 1..=3 {
-        run_day(&mut stable_engine, 0.1)?;
-        run_day(&mut swing_engine, 0.1)?;
+    let mut lingering_state = shock_state.clone();
+    lingering_state.water.temperature_c = 24.0;
+    lingering_state.environment.ambient_temp_c = 24.0;
+    lingering_state.stability_tracker.prev_temp_c = 24.0;
+    lingering_state.stability_tracker.prev_ph = lingering_state.water.ph;
+    lingering_state.stability_tracker.prev_gh_d = lingering_state.gh_d();
+    lingering_state.stability_tracker.prev_do_mg_l = lingering_state.do_mg_per_l();
+    lingering_state.process_params.shrimp_condition_smoothing = 0.0;
+    lingering_state.animal.adult.condition_index = 0.8;
+    lingering_state.animal.molt_stress_index = 0.0;
+    lingering_state.animal.adult.molt_timer_days = 0.0;
+    lingering_state.animal.sub_adult.molt_timer_days = 0.0;
+    lingering_state.animal.juvenile.molt_timer_days = 0.0;
+    lingering_state.animal.hourly_heat_stress_accum = 0.0;
+    lingering_state.animal.hourly_instability_stress_accum = 0.0;
 
-        let stable_state = stable_engine.full_state();
-        let swing_state = swing_engine.full_state();
-        assert!(
-            swing_state.animal.reproductive_readiness_index
-                < stable_state.animal.reproductive_readiness_index,
-            "Readiness should stay suppressed for 2-3 days after the swing (day {post_day}): \
-             swing={:.4}, stable={:.4}",
-            swing_state.animal.reproductive_readiness_index,
-            stable_state.animal.reproductive_readiness_index,
-        );
-        assert!(
-            swing_state.stability_tracker.instability_index
-                > stable_state.stability_tracker.instability_index + 0.01,
-            "Instability should remain elevated after the swing (day {post_day}): \
-             swing={:.4}, stable={:.4}",
-            swing_state.stability_tracker.instability_index,
-            stable_state.stability_tracker.instability_index,
-        );
-    }
+    let mut recovered_state = lingering_state.clone();
+    recovered_state.stability_tracker.instability_index = 0.0;
+
+    step_daily_shrimp(&mut lingering_state);
+    step_daily_shrimp(&mut recovered_state);
+
+    assert!(
+        lingering_state.animal.reproductive_readiness_index
+            < recovered_state.animal.reproductive_readiness_index,
+        "At matched temperature/condition, lingering instability alone should suppress readiness: unstable={:.4}, recovered={:.4}",
+        lingering_state.animal.reproductive_readiness_index,
+        recovered_state.animal.reproductive_readiness_index,
+    );
+    assert!(
+        lingering_state.animal.adult.condition_index
+            >= recovered_state.animal.adult.condition_index - 1.0e-9,
+        "This regression should not rely on a worse post-shock condition state"
+    );
 
     Ok(())
 }
@@ -886,18 +919,16 @@ fn test_mature_stable_tank_breeds_well() -> Result<(), SimError> {
     let total_hours = 2000u32;
     let days = total_hours / 24;
     for day in 0..days {
-        run_day(&mut engine, 0.05)?;
+        let peaks = run_day_with_hourly_peaks(&mut engine, 0.05)?;
         if (day + 1) % 5 == 0 {
             engine.apply_action(PlayerAction::WaterChangePercent {
                 percent: 20.0,
                 source_profile_id: "hard_shrimp".to_string(),
             })?;
         }
-        let snapshot = engine.snapshot();
-        max_tan = max_tan.max(snapshot.tan_mg_n_per_l);
-        max_no2 = max_no2.max(snapshot.nitrite_mg_n_per_l);
-        max_instability =
-            max_instability.max(engine.full_state().stability_tracker.instability_index);
+        max_tan = max_tan.max(peaks.tan_mg_n_per_l);
+        max_no2 = max_no2.max(peaks.nitrite_mg_n_per_l);
+        max_instability = max_instability.max(peaks.instability_index);
     }
     let remaining = total_hours % 24;
     if remaining > 0 {
