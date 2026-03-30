@@ -33,6 +33,8 @@
 //! - `budget_ledger.json` — budget ledger (if tracking was enabled)
 //! - `trace.jsonl` — JSON-lines trace output (if tracing was enabled)
 
+pub mod calibration;
+
 use std::fmt;
 use std::path::PathBuf;
 

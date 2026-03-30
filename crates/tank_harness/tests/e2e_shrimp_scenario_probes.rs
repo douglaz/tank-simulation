@@ -31,7 +31,8 @@ use std::collections::BTreeSet;
 
 use tank_core::{
     systems::chemistry::{
-        bicarbonate_mg_total_from_mmol_per_l, validate_source_water_carbonate_profile,
+        bicarbonate_mg_total_from_mmol_per_l, resolve_carbonate_state,
+        validate_source_water_carbonate_profile,
     },
     EggCohort, EventKind, PlayerAction, ProcessParams, SimSeed, SimTracer, SimulationEngine,
     SourceWaterProfile, TankGeometry, TankState, Verbosity, WaterState,
@@ -385,6 +386,7 @@ fn breeding_success_state(seed: SimSeed) -> TankState {
     state.water.ammonia_total_mg_n_total = 0.0;
     state.water.nitrite_mg_n_total = 0.0;
     state.water.nitrate_mg_n_total = 5.0 * vol;
+    resolve_carbonate_state(&mut state.water, vol);
 
     // Abundant periphyton so food is never limiting
     state.algae.set_periphyton_total(120.0);
@@ -468,6 +470,7 @@ fn probe_thermal_suppression() -> Result<(), Box<dyn std::error::Error>> {
 /// thermal effects from food limitation and ammonia stress.
 fn thermal_scenario_state(seed: SimSeed, ambient_temp_c: f64) -> TankState {
     let mut state = breeding_success_state(seed);
+    let vol = state.water_volume_l();
     state.water.temperature_c = ambient_temp_c;
     state.environment.ambient_temp_c = ambient_temp_c;
     state.animal.berried_females_count = 4;
@@ -487,6 +490,7 @@ fn thermal_scenario_state(seed: SimSeed, ambient_temp_c: f64) -> TankState {
         .source_water_catalog
         .insert("thermal_probe".to_string(), source);
 
+    resolve_carbonate_state(&mut state.water, vol);
     state.reseed_stability_tracker();
     if ambient_temp_c > 30.0 {
         state.stability_tracker.prev_temp_c = 25.0;
@@ -753,6 +757,7 @@ fn chemistry_stress_state(seed: SimSeed) -> TankState {
     state.water.nitrite_mg_n_total = 4.0 * vol;
     // No chloride protection
     state.water.chloride_mg_total = 0.0;
+    resolve_carbonate_state(&mut state.water, vol);
 
     state.algae.set_periphyton_total(3.0);
 
@@ -998,6 +1003,7 @@ fn chloride_test_base_state(seed: SimSeed) -> TankState {
     state.water.dissolved_oxygen_mg_total = 8.0 * vol;
     state.water.bicarbonate_mg_total = 300.0 * vol;
     state.algae.set_periphyton_total(5.0);
+    resolve_carbonate_state(&mut state.water, vol);
 
     // Cycling crash: AOB active but NOB insufficient → nitrite accumulates
     state.microbe.set_decomposer_total(0.1);
@@ -1214,6 +1220,7 @@ fn crash_mode_state(seed: SimSeed) -> TankState {
     state.water.dissolved_inorganic_carbon_mg_c_total = 10.0 * vol;
     state.water.dissolved_oxygen_mg_total = 7.0 * vol;
     state.water.bicarbonate_mg_total = 200.0 * vol;
+    resolve_carbonate_state(&mut state.water, vol);
 
     state.algae.set_periphyton_total(2.0);
 
