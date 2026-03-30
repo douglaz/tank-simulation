@@ -8,6 +8,16 @@ const D_O2_FREE_20C_CM2_PER_S: f64 = 2.0e-5;
 const MICROFAUNA_O2_PER_MG_C_RESPIRED: f64 = 2.67;
 const SECONDS_PER_DAY: f64 = 86_400.0;
 
+/// Daily fraction of fine detritus consumed by substrate-associated microfauna.
+///
+/// At full population index the microfauna community processes roughly 1% of
+/// the available fine detritus pool per day within the substrate zone. This is
+/// a conservative estimate for benthic meiofauna; the periphyton consumption
+/// rate is tunable via `process_params.microfauna_periphyton_consumption` but
+/// detritus processing is less variable in practice, so a constant suffices
+/// for the first-pass model.
+const MICROFAUNA_DETRITUS_DAILY_FRACTION: f64 = 0.01;
+
 /// Minimum volumetric O₂ consumption rate (mg O₂ cm⁻³ s⁻¹) to avoid
 /// division-by-zero in the Bouldin penetration model. When biological
 /// demand is below this floor the entire substrate is treated as oxic.
@@ -186,7 +196,7 @@ fn estimate_substrate_microfauna_o2_demand_mg_per_s(state: &TankState) -> f64 {
     };
 
     let substrate_detritus_consumed_g = state.detritus.fine_detritus_g_total.max(0.0)
-        * 0.01
+        * MICROFAUNA_DETRITUS_DAILY_FRACTION
         * population_index
         * substrate_habitat_area_fraction(state);
 

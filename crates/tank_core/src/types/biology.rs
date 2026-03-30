@@ -91,9 +91,6 @@ pub struct StageCohort {
     /// Fractional maturation accumulator for stage promotion.
     #[serde(default)]
     pub maturation_accum: f64,
-    /// Per-stage molt timer (days since last molt for this stage).
-    #[serde(default)]
-    pub molt_timer_days: f64,
 }
 
 pub const DEFAULT_STAGE_CONDITION_INDEX: f64 = 0.8;
@@ -109,7 +106,6 @@ impl Default for StageCohort {
             reserve_g: 0.0,
             condition_index: DEFAULT_STAGE_CONDITION_INDEX,
             maturation_accum: 0.0,
-            molt_timer_days: 0.0,
         }
     }
 }
@@ -136,7 +132,6 @@ impl StageCohort {
             self.reserve_g = incoming_reserve_g;
             self.condition_index = incoming_condition_index;
             self.maturation_accum = 0.0;
-            self.molt_timer_days = 0.0;
             return;
         }
 
@@ -278,21 +273,6 @@ pub struct ShrimpRuntimeParams {
     /// Condition below which clutch size is zero.
     #[serde(default = "default_min_clutch_condition")]
     pub min_clutch_condition: f64,
-    /// Minimum calcium concentration (mg/L) for full molt mineral score.
-    #[serde(default = "default_ca_min_mg_per_l")]
-    pub ca_min_mg_per_l: f64,
-    /// Minimum magnesium concentration (mg/L) for full molt mineral score.
-    #[serde(default = "default_mg_min_mg_per_l")]
-    pub mg_min_mg_per_l: f64,
-    /// Base inter-molt period for juveniles (days). Shorter than adults.
-    #[serde(default = "default_juvenile_molt_interval_days")]
-    pub juvenile_molt_interval_days: f64,
-    /// Base inter-molt period for sub-adults (days).
-    #[serde(default = "default_sub_adult_molt_interval_days")]
-    pub sub_adult_molt_interval_days: f64,
-    /// Minimum weighted score for a molt to succeed.
-    #[serde(default = "default_molt_success_threshold")]
-    pub molt_success_threshold: f64,
 }
 
 /// Tracks recent chemistry swings for shrimp stress calculations.
@@ -644,11 +624,6 @@ impl Default for ShrimpRuntimeParams {
             sub_adult_sensitivity: default_sub_adult_sensitivity(),
             base_clutch_size: default_base_clutch_size(),
             min_clutch_condition: default_min_clutch_condition(),
-            ca_min_mg_per_l: default_ca_min_mg_per_l(),
-            mg_min_mg_per_l: default_mg_min_mg_per_l(),
-            juvenile_molt_interval_days: default_juvenile_molt_interval_days(),
-            sub_adult_molt_interval_days: default_sub_adult_molt_interval_days(),
-            molt_success_threshold: default_molt_success_threshold(),
         }
     }
 }
@@ -714,26 +689,6 @@ fn default_base_clutch_size() -> u32 {
 
 fn default_min_clutch_condition() -> f64 {
     0.3
-}
-
-fn default_ca_min_mg_per_l() -> f64 {
-    20.0
-}
-
-fn default_mg_min_mg_per_l() -> f64 {
-    5.0
-}
-
-fn default_juvenile_molt_interval_days() -> f64 {
-    14.0
-}
-
-fn default_sub_adult_molt_interval_days() -> f64 {
-    21.0
-}
-
-fn default_molt_success_threshold() -> f64 {
-    0.55
 }
 
 impl Default for StabilityTracker {
