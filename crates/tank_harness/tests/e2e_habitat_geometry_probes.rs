@@ -494,7 +494,7 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix(
             "biofilter_filter_area",
             filter_area_large > filter_area_small * 1.5,
             format!(
-                "2× media should expand filter habitat area by >1.5×: \
+                "8× media should expand filter habitat area by >1.5×: \
                  small={filter_area_small:.1} cm², large={filter_area_large:.1} cm²"
             ),
         );
@@ -1025,6 +1025,9 @@ fn run_probe_habitat_fouling_glass_vs_filter_with_suffix(
 /// dynamically compute O₂ penetration each tick. The planted arm includes
 /// live rooted biomass, while both arms keep decomposer loading identical so
 /// the comparison remains about substrate geometry and root-zone effects.
+/// The inert control also gets active aeration, which makes the contrast
+/// stricter: even with extra dissolved oxygen, the thin inert bed still lacks
+/// enough suboxic volume to sustain planted-like denitrification.
 ///
 /// **What we validate:**
 /// - Live planted substrate starts with a real suboxic zone and measurable
