@@ -430,11 +430,12 @@ fn breeding_success_state(seed: SimSeed) -> TankState {
 /// driver of the divergence.
 ///
 /// Note: we intentionally do not assert that the final warm-tank
-/// `molt_stress` exceeds the cool tank. In the current calibrated model the
-/// cool colony breeds and molts more aggressively, so recent runs finish with
-/// an inverted ordering (`cool=1.000`, `warm=0.351`). The probe therefore
-/// locks the direct thermal outcomes that stay stable across retuning:
-/// lower readiness, fewer offspring, and more egg dropping in the warm arm.
+/// `molt_stress` exceeds the cool tank. The rebuilt stable-baseline fixture
+/// currently finishes with the expected warm-over-cool ordering
+/// (`cool=0.009`, `warm=0.336`), but that specific gap has shifted across
+/// retunes. The probe therefore locks the direct thermal outcomes that stay
+/// stable across calibration work: lower readiness, fewer offspring, and more
+/// egg dropping in the warm arm.
 #[test]
 fn probe_thermal_suppression() -> Result<(), Box<dyn std::error::Error>> {
     require_probe_pass(run_probe_thermal_suppression())
@@ -574,8 +575,8 @@ fn run_probe_thermal_suppression_with_suffix(
         warm_snap.shrimp_reproductive_readiness <= cool_snap.shrimp_reproductive_readiness
     };
     // We intentionally do not assert a warm>cool final molt-stress ordering.
-    // Current calibrated runs invert that relationship because the cooler arm
-    // reproduces and molts more aggressively (`cool=1.000`, `warm=0.351`).
+    // The current stable-baseline fixture lands there (`cool=0.009`,
+    // `warm=0.336`), but that exact gap has shifted across calibration passes.
     if !warm_worse {
         record_failure_all(
             &mut runs,
