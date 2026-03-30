@@ -679,6 +679,12 @@ fn chemistry_stress_state(seed: SimSeed) -> TankState {
     state.animal.set_population_condition_index(0.7);
     state.animal.molt_stress_index = 0.1;
     state.animal.reproductive_readiness_index = 0.3;
+    // Seed the colony at the end of an intermolt cycle so the 21-day probe
+    // actually exercises chemistry-driven molt resolution instead of only
+    // chronic nitrite mortality.
+    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days;
+    state.animal.inter_molt_timer_days = state.shrimp_params.base_molt_interval_days;
+    state.animal.last_molt_success = true;
 
     state.process_params = ProcessParams::default();
     state.process_params.nob_vmax_mg_n_per_g_per_hour = 0.3;
@@ -757,6 +763,17 @@ fn run_probe_chemistry_stress_with_suffix(
             format!(
                 "condition should decline under stress: initial={initial_condition:.3}, final={:.3}. {}",
                 final_snap.shrimp_condition_index,
+                shrimp_diag(&final_state),
+            ),
+        );
+    }
+
+    if molt_failures == 0 && final_state.animal.failed_molt_accum <= 0.0 {
+        run.record_failure(
+            "molt_failure_signal",
+            format!(
+                "low GH + high NO₂ should cause either explicit MoltFailure events or lingering \
+                 failed-molt accumulation, but saw neither. {}",
                 shrimp_diag(&final_state),
             ),
         );
