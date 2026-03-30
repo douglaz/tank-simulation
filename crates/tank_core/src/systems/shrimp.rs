@@ -9,6 +9,11 @@ use crate::types::{
 const ROUTING_MASS_ASSERT_TOLERANCE_G: f64 = 1e-12;
 const DEATH_DETRITUS_FRACTION_TOLERANCE: f64 = 1e-9;
 const DETERMINISTIC_CARRY_LIMIT: f64 = 1.0;
+const PARTIAL_HATCH_DIAGNOSTIC_THRESHOLD: f64 = 0.8;
+const HATCH_SEVERE_CAUSE_FACTOR_THRESHOLD: f64 = 0.6;
+const HATCH_TEMPERATURE_CAUSE_FACTOR_THRESHOLD: f64 = 0.5;
+const HATCH_LIMITING_FACTOR_REPORT_THRESHOLD: f64 = 0.95;
+const HATCH_LIMITING_FACTOR_GROUP_EPSILON: f64 = 0.05;
 
 #[derive(Debug, Clone, Copy)]
 struct MoltConditionBreakdown {
@@ -43,6 +48,17 @@ struct MortalityProbabilities {
     adult: f64,
     sub_adult: f64,
     juvenile: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct HatchOutcomeFactors {
+    condition: f64,
+    oxygen: f64,
+    temperature: f64,
+    stability: f64,
+    minerals: f64,
+    tan: f64,
+    nitrite: f64,
 }
 
 // ── Hourly ──────────────────────────────────────────────────────────────────
@@ -972,6 +988,18 @@ fn egg_development(state: &mut TankState) {
         }
     }
 
+    let hatch_factors = HatchOutcomeFactors {
+        condition: f_condition,
+        oxygen: f_oxygen,
+        temperature: f_temp,
+        stability: f_stability,
+        minerals: f_mineral,
+        tan: f_tan,
+        nitrite: f_no2,
+    };
+    let hatch_causes =
+        hatch_outcome_causes(hatch_factors, temp, total_resource_limited > 0, params);
+
     // Successful hatches produce juveniles
     if total_successful > 0 {
         state.animal.juvenile.receive_entrants(
@@ -980,15 +1008,33 @@ fn egg_development(state: &mut TankState) {
             state.animal.adult.condition_index,
         );
 
+        let hatch_summary =
+            if hatch_rate < PARTIAL_HATCH_DIAGNOSTIC_THRESHOLD && !hatch_causes.is_empty() {
+                format!(
+                    "{total_successful} clutch(es) hatched into {} juvenile(s) \
+                 (hatch rate {hatch_rate:.2}; limited by {})",
+                    total_successful * effective_clutch_size,
+                    hatch_cause_summary(&hatch_causes)
+                )
+            } else {
+                format!(
+                    "{total_successful} clutch(es) hatched into {} juvenile(s)",
+                    total_successful * effective_clutch_size
+                )
+            };
+        let hatch_event_causes =
+            if hatch_rate < PARTIAL_HATCH_DIAGNOSTIC_THRESHOLD && !hatch_causes.is_empty() {
+                hatch_causes.clone()
+            } else {
+                vec![EventCause::RoutineAction]
+            };
+
         crate::systems::events::emit_once_per_day_pub(
             state,
             EventSeverity::Info,
             EventKind::ShrimpHatched,
-            vec![EventCause::RoutineAction],
-            format!(
-                "{total_successful} clutch(es) hatched into {} juvenile(s)",
-                total_successful * effective_clutch_size
-            ),
+            hatch_event_causes,
+            hatch_summary,
         );
     }
 
@@ -999,28 +1045,7 @@ fn egg_development(state: &mut TankState) {
         .saturating_sub(resolved_berried);
 
     if total_failed > 0 || total_resource_limited > 0 {
-        let mut causes = Vec::new();
-        if f_oxygen < 0.6 {
-            causes.push(EventCause::LowOxygen);
-        }
-        if f_temp < 0.5 {
-            causes.push(EventCause::HighTemperature);
-        }
-        if f_mineral < 0.6 {
-            causes.push(EventCause::LowMinerals);
-        }
-        if f_stability < 0.6 {
-            causes.push(EventCause::ChemistryInstability);
-        }
-        if f_tan < 0.6 {
-            causes.push(EventCause::HighAmmonia);
-        }
-        if f_no2 < 0.6 {
-            causes.push(EventCause::HighNitrite);
-        }
-        if total_resource_limited > 0 {
-            causes.push(EventCause::Starvation);
-        }
+        let mut causes = hatch_causes;
         if causes.is_empty() {
             causes.push(EventCause::PoorCondition);
         }
@@ -1749,6 +1774,134 @@ fn temperature_summary(temp_c: f64, params: &ShrimpRuntimeParams) -> String {
     } else {
         format!("temp {:.1} C", temp_c)
     }
+}
+
+fn hatch_outcome_causes(
+    factors: HatchOutcomeFactors,
+    temp_c: f64,
+    resource_limited: bool,
+    params: &ShrimpRuntimeParams,
+) -> Vec<EventCause> {
+    let mut causes = Vec::new();
+
+    if factors.oxygen < HATCH_SEVERE_CAUSE_FACTOR_THRESHOLD {
+        push_unique_cause(&mut causes, EventCause::LowOxygen);
+    }
+    if factors.temperature < HATCH_TEMPERATURE_CAUSE_FACTOR_THRESHOLD {
+        if let Some((cause, _)) = temperature_penalty_detail(temp_c, params) {
+            push_unique_cause(&mut causes, cause);
+        }
+    }
+    if factors.minerals < HATCH_SEVERE_CAUSE_FACTOR_THRESHOLD {
+        push_unique_cause(&mut causes, EventCause::LowMinerals);
+    }
+    if factors.stability < HATCH_SEVERE_CAUSE_FACTOR_THRESHOLD {
+        push_unique_cause(&mut causes, EventCause::ChemistryInstability);
+    }
+    if factors.tan < HATCH_SEVERE_CAUSE_FACTOR_THRESHOLD {
+        push_unique_cause(&mut causes, EventCause::HighAmmonia);
+    }
+    if factors.nitrite < HATCH_SEVERE_CAUSE_FACTOR_THRESHOLD {
+        push_unique_cause(&mut causes, EventCause::HighNitrite);
+    }
+    if resource_limited {
+        push_unique_cause(&mut causes, EventCause::Starvation);
+    }
+
+    if causes.is_empty() {
+        for cause in dominant_hatch_limiting_causes(factors, temp_c, params) {
+            push_unique_cause(&mut causes, cause);
+        }
+    }
+
+    causes
+}
+
+fn dominant_hatch_limiting_causes(
+    factors: HatchOutcomeFactors,
+    temp_c: f64,
+    params: &ShrimpRuntimeParams,
+) -> Vec<EventCause> {
+    let mut candidates = Vec::new();
+
+    if factors.condition <= HATCH_LIMITING_FACTOR_REPORT_THRESHOLD {
+        candidates.push((EventCause::PoorCondition, factors.condition));
+    }
+    if factors.oxygen <= HATCH_LIMITING_FACTOR_REPORT_THRESHOLD {
+        candidates.push((EventCause::LowOxygen, factors.oxygen));
+    }
+    if factors.temperature <= HATCH_LIMITING_FACTOR_REPORT_THRESHOLD {
+        if let Some((cause, _)) = temperature_penalty_detail(temp_c, params) {
+            candidates.push((cause, factors.temperature));
+        }
+    }
+    if factors.stability <= HATCH_LIMITING_FACTOR_REPORT_THRESHOLD {
+        candidates.push((EventCause::ChemistryInstability, factors.stability));
+    }
+    if factors.minerals <= HATCH_LIMITING_FACTOR_REPORT_THRESHOLD {
+        candidates.push((EventCause::LowMinerals, factors.minerals));
+    }
+    if factors.tan <= HATCH_LIMITING_FACTOR_REPORT_THRESHOLD {
+        candidates.push((EventCause::HighAmmonia, factors.tan));
+    }
+    if factors.nitrite <= HATCH_LIMITING_FACTOR_REPORT_THRESHOLD {
+        candidates.push((EventCause::HighNitrite, factors.nitrite));
+    }
+
+    let Some(min_factor) = candidates
+        .iter()
+        .map(|(_, factor)| *factor)
+        .min_by(f64::total_cmp)
+    else {
+        return Vec::new();
+    };
+
+    let mut causes = Vec::new();
+    for (cause, factor) in candidates {
+        if factor <= min_factor + HATCH_LIMITING_FACTOR_GROUP_EPSILON {
+            push_unique_cause(&mut causes, cause);
+        }
+    }
+
+    causes
+}
+
+fn push_unique_cause(causes: &mut Vec<EventCause>, cause: EventCause) {
+    if !causes.contains(&cause) {
+        causes.push(cause);
+    }
+}
+
+fn hatch_cause_summary(causes: &[EventCause]) -> String {
+    causes
+        .iter()
+        .filter_map(|cause| match cause {
+            EventCause::LowOxygen => Some("low oxygen"),
+            EventCause::LowTemperature => Some("low temperature"),
+            EventCause::HighTemperature => Some("high temperature"),
+            EventCause::LowMinerals => Some("low minerals"),
+            EventCause::HighMinerals => Some("high minerals"),
+            EventCause::ChemistryInstability => Some("instability"),
+            EventCause::HighAmmonia => Some("high TAN"),
+            EventCause::HighNitrite => Some("high nitrite"),
+            EventCause::Starvation => Some("low reserves"),
+            EventCause::PoorCondition => Some("poor condition"),
+            EventCause::MarginalFailure => Some("marginal conditions"),
+            EventCause::RoutineAction
+            | EventCause::Overfeeding
+            | EventCause::WaterChange
+            | EventCause::FilterMaintenance
+            | EventCause::BiofilterImmature
+            | EventCause::SurfaceExchangeRestricted
+            | EventCause::HighNutrients
+            | EventCause::PlantCrowding
+            | EventCause::SurfaceSaturation
+            | EventCause::SubstrateExhausted
+            | EventCause::HighDensity
+            | EventCause::PlantTrimming => None,
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 pub fn molt_mineral_modifier(

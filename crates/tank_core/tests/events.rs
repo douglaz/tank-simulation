@@ -309,6 +309,65 @@ fn shrimp_hatched_event_has_cause_codes() -> Result<(), tank_core::SimError> {
 }
 
 #[test]
+fn shrimp_hatched_event_reports_limiting_causes_when_suppressed() -> Result<(), tank_core::SimError>
+{
+    let mut state = TankState::new(SimSeed(5351));
+    state.water.temperature_c = 24.0;
+    state.environment.ambient_temp_c = 24.0;
+    let volume_l = state.water_volume_l();
+    state.water.dissolved_oxygen_mg_total = 3.0 * volume_l;
+    state.water.calcium_mg_total = 10.0 * volume_l;
+    state.water.magnesium_mg_total = 2.0 * volume_l;
+    state.water.alkalinity_meq_total = 10.0 * volume_l;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * volume_l;
+
+    state.animal.adult.count = 12;
+    state.animal.adult.condition_index = 0.95;
+    state.animal.adult.reserve_g = 4.0;
+    state.animal.berried_females_count = 6;
+    state.animal.egg_progress_days = 20.0;
+    state.animal.egg_cohorts = vec![EggCohort {
+        count: 6,
+        progress_days: 20.0,
+    }];
+    state.animal.molt_stress_index = 0.0;
+    state.animal.reproductive_readiness_index = 1.0;
+    state.stability_tracker.instability_index = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.shrimp_params.hatch_success_base = 1.0;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.step_hours(24)?;
+
+    let hatch_event = engine
+        .full_state()
+        .event_log
+        .iter()
+        .find(|event| event.kind == EventKind::ShrimpHatched)
+        .expect("expected a partially suppressed ShrimpHatched event");
+
+    assert!(
+        hatch_event.cause_codes.contains(&EventCause::LowOxygen),
+        "Partial hatch should surface low-oxygen suppression: {:?}",
+        hatch_event.cause_codes
+    );
+    assert!(
+        hatch_event.cause_codes.contains(&EventCause::LowMinerals),
+        "Partial hatch should surface low-mineral suppression: {:?}",
+        hatch_event.cause_codes
+    );
+    assert!(
+        hatch_event.summary.contains("limited by")
+            && hatch_event.summary.contains("low oxygen")
+            && hatch_event.summary.contains("low minerals"),
+        "Partial hatch summary should describe the limiting factors: {}",
+        hatch_event.summary
+    );
+
+    Ok(())
+}
+
+#[test]
 fn egg_failure_event_has_cause_codes() -> Result<(), tank_core::SimError> {
     let mut state = TankState::new(SimSeed(5400));
     state.water.temperature_c = 32.0;

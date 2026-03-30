@@ -472,6 +472,19 @@ fn test_chemistry_stress_suppresses_breeding() -> Result<(), SimError> {
 
     let no2_readiness = no2_engine.full_state().animal.reproductive_readiness_index;
 
+    // Low GH/minerals stress test
+    let mut low_gh_state = breeding_fixture(SimSeed(8005));
+    low_gh_state.water.calcium_mg_total = 10.0 * vol;
+    low_gh_state.water.magnesium_mg_total = 2.0 * vol;
+
+    let mut low_gh_engine = Engine::from_parts(low_gh_state, vec![]);
+    run_days(&mut low_gh_engine, 15)?;
+
+    let low_gh_readiness = low_gh_engine
+        .full_state()
+        .animal
+        .reproductive_readiness_index;
+
     // Clean baseline
     let mut clean_engine = Engine::from_parts(breeding_fixture(SimSeed(8005)), vec![]);
     run_days(&mut clean_engine, 15)?;
@@ -488,6 +501,10 @@ fn test_chemistry_stress_suppresses_breeding() -> Result<(), SimError> {
     assert!(
         no2_readiness < clean_readiness * 0.7,
         "NO2-stressed readiness ({no2_readiness:.4}) should be < 70% of clean ({clean_readiness:.4})"
+    );
+    assert!(
+        low_gh_readiness < clean_readiness * 0.7,
+        "Low-GH readiness ({low_gh_readiness:.4}) should be < 70% of clean ({clean_readiness:.4})"
     );
 
     Ok(())
