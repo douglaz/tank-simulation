@@ -65,6 +65,13 @@ pub struct MicrobeState {
     /// GlassHardscape and PlantSurfaces carry modest decomposer biofilm.
     #[serde(default)]
     pub decomposer_by_habitat: BTreeMap<HabitatKind, f64>,
+    /// Denitrifier community activity index (0.0–1.0).
+    /// Represents the maturation of the anaerobic microbial community in
+    /// suboxic substrate zones. Starts near zero in fresh substrate and
+    /// ramps up over weeks as the denitrifier community establishes.
+    /// Updated daily alongside biofilter maturity.
+    #[serde(default)]
+    pub denitrifier_activity_index: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -591,6 +598,7 @@ impl Default for MicrobeState {
             comammox_biomass_g: 0.01,
             maturity_index: 0.1,
             decomposer_by_habitat,
+            denitrifier_activity_index: 0.0,
         }
     }
 }

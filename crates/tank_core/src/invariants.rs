@@ -407,6 +407,10 @@ fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), Si
         "shrimp_params.critical_molt_gh_ratio",
         params.critical_molt_gh_ratio,
     )?;
+    check_non_negative(
+        "shrimp_params.chloride_protection_factor",
+        params.chloride_protection_factor,
+    )?;
     check_strictly_increasing(
         "shrimp_params.juvenile_molt_interval_days",
         params.juvenile_molt_interval_days,

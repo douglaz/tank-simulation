@@ -505,23 +505,6 @@ fn molt_cycle(state: &mut TankState) {
         state.animal.juvenile.molt_timer_days = 0.0;
     }
 
-    if state.animal.inter_molt_timer_days > 0.0
-        && state.animal.adult.molt_timer_days == 0.0
-        && state.animal.sub_adult.molt_timer_days == 0.0
-        && state.animal.juvenile.molt_timer_days == 0.0
-    {
-        let legacy_timer = state.animal.inter_molt_timer_days;
-        if state.animal.adult.count > 0 {
-            state.animal.adult.molt_timer_days = legacy_timer;
-        }
-        if state.animal.sub_adult.count > 0 {
-            state.animal.sub_adult.molt_timer_days = legacy_timer;
-        }
-        if state.animal.juvenile.count > 0 {
-            state.animal.juvenile.molt_timer_days = legacy_timer;
-        }
-    }
-
     let params = state.shrimp_params.clone();
     let chemistry = state.concentrations();
     let gh_d = chemistry.gh_d();
@@ -1451,10 +1434,10 @@ fn molt_condition_breakdown(
 #[cfg(test)]
 mod tests {
     use super::{
-        compute_effective_nitrite_hazard, compute_mortality_probabilities,
-        refresh_carbonate_state, route_consumed_food, shrimp_feeding,
-        shrimp_grazing_access_factor, shrimp_target_food_route_g, step_daily_shrimp,
-        step_hourly_shrimp_stress, update_condition, MG_N_PER_MEQ_AMMONIA,
+        compute_effective_nitrite_hazard, compute_mortality_probabilities, refresh_carbonate_state,
+        route_consumed_food, shrimp_feeding, shrimp_grazing_access_factor,
+        shrimp_target_food_route_g, step_daily_shrimp, step_hourly_shrimp_stress, update_condition,
+        MG_N_PER_MEQ_AMMONIA,
     };
     use crate::{algae_detrital_mass_g, SimSeed, TankState, WaterState};
 

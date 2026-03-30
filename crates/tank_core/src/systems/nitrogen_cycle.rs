@@ -30,12 +30,12 @@ pub struct NitrogenCycleOutput {
     /// Only AOB and comammox consume alkalinity (TAN oxidation step).
     /// NOB (NO₂⁻ → NO₃⁻) does not consume additional alkalinity.
     pub alkalinity_consumed_meq: f64,
-    /// Total alkalinity produced this tick (meq).
-    ///
-    /// Reserved for the future denitrification return path. Kept as a first-
-    /// class output now so denitrification can add alkalinity without another
-    /// tracing/budget schema change.
+    /// Total alkalinity produced this tick by denitrification (meq).
     pub alkalinity_produced_meq: f64,
+    /// mg N removed by denitrification as N₂ gas (permanent export).
+    pub denitrification_n2_export_mg_n: f64,
+    /// mg C (DOC) consumed by denitrification this tick.
+    pub denitrification_doc_consumed_mg_c: f64,
     /// mg N oxidized by AOB (TAN → NO₂⁻) this tick.
     pub aob_n_oxidized_mg: f64,
     /// mg N oxidized by NOB (NO₂⁻ → NO₃⁻) this tick.
@@ -517,6 +517,8 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
         tan_oxidized_mg,
         alkalinity_consumed_meq,
         alkalinity_produced_meq,
+        denitrification_n2_export_mg_n: 0.0,
+        denitrification_doc_consumed_mg_c: 0.0,
         aob_n_oxidized_mg: aob_step.oxidized_n_mg,
         nob_n_oxidized_mg: nob_step.oxidized_n_mg,
         comammox_n_oxidized_mg: comammox_step.oxidized_n_mg,

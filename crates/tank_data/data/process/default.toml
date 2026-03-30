@@ -87,6 +87,16 @@ comammox_k_do_mg_per_l = 0.6            # DO Ks (mg O₂/L), literature 0.3–1.
 comammox_growth_yield = 0.03
 comammox_decay_rate_per_hour = 0.004
 
+# ── Denitrification kinetics ─────────────────────────────────────────
+# Simplified denitrification in suboxic substrate pore water.
+# Rate = vmax × activity × monod(NO3) × monod(DOC) × suboxic_pore_volume.
+# Stoichiometry: 5CH₂O + 4NO₃⁻ + 4H⁺ → 2N₂↑ + 5CO₂ + 7H₂O
+denitrification_vmax_mg_n_per_l_per_hour = 0.1     # mg N/L/h, literature 0.01–0.5
+denitrification_k_no3_mg_n_per_l = 2.0             # NO₃ Ks (mg N/L), literature 0.5–5.0
+denitrification_k_doc_mg_c_per_l = 5.0             # DOC Ks (mg C/L), literature 1.0–10.0
+denitrification_pore_water_mixing_factor = 0.5      # fraction of water-column conc. in pore water
+denitrification_activity_maturation_days = 60.0     # days for denitrifier community to mature
+
 # Stoichiometric constants
 o2_per_mg_n_nitrified = 4.57
 alkalinity_meq_per_mg_n_nitrified = 0.1428

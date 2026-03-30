@@ -139,6 +139,40 @@ pub struct ProcessParams {
     /// Comammox decay rate per hour.
     pub comammox_decay_rate_per_hour: f64,
 
+    // -- Denitrification kinetics --
+    /// Maximum denitrification rate (mg N per L suboxic pore water per hour).
+    /// Represents the potential rate at saturating NO₃ and DOC concentrations
+    /// in fully mature substrate. Literature range: 0.01–0.5 mg N/L/h for
+    /// freshwater sediments.
+    #[serde(default = "crate::types::process::default_denitrification_vmax_mg_n_per_l_per_hour")]
+    pub denitrification_vmax_mg_n_per_l_per_hour: f64,
+
+    /// Nitrate half-saturation constant for denitrification (mg N / L).
+    /// Monod-style: limitation = [NO₃] / ([NO₃] + K_s).
+    /// Literature range: 0.5–5.0 mg N/L for freshwater denitrifiers.
+    #[serde(default = "crate::types::process::default_denitrification_k_no3_mg_n_per_l")]
+    pub denitrification_k_no3_mg_n_per_l: f64,
+
+    /// DOC half-saturation constant for denitrification (mg C / L).
+    /// Monod-style: limitation = [DOC] / ([DOC] + K_s).
+    /// Literature range: 1.0–10.0 mg C/L.
+    #[serde(default = "crate::types::process::default_denitrification_k_doc_mg_c_per_l")]
+    pub denitrification_k_doc_mg_c_per_l: f64,
+
+    /// Pore-water mixing factor: fraction of water-column concentration that
+    /// reaches suboxic pore water via diffusion and advection.
+    /// Range: 0.0 (no mixing) to 1.0 (perfect equilibrium).
+    /// Typical: 0.3–0.7 for aquarium substrate with moderate flow.
+    #[serde(default = "crate::types::process::default_denitrification_pore_water_mixing_factor")]
+    pub denitrification_pore_water_mixing_factor: f64,
+
+    /// Time constant for denitrifier activity maturation (days).
+    /// The denitrifier activity index ramps from near-zero to 1.0 over
+    /// this many days. Reflects the establishment of an anaerobic microbial
+    /// community in the suboxic zone.
+    #[serde(default = "crate::types::process::default_denitrification_activity_maturation_days")]
+    pub denitrification_activity_maturation_days: f64,
+
     // -- Biofilter carrying capacity --
     /// Base nitrifier density (g biomass / cm² colonizable area).
     /// Multiplied by habitat area, flow, and oxygen exposure to compute
@@ -346,6 +380,17 @@ impl Default for ProcessParams {
             comammox_growth_yield: 0.03,
             comammox_decay_rate_per_hour: 0.004,
 
+            denitrification_vmax_mg_n_per_l_per_hour:
+                crate::types::process::default_denitrification_vmax_mg_n_per_l_per_hour(),
+            denitrification_k_no3_mg_n_per_l:
+                crate::types::process::default_denitrification_k_no3_mg_n_per_l(),
+            denitrification_k_doc_mg_c_per_l:
+                crate::types::process::default_denitrification_k_doc_mg_c_per_l(),
+            denitrification_pore_water_mixing_factor:
+                crate::types::process::default_denitrification_pore_water_mixing_factor(),
+            denitrification_activity_maturation_days:
+                crate::types::process::default_denitrification_activity_maturation_days(),
+
             nitrifier_base_density_g_per_cm2: default_nitrifier_base_density_g_per_cm2(),
 
             o2_per_mg_n_nitrified: 4.57,
@@ -436,6 +481,38 @@ fn default_shrimp_o2_per_mg_c_respired() -> f64 {
 /// All dead biomass stays in-tank as fine detritus by default.
 fn default_death_biomass_to_detritus_fraction() -> f64 {
     1.0
+}
+
+// -- Denitrification defaults --
+
+/// Conservative vmax for freshwater aquarium substrate denitrification.
+/// Literature values range 0.01–0.5 mg N/L/h; 0.1 sits mid-range.
+pub(crate) fn default_denitrification_vmax_mg_n_per_l_per_hour() -> f64 {
+    0.1
+}
+
+/// NO₃ half-saturation for denitrification: 2.0 mg N/L.
+/// Literature range: 0.5–5.0 mg N/L.
+pub(crate) fn default_denitrification_k_no3_mg_n_per_l() -> f64 {
+    2.0
+}
+
+/// DOC half-saturation for denitrification: 5.0 mg C/L.
+/// Literature range: 1.0–10.0 mg C/L.
+pub(crate) fn default_denitrification_k_doc_mg_c_per_l() -> f64 {
+    5.0
+}
+
+/// Fraction of water-column concentration reaching suboxic pore water.
+/// Moderate mixing: 0.5 (50% of overlying concentration).
+pub(crate) fn default_denitrification_pore_water_mixing_factor() -> f64 {
+    0.5
+}
+
+/// Days for denitrifier community to reach full activity.
+/// Anaerobic communities establish slowly: ~60 days typical for aquaria.
+pub(crate) fn default_denitrification_activity_maturation_days() -> f64 {
+    60.0
 }
 
 // -- Biofilter carrying capacity defaults --

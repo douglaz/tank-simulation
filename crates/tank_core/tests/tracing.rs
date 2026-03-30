@@ -231,7 +231,10 @@ fn trace_verbosity_reports_chloride_adjusted_nitrite_stress_diagnostics(
         "shrimp_stress.nitrite_stress_accum.after=",
     ] {
         assert!(
-            shrimp_stress.notes.iter().any(|note| note.starts_with(prefix)),
+            shrimp_stress
+                .notes
+                .iter()
+                .any(|note| note.starts_with(prefix)),
             "trace notes should include {prefix:?}. Notes: {:?}",
             shrimp_stress.notes
         );

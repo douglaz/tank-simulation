@@ -346,6 +346,7 @@ fn step_hours_rejects_invalid_molt_mineral_parameters_before_simulation() {
         ("shrimp_params.sub_adult_molt_interval_days", 0.0),
         ("shrimp_params.molt_success_threshold", 1.2),
         ("shrimp_params.critical_molt_gh_ratio", 1.2),
+        ("shrimp_params.chloride_protection_factor", -1.0),
     ];
 
     for (index, (field, value)) in invalid_cases.into_iter().enumerate() {
@@ -364,6 +365,9 @@ fn step_hours_rejects_invalid_molt_mineral_parameters_before_simulation() {
             }
             "shrimp_params.critical_molt_gh_ratio" => {
                 state.shrimp_params.critical_molt_gh_ratio = value;
+            }
+            "shrimp_params.chloride_protection_factor" => {
+                state.shrimp_params.chloride_protection_factor = value;
             }
             _ => unreachable!(),
         }

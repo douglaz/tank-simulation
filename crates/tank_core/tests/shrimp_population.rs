@@ -746,7 +746,8 @@ fn poor_conditions_can_force_failed_molts() {
     state.process_params.shrimp_stress_mortality_scale = 0.0;
     state.shrimp_params.base_spawn_rate = 0.0;
     state.animal.set_population_condition_index(0.1);
-    state.animal.inter_molt_timer_days = state.shrimp_params.base_molt_interval_days;
+    state.animal.inter_molt_timer_days = 0.0;
+    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days;
 
     let vol = state.water_volume_l();
     state.water.calcium_mg_total = 1.0 * vol;
@@ -769,7 +770,8 @@ fn severe_soft_water_forces_failed_molt_even_for_healthy_shrimp() {
     state.process_params.shrimp_stress_mortality_scale = 0.0;
     state.shrimp_params.base_spawn_rate = 0.0;
     state.animal.set_population_condition_index(1.0);
-    state.animal.inter_molt_timer_days = state.shrimp_params.base_molt_interval_days;
+    state.animal.inter_molt_timer_days = 0.0;
+    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days;
     state.water.calcium_mg_total = 0.0;
     state.water.magnesium_mg_total = 0.0;
     state.stability_tracker.prev_gh_d = state.gh_d();
@@ -781,6 +783,41 @@ fn severe_soft_water_forces_failed_molt_even_for_healthy_shrimp() {
         "very soft water should still fail the molt gate even at high condition"
     );
     assert!(state.animal.failed_molt_accum > 0.0);
+}
+
+#[test]
+fn current_stage_timers_are_not_backfilled_from_legacy_population_timer() {
+    let mut state = shrimp_test_state(SimSeed(7_158));
+    state
+        .process_params
+        .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.animal.set_population_condition_index(1.0);
+    state.animal.inter_molt_timer_days = state.shrimp_params.base_molt_interval_days;
+    state.animal.adult.molt_timer_days = 0.0;
+    state.animal.sub_adult.count = 0;
+    state.animal.juvenile.count = 0;
+    state.water.calcium_mg_total = 0.0;
+    state.water.magnesium_mg_total = 0.0;
+    state.stability_tracker.prev_gh_d = state.gh_d();
+
+    step_daily_shrimp(&mut state);
+
+    assert!(
+        state.animal.last_molt_success,
+        "current-stage states should not resolve a molt from the legacy population timer alone"
+    );
+    assert!(
+        state.animal.failed_molt_accum.abs() < 1e-9,
+        "legacy inter_molt_timer_days should not force a failed molt when stage timers are zero"
+    );
+    assert!(
+        (state.animal.adult.molt_timer_days - 1.0).abs() < 1e-9,
+        "adult stage timer should advance from zero rather than being backfilled from the legacy timer"
+    );
 }
 
 #[test]

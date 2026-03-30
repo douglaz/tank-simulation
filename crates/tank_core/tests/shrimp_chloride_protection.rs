@@ -1,4 +1,7 @@
 use tank_core::{
+    systems::chemistry::{
+        bicarbonate_mg_total_from_mmol_per_l, validate_source_water_carbonate_profile,
+    },
     Engine, PlayerAction, ProcessParams, SimError, SimSeed, SimulationEngine, SourceWaterProfile,
     TankState, WaterState,
 };
@@ -66,25 +69,60 @@ fn nitrite_crash_state(seed: SimSeed) -> TankState {
     state
 }
 
-fn salt_treatment_source_profile(state: &TankState) -> SourceWaterProfile {
-    let base = WaterState::default_for_volume_l(1.0);
+fn valid_source_profile_carbonate(state: &TankState) -> (f64, f64, f64) {
+    let dic_mg_c_per_l = state.dic_mg_c_per_l();
+    let alkalinity_meq_per_l = state.alkalinity_meq_per_l();
+    if let Ok(eq) = validate_source_water_carbonate_profile(
+        dic_mg_c_per_l,
+        alkalinity_meq_per_l,
+        state.water.temperature_c,
+    ) {
+        return (
+            dic_mg_c_per_l,
+            alkalinity_meq_per_l,
+            bicarbonate_mg_total_from_mmol_per_l(eq.hco3_mmol_per_l, 1.0),
+        );
+    }
+
+    let fallback = WaterState::default_for_volume_l(1.0);
+    let eq = validate_source_water_carbonate_profile(
+        fallback.dissolved_inorganic_carbon_mg_c_total,
+        fallback.alkalinity_meq_total,
+        state.water.temperature_c,
+    )
+    .expect("default source-water carbonate profile should validate");
+    (
+        fallback.dissolved_inorganic_carbon_mg_c_total,
+        fallback.alkalinity_meq_total,
+        bicarbonate_mg_total_from_mmol_per_l(eq.hco3_mmol_per_l, 1.0),
+    )
+}
+
+fn emergency_water_change_source_profile(
+    state: &TankState,
+    sodium_mg_per_l: f64,
+    chloride_mg_per_l: f64,
+) -> SourceWaterProfile {
+    let volume_l = state.water_volume_l().max(f64::EPSILON);
+    let (dic_mg_c_per_l, alkalinity_meq_per_l, bicarbonate_mg_per_l) =
+        valid_source_profile_carbonate(state);
     SourceWaterProfile {
         temperature_c: state.water.temperature_c,
-        ammonia_mg_n_per_l: 0.0,
+        ammonia_mg_n_per_l: state.tan_mg_n_per_l(),
         nitrite_mg_n_per_l: state.nitrite_mg_n_per_l(),
         nitrate_mg_n_per_l: state.nitrate_mg_n_per_l(),
-        phosphate_mg_p_per_l: 0.0,
-        dic_mg_c_per_l: base.dissolved_inorganic_carbon_mg_c_total,
-        doc_mg_c_per_l: 0.0,
-        don_mg_n_per_l: 0.0,
-        alkalinity_meq_per_l: base.alkalinity_meq_total,
-        calcium_mg_per_l: 40.0,
-        magnesium_mg_per_l: 10.0,
-        sodium_mg_per_l: base.sodium_mg_total + 130.0,
-        potassium_mg_per_l: base.potassium_mg_total,
-        bicarbonate_mg_per_l: base.bicarbonate_mg_total,
-        chloride_mg_per_l: 200.0,
-        sulfate_mg_per_l: base.sulfate_mg_total,
+        phosphate_mg_p_per_l: state.phosphate_mg_p_per_l(),
+        dic_mg_c_per_l,
+        doc_mg_c_per_l: state.doc_mg_c_per_l(),
+        don_mg_n_per_l: state.don_mg_n_per_l(),
+        alkalinity_meq_per_l,
+        calcium_mg_per_l: state.calcium_mg_per_l(),
+        magnesium_mg_per_l: state.magnesium_mg_per_l(),
+        sodium_mg_per_l,
+        potassium_mg_per_l: state.water.potassium_mg_total / volume_l,
+        bicarbonate_mg_per_l,
+        chloride_mg_per_l,
+        sulfate_mg_per_l: state.water.sulfate_mg_total / volume_l,
     }
 }
 
@@ -96,58 +134,133 @@ fn salt_treatment_source_profile(state: &TankState) -> SourceWaterProfile {
 /// elevated, because chloride inhibits nitrite uptake at the gills.
 #[test]
 fn test_salt_treatment_emergency_scenario() -> Result<(), SimError> {
-    let mut state = nitrite_crash_state(SimSeed(30_001));
-    let salt_treatment_profile = salt_treatment_source_profile(&state);
-    state
-        .source_water_catalog
-        .insert("salt_treatment".to_string(), salt_treatment_profile);
-
-    let mut engine = Engine::from_parts(state, vec![]);
-    let initial_count = engine.full_state().animal.total_count();
+    let mut crash_engine = Engine::from_parts(nitrite_crash_state(SimSeed(30_001)), vec![]);
+    let initial_count = crash_engine.full_state().animal.total_count();
     assert!(initial_count >= 20, "should start with 20 shrimp");
 
     // Phase 1: run through an active nitrite crash with no chloride protection.
-    engine.step_hours(3 * 24)?;
-    let count_before_treatment = engine.full_state().animal.total_count();
+    crash_engine.step_hours(3 * 24)?;
+    let pre_treatment_state = crash_engine.full_state().clone();
+    let count_before_treatment = pre_treatment_state.animal.total_count();
     let pre_treatment_deaths = initial_count - count_before_treatment;
     assert!(
         pre_treatment_deaths > 0,
         "high nitrite with no salt should cause some mortality (got 0 deaths)"
     );
 
-    // Phase 2: perform a 50% water change with chloride-rich source water that
-    // keeps nitrite elevated, so the improvement comes from chloride protection
-    // rather than nitrite removal.
-    engine.apply_action(PlayerAction::WaterChangePercent {
+    let volume_l = pre_treatment_state.water_volume_l().max(f64::EPSILON);
+    let baseline_sodium_mg_per_l = pre_treatment_state.water.sodium_mg_total / volume_l;
+    let baseline_chloride_mg_per_l = pre_treatment_state.concentrations().chloride_mg_per_l();
+    let salt_treatment_profile = emergency_water_change_source_profile(
+        &pre_treatment_state,
+        baseline_sodium_mg_per_l + 130.0,
+        200.0,
+    );
+    let control_profile = emergency_water_change_source_profile(
+        &pre_treatment_state,
+        baseline_sodium_mg_per_l,
+        baseline_chloride_mg_per_l,
+    );
+    salt_treatment_profile.validate("salt_treatment")?;
+    control_profile.validate("matched_control")?;
+
+    let mut treated_state = pre_treatment_state.clone();
+    treated_state
+        .source_water_catalog
+        .insert("salt_treatment".to_string(), salt_treatment_profile.clone());
+    let mut treated_engine = Engine::from_parts(treated_state, vec![]);
+
+    let mut control_state = pre_treatment_state.clone();
+    control_state
+        .source_water_catalog
+        .insert("matched_control".to_string(), control_profile);
+    let mut control_engine = Engine::from_parts(control_state, vec![]);
+
+    let mut salt_without_protection_state = pre_treatment_state;
+    salt_without_protection_state
+        .shrimp_params
+        .chloride_protection_factor = 0.0;
+    salt_without_protection_state
+        .source_water_catalog
+        .insert("salt_treatment".to_string(), salt_treatment_profile);
+    let mut salt_without_protection_engine =
+        Engine::from_parts(salt_without_protection_state, vec![]);
+
+    // Phase 2: apply matched 50% water changes. Only the salt-treatment branch
+    // changes chloride/sodium, and the no-protection branch keeps the same salt
+    // chemistry while disabling the chloride protection mechanic itself.
+    treated_engine.apply_action(PlayerAction::WaterChangePercent {
         percent: 50.0,
         source_profile_id: "salt_treatment".to_string(),
     })?;
-    engine.step_hours(1)?;
+    control_engine.apply_action(PlayerAction::WaterChangePercent {
+        percent: 50.0,
+        source_profile_id: "matched_control".to_string(),
+    })?;
+    salt_without_protection_engine.apply_action(PlayerAction::WaterChangePercent {
+        percent: 50.0,
+        source_profile_id: "salt_treatment".to_string(),
+    })?;
+    treated_engine.step_hours(1)?;
+    control_engine.step_hours(1)?;
+    salt_without_protection_engine.step_hours(1)?;
 
-    let treated_state = engine.full_state();
+    let treated_state = treated_engine.full_state();
+    let control_state = control_engine.full_state();
     let treated_nitrite_mg_l = treated_state.concentrations().nitrite_mg_n_per_l();
+    let control_nitrite_mg_l = control_state.concentrations().nitrite_mg_n_per_l();
     let treated_chloride_mg_l = treated_state.concentrations().chloride_mg_per_l();
+    let control_chloride_mg_l = control_state.concentrations().chloride_mg_per_l();
     assert!(
         treated_nitrite_mg_l > 2.0,
         "nitrite should remain elevated after salt treatment: {treated_nitrite_mg_l:.2} mg/L"
     );
     assert!(
+        control_nitrite_mg_l > 2.0,
+        "matched control should also keep nitrite elevated: {control_nitrite_mg_l:.2} mg/L"
+    );
+    assert!(
+        (treated_nitrite_mg_l - control_nitrite_mg_l).abs() < 1e-6,
+        "salt treatment should not change nitrite relative to the matched water-change control: \
+         treated={treated_nitrite_mg_l:.4}, control={control_nitrite_mg_l:.4}"
+    );
+    assert!(
         treated_chloride_mg_l >= 95.0,
         "salt treatment should raise chloride near 100 mg/L: {treated_chloride_mg_l:.2} mg/L"
     );
+    assert!(
+        control_chloride_mg_l < 5.0,
+        "matched control should leave chloride near the untreated baseline: {control_chloride_mg_l:.2} mg/L"
+    );
 
-    engine.step_hours(71)?;
-    let count_after_treatment = engine.full_state().animal.total_count();
-    let post_treatment_deaths = count_before_treatment - count_after_treatment;
-    let pre_treatment_mortality_rate = pre_treatment_deaths as f64 / initial_count.max(1) as f64;
-    let post_treatment_mortality_rate =
-        post_treatment_deaths as f64 / count_before_treatment.max(1) as f64;
+    treated_engine.step_hours(71)?;
+    control_engine.step_hours(71)?;
+    salt_without_protection_engine.step_hours(71)?;
+
+    let treated_deaths = count_before_treatment - treated_engine.full_state().animal.total_count();
+    let control_deaths = count_before_treatment - control_engine.full_state().animal.total_count();
+    let no_protection_deaths = count_before_treatment
+        - salt_without_protection_engine
+            .full_state()
+            .animal
+            .total_count();
+    let treated_mortality_rate = treated_deaths as f64 / count_before_treatment.max(1) as f64;
+    let control_mortality_rate = control_deaths as f64 / count_before_treatment.max(1) as f64;
+    let no_protection_mortality_rate =
+        no_protection_deaths as f64 / count_before_treatment.max(1) as f64;
 
     assert!(
-        post_treatment_mortality_rate < pre_treatment_mortality_rate,
-        "salt treatment should lower mortality rate despite persistent nitrite: \
-         pre={pre_treatment_mortality_rate:.3}, post={post_treatment_mortality_rate:.3}, \
-         pre_deaths={pre_treatment_deaths}, post_deaths={post_treatment_deaths}"
+        treated_mortality_rate < control_mortality_rate,
+        "salt treatment should beat the matched water-change control while nitrite stays elevated: \
+         treated={treated_mortality_rate:.3}, control={control_mortality_rate:.3}, \
+         treated_deaths={treated_deaths}, control_deaths={control_deaths}, \
+         pre_treatment_deaths={pre_treatment_deaths}"
+    );
+    assert!(
+        treated_mortality_rate < no_protection_mortality_rate,
+        "the chloride-rich branch should lose its benefit when chloride protection is disabled: \
+         treated={treated_mortality_rate:.3}, no_protection={no_protection_mortality_rate:.3}, \
+         treated_deaths={treated_deaths}, no_protection_deaths={no_protection_deaths}"
     );
 
     Ok(())

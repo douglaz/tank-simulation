@@ -52,6 +52,11 @@ pub struct TankState {
     /// hardware, substrate, filter state, or plant state changes.
     #[serde(default)]
     pub habitat_registry: Vec<HabitatEntry>,
+    /// Cumulative nitrogen permanently removed from the system as N₂ gas
+    /// via denitrification (mg N). This is an explicit export pathway in
+    /// the nitrogen budget — not recycled, not unexplained loss.
+    #[serde(default)]
+    pub cumulative_n2_export_mg_n: f64,
 }
 
 impl TankState {
@@ -104,6 +109,7 @@ impl TankState {
             shrimp_params: ShrimpRuntimeParams::default(),
             stability_tracker: StabilityTracker::default(),
             habitat_registry: Vec::new(),
+            cumulative_n2_export_mg_n: 0.0,
         };
         // Seed stability baseline from the freshly built water state so the
         // first daily update does not register a false chemistry swing.
