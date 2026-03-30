@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330040229-apply_fixes-c2-a1-cr8-artifact",
+  "payload_id": "run-20260330040229-apply_fixes-c2-a1-cr8",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-30T10:02:16.172225585Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nRevalidated the biofilter-scaling review feedback and found the equal absolute nitrifier seeding fix was already present on HEAD. This pass applied the remaining probe correction by changing the no-clearance fallback in `crates/tank_harness/tests/e2e_habitat_geometry_probes.rs` to judge the larger filter on lower total reduced nitrogen plus no-worse nitrite, instead of requiring lower TAN specifically under an equal-seed setup. The habitat geometry probe suite now passes end to end.\n\n## Steps\n\n1. [Completed] Inspected the biofilter probe against the review finding, confirmed the fixed absolute-seeding path was already present, and isolated the remaining mismatch to the fallback assertion used when neither run clears reduced nitrogen within the horizon.\n2. [Completed] Updated the no-clearance fallback assertion/message in `crates/tank_harness/tests/e2e_habitat_geometry_probes.rs` so the larger-media branch is evaluated on lower total reduced N and no-worse NO2 rather than a stricter lower-TAN requirement that no longer matches the equal-seed setup.\n3. [Completed] Ran formatting plus targeted habitat-probe validation, then a broader `tank_harness` test sweep to confirm the biofilter probe fix and capture the remaining unrelated shrimp-probe failures in the dirty worktree.\n\n## Validation Evidence\n\n- `git diff -- crates/tank_harness/tests/e2e_habitat_geometry_probes.rs`\n- `cargo fmt --all`\n- `cargo test -p tank_harness --test e2e_habitat_geometry_probes -- --nocapture`\n- `cargo test -p tank_harness`\n- `git status --short`\n- `git diff --stat -- crates/tank_harness/tests/e2e_shrimp_scenario_probes.rs`\n\n## Outstanding Risks\n\n- `cargo test -p tank_harness` still fails in `crates/tank_harness/tests/e2e_shrimp_scenario_probes.rs::{probe_successful_breeding, all_shrimp_probes_summary}` due unrelated dirty-tree changes already present in that file; I did not modify or reconcile those edits in this pass.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 8
+}

@@ -1,0 +1,7 @@
+id = "tanksim-6e5.6.6"
+name = "Shrimp scenario tests"
+flow = "quick_dev"
+prompt_reference = "prompt.md"
+prompt_hash = "b7e43a2450192a68"
+created_at = "2026-03-30T09:38:43.424351765Z"
+status_summary = "created"

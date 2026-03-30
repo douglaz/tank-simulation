@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328023522-review-c2-a1-cr2-artifact",
+  "payload_id": "run-20260328023522-review-c2-a1-cr2",
+  "stage_id": "review",
+  "created_at": "2026-03-28T03:24:09.899627797Z",
+  "content": "# Review\n\n## Outcome\n\n**Approved**\n\n## Evidence\n\n- All 22 budget_tracking tests pass, including the previously-failing `test_closed_system_shrimp_reproduction_conserves_n_and_c` and `test_high_mortality_200_hours_conserves_n_c_and_accumulates_detritus`.\n- All 13 budget_helpers tests pass, including the retrofit test, O2 balance coverage, and the TANK_BUDGET_DEBUG env-var smoke test.\n- All 8 shrimp_feeding_pathway tests pass, with `closed_system_shrimp_feeding_conserves_nitrogen` and `closed_system_shrimp_feeding_conserves_carbon` now using `step_and_inspect` + `assert_n_conserved`/`assert_c_conserved`.\n- All 10 water_change_mass_balance tests pass, with the 50% RO test now exercising the public `engine.apply_action + engine.step_hours` path via an isolated fixture that disables atmospheric exchange.\n- `cargo clippy -p tank_core -- -D warnings` passes with zero warnings.\n- `cargo fmt -p tank_core --check` passes cleanly.\n- Module docs (budget_helpers.rs lines 41-47) explicitly document the runtime `Option<BudgetLedger>` opt-in mechanism, satisfying amendment fr-1-53770879.\n- The `abs_cmp` helper at budget_helpers.rs:580-584 uses `unwrap_or(std::cmp::Ordering::Equal)` as a centralized NaN-safe comparator used by all four sort sites, satisfying amendment fr-1-947a9f46.\n- `BudgetTotals::from_state` at types/budget.rs:100-103 has a `debug_assert!` before the `.max(0.0)` clamp, satisfying amendment fr-1-3d3b6612.\n- `step_and_inspect` at budget_helpers.rs:269-271 emits `maybe_print_debug` on the error path before returning the error, satisfying amendment fr-1-5c021677.\n\n## Findings and Gaps\n\n- The error-path debug emission (fr-1-5c021677) is implemented but not directly exercised by a dedicated test that captures stderr during a partial-failure step. The implementation is compile-validated and structurally correct, but this gap means a future regression in the error path would only be caught indirectly.\n- The doc-test in budget_helpers.rs (line 9) is marked `rust,ignore` and thus not compiled. This is acceptable since it references test-fixture setup that wouldn't compile standalone, but means the quick-start example could drift from the API.\n\n## Follow-up and Amendments\n\n- Consider adding a dedicated test that injects a failure mid-run (e.g., via a poisoned state that triggers SimError after N ticks) and asserts that the partial ticks are still printed to stderr. This would close the error-path coverage gap identified above, but is not blocking for this bead.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}

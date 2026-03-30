@@ -1,0 +1,59 @@
+{
+  "payload_id": "run-20260327232421-final_review-planner-positions-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T01:31:55.421348601Z",
+  "payload": {
+    "summary": "Accept the two live issues: legacy-save reserve seeding and missing alkalinity credit on shrimp TAN production. Reject the rest because they are already fixed in the current code or because they introduce a speculative maintenance model rather than correcting a demonstrated defect.",
+    "votes": [
+      {
+        "amendment_id": "fr-3-694949da",
+        "decision": "accept",
+        "rationale": "`reserve_g` is a newly introduced hidden state that now gates hatching and juvenile maturation. Migrating populated v3 saves to `0.0` causes an immediate behavior regression on load, so the loader should reconstruct a bounded non-zero reserve from existing colony state instead of forcing a cold start."
+      },
+      {
+        "amendment_id": "fr-3-c4d41a63",
+        "decision": "accept",
+        "rationale": "Shrimp routing currently adds TAN and DIC but never credits alkalinity, while nitrification later debits alkalinity for the same nitrogen. That makes the carbonate solve systematically too acidic during sustained shrimp waste production; adding the NHx alkalinity term is the correct coupling."
+      },
+      {
+        "amendment_id": "fr-3-e0885878",
+        "decision": "reject",
+        "rationale": "This is not a demonstrated correctness bug in the current phase-1 model. Adding an arbitrary daily reserve bleed would introduce a new TAN/DIC source and materially retune shrimp life-history behavior without a grounded maintenance model or calibration target."
+      },
+      {
+        "amendment_id": "fr-3-769ef011",
+        "decision": "reject",
+        "rationale": "The current `route_consumed_food` already limits respiration by available dissolved oxygen, scales DIC/TAN by that factor, and retains the unrespired share in `reserve_g`. This amendment is stale rather than identifying a current defect."
+      },
+      {
+        "amendment_id": "fr-3-35499590",
+        "decision": "reject",
+        "rationale": "`step_daily_shrimp` already refreshes carbonate state immediately after feeding and before `update_condition`, so condition and downstream steps do not run on stale pre-feeding pH. The reported ordering bug has already been fixed."
+      },
+      {
+        "amendment_id": "fr-3-61de90b7",
+        "decision": "reject",
+        "rationale": "`fund_live_shrimp_biomass` now fails when `reserve_g` is insufficient and does not synthesize shrimp biomass from DOC/DIC/DON/TAN. The dissolved-pool fallback has already been removed, so this amendment is stale."
+      },
+      {
+        "amendment_id": "fr-3-eac07306",
+        "decision": "reject",
+        "rationale": "`RemoveShrimp` now computes reserve export against the total shrimp population, not adults alone, so removing all adults while juveniles remain no longer deletes the entire reserve pool. This defect is already fixed."
+      },
+      {
+        "amendment_id": "fr-3-96fc0cd7",
+        "decision": "reject",
+        "rationale": "The loader still carries the source schema version into stability-tracker reconciliation and reseeds legacy schema-v2 default trackers when their baselines do not match live water state. The fake post-load instability swing case is already handled."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

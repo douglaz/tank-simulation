@@ -1,0 +1,31 @@
+{
+  "payload_id": "run-20260329204233-final_review-reviewer-0-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-29T21:24:42.586941377Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "In conservation_regression.rs, the grazing test (closed_system_grazing_conserves_n_and_c, lines 257-271) still uses bare `assert!()` for pathway verification instead of the new `assert_or_dump()` helper that all other five tests use. This means a grazing pathway assertion failure will NOT dump the trace to /tmp/tank_conservation_traces/grazing.jsonl, violating the acceptance criterion that 'failures dump the full trace to a file for debugging.' Replace the three bare `assert!()` calls with `assert_or_dump(\"grazing\", &engine, ...)` calls.",
+        "rationale": "All other tests (feeding, mortality_senescence, trim_and_remove, trim_and_leave, water_change) were upgraded to assert_or_dump in this same diff. The grazing test was only partially upgraded (step_and_inspect_or_dump was added but the pathway assertions weren't). This makes grazing the only scenario where a pathway-verification failure gives no trace dump, directly contradicting the acceptance criteria."
+      },
+      {
+        "body": "In e2e_conservation.rs, `run_grazing()` (lines 375-390) has no pathway-verification assertions (ensure/ensure_trace_delta), while all other five scenario runners (run_feeding, run_mortality_senescence, run_trim_and_remove, run_trim_and_leave, run_water_change) were enhanced with these checks in this diff. Add at minimum: ensure that periphyton decreased, TAN increased, and fine detritus increased (mirroring the unit test), so the e2e runner catches the case where grazing is silently not exercised.",
+        "rationale": "Without pathway verification, run_grazing would pass conservation even if grazing isn't actually happening (e.g., zero mass movement everywhere trivially conserves N and C). The other five e2e runners all verify their pathway was exercised. This gap means the e2e summary report could show 'PASS' for grazing without the grazing pathway being tested."
+      },
+      {
+        "body": "In the water-change test (both files), the expected_n_import calculation only sums `source.ammonia_mg_n_per_l + source.nitrate_mg_n_per_l + source.don_mg_n_per_l`, omitting `source.nitrite_mg_n_per_l`. The engine's budget (apply_water_change_with_budget, line 125-128) sums all four source species including nitrite. This only works because the source profile's nitrite is implicitly zero from SourceWaterProfile::zero(). Add `+ source.nitrite_mg_n_per_l` to the test's expected_n_import formula for correctness and resilience against fixture evolution.",
+        "rationale": "If a future test maintainer adds source.nitrite_mg_n_per_l to the fixture (as they did for dic/doc/alkalinity in this diff), the test would fail with a confusing N-import mismatch. The asymmetry between the export formula (which correctly lists all four dissolved N species) and the import formula (which omits nitrite) is a latent bug waiting for a trigger."
+      }
+    ],
+    "summary": "Reviewed the diff of conservation_regression.rs and e2e_conservation.rs (the two files changed in the tanksim-6e5.3.6 apply_fixes cycle). The changes add extensive pathway-verification assertions (trace delta checks, particulate/detritus assertions), dump-on-failure diagnostics, and carbon conservation checking for water-change and trim-and-remove tests. Fixture tuning (disabling light in mortality scenario, boosting senescence/respiration rates, adding suspended algae) makes the mortality test more focused. Overall the implementation is solid and the test logic is correct against the engine's actual accounting. Found three substantive issues: one inconsistency where the grazing test was not fully upgraded to the dump-on-failure pattern, one gap where the e2e grazing runner lacks pathway verification unlike all other scenarios, and one fragility concern in the water-change test's expected-import formula."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

@@ -1,0 +1,617 @@
+=== stdout ===
+=== stderr ===
+OpenAI Codex v0.117.0 (research preview)
+--------
+workdir: /home/master/p/tank-simulation
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019d353d-6cb2-74e1-b6fd-547184c1e757
+--------
+user
+Contract: apply_fixes
+Role: Implementer
+
+# Stage Execution Prompt
+
+You are the Implementer. Your objective for this Apply Fixes stage is to apply the requested fixes, summarize the edits, and record the validation performed.
+
+## Original Project Prompt
+
+○ tanksim-6e5.6.2 · Implement stage- or size-structured shrimp population dynamics   [● P1 · OPEN]
+Owner: master · Type: task
+Created: 2026-03-26 · Updated: 2026-03-27
+Labels: life-history, phase-4, population, scientific-core, shrimp
+
+Context:
+- The current shrimp model already distinguishes adults, juveniles, berried females, egg cohorts, and maturation progress, but it still shares most condition/readiness state globally and lacks an explicit sub-adult or reserve-aware stage layer.
+- The next version should extend that coarse cohort model enough that lifecycle dynamics are visible, tunable, and chemically grounded.
+
+Deliverable:
+- Extend AnimalState into a stage-aware cohort model consistent with F1, with at least juvenile, sub-adult, adult, and berried stages plus per-stage reserve/condition semantics.
+- Implement deterministic forward transitions for growth, berried state, and hatching so the lifecycle is parameterized and testable.
+- Integrate stage-aware feeding, mortality, density, and reproduction logic so every stage contributes to bioload and later stress systems can hook into the same structure.
+- Update snapshot/API/TUI outputs plus save migration and compatibility accessors so richer stage structure remains readable to users and loadable from old saves.
+- Keep the abstraction aggregated and inspectable rather than drifting into hidden individual-level simulation.
+
+Likely touch points:
+- crates/tank_core/src/systems/shrimp.rs
+- crates/tank_core/src/types/biology.rs (AnimalState)
+- crates/tank_core/src/types/snapshot.rs
+- save/state code as needed
+
+## Acceptance Criteria
+
+Acceptance Criteria:
+- the stage model distinguishes at least juvenile, sub-adult, adult, and berried cohorts with per-stage reserve/condition semantics, and old saves migrate into that layout cleanly.
+- lifecycle transitions are deterministic, parameterized, and one-way forward through hatch/growth/berried progression, with counts conserved except for explicit births and deaths.
+- feeding, mortality, density, and reproduction logic are stage-aware, only adults can become berried, and all stages contribute to water-chemistry load/diagnostics.
+- snapshot/API/TUI expose a readable stage breakdown alongside backward-compatible total-population summaries.
+
+Dependencies:
+  -> tanksim-6e5.3.2 (blocks) - Implement shrimp ingestion → assimilation → excretion → feces → respiration loop
+  -> tanksim-6e5.1.2.3 (blocks) - Add save-schema versioning and migration scaffolding
+  -> tanksim-6e5.6.1 (blocks) - Define shrimp state model for reserve, condition, stage, molt, and reproduction
+  -> tanksim-6e5.6 (parent-child) - Phase 4 — shrimp life history, toxicity, and reproduction realism
+
+Dependents:
+  <- tanksim-6e5.6.5 (blocks) - Model chloride protection against nitrite hazard and integrate toxic stress accounting
+  <- tanksim-6e5.6.4 (blocks) - Model reproduction success as a function of temperature, stability, condition, density, and osmotic stress
+  <- tanksim-6e5.6.3 (blocks) - Add mineral budget and molt success/failure mechanics
+
+Comments:
+  [2026-03-26 20:44 UTC] master: Canonicalization note: merged former F2a-F2d into F2 so the stage-model contract, transitions, system integration, and save/UI surface stay in one canonical bead. This keeps Phase 4 follow-on work blocked on one readable lifecycle milestone instead of a micro-chain.
+  [2026-03-26 13:47 UTC] backlog-planner: Future-self notes:
+- Use the lightest structure that unlocks the target behaviors. Three stages (juvenile, sub-adult, adult) are likely enough.
+- Make sure this integrates with the mass-routing loop from C2 rather than bypassing it. Each stage should have feeding, excretion, and respiration rates.
+- Pay attention to snapshot/UI burden; more state is only useful if it remains interpretable.
+
+## Prior Stage Outputs This Cycle
+
+### Apply Fixes (`apply_fixes`)
+- Payload ID: `run-20260328125540-apply_fixes-c2-a1-cr1`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "Reworked shrimp lifecycle progression to use deterministic signed carry math for adult->berried and clutch-resolution transfers, rewired molt timing so failed molts can occur under poor mineral/condition states, and added defaulted carry fields so current/legacy saves keep loading through the existing migration path. Also exposed `total_shrimp_count` plus `sub_adult_count` on snapshot/biology surfaces, updated the overview/biology TUI and harness shrimp totals, and added regression coverage for deterministic spawn/hatch behavior, failed molts, snapshot/API totals, and harness counting.",
+    "outstanding_risks": [
+      "Long-horizon population balance changed from per-individual RNG to deterministic rounding with signed carry; I validated focused shrimp/save suites but did not rerun the full scenario/e2e matrix.",
+      "The TUI surface was compile-validated, but there are still no render/snapshot tests covering the updated shrimp overview text."
+    ],
+    "steps": [
+      {
+        "description": "Inspect the current shrimp stage model, remediation gaps, and outward-facing snapshot/API/TUI/harness surfaces to pin down the required fixes.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Implement deterministic berried and hatch transfers plus a reachable molt-failure path, with new defaulted carry fields to preserve save compatibility.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Expose total/sub-adult shrimp counts across snapshot, biology API, overview/biology TUI, and harness shrimp totals, and add targeted regression tests for those surfaces.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Run focused compilation and test validation for the touched scientific-core, save, API, harness, and TUI crates.",
+        "order": 3,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "`cargo test -p tank_core --no-run` passed.",
+      "`cargo test -p tank_core --lib` passed.",
+      "`cargo test -p tank_core --test shrimp_population` passed.",
+      "`cargo test -p tank_core --test save_load` passed.",
+      "`cargo test -p tank_api snapshot` passed.",
+      "`cargo test -p tank_harness --lib` passed.",
+      "`cargo test -p tank_tui --no-run` passed."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Plan and Implement (`plan_and_implement`)
+- Payload ID: `run-20260328125540-plan_and_implement-c2-a1-cr2`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "Implemented the pending shrimp stage-model amendments in the current workspace: `AnimalState::add_reserve_by_feeding_units()` now uses the adult feeding weight constant consistently; shrimp preset/scenario materialization now carries the stage-aware runtime knobs instead of defaulting them away, while preserving legacy scenario maturation tuning by splitting `process_params.shrimp_juvenile_maturation_days` into juvenile/sub-adult stage durations; v4->v5 save migration now seeds those stage durations from the legacy total-days field so older saves keep their prior maturation schedule; and load-time invariant enforcement now validates `ShrimpRuntimeParams`, with regression coverage for migration, scenario materialization, direct-load rejection of invalid stage params, and the updated thermal reproduction test contract.",
+    "outstanding_risks": [
+      "Scenario compatibility still infers a 60/40 juvenile/sub-adult split from the documented 30+20 default stage contract whenever only the legacy total maturation-days knob is available; any future preset that needs a different split must set explicit stage durations.",
+      "Direct callers that build `TankState` programmatically still need to write `state.shrimp_params` or call `apply_legacy_total_maturation_days()` themselves; the legacy `process_params.shrimp_juvenile_maturation_days` field is only translated during scenario materialization and v4->v5 save migration.",
+      "Focused tank_core, tank_data, and tank_scenarios suites passed, but I did not rerun the broader end-to-end/UI/harness matrix in this amendment pass."
+    ],
+    "steps": [
+      {
+        "description": "Inspect the shrimp biology weighting, preset/scenario materialization, save migration, and invariant validation paths behind the pending amendments.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Patch the runtime and preset wiring so stage-aware shrimp params are materialized explicitly, legacy maturation totals split into stage durations for scenarios and migrated saves, and the adult reserve-routing weight matches `feeding_units()` semantics.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Add load-time validation for `ShrimpRuntimeParams` and update regression coverage for scenario materialization, v4->v5 migration, invalid current-schema loads, and the thermal reproduction maturation override path.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Format the touched code and run focused validation across tank_core, tank_data, and tank_scenarios.",
+        "order": 3,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "`cargo fmt --all` completed.",
+      "`cargo test -p tank_core --lib` passed.",
+      "`cargo test -p tank_core --test save_load` passed.",
+      "`cargo test -p tank_core --test thermal_reproduction_penalty` passed.",
+      "`cargo test -p tank_scenarios` passed.",
+      "`cargo test -p tank_data` passed."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Review (`review`)
+- Payload ID: `run-20260328125540-review-c2-a1-cr2`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "evidence": [
+      "All four amendments from the final review are verified as correctly applied: (1) ADULT_FEEDING_WEIGHT consistency in add_reserve_by_feeding_units at biology.rs:510, (2) ShrimpPreset now includes Optional stage fields (presets.rs:168-184) and scenario materialization populates them via shrimp_preset_to_params (lib.rs:546-600) with legacy maturation bridge via apply_legacy_total_maturation_days, (3) v4→v5 migration derives juvenile_to_subadult_days and subadult_to_adult_days from legacy process_params.shrimp_juvenile_maturation_days (save.rs:410-436), (4) validate_shrimp_runtime_params function added (invariants.rs:256-349) and called from validate_invariants_inner (line 251).",
+      "Stage model is complete: AnimalState (biology.rs:92-144) distinguishes juvenile, sub_adult, adult StageCohorts with per-stage reserve_g, condition_index, maturation_accum; berried_females_count as adult-subset bookkeeping; molt lifecycle fields.",
+      "Lifecycle transitions are deterministic and one-way: juvenile_to_subadult (shrimp.rs:602-658) uses params.juvenile_to_subadult_days with condition gate and reserve funding; subadult_to_adult (shrimp.rs:660-717) uses params.subadult_to_adult_days with condition+molt gate; spawning (shrimp.rs:424-462) restricted to adults only; egg_development resolves cohorts to juveniles.",
+      "Feeding is stage-weighted (1.0/0.67/0.3), mortality has per-stage sensitivity (1.0x/1.2x/1.5x), reproduction restricted to adults, all stages contribute to water chemistry via total feeding_units.",
+      "Snapshot (snapshot.rs:38-42) exposes total_shrimp_count, adult_shrimp_count, sub_adult_count, juveniles_count, berried_females_count. API BiologySnapshot mirrors this. TUI displays stage breakdown.",
+      "cargo clippy --workspace: clean, no warnings. cargo fmt --all --check: clean.",
+      "cargo test --workspace: 277 passed, 1 failed. The single failure (step_hours_leaves_state_untouched_when_clamps_precede_a_validation_error in validation.rs:141) is a pre-existing regression from bead 6e5.7.1 (commit 019219e), which added refresh_habitat_registry() to Engine::from_parts(). This commit is an ancestor of e1bdd1d (the base of this bead's cycle 2 work), confirmed via git ancestry check. validation.rs was not modified by this bead."
+    ],
+    "findings_or_gaps": [
+      "Pre-existing test failure: step_hours_leaves_state_untouched_when_clamps_precede_a_validation_error fails because bead 6e5.7.1 added refresh_habitat_registry() to Engine::from_parts() which mutates state after the test's expected snapshot is cloned. This is not a regression from 6e5.6.2.",
+      "The outstanding risk noted in the apply_fixes output about not rerunning the full scenario/e2e matrix was warranted — a broader test run would surface interactions earlier. However, the only actual failure found is from a different bead.",
+      "The 60/40 juvenile/sub-adult split from legacy total maturation days is a reasonable heuristic but could surprise presets with very different stage ratios. The code documents this clearly and any future preset can override with explicit stage durations."
+    ],
+    "follow_up_or_amendments": [
+      "Bead 6e5.7.1 should fix the pre-existing validation test regression by either updating the test to capture expected after Engine::from_parts() or making the step_hours error path fully restore state including habitat_registry.",
+      "Consider adding a focused integration test that verifies a round-trip scenario materialize → save → load → resume preserves all stage-structured params (beyond what the existing save_load_roundtrip tests cover for the new fields specifically)."
+    ],
+    "outcome": "approved"
+  },
+  "family": "Validation"
+}
+```
+
+### Apply Fixes (`apply_fixes`)
+- Payload ID: `run-20260328125540-apply_fixes-c2-a1-cr2`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "No additional amendments were required after review; the previously applied shrimp stage-model fixes stand as the final implementation. The workspace now uses deterministic signed-carry adult-to-berried and hatch transfers with reachable molt failures, preserves legacy/current saves via defaulted carry fields plus v4->v5/runtime stage-parameter wiring and invariant validation, and exposes readable total/sub-adult shrimp breakdowns across snapshot/API/TUI/harness surfaces with targeted regression coverage.",
+    "outstanding_risks": [
+      "Legacy-only maturation-days inputs still map to juvenile/sub-adult durations via the documented 60/40 split; callers that need different stage timing must set explicit stage durations or populate `state.shrimp_params` directly.",
+      "`cargo test --workspace` still reports the pre-existing `step_hours_leaves_state_untouched_when_clamps_precede_a_validation_error` failure from bead 6e5.7.1; this task did not address that regression.",
+      "The updated TUI stage breakdown is compile-validated and the core/harness/API surfaces are regression-tested, but there are still no dedicated TUI render snapshots or full end-to-end scenario reruns for the new text."
+    ],
+    "steps": [
+      {
+        "description": "Review the final validation output and determine whether any new bead-scope amendments were required.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Apply any additional review-requested code changes after the final review.",
+        "order": 1,
+        "status": "skipped"
+      },
+      {
+        "description": "Retain the approved shrimp lifecycle, save-compatibility, runtime-validation, and outward-surface fixes as the final implementation for this bead.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Record the focused and workspace-level validation evidence for the shipped changes.",
+        "order": 3,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "Review stage outcome: approved with no actionable findings for this bead.",
+      "`cargo fmt --all` completed.",
+      "`cargo fmt --all --check` passed.",
+      "`cargo clippy --workspace` passed with no warnings.",
+      "`cargo test -p tank_core --lib` passed.",
+      "`cargo test -p tank_core --test shrimp_population` passed.",
+      "`cargo test -p tank_core --test save_load` passed.",
+      "`cargo test -p tank_core --test thermal_reproduction_penalty` passed.",
+      "`cargo test -p tank_scenarios` passed.",
+      "`cargo test -p tank_data` passed.",
+      "`cargo test -p tank_api snapshot` passed.",
+      "`cargo test -p tank_harness --lib` passed.",
+      "`cargo test -p tank_tui --no-run` passed.",
+      "`cargo test --workspace` completed with 277 passed and 1 failed; review confirmed the only failure is the pre-existing `step_hours_leaves_state_untouched_when_clamps_precede_a_validation_error` regression from bead 6e5.7.1, outside this task's scope."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Plan and Implement (`plan_and_implement`)
+- Payload ID: `run-20260328125540-plan_and_implement-c2-a1-cr3`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "Completed the pending shrimp bookkeeping amendment pass by hardening the shared stage/egg cohort count helpers with saturating arithmetic and adding regression coverage for the remaining lifecycle invariants: hatch-into-empty juvenile reset, promotion into empty sub-adult reset, and multi-day population conservation where total population change equals births minus deaths. The current `tank_core` branch now has direct tests covering the empty-stage carryover bug class and the acceptance-criteria count-accounting identity.",
+    "outstanding_risks": [
+      "This amendment pass revalidated `tank_core` only; downstream crates were not rerun because the net code diff stayed inside that crate.",
+      "The new conservation regression isolates births and deaths by freezing stage promotions, so long-horizon accounting with simultaneous promotion and mortality still relies on the existing transition-specific tests rather than a dedicated combined invariant test."
+    ],
+    "steps": [
+      {
+        "description": "Inspect the current branch to confirm which pending shrimp-stage amendments were already wired and where the remaining gaps still lived in shared biology helpers and regression coverage.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Harden the shared stage/egg cohort helper arithmetic so incoming-stage and egg-cohort totals use saturating count math instead of unchecked `u32` addition.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Add focused shrimp population regressions for hatch-into-empty juvenile state reset, promotion into empty sub-adult state reset, and multi-day births-minus-deaths population conservation.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Format the updated code and rerun the relevant `tank_core` validation suites, including the full crate test pass.",
+        "order": 3,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "`cargo fmt --all` completed.",
+      "`cargo test -p tank_core --lib` passed.",
+      "`cargo test -p tank_core --test shrimp_population --test validation --test save_load` passed.",
+      "`cargo test -p tank_core` passed (full `tank_core` suite, including the new shrimp population regressions)."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Review (`review`)
+- Payload ID: `run-20260328125540-review-c2-a1-cr3`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "evidence": [
+      "All acceptance criteria verified against source code: (1) Stage model distinguishes juvenile, sub_adult, adult StageCohorts (biology.rs:63-75, 130-182) with per-stage reserve_g, condition_index, maturation_accum; berried_females_count as adult-subset; egg_cohorts with per-cohort count/progress. (2) Lifecycle transitions are deterministic and one-way: juvenile_to_subadult (shrimp.rs:607-667), subadult_to_adult (shrimp.rs:670-731), spawning restricted to adults (shrimp.rs:424-427), egg_development resolves cohorts to juveniles (shrimp.rs:464-586). All use deterministic_transfer_count with signed carry. (3) Feeding is stage-weighted (1.0/0.67/0.3 at biology.rs:192-194) via feeding_units (biology.rs:507-511); mortality has per-stage sensitivity (shrimp.rs:749-758); all stages contribute to water chemistry via respiration/excretion/death-detritus routing. (4) Snapshot exposes total_shrimp_count, adult_shrimp_count, sub_adult_count, juveniles_count, berried_females_count (snapshot.rs:55-59); API BiologySnapshot mirrors these; TUI displays stage breakdown.",
+      "Invariant enforcement verified: enforce_invariants (invariants.rs:42-48) calls clamp_berried_to_adults(), reconcile_egg_cohort_counts() (new, biology.rs:602-621), and clamp_maturation_accum_to_count() on all three stages (biology.rs:125-127). validate_shrimp_runtime_params (invariants.rs:260-360) validates stage durations, condition thresholds, molt intervals.",
+      "Save migration verified: v4→v5 migration (save.rs:408-604) seeds juvenile_to_subadult_days/subadult_to_adult_days from legacy total maturation days via split_legacy_total_maturation_days (biology.rs:380-386). New StageCohort fields use serde(default) for backward compatibility.",
+      "Scenario materialization verified: shrimp_preset_to_params (tank_scenarios/lib.rs:546-600) wires stage-aware knobs with legacy fallback via apply_legacy_total_maturation_days.",
+      "Stage transition safety verified: receive_entrants (biology.rs:92-123) is used at all three transition points (shrimp.rs:538, 666, 730). Empty stages are re-seeded from incoming animals with maturation_accum=0 and condition from source stage. Non-empty stages do count-weighted condition blending.",
+      "clippy --workspace: clean, no warnings. fmt --all --check: clean (verified before cross-bead breakage).",
+      "New regression tests verified: hatch_into_empty_juvenile_resets_stale_stage_state (shrimp_population.rs:382-418) confirms empty juvenile stage is properly re-seeded; promotion_into_empty_subadult_resets_stale_stage_state (shrimp_population.rs:421-452) confirms empty sub-adult stage re-seeded; stage_model_conserves_population_counts_across_births_and_deaths (shrimp_population.rs:455-515) asserts total_count_change == births - deaths over 30-day run. All three assert deterministic values.",
+      "Pre-existing workspace compilation failure: algae_growth.rs references removed fields/functions (algae_half_saturation_n_mg_total, legacy_total_param_to_mg_per_l) introduced by bead 6e5.7.1 (commit 45a0d83). Confirmed via git diff: bead 6e5.6.2 files are unchanged since its checkpoint (43902e4), and at that checkpoint algae_growth.rs had correct imports. This regression is fully outside this bead's scope."
+    ],
+    "findings_or_gaps": [
+      "Cross-bead regression: bead 6e5.7.1 (commit 45a0d83) broke algae_growth.rs by removing legacy_total_param_to_mg_per_l from imports and renaming ProcessParams fields (plant_half_saturation_n_mg_total → plant_half_saturation_n_mg_n_per_l) without updating algae_growth.rs which still references the old names. This prevents workspace-wide compilation and testing. Not attributable to 6e5.6.2.",
+      "The conservation test (shrimp_population.rs:455-515) isolates births and deaths by setting maturation days to 10000 (freezing promotions) and spawn_rate to 0 (no new berried). This is a valid targeted test but does not exercise the combined births+promotions+deaths accounting in a single run. The existing transition-specific tests cover individual promotion paths adequately.",
+      "The 60/40 juvenile/sub-adult split from legacy total maturation days is documented and has a clear override path, but no scenario preset currently specifies explicit stage durations, so all legacy scenarios use the inferred split."
+    ],
+    "follow_up_or_amendments": [
+      "Bead 6e5.7.1 must fix the algae_growth.rs compilation error before workspace tests can run again. The file references algae_half_saturation_n_mg_total, algae_half_saturation_p_mg_total, and legacy_total_param_to_mg_per_l which were removed/renamed in that bead's process.rs changes.",
+      "Consider adding a combined-lifecycle conservation test that allows promotions, births, and deaths simultaneously over a multi-day run to catch potential inter-transition accounting errors. The current conservation test freezes promotions for isolation."
+    ],
+    "outcome": "approved"
+  },
+  "family": "Validation"
+}
+```
+
+### Apply Fixes (`apply_fixes`)
+- Payload ID: `run-20260328125540-apply_fixes-c2-a1-cr3`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "No additional amendments were required after the final review. The existing shrimp stage-model implementation remains the shipped result: stage and egg cohort helper math now uses saturating counts, deterministic stage progression and berried/hatch transfers preserve count accounting, legacy and current saves keep loading through the staged runtime-parameter migration path, and snapshot/API/TUI surfaces expose readable total and per-stage shrimp breakdowns with focused regression coverage for empty-stage reseeding and births-minus-deaths conservation.",
+    "outstanding_risks": [
+      "Workspace-wide validation is still blocked by the pre-existing bead 6e5.7.1 regression in `algae_growth.rs`; this task was approved without addressing that unrelated compile failure.",
+      "Legacy-only maturation-days inputs still map to juvenile/sub-adult durations through the documented 60/40 split unless callers set explicit stage durations.",
+      "The conservation regression intentionally freezes promotions to isolate births-versus-deaths accounting, so there is still no single combined test covering births, promotions, and deaths simultaneously."
+    ],
+    "steps": [
+      {
+        "description": "Review the final validation output and confirm whether any bead-scope fixes were still outstanding.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Apply any additional code amendments requested by the final review.",
+        "order": 1,
+        "status": "skipped"
+      },
+      {
+        "description": "Retain the approved shrimp lifecycle, save-compatibility, stage-count helper, and outward-surface changes as the final implementation for this bead.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Record the focused validation evidence supporting the final approved state.",
+        "order": 3,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "Review stage outcome: approved with no actionable findings for this bead.",
+      "`cargo fmt --all` completed.",
+      "`cargo test -p tank_core --lib` passed.",
+      "`cargo test -p tank_core --test shrimp_population --test validation --test save_load` passed.",
+      "`cargo test -p tank_core` passed.",
+      "Review confirmed the remaining workspace-level failure is the unrelated pre-existing bead 6e5.7.1 regression in `algae_growth.rs`, outside this task's scope."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Plan and Implement (`plan_and_implement`)
+- Payload ID: `run-20260328125540-plan_and_implement-c2-a1-cr4`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "Reviewed the three pending amendments against the current workspace and confirmed the production paths already satisfy them: shrimp condition uses the same access-adjusted food target as feeding, `PlayerAction::AddShrimp` seeds adults through `receive_entrants()`, and snapshot/TUI parsing accept pre-stage payloads that omit `sub_adult_count` and `total_shrimp_count`. The only follow-up needed in this pass was tightening the shrimp satiation regression so it isolates that access-adjusted food-target contract without failing on incidental chemistry drift, then rerunning focused validation.",
+    "outstanding_risks": [
+      "Validation stayed focused on `tank_core` unit/validation coverage and `tank_tui` API-client parsing; I did not rerun broader scenario, harness, or full-workspace suites in this pass.",
+      "The repository currently has unrelated unmerged-index entries in `crates/tank_core/src/systems/plant_growth.rs`, `crates/tank_core/src/types/actions.rs`, `crates/tank_core/src/types/habitat.rs`, `crates/tank_core/src/types/state.rs`, and `crates/tank_core/src/types/substrate.rs`; I left those untouched, so broader git operations may still need manual resolution."
+    ],
+    "steps": [
+      {
+        "description": "Inspect the pending shrimp-condition, AddShrimp, and snapshot compatibility code paths and compare them against the current workspace state.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Confirm the runtime implementation already covers the three pending amendments and avoid redundant production-code edits where the fixes were already present.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Tighten the shrimp satiation regression so it verifies access-adjusted satiation directly, while preserving the existing AddShrimp reseeding and legacy snapshot compatibility coverage.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Run formatting and targeted validation for the touched `tank_core` and `tank_tui` paths.",
+        "order": 3,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "`cargo fmt --all` completed.",
+      "An initial `cargo test -p tank_core --lib` run exposed a brittle exact-value assertion in `update_condition_treats_full_accessible_ration_as_satiated`; after tightening that regression, the rerun passed.",
+      "`cargo test -p tank_core --lib` passed (59 tests).",
+      "`cargo test -p tank_core --test validation` passed.",
+      "`cargo test -p tank_tui api_client` passed."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Review (`review`)
+- Payload ID: `run-20260328125540-review-c2-a1-cr4`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "evidence": [
+      "Stage model verified complete: AnimalState (biology.rs:133-184) distinguishes juvenile, sub_adult, adult StageCohorts with per-stage reserve_g, condition_index, maturation_accum; berried_females_count as adult-subset; egg_cohorts with per-cohort count/progress_days.",
+      "Lifecycle transitions verified deterministic and one-way: juvenile_to_subadult (shrimp.rs:622-682) and subadult_to_adult (shrimp.rs:685-746) use deterministic_transfer_count with carry, condition gates, and reserve-funded biomass growth. Spawning (shrimp.rs:436-476) restricted to adults only. egg_development (shrimp.rs:478-585) resolves cohorts to juveniles via receive_entrants().",
+      "Feeding is stage-weighted (ADULT=1.0, SUB_ADULT=0.67, JUVENILE=0.3 at biology.rs:194-196) via feeding_units() (biology.rs:509-513). Mortality has per-stage sensitivity (sub_adult_sensitivity=1.2, juvenile_sensitivity=1.5) at shrimp.rs:748-818. All stages contribute to water chemistry via total feeding_units.",
+      "Food demand consistency verified: shrimp_feeding() (shrimp.rs:149-196) uses grazing_access_factor (line 160), and update_condition() (shrimp.rs:274-330) uses shrimp_target_food_route_g() (shrimp.rs:132-147) which also applies grazing_access_factor (line 142). The prior amendment fr-3-4901e64f is resolved.",
+      "AddShrimp handler verified: engine.rs:698-704 now calls self.state.animal.adult.receive_entrants(count, 0.0, DEFAULT_STAGE_CONDITION_INDEX) instead of direct count increment. The prior amendment fr-3-17d200a6 is resolved.",
+      "Snapshot backward compatibility verified: TankSnapshotRepr.total_shrimp_count is Option<u32> with #[serde(default)] (defaults to None); sub_adult_count has #[serde(default)] (defaults to 0). Conversion logic (snapshot.rs:176-181) reconstructs total from stage counts when None. Test snapshot_deserializes_pre_stage_payloads_without_stage_totals covers this path. The prior amendment fr-3-dce4c34e is resolved.",
+      "Save migration verified: v4→v5 migration (save.rs:432-628) seeds juvenile_to_subadult_days and subadult_to_adult_days from legacy total maturation days via split_legacy_total_maturation_days. StageCohort fields have serde(default). ShrimpRuntimeParams has struct-level #[serde(default)]. Test legacy_schema_v4_saves_split_legacy_maturation_days_into_stage_params covers this.",
+      "Invariant validation verified: validate_shrimp_runtime_params (invariants.rs:276-376) validates stage durations and condition thresholds. enforce_invariants (invariants.rs:30-55) clamps per-stage condition_index, maturation_accum, and calls clamp_berried_to_adults().",
+      "cargo clippy -p tank_core: clean, no warnings.",
+      "cargo test -p tank_core --lib: 59 passed, 0 failed.",
+      "cargo test -p tank_core --test validation: 14 passed, 0 failed.",
+      "cargo test -p tank_api snapshot: 3 passed, 0 failed.",
+      "cargo test -p tank_core --test shrimp_population: 18 passed, 1 failed (shrimp_removal_validation).",
+      "cargo test -p tank_core --test save_load: 30 passed, 1 failed (save_load_with_active_cycle_state)."
+    ],
+    "findings_or_gaps": [
+      "BEAD REGRESSION: shrimp_removal_validation test fails with InvariantViolation { field: 'animal.egg_cohort_count_total', value: 0.0 }. The test (shrimp_population.rs:626-658) sets berried_females_count=2 but creates no egg cohorts. The egg_cohort invariant (invariants.rs:192-198, added by this bead) requires egg_cohort_count_total == berried_females_count. Either the test must create matching egg cohorts, or enforce_invariants should call repair_egg_cohort_counts_for_load() before validation runs on Engine::from_parts state.",
+      "CROSS-BEAD REGRESSION: save_load_with_active_cycle_state fails due to refresh_habitat_registry() added at non-daily hours in engine.rs:322-326 by bead 6e5.7.1. This changes state during continued simulation that isn't captured in the saved snapshot, causing numerical drift and RNG state mismatch on resume. Not attributable to 6e5.6.2; the diff between commit 43902e4 (this bead's cycle 2 round 3 checkpoint) and HEAD shows this change came from another bead.",
+      "CROSS-BEAD: cargo fmt --all --check reports a formatting issue in plant_nutrient_normalization.rs (last modified by bead 6e5.4.3-v2). Not attributable to 6e5.6.2.",
+      "The step_hours_leaves_state_untouched_when_clamps_precede_a_validation_error test (previously reported as failing from bead 6e5.7.1) now passes. This suggests the refresh_habitat_registry change has been accounted for in some code paths but broke the save/load determinism test instead."
+    ],
+    "follow_up_or_amendments": [
+      "Fix shrimp_removal_validation test: The test must create egg cohorts matching berried_females_count=2. Add two EggCohort entries (e.g., state.animal.egg_cohorts = vec![EggCohort { count: 1, progress_days: 0.0 }, EggCohort { count: 1, progress_days: 0.0 }]) before constructing the engine. This is a one-line fix within this bead's scope.",
+      "Alternatively, enforce_invariants could call repair_egg_cohort_counts_for_load() to auto-heal the berried/egg_cohort mismatch. However, the stricter approach of requiring test setup to be correct is preferred since the invariant is catching a real bookkeeping issue.",
+      "Bead 6e5.7.1 must address the save_load_with_active_cycle_state regression caused by the refresh_habitat_registry() addition at non-daily hours."
+    ],
+    "outcome": "conditionally_approved"
+  },
+  "family": "Validation"
+}
+```
+
+## Authoritative JSON Schema
+
+The JSON schema below is authoritative. Return only JSON that conforms exactly to it.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ExecutionStep": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "order": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/definitions/StepStatus"
+        }
+      },
+      "required": [
+        "description",
+        "order",
+        "status"
+      ],
+      "type": "object"
+    },
+    "StepStatus": {
+      "enum": [
+        "intended",
+        "completed",
+        "skipped"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload for execution/update stages.\n\nRequires structured change summaries, intended or completed steps, validation evidence or plans, and outstanding-risk fields.",
+  "properties": {
+    "change_summary": {
+      "type": "string"
+    },
+    "outstanding_risks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/definitions/ExecutionStep"
+      },
+      "type": "array"
+    },
+    "validation_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "change_summary",
+    "outstanding_risks",
+    "steps",
+    "validation_evidence"
+  ],
+  "title": "ExecutionPayload",
+  "type": "object"
+}
+```
+
+--- Context JSON ---
+{
+  "attempt": 1,
+  "completion_round": 4,
+  "cycle": 2
+}
+
+Return ONLY valid JSON matching the following schema:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ExecutionStep": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "order": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/definitions/StepStatus"
+        }
+      },
+      "required": [
+        "description",
+        "order",
+        "status"
+      ],
+      "type": "object"
+    },
+    "StepStatus": {
+      "enum": [
+        "intended",
+        "completed",
+        "skipped"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload for execution/update stages.\n\nRequires structured change summaries, intended or completed steps, validation evidence or plans, and outstanding-risk fields.",
+  "properties": {
+    "change_summary": {
+      "type": "string"
+    },
+    "outstanding_risks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/definitions/ExecutionStep"
+      },
+      "type": "array"
+    },
+    "validation_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "change_summary",
+    "outstanding_risks",
+    "steps",
+    "validation_evidence"
+  ],
+  "title": "ExecutionPayload",
+  "type": "object"
+}
+
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:00 PM.
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:00 PM.

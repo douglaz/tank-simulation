@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260330104128-final_review-aggregate-c2-a1-cr2-artifact",
+  "payload_id": "run-20260330104128-final_review-aggregate-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T11:53:20.944528595Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 3 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 5\n**Final Review Restarts:** 2/20\n\n## Accepted\n\n- `fr-2-8014730a`\n- `fr-2-d7c5dd73`\n- `fr-2-7893222b`\n\n## Rejected\n\n- `fr-2-1c025102`\n- `fr-2-f229f75f`\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-2-8014730a`\n\nThe `colonizable_area_factor` valid_range upper bound for `coarse_porous.toml` is 1.1, which would mean colonizable area exceeds geometric footprint. Add a brief note in the `param_meta.notes` field explaining why >1.0 is physically meaningful for porous media (surface area exceeding projected area due to void structure) or tighten the upper bound to 1.0 if it should not exceed footprint.\n\n### `fr-2-d7c5dd73`\n\nIn `docs/PROVENANCE_STATUS.md`, the code-resident solver constants table lists `pKa1(T)` as a formula row but uses a different format from the other rows (inline formula vs. single numeric value). Add an explicit 25°C reference value (≈6.35) alongside the formula for quick cross-referencing with standard carbonate tables, consistent with how `PKA2` is presented.\n\n### `fr-2-7893222b`\n\nAdd `param_meta` entries or explicit provisional/TODO notes for the newly introduced shrimp tunables in `/home/master/p/tank-simulation/crates/tank_data/data/shrimp/neocaridina_davidi.toml:36-60`. The file now exposes `temp_condition_low_divisor_c`, `temp_condition_high_divisor_c`, `molt_stress_condition_midpoint`, `molt_stress_thermal_cap`, `nh3_stress_threshold_mg_n_per_l`, and `nh3_stress_response_scale` as first-class scientific knobs, but the `param_meta` section starting at `/home/master/p/tank-simulation/crates/tank_data/data/shrimp/neocaridina_davidi.toml:98` contains no provenance/confidence entries for them.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 2
+}

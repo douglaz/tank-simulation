@@ -1,0 +1,172 @@
+{
+  "payload_id": "run-20260330040229-final_review-aggregate-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T08:17:50.624959294Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-5-c0817a06",
+      "fr-5-3d54a6d2",
+      "fr-5-82009a69",
+      "fr-5-98b094a7",
+      "fr-5-7f760efe"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-5-1cf2cbc3",
+        "normalized_body": "Fix compilation failure in `egg_dropping()` at `crates/tank_core/src/systems/shrimp.rs:792-793`. A stray `}` on line 793 (leftover from removing an `if` block during refactoring) prematurely closes the `if total_dropped > 0` block, causing `causes` to be out of scope when referenced on line 799 and leaving an unmatched `}` at line 809. The project does not compile at all in its current state. Remove the stray `}` on line 793.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-c0817a06",
+        "normalized_body": "The `egg_drop_temp_swing_c` parameter (defined in `biology.rs:350`, defaulted in `biology.rs:850`, serialized in `neocaridina_davidi.toml`, and tested for `> 0.0` in `reproduction_factors.rs:542`) is never actually used in any logic. The `egg_dropping()` function only reads `egg_drop_instability_threshold` and the instability index. Either remove the unused parameter or wire it into the egg-dropping logic as the comment on `shrimp.rs:743` implies it should be (\"A temperature swing > `egg_drop_temp_swing_c` in 24 hours...\").",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-52f42a9a",
+        "normalized_body": "`dominant_repro_suppression()` in `snapshot.rs:372-432` tracks five factors (temperature, condition, stability, density, chemistry) but omits `f_molt` (molt stress), which IS included in the `update_reproductive_readiness()` target formula at `shrimp.rs:684`. When molt stress is the dominant suppressor, the snapshot will misattribute suppression to the next-lowest factor. Add molt stress to the factor array in `dominant_repro_suppression`.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-3d54a6d2",
+        "normalized_body": "`EventCause::HighDensity` (defined at `events.rs:49`) is added by this changeset but never emitted anywhere. If density-dependent reproduction suppression is intended to be observable through events, wire it up (e.g., in spawning or reproductive readiness). Otherwise remove it to avoid dead code.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-82009a69",
+        "normalized_body": "[high] `crates/tank_core/src/systems/shrimp.rs:741-761` regresses sudden egg-drop behavior. The new code no longer reads `egg_drop_temp_swing_c` and only gates on `instability_index`, but `update_stability_tracker()` only moves that index 30% toward the raw swing each day (`crates/tank_core/src/systems/shrimp.rs:194-205`). From a stable baseline, even a 4°C swing produces only ~0.3 instability, which is still below the default `egg_drop_instability_threshold` of 0.5, so first-day temperature shocks no longer drop eggs at all. That also leaves the species parameter declared at `crates/tank_core/src/types/biology.rs:347-353` effectively dead.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-98b094a7",
+        "normalized_body": "[high] `crates/tank_core/tests/reproduction_factors.rs:227-245` breaks `test_reproduction_increases_with_condition`. The 'starved' setup zeroes `shrimp_periphyton_grazing_g_per_shrimp_per_day`, and `update_condition()` treats zero food demand as fully satiated (`crates/tank_core/src/systems/shrimp.rs:393-399`). In practice the starved tank ends up healthier than the fed tank, and `cargo test -p tank_core --test reproduction_factors` now fails at `crates/tank_core/tests/reproduction_factors.rs:252-265`.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-7f760efe",
+        "normalized_body": "[high] `crates/tank_core/tests/reproduction_factors.rs:560-599` still leaves `test_mature_stable_tank_breeds_well` failing. With the retuned scenario (`adult.count = 20`, `Feed { grams: 0.2 }`, faster maturation, etc.), the run only produces one `ShrimpBerried` event, so the `berried_events >= 3` assertion at `crates/tank_core/tests/reproduction_factors.rs:597-600` trips under `cargo test -p tank_core --test reproduction_factors`.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [
+      "fr-5-52f42a9a"
+    ],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-5-c0817a06",
+        "normalized_body": "The `egg_drop_temp_swing_c` parameter (defined in `biology.rs:350`, defaulted in `biology.rs:850`, serialized in `neocaridina_davidi.toml`, and tested for `> 0.0` in `reproduction_factors.rs:542`) is never actually used in any logic. The `egg_dropping()` function only reads `egg_drop_instability_threshold` and the instability index. Either remove the unused parameter or wire it into the egg-dropping logic as the comment on `shrimp.rs:743` implies it should be (\"A temperature swing > `egg_drop_temp_swing_c` in 24 hours...\").",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-3d54a6d2",
+        "normalized_body": "`EventCause::HighDensity` (defined at `events.rs:49`) is added by this changeset but never emitted anywhere. If density-dependent reproduction suppression is intended to be observable through events, wire it up (e.g., in spawning or reproductive readiness). Otherwise remove it to avoid dead code.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-82009a69",
+        "normalized_body": "[high] `crates/tank_core/src/systems/shrimp.rs:741-761` regresses sudden egg-drop behavior. The new code no longer reads `egg_drop_temp_swing_c` and only gates on `instability_index`, but `update_stability_tracker()` only moves that index 30% toward the raw swing each day (`crates/tank_core/src/systems/shrimp.rs:194-205`). From a stable baseline, even a 4°C swing produces only ~0.3 instability, which is still below the default `egg_drop_instability_threshold` of 0.5, so first-day temperature shocks no longer drop eggs at all. That also leaves the species parameter declared at `crates/tank_core/src/types/biology.rs:347-353` effectively dead.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-98b094a7",
+        "normalized_body": "[high] `crates/tank_core/tests/reproduction_factors.rs:227-245` breaks `test_reproduction_increases_with_condition`. The 'starved' setup zeroes `shrimp_periphyton_grazing_g_per_shrimp_per_day`, and `update_condition()` treats zero food demand as fully satiated (`crates/tank_core/src/systems/shrimp.rs:393-399`). In practice the starved tank ends up healthier than the fed tank, and `cargo test -p tank_core --test reproduction_factors` now fails at `crates/tank_core/tests/reproduction_factors.rs:252-265`.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-7f760efe",
+        "normalized_body": "[high] `crates/tank_core/tests/reproduction_factors.rs:560-599` still leaves `test_mature_stable_tank_breeds_well` failing. With the retuned scenario (`adult.count = 20`, `Feed { grams: 0.2 }`, faster maturation, etc.), the run only produces one `ShrimpBerried` event, so the `berried_events >= 3` assertion at `crates/tank_core/tests/reproduction_factors.rs:597-600` trips under `cargo test -p tank_core --test reproduction_factors`.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 5,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-5-1cf2cbc3"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 5 amendment(s); restart required.",
+    "total_proposed_amendments": 7,
+    "total_reviewers": 2,
+    "unique_amendment_count": 7
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 5
+}

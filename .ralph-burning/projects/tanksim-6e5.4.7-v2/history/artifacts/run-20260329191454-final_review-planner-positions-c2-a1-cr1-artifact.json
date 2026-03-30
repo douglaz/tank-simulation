@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260329191454-final_review-planner-positions-c2-a1-cr1-artifact",
+  "payload_id": "run-20260329191454-final_review-planner-positions-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-29T19:50:30.943765820Z",
+  "content": "# Final Review Planner Positions\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccept the two amendments that tighten actual internal invariants and remove unnecessary disabled-path work; reject the two whose premises are no longer true in the current tree.\n\n## Votes\n\n- `fr-1-6a5fe401`: Accept\n  `alk_budget` is clearly being maintained as a running shared resource limit alongside `do_budget`. Leaving it undecremented after comammox makes that internal budget inconsistent with the actual alkalinity already charged this tick. That is harmless in the current control flow because nothing reads `alk_budget` afterward, but the proposed decrement is low-risk, keeps the bookkeeping invariant intact, and avoids a silent over-allocation bug if a later stage starts consuming the remaining alkalinity budget.\n- `fr-1-9ac12929`: Accept\n  `StageTrace::metric()` always builds a `BudgetMetric` with an owned `String`, and those metrics are only consumed when `ctx.budget` is present. When budget tracking is off, and especially when tracing is also off, those allocations are pure overhead and are dropped immediately. Guarding metric collection on budget activity is behavior-preserving and improves the cold path without reducing observability when budgets are enabled.\n- `fr-1-c283b14f`: Reject\n  The premise is incorrect in the current repository state: `crates/tank_core/tests/nitrification_alkalinity.rs` is already tracked in git. This is not an actual defect in the reviewed change set.\n- `fr-1-beff8673`: Reject\n  The current code already exposes both `alkalinity_consumed_meq` and `alkalinity_produced_meq` on `NitrogenCycleOutput`, and the engine already emits both corresponding metrics/trace notes. That means the claimed consumed-vs-returned attribution gap has already been addressed. More granular future attribution could still be added later, but the specific amendment does not describe a current missing API/schema capability.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

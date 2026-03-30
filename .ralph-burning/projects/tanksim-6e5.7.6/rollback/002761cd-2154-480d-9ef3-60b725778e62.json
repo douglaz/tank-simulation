@@ -1,0 +1,36 @@
+{
+  "rollback_id": "002761cd-2154-480d-9ef3-60b725778e62",
+  "created_at": "2026-03-30T13:41:47.277196357Z",
+  "stage_id": "plan_and_implement",
+  "cycle": 1,
+  "git_sha": "1e4bf66ff35fab82126736508794db85005c9a77",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260330133505",
+      "stage_cursor": {
+        "stage": "review",
+        "cycle": 1,
+        "attempt": 1,
+        "completion_round": 1
+      },
+      "started_at": "2026-03-30T13:35:05.440977066Z",
+      "prompt_hash_at_cycle_start": "8f7839057775e0e4",
+      "prompt_hash_at_stage_start": "8f7839057775e0e4",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 0
+    },
+    "status": "running",
+    "cycle_history": [],
+    "completion_rounds": 1,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [],
+      "processed_count": 0
+    },
+    "status_summary": "running: completed Plan and Implement, next Review"
+  }
+}

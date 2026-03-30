@@ -1,0 +1,102 @@
+{
+  "payload_id": "run-20260329191454-final_review-aggregate-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-29T20:38:42.343807692Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-3-bc178401",
+      "fr-3-67cf9ba0"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-3-bc178401",
+        "normalized_body": "In nitrogen_cycle.rs after the comammox budget deduction (around line 352), `alk_budget` is left stale at its pre-comammox value because the recent refactor replaced `alk_budget = (alk_budget - comammox_alk_cost).max(0.0)` with a local `let remaining_alk_budget`. Add `alk_budget = remaining_alk_budget.max(0.0);` after the debug_assert (or shadow `alk_budget` with `let alk_budget = ...`) to maintain the running-budget invariant. Without this, any future guild step added after comammox but before the final alkalinity commit at line 434 would silently read an inflated budget and over-allocate alkalinity.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-67cf9ba0",
+        "normalized_body": "The constant MG_N_PER_MEQ_AMMONIA (= 14.007) is defined identically in both microfauna.rs:9 and shrimp.rs:9 for ammonia excretion alkalinity coupling. Centralize it in process.rs alongside NITRIFICATION_ALK_MEQ_PER_MG_N and DENITRIFICATION_ALK_MEQ_PER_MG_N, since all three derive from the atomic mass of nitrogen and govern alkalinity stoichiometry. This prevents future divergence if one copy is changed without the other.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-d552d797",
+        "normalized_body": "`crates/tank_core/src/engine.rs:232-239` now emits `nitrogen_cycle.total_n_nitrified_mg`, but the value it logs is still `nob_step + comammox_step` from `crates/tank_core/src/systems/nitrogen_cycle.rs:343-346`, while alkalinity is consumed on the AOB leg as well (`crates/tank_core/src/systems/nitrogen_cycle.rs:236-240,371-384`). In a partial-nitrification tick (for example AOB active, NOB absent or O2-limited), the trace will show positive `alk_consumed_meq` with `total_n_nitrified_mg=0`, which makes the new diagnostics scientifically wrong and breaks the intended stoichiometric attribution.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-145af1bf",
+        "normalized_body": "The new bookkeeping surface is still one-sided, so it does not actually prepare the denitrification return path. `NitrogenCycleOutput` only exposes `alkalinity_consumed_meq` (`crates/tank_core/src/systems/nitrogen_cycle.rs:12-23,382-384`), and the trace schema only writes `nitrogen_cycle.alk_consumed_meq` (`crates/tank_core/src/engine.rs:236-238`). Once denitrification is added, there is no place to report 'consumed X / returned Y' separately without adding another public struct field and trace key or overloading the existing field with a different meaning.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-3-bc178401",
+        "normalized_body": "In nitrogen_cycle.rs after the comammox budget deduction (around line 352), `alk_budget` is left stale at its pre-comammox value because the recent refactor replaced `alk_budget = (alk_budget - comammox_alk_cost).max(0.0)` with a local `let remaining_alk_budget`. Add `alk_budget = remaining_alk_budget.max(0.0);` after the debug_assert (or shadow `alk_budget` with `let alk_budget = ...`) to maintain the running-budget invariant. Without this, any future guild step added after comammox but before the final alkalinity commit at line 434 would silently read an inflated budget and over-allocate alkalinity.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-67cf9ba0",
+        "normalized_body": "The constant MG_N_PER_MEQ_AMMONIA (= 14.007) is defined identically in both microfauna.rs:9 and shrimp.rs:9 for ammonia excretion alkalinity coupling. Centralize it in process.rs alongside NITRIFICATION_ALK_MEQ_PER_MG_N and DENITRIFICATION_ALK_MEQ_PER_MG_N, since all three derive from the atomic mass of nitrogen and govern alkalinity stoichiometry. This prevents future divergence if one copy is changed without the other.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 3,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-3-d552d797",
+      "fr-3-145af1bf"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 2 amendment(s); restart required.",
+    "total_proposed_amendments": 4,
+    "total_reviewers": 2,
+    "unique_amendment_count": 4
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 3
+}

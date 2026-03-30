@@ -1,0 +1,115 @@
+{
+  "payload_id": "run-20260330113320-final_review-aggregate-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T12:52:58.718514313Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-2-cfc6f6b8"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-2-878c6151",
+        "normalized_body": "The validation suite VS-03 (day/night pH swing) hard-codes process_params overrides (photosynthesis_dic_rate=0.15, respiration_dic_rate=0.03, plant_photosynthesis_o2=0.4, background_bod=0.08) that diverge 2-4x from the shipped default.toml rates. This means the probe validates a custom scenario rather than the simulator's actual default configuration. Consider adding a comment or a separate probe that also tests with default rates to ensure the shipped model produces a measurable diurnal swing under realistic planted-tank conditions. At minimum, document that this scenario's rates are intentionally amplified and why, so future tuners don't assume the shipped defaults achieve a 0.2-1.0 pH swing.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-c6b05ec5",
+        "normalized_body": "VS-05 (shrimp breeding thermal window) disables both mortality pathways (shrimp_base_mortality_per_day=0.0, shrimp_stress_mortality_scale=0.0, failed_molt_mortality_scale=0.0) in both arms, which means the warm arm cannot exhibit temperature-induced mortality—only reproductive suppression. The doc envelope table says 'Egg-dropping events: warm >= cool' but the test never checks for egg-dropping events. Add at least a soft assertion for egg-dropping or heat-stress events in the warm arm, or update the envelope table in validation_scenarios.md to remove/downgrade claims that the test doesn't actually verify.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-55664bd1",
+        "normalized_body": "VS-07 (denitrification) pre-seeds the planted arm with denitrifier_activity_index=1.0 and sets denitrification_vmax to 0.2 (2x the shipped default of 0.1) and pore_water_mixing_factor to 1.0 (2x the shipped 0.5). Both arms use StartupSubstratePreset::InertSand for the bare arm but the planted arm uses ActivePlanted, creating asymmetric starting conditions beyond just substrate. Document these deliberate parameter overrides in the validation_scenarios.md envelope bounds section so that future tuners understand the scenario tests a specifically favorable denitrification setup rather than the shipped defaults.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-b4f97863",
+        "normalized_body": "The `cadence_frozen` path in molt_cycle (shrimp.rs:559-560) is not exercised by any validation scenario because no scenario sets temp_condition_min_factor to 0.0. The shipped neocaridina preset uses 0.2, so cadence_frozen is always false. The molt_mineral_budget test 'test_zero_temp_condition_min_factor_freezes_molt_progress' covers the unit-level behavior, but the validation suite should ideally include a note that this extreme-cold/extreme-heat molt-freeze behavior is tested elsewhere and not part of the current envelope set.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-c1a30bdf",
+        "normalized_body": "`crates/tank_harness/src/calibration.rs:77-81` stores `FieldCheck.observed`, `envelope_min`, and `envelope_max` as raw `f64`s, and `check_classified()` feeds `f64::INFINITY` into that struct for one-sided envelopes such as `do_min()` (`crates/tank_harness/src/calibration.rs:393-394`, `crates/tank_harness/src/calibration.rs:487-538`). `serde_json` serializes `Infinity`/`NaN` as `null`, so `CalibrationReport` no longer round-trips as JSON; `cargo test -p tank_harness --test calibration_report` is already failing in `test_report_machine_readable` and `test_full_calibration_workflow` with `invalid type: null, expected f64`. The report needs a JSON-safe representation for open-ended or non-finite values before it can be considered machine-readable.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-cfc6f6b8",
+        "normalized_body": "`CalibrationRun::finish()` computes `overall_status` only from `checkpoint_rows` and then ignores the `Result` from `self.inner.finish()` (`crates/tank_harness/src/calibration.rs:321-338`). Because callers can reach the shared harness through `CalibrationRun::inner_mut()` (`crates/tank_harness/src/calibration.rs:251-253`), and the harness exposes additional failure paths such as `assert_snapshot()` and `record_failure()` (`crates/tank_harness/src/lib.rs:580-614`), a calibration run can accumulate real harness failures while the returned `ScenarioRow` still says `pass` and omits `artifact_path`. `finish()` should propagate or incorporate underlying harness failures instead of dropping them.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-2-cfc6f6b8",
+        "normalized_body": "`CalibrationRun::finish()` computes `overall_status` only from `checkpoint_rows` and then ignores the `Result` from `self.inner.finish()` (`crates/tank_harness/src/calibration.rs:321-338`). Because callers can reach the shared harness through `CalibrationRun::inner_mut()` (`crates/tank_harness/src/calibration.rs:251-253`), and the harness exposes additional failure paths such as `assert_snapshot()` and `record_failure()` (`crates/tank_harness/src/lib.rs:580-614`), a calibration run can accumulate real harness failures while the returned `ScenarioRow` still says `pass` and omits `artifact_path`. `finish()` should propagate or incorporate underlying harness failures instead of dropping them.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 2,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-2-878c6151",
+      "fr-2-c6b05ec5",
+      "fr-2-55664bd1",
+      "fr-2-b4f97863",
+      "fr-2-c1a30bdf"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 1 amendment(s); restart required.",
+    "total_proposed_amendments": 6,
+    "total_reviewers": 2,
+    "unique_amendment_count": 6
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 2
+}

@@ -1,0 +1,24 @@
+{
+  "payload_id": "run-20260330104128-final_review-planner-positions-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T12:51:35.674472717Z",
+  "payload": {
+    "summary": "Reject the amendment. Existing tests already cover the added non-critical-GH summary path, and the cited regression risk is not demonstrated beyond that.",
+    "votes": [
+      {
+        "amendment_id": "fr-4-77b8e070",
+        "decision": "reject",
+        "rationale": "The code change does add a new \"score\" detail on the non-critical-GH path, but that behavior is already exercised by the existing molt-failure test that asserts the summary contains \"score\". The newer disabled-GH-minimum test is specifically checking branch selection by ensuring the critical-GH detail is suppressed. Because the else branch is unconditional for all non-critical-GH failures, requiring an additional positive assertion in that exact scenario would be redundant rather than addressing a distinct correctness or safety gap, and there is no evidence here of consumers depending on exact summary strings as a stable interface."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

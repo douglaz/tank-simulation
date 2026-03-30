@@ -1,0 +1,7 @@
+id = "tanksim-6e5.7.6"
+name = "Rebalance and release narrative"
+flow = "quick_dev"
+prompt_reference = "prompt.md"
+prompt_hash = "8f7839057775e0e4"
+created_at = "2026-03-30T13:35:05.253557524Z"
+status_summary = "created"

@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330064830-apply_fixes-c2-a1-cr6-artifact",
+  "payload_id": "run-20260330064830-apply_fixes-c2-a1-cr6",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-30T10:06:24.728524614Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNo additional code changes were required in this Apply Fixes pass. The latest review approved the remaining-depth root-zone oxygenation saturation change and the habitat-geometry probe deduplication update with no blocking follow-up requested.\n\n## Steps\n\n1. [Completed] Inspect the latest approved review results to confirm whether any blocking amendments were requested for the implemented root-zone oxygenation and habitat-geometry probe fixes.\n2. [Skipped] Apply additional code changes for review follow-up items.\n3. [Completed] Record the approved validation state from the latest package test, clippy, formatting, and targeted probe runs.\n\n## Validation Evidence\n\n- Latest review outcome was `approved` with no blocking amendments required.\n- `cargo test -p tank_core` passed across the full `tank_core` package test suite with zero failures.\n- `cargo clippy -p tank_core -- -D warnings` passed.\n- `cargo fmt --all --check` was clean in the latest review validation.\n- `cargo test -p tank_harness --test e2e_habitat_geometry_probes -- --nocapture` passed with the intended default shape: the summary runner executed and the 5 individual probe entrypoints were ignored by default.\n- `cargo clippy -p tank_harness -- -D warnings` passed.\n- Review also reconfirmed passing substrate/root-zone oxygenation coverage, denitrification coverage, and habitat-geometry probe coverage.\n\n## Outstanding Risks\n\n- This stage relied on the latest approved validation results rather than rerunning a fresh workspace-wide test suite.\n- Two non-blocking cleanup opportunities remain from review: initialization-time `from_parts` still discards the returned `SubstrateOxygenationBreakdown`, and `root_oxygenation_active_biomass_g()` still recomputes the habitat registry internally.\n- The current `effective_penetration_cm` path no longer has an extra explicit clamp to total depth; review confirmed the math keeps it bounded, but the removed safety-net clamp remains a non-blocking review note.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 6
+}

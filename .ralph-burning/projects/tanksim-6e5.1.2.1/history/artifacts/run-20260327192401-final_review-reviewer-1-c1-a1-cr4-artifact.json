@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327192401-final_review-reviewer-1-c1-a1-cr4-artifact",
+  "payload_id": "run-20260327192401-final_review-reviewer-1-c1-a1-cr4-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-27T22:01:30.535226467Z",
+  "content": "# Final Review Proposal\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nReviewed the budget-tracking implementation end-to-end and ran `cargo test -p tank_core -- --nocapture`. The suite passes, but I found two correctness bugs: nitrifier growth can stall after successful nitrification because it is funded from post-debit residual TAN, and the new plant/algae loss-routing code can create mass when loss fractions exceed available biomass.\n\n## Amendments\n\n1. crates/tank_core/src/systems/nitrogen_cycle.rs:227-229,286-324,377-388: nitrifier growth is computed after TAN has already been debited for oxidation, and the growth helper then funds AOB/NOB/comammox biomass from the post-oxidation ammonia pool. That makes growth collapse to zero whenever a tick fully consumes TAN, even with positive `*_growth_yield`, spare DIC, and successful nitrification; NOB growth is additionally keyed off ammonia instead of the nitrite it just oxidized. Please move the biomass-funding calculation onto the substrate actually processed this tick (or pre-debit pools), and stop using residual ammonia as the N source for NOB growth.\n   Rationale: This is a behavior regression, not just a ledger issue: biofilter guilds can stop growing in exactly the high-activity ticks that should increase maturity. I reproduced it locally with a 10 mg TAN / 10 mg nitrite fixture: `step_nitrogen_cycle()` converted all 10 mg N to nitrate, but both `aob_delta` and `nob_delta` stayed `0.0` despite positive growth yields and no decay.\n2. crates/tank_core/src/systems/plant_growth.rs:151-157 and crates/tank_core/src/systems/algae_growth.rs:116-125,200-209: the new mass-routing code adds the full requested respiration/grazing/senescence loss into DOC/DON or detritus even when the biomass update is clamped at zero. If losses exceed available biomass, the state floors the producer pool at `0.0` but still routes more mass than actually existed, creating nitrogen/carbon. Clamp routed loss to the biomass that was truly removed (`before + growth - after`), not the uncapped loss terms.\n   Rationale: This breaks the conservation work the patch is trying to add. With a 1 g plant, zero nutrients, and `plant_respiration_fraction_per_day = 2.0`, `step_daily_plants()` leaves plant biomass at `0` but doubles total N from `28` to `56` mg and total C from `175` to `350` mg by routing 2 g worth of organics into DON/DOC.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

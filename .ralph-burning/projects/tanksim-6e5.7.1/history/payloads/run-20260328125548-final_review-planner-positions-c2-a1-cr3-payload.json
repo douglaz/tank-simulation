@@ -1,0 +1,49 @@
+{
+  "payload_id": "run-20260328125548-final_review-planner-positions-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T14:47:38.206294560Z",
+  "payload": {
+    "summary": "Accept amendments that fix the stale validation test assumption, close the missing DIC-rate validation hole, clarify the effective-unit contract for valid_range, surface range diagnostics on the normal loader path, and extend per-parameter provenance beyond process presets. Reject only the opt-in renormalization proposal, because legacy kinetic fields already have normalized runtime semantics and the better fix is clearer docs/diagnostics plus less ambiguous fallback formatting, not removing normalization by default.",
+    "votes": [
+      {
+        "amendment_id": "fr-3-67e7ae00",
+        "decision": "accept",
+        "rationale": "Accept. The failure is real, but the mismatch is between a stale cloned habitat_registry and the canonicalized state produced by Engine::from_parts(), which intentionally refreshes derived habitat data before stepping. The failed-step contract should be asserted against that canonical pre-step state; do not weaken the existing from_parts refresh behavior just to satisfy the test."
+      },
+      {
+        "amendment_id": "fr-3-bfd109f4",
+        "decision": "accept",
+        "rationale": "Accept. These two fields exist in ProcessParamsPreset and in param_value(), but they are missing from validate()'s finite/non-negative sweep. That lets malformed TOML inject negative or non-finite DIC rates that can later distort chemistry calculations."
+      },
+      {
+        "amendment_id": "fr-3-25137feb",
+        "decision": "accept",
+        "rationale": "Accept. check_ranges() compares a normalized value from provenance_value() against unnormalized valid_range bounds, so authors can easily write bounds in the wrong unit system and get misleading warnings. The contract needs to say that valid_range is expressed in the same effective units as the displayed/normalized value."
+      },
+      {
+        "amendment_id": "fr-3-cb38a067",
+        "decision": "accept",
+        "rationale": "Accept. The normal production path is load_process_params(), and that path never calls check_ranges(); there are no other non-test call sites either. As implemented, malformed or out-of-range valid_range metadata loads silently unless a caller knows to invoke a separate helper, so the diagnostic path is not actually surfaced."
+      },
+      {
+        "amendment_id": "fr-3-70c8111f",
+        "decision": "reject",
+        "rationale": "Reject. The core problem is not that legacy _mg/_mg_total fields are normalized at all; runtime code already treats those names as concentration-based kinetics against the historical reference tank. The real defects are the ambiguous fallback formatter output and the underdocumented range contract. Making normalization opt-in by default adds schema complexity and risks showing scientifically wrong values for correctly annotated legacy fields."
+      },
+      {
+        "amendment_id": "fr-3-ce96654a",
+        "decision": "accept",
+        "rationale": "Accept. The new per-parameter metadata path is attached only to ProcessParamsPreset, while SourceWaterPreset and ShrimpPreset still expose only file-level provenance. That means important chemistry and biology preset families still cannot carry per-parameter source/confidence/range metadata without another API/schema change, which is a real completeness gap against the stated acceptance criteria."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

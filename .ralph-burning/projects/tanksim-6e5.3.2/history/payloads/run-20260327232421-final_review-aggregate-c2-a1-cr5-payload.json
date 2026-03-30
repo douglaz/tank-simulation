@@ -1,0 +1,79 @@
+{
+  "payload_id": "run-20260327232421-final_review-aggregate-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T02:36:26.117360220Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-5-847e2a07"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-5-c3828380",
+        "normalized_body": "In `shrimp_feeding()` (shrimp.rs:152), `detritus_demand` is computed as `(food_demand - periph_consumed).max(0.0)` where both operands are in periphyton-biomass grams (1g ≈ 0.254g organic matter). This demand is then compared to `max_detritus = fine_detritus_g_total * 0.2` (organic-matter grams) and subtracted from `fine_detritus_g_total`. The ~4× mass-basis mismatch means shrimp consume approximately 4× more organic matter from detritus than the unmet periphyton demand warrants. Fix by converting the demand to organic-matter grams before operating on the detritus pool: `let detritus_demand_om = algae_detrital_mass_g((food_demand - periph_consumed).max(0.0), n_to_c_ratio);` then use `detritus_demand_om` instead of `detritus_demand` in the `.min(max_detritus)` comparison and detritus subtraction.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-d1fd0cd7",
+        "normalized_body": "The unit test `shrimp_feeding_uses_detritus_only_for_unmet_demand` (shrimp.rs:842-879) asserts `periphyton_consumed + detritus_consumed == max_daily_intake_g` where `periphyton_consumed` is in periphyton-biomass grams and `detritus_consumed` is in organic-matter grams. These are different mass bases (~4:1 ratio) and should not be summed. If the detritus demand conversion is fixed per the previous amendment, this test assertion should be updated to reflect the corrected detritus consumption in organic-matter grams, and the sum should be compared against the properly-converted total demand.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-847e2a07",
+        "normalized_body": "`crates/tank_core/src/save.rs:324-331` makes the schema-3 to schema-4 migration a no-op, so every legacy save loads with `animal.reserve_g = 0`. That would be safe only if reserve were optional, but it is now the sole funding source for retained biomass and for both hatching and juvenile maturation (`crates/tank_core/src/systems/shrimp.rs:252-260`, `crates/tank_core/src/systems/shrimp.rs:469-475`, `crates/tank_core/src/systems/shrimp.rs:555-562`, `crates/tank_core/src/systems/shrimp.rs:650-656`). A valid v3 colony with near-hatch egg cohorts or ready-to-mature juveniles will therefore stall or fail those transitions immediately after upgrade until later feeding rebuilds reserve, so the resumed simulation diverges from the pre-upgrade state even though loading succeeds. `crates/tank_core/tests/save_load.rs:274-320` currently codifies that zero-reserve migration, so this compatibility regression would persist unnoticed.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-5-847e2a07",
+        "normalized_body": "`crates/tank_core/src/save.rs:324-331` makes the schema-3 to schema-4 migration a no-op, so every legacy save loads with `animal.reserve_g = 0`. That would be safe only if reserve were optional, but it is now the sole funding source for retained biomass and for both hatching and juvenile maturation (`crates/tank_core/src/systems/shrimp.rs:252-260`, `crates/tank_core/src/systems/shrimp.rs:469-475`, `crates/tank_core/src/systems/shrimp.rs:555-562`, `crates/tank_core/src/systems/shrimp.rs:650-656`). A valid v3 colony with near-hatch egg cohorts or ready-to-mature juveniles will therefore stall or fail those transitions immediately after upgrade until later feeding rebuilds reserve, so the resumed simulation diverges from the pre-upgrade state even though loading succeeds. `crates/tank_core/tests/save_load.rs:274-320` currently codifies that zero-reserve migration, so this compatibility regression would persist unnoticed.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 5,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-5-c3828380",
+      "fr-5-d1fd0cd7"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 1 amendment(s); restart required.",
+    "total_proposed_amendments": 3,
+    "total_reviewers": 2,
+    "unique_amendment_count": 3
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 5
+}

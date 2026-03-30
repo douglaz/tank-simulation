@@ -1,0 +1,44 @@
+{
+  "payload_id": "run-20260330093843-final_review-planner-positions-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T12:05:32.699135114Z",
+  "payload": {
+    "summary": "Accepted one maintainability clarification amendment. Rejected four amendments because three describe issues that are already fixed or not present in the current code, and one proposes weakening a behavioral test with an arbitrary tolerance instead of fixing the underlying observation method.",
+    "votes": [
+      {
+        "amendment_id": "fr-4-5a2e1e96",
+        "decision": "reject",
+        "rationale": "The concern about missing intra-day peaks is plausible because this test samples the neglected run coarsely, but adding a `+2` tolerance to the final population assertion is an imprecise workaround. It weakens the regression and can hide real growth regressions in the neglected tank. If peak visibility is the problem, the better fix is finer-grained sampling or a more direct assertion, not relaxing the expected outcome."
+      },
+      {
+        "amendment_id": "fr-4-87d566aa",
+        "decision": "accept",
+        "rationale": "Using `\"medium_planted\"` as the seed scenario for a bare-bottom, plantless arm is easy to misread in a long-lived test. A neutral base or, more realistically, a short explanatory comment that this arm intentionally reuses the same base scenario to hold other conditions constant would improve maintainability without changing behavior."
+      },
+      {
+        "amendment_id": "fr-4-beaf754d",
+        "decision": "reject",
+        "rationale": "The cited regression file is already tracked in version control, so the claimed CI gap is not real. `git ls-files` includes `crates/tank_core/tests/nitrification_alkalinity.rs`, which means the tests will ship and run normally."
+      },
+      {
+        "amendment_id": "fr-4-c6a42041",
+        "decision": "reject",
+        "rationale": "The inconsistency described has already been removed. The preset path now goes through `default_alk_per_mg_n()`, which returns `NITRIFICATION_ALK_MEQ_PER_MG_N`, and there is already a regression test asserting that the preset default matches the core constant."
+      },
+      {
+        "amendment_id": "fr-4-4fc13edd",
+        "decision": "reject",
+        "rationale": "This code does not currently expose an `Element::Alkalinity` branch in `budget_helpers.rs`. The helper is still intentionally limited to mg-based nitrogen, carbon, and oxygen accounting, so the proposed unit-label fix is addressing a path that is not present here."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

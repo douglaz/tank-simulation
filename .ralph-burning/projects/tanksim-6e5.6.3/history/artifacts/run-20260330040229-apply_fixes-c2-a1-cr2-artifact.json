@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330040229-apply_fixes-c2-a1-cr2-artifact",
+  "payload_id": "run-20260330040229-apply_fixes-c2-a1-cr2",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-30T05:40:14.610520805Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nVerified that the remaining molt/mineral amendments requested this cycle are already present in the branch, so this apply-fixes pass did not require additional code edits. The current implementation still includes the named `critical_molt_gh_ratio` parameter path, the current-schema save/load guard that preserves zeroed per-stage molt timers for processed shrimp additions, and the dedicated low-temperature and reserve-shortfall diagnostic coverage exercised by the regression suite.\n\n## Steps\n\n1. [Completed] Inspected the relevant shrimp runtime, preset, save/load, event, and regression coverage to confirm the review-approved molt/mineral fixes were already applied in the current branch.\n2. [Completed] Ran targeted `tank_core` regressions for molt/mineral behavior, save/load migration safety, and event diagnostics; all passed without requiring further changes.\n3. [Completed] Recorded this stage as a validation-only apply-fixes pass because the branch already satisfies the requested amendments.\n\n## Validation Evidence\n\n- `cargo test -p tank_core --test molt_mineral_budget -- --nocapture`\n- `cargo test -p tank_core --test save_load -- --nocapture`\n- `cargo test -p tank_core --test events -- --nocapture`\n\n## Outstanding Risks\n\nNone identified.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

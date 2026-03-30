@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330064830-final_review-vote-1-c2-a1-cr3-artifact",
+  "payload_id": "run-20260330064830-final_review-vote-1-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T08:47:33.495973804Z",
+  "content": "# Final Review Votes\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nFive amendments are contradicted by the current code or passing regression coverage. The only amendment with clear technical merit is the cleanup of an otherwise-unused public wrapper.\n\n## Votes\n\n- `fr-3-a011636a`: Reject\n  The premise is false in the current tree. `egg_dropping()` computes `temp_swing_pressure` via `egg_drop_temp_swing_pressure()`, and that helper compares against `params.egg_drop_temp_swing_c`, so the parameter is live runtime behavior rather than dead config.\n- `fr-3-717340b3`: Reject\n  `EventCause::HighDensity` is already emitted. `shrimp.rs` adds it to `ShrimpBerried` events when the density reproduction factor is suppressed, and the regression test `test_high_density_berried_events_report_density_cause` passes.\n- `fr-3-a7b12680`: Accept\n  `temp_repro_factor_pub` is public, exported through the public `systems::shrimp` module, and has no workspace call sites beyond its own definition. Unless there is an external downstream consumer, this is unnecessary public API surface and should be removed or deliberately justified.\n- `fr-3-72451f87`: Reject\n  The nitrate assertion is looser, but the refactored test also requires lower total nitrogen and higher cumulative N2 export in the denitrifying case. Those checks validate denitrification efficacy directly, so the claimed regression hole is not established.\n- `fr-3-6f64c62a`: Reject\n  The current codebase does implement root-zone oxygenation in the substrate path, including habitat-aware rooted biomass, a saturated ROL bonus, planted-vs-unplanted integration tests, and tracing exposure. The dedicated `root_zone_oxygenation` and `rooted_substrate_advantage` tests both pass.\n- `fr-3-ed44ead5`: Reject\n  I could not substantiate the claimed save/load regression. The save loader does normalize carbonate caches on load, but the exact regression tests `save_load_with_active_cycle_state` and `save_load_resume_determinism` both pass in the current tree, so the asserted failure is not supported.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

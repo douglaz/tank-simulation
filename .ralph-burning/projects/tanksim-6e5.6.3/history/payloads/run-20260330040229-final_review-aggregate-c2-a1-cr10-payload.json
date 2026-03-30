@@ -1,0 +1,241 @@
+{
+  "payload_id": "run-20260330040229-final_review-aggregate-c2-a1-cr10-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:28:27.081361533Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-10-d47e77ef",
+      "fr-10-0558bfd9",
+      "fr-10-a9163f4b",
+      "fr-10-183acb0a",
+      "fr-10-d2a02c10",
+      "fr-10-90536180",
+      "fr-10-e2c036cf"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-10-d47e77ef",
+        "normalized_body": "In `molt_mineral_modifier()` (shrimp.rs:1732-1734), the GH deficit penalty uses a quadratic formula `(gh_ratio)²` with NO floor clamp on the intermediate result, while `gh_mineral_factor()` (shrimp.rs:1677) uses a linear formula `gh_ratio` WITH a floor clamp to `mineral_factor_floor`. The docstring on `molt_mineral_factor_floor` (biology.rs:382-386) says the floor applies to 'GH/Ca/Mg factors inside `molt_mineral_modifier` and the shared reproduction GH penalty curve', but the GH factor in `molt_mineral_modifier` is computed as `gh_ratio * gh_ratio` and never clamped to the floor before multiplication. At GH=0.5 dGH (gh_min_d=5.0), the quadratic result is 0.01, well below the documented floor of 0.3. Either apply `.max(mineral_factor_floor)` to `gh_factor` in the deficit branch of `molt_mineral_modifier` (line 1734), or update the docstring to clarify that the floor only applies to Ca/Mg sub-factors and the reproduction curve, not the molt GH factor.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-10-0558bfd9",
+        "normalized_body": "Hardcoded thermal divisors in `temp_condition_factor()` (shrimp.rs:1595 and 1597): the constants 10.0 (cold divisor) and 8.0 (hot divisor) control how quickly molt success degrades at non-optimal temperatures but are not exposed as named parameters in `ShrimpRuntimeParams`. The same 8.0 divisor appears hardcoded in `update_molt_stress()` (shrimp.rs:492). Extract these into named parameters (e.g., `temp_condition_low_divisor_c`, `temp_condition_high_divisor_c`) in `ShrimpRuntimeParams` with serde defaults, so they are inspectable and tunable through species data files as required by the acceptance criteria.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-10-a9163f4b",
+        "normalized_body": "The condition stress midpoint in `update_molt_stress()` (shrimp.rs:490) is hardcoded as `0.5`: `let condition_stress = (0.5 - state.animal.population_condition_index()).max(0.0)`. This threshold controls when poor condition starts contributing to the molt stress index but cannot be tuned through species data. Similarly, the thermal stress clamp max of 0.5 on line 492 is hardcoded. Both should be named parameters.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-10-183acb0a",
+        "normalized_body": "The NH3 stress threshold (0.02 mg/L) and response scale (2.0) in `step_hourly_shrimp_stress()` (shrimp.rs:123-124) are hardcoded: `if nh3_mg_l > 0.02 { state.animal.hourly_nh3_stress_accum += (nh3_mg_l - 0.02) * 2.0 / 24.0; }`. These feed into the stress_total that drives mortality, including molt-stress-linked mortality. Extract them as named parameters.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-10-d2a02c10",
+        "normalized_body": "The integration test `test_soft_vs_hard_water_shrimp_survival` (molt_mineral_budget.rs:726-748) asserts only that `hard_population - soft_population >= 5` over 1000 simulated hours starting from 36 shrimp. This is an extremely weak assertion — a gap of 5 is ~14% mortality difference, while the mineral modifier for the soft profile (Ca=10, Mg=2) should produce a modifier around 0.12, causing near-certain molt failures. The test should assert a more meaningful population gap (e.g., >= 15) or assert that the soft-water population drops below a specific threshold (e.g., < 20). The adjacent seeds (9000 vs 9001) also introduce unnecessary RNG variance; consider using the same seed to isolate the mineral effect.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-10-90536180",
+        "normalized_body": "The test `test_very_low_gh_causes_molt_deaths` (molt_mineral_budget.rs:282-286) asserts `final_count < 30` starting from 30 shrimp over 500 hours with Ca=1.5 mg/L, Mg=0.3 mg/L. A single death satisfies this assertion. Tighten to something like `final_count < 25` or assert a minimum number of MoltFailure events that led to deaths.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-10-e2c036cf",
+        "normalized_body": "In `molt_mineral_modifier()` (shrimp.rs:1734), the GH deficit path uses a quadratic penalty `gh_ratio * gh_ratio` while Ca and Mg use linear ratios with sqrt deemphasis (lines 1742, 1747). This creates a ~3x sensitivity imbalance: at 50% of minimum, GH factor = 0.25 while Ca factor = sqrt(0.5) = 0.707. The design intent may be correct (GH is the aggregate measure), but verify this is intentional by adding a code comment explaining why different exponents are used for GH vs individual minerals.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-10-a66e7ac6",
+        "normalized_body": "Blocker: this patch does not implement tanksim-6e5.6.3’s shrimp mineral/molt deliverable. The new behavior is confined to nitrification alkalinity bookkeeping and tracing (`crates/tank_core/src/systems/nitrogen_cycle.rs:366-385`, `crates/tank_core/src/engine.rs:229-241`, `crates/tank_core/tests/nitrification_alkalinity.rs:1-336`), while the shrimp molt path is untouched and still depends on the pre-existing GH-only shortcut in `crates/tank_core/src/systems/shrimp.rs:371-404` and `crates/tank_core/src/systems/shrimp.rs:990-998`. There is still no explicit Ca/Mg-aware mineral budget or reserve-driven molt success/failure implementation in the shrimp system.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-10-ec739308",
+        "normalized_body": "Blocker: very-low-GH water still does not create the required high molt-failure risk. `gh_mineral_factor()` bottoms out at 0.3 even at GH≈0 (`crates/tank_core/src/systems/shrimp.rs:990-998`), and `molt_cycle()` declares success once the weighted score reaches 0.55 (`crates/tank_core/src/systems/shrimp.rs:390-404`). With good condition and stability, that formula still yields a successful molt in essentially mineral-free water, so the acceptance criterion for GH < 2 remains unmet.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-10-25e4dc93",
+        "normalized_body": "Blocker: stage-specific molting and tunable mineral thresholds are still missing from the data model. `ShrimpRuntimeParams` only exposes `gh_min_d`, `gh_max_d`, and one shared `base_molt_interval_days`/`failed_molt_mortality_scale` (`crates/tank_core/src/types/biology.rs:205-247`), while `AnimalState` stores one population-wide `inter_molt_timer_days`, `molt_readiness`, and `last_molt_success` (`crates/tank_core/src/types/biology.rs:172-183`) that `molt_cycle()` applies to the whole population (`crates/tank_core/src/systems/shrimp.rs:371-408`). Juveniles therefore cannot molt more frequently than adults, and there are still no named Ca/Mg minima or other per-stage parameters to satisfy the bead.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-10-e2e534a3",
+        "normalized_body": "The added verification is pointed at the wrong problem. The new suite only tests nitrification alkalinity behavior (`crates/tank_core/tests/nitrification_alkalinity.rs:1-336`); it does not cover the required shrimp scenarios such as Ca vs Mg contribution to molt success, low reserve lowering success, repeated failed molts increasing mortality, juvenile-vs-adult molt cadence, or a 1000-hour soft-vs-hard water shrimp survival comparison.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-10-d47e77ef",
+        "normalized_body": "In `molt_mineral_modifier()` (shrimp.rs:1732-1734), the GH deficit penalty uses a quadratic formula `(gh_ratio)²` with NO floor clamp on the intermediate result, while `gh_mineral_factor()` (shrimp.rs:1677) uses a linear formula `gh_ratio` WITH a floor clamp to `mineral_factor_floor`. The docstring on `molt_mineral_factor_floor` (biology.rs:382-386) says the floor applies to 'GH/Ca/Mg factors inside `molt_mineral_modifier` and the shared reproduction GH penalty curve', but the GH factor in `molt_mineral_modifier` is computed as `gh_ratio * gh_ratio` and never clamped to the floor before multiplication. At GH=0.5 dGH (gh_min_d=5.0), the quadratic result is 0.01, well below the documented floor of 0.3. Either apply `.max(mineral_factor_floor)` to `gh_factor` in the deficit branch of `molt_mineral_modifier` (line 1734), or update the docstring to clarify that the floor only applies to Ca/Mg sub-factors and the reproduction curve, not the molt GH factor.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-10-0558bfd9",
+        "normalized_body": "Hardcoded thermal divisors in `temp_condition_factor()` (shrimp.rs:1595 and 1597): the constants 10.0 (cold divisor) and 8.0 (hot divisor) control how quickly molt success degrades at non-optimal temperatures but are not exposed as named parameters in `ShrimpRuntimeParams`. The same 8.0 divisor appears hardcoded in `update_molt_stress()` (shrimp.rs:492). Extract these into named parameters (e.g., `temp_condition_low_divisor_c`, `temp_condition_high_divisor_c`) in `ShrimpRuntimeParams` with serde defaults, so they are inspectable and tunable through species data files as required by the acceptance criteria.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-10-a9163f4b",
+        "normalized_body": "The condition stress midpoint in `update_molt_stress()` (shrimp.rs:490) is hardcoded as `0.5`: `let condition_stress = (0.5 - state.animal.population_condition_index()).max(0.0)`. This threshold controls when poor condition starts contributing to the molt stress index but cannot be tuned through species data. Similarly, the thermal stress clamp max of 0.5 on line 492 is hardcoded. Both should be named parameters.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-10-183acb0a",
+        "normalized_body": "The NH3 stress threshold (0.02 mg/L) and response scale (2.0) in `step_hourly_shrimp_stress()` (shrimp.rs:123-124) are hardcoded: `if nh3_mg_l > 0.02 { state.animal.hourly_nh3_stress_accum += (nh3_mg_l - 0.02) * 2.0 / 24.0; }`. These feed into the stress_total that drives mortality, including molt-stress-linked mortality. Extract them as named parameters.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-10-d2a02c10",
+        "normalized_body": "The integration test `test_soft_vs_hard_water_shrimp_survival` (molt_mineral_budget.rs:726-748) asserts only that `hard_population - soft_population >= 5` over 1000 simulated hours starting from 36 shrimp. This is an extremely weak assertion — a gap of 5 is ~14% mortality difference, while the mineral modifier for the soft profile (Ca=10, Mg=2) should produce a modifier around 0.12, causing near-certain molt failures. The test should assert a more meaningful population gap (e.g., >= 15) or assert that the soft-water population drops below a specific threshold (e.g., < 20). The adjacent seeds (9000 vs 9001) also introduce unnecessary RNG variance; consider using the same seed to isolate the mineral effect.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-10-90536180",
+        "normalized_body": "The test `test_very_low_gh_causes_molt_deaths` (molt_mineral_budget.rs:282-286) asserts `final_count < 30` starting from 30 shrimp over 500 hours with Ca=1.5 mg/L, Mg=0.3 mg/L. A single death satisfies this assertion. Tighten to something like `final_count < 25` or assert a minimum number of MoltFailure events that led to deaths.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-10-e2c036cf",
+        "normalized_body": "In `molt_mineral_modifier()` (shrimp.rs:1734), the GH deficit path uses a quadratic penalty `gh_ratio * gh_ratio` while Ca and Mg use linear ratios with sqrt deemphasis (lines 1742, 1747). This creates a ~3x sensitivity imbalance: at 50% of minimum, GH factor = 0.25 while Ca factor = sqrt(0.5) = 0.707. The design intent may be correct (GH is the aggregate measure), but verify this is intentional by adding a code comment explaining why different exponents are used for GH vs individual minerals.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 10,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-10-a66e7ac6",
+      "fr-10-ec739308",
+      "fr-10-25e4dc93",
+      "fr-10-e2e534a3"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 7 amendment(s); restart required.",
+    "total_proposed_amendments": 11,
+    "total_reviewers": 2,
+    "unique_amendment_count": 11
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 10
+}

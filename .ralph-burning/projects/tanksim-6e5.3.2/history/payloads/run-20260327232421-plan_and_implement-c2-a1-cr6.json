@@ -1,0 +1,48 @@
+{
+  "payload_id": "run-20260327232421-plan_and_implement-c2-a1-cr6",
+  "stage_id": "plan_and_implement",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T02:40:00.538075839Z",
+  "payload": {
+    "data": {
+      "change_summary": "Restored the schema-3 to schema-4 save migration so missing `animal.reserve_g` is reconstructed from serialized adult and juvenile shrimp biomass instead of loading legacy colonies with zero reserve. I updated `crates/tank_core/src/save.rs` to seed that retained organic-matter pool while still letting the new shrimp routing parameters come from serde defaults, and I replaced the old zero-reserve save-load regression in `crates/tank_core/tests/save_load.rs` with a biomass-based reserve assertion.",
+      "outstanding_risks": [
+        "Schema-3 reserve seeding remains heuristic: legacy saves do not store the true retained reserve history, so the migration can only reconstruct `reserve_g` from serialized shrimp biomass.",
+        "`cargo clippy -p tank_core -- -D warnings` is not green in the current workspace because the unrelated untracked module `crates/tank_core/src/budget_helpers.rs` has unused imports; I left that file untouched.",
+        "The pre-existing untracked `.ralph-burning/` directory remains in the worktree and was left untouched."
+      ],
+      "steps": [
+        {
+          "description": "Inspected the current schema-3 to schema-4 migration path and legacy save-load regression to confirm that missing `animal.reserve_g` was still being left at the serde default instead of being reconstructed from shrimp biomass.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Patched `crates/tank_core/src/save.rs` so the v3→v4 migration seeds missing reserve from serialized adult and juvenile shrimp counts, and updated the migration comments to document why reserve cannot stay at zero after upgrade.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Updated `crates/tank_core/tests/save_load.rs` to assert biomass-based reserve reconstruction for migrated schema-3 saves, then ran formatting and validation to confirm the migration and full `tank_core` suite still pass.",
+          "order": 3,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo fmt --all` passed.",
+        "`cargo test -p tank_core --test save_load` passed (19 tests), including `legacy_schema_v3_saves_seed_reserve_from_existing_shrimp_biomass`.",
+        "`cargo test -p tank_core` passed in full across lib and integration suites.",
+        "`cargo clippy -p tank_core -- -D warnings` failed only because the unrelated untracked `crates/tank_core/src/budget_helpers.rs` module has unused imports in the current workspace state."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 6
+}

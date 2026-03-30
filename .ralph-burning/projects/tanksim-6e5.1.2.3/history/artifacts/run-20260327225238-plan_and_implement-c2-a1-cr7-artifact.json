@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327225238-plan_and_implement-c2-a1-cr7-artifact",
+  "payload_id": "run-20260327225238-plan_and_implement-c2-a1-cr7",
+  "stage_id": "plan_and_implement",
+  "created_at": "2026-03-28T01:06:27.999609028Z",
+  "content": "# Plan and Implement\n\n## Change Summary\n\nUpdated `crates/tank_core/src/save.rs` so the load path now distinguishes a genuinely valid serialized `stability_tracker` from the legacy schema-2 `StabilityTracker::default()` sentinel. The loader now reseeds tracker baselines when a schema-2 save includes that uninitialized default tracker but the migrated water state does not match those baselines, while still preserving valid historical trackers and the existing carbonate-cache pH repair path. In `crates/tank_core/tests/save_load.rs`, I added a regression test covering a schema-2 payload with a present-but-unseeded tracker and verified that loading reseeds the baselines and prevents the fake first-day instability spike.\n\n## Steps\n\n1. [Completed] Inspected the current save loader, migration flow, and stability-tracker reconciliation logic to confirm the remaining gap was the schema-2 case where `stability_tracker` exists but still contains the legacy default sentinel baselines.\n2. [Completed] Patched `crates/tank_core/src/save.rs` so `SaveFile::from_value` passes the source schema version into tracker reconciliation, and added targeted legacy-default detection that reseeds only schema-2 saves whose serialized tracker equals `StabilityTracker::default()` but does not match the migrated water state.\n3. [Completed] Added regression coverage in `crates/tank_core/tests/save_load.rs` for a schema-2 payload with an uninitialized serialized tracker, including a post-load `update_stability_tracker` check that proves the first daily stability pass no longer invents a swing.\n4. [Completed] Ran focused formatting, save/load, and lint validation on the touched `tank_core` paths.\n\n## Validation Evidence\n\n- `cargo test -p tank_core --test save_load` passed: 19 tests passed, including the new `legacy_schema_v2_saves_with_unseeded_tracker_reseed_stability_baselines` regression.\n- `cargo clippy -p tank_core --tests -- -D warnings` passed with no warnings.\n- `cargo fmt --check --package tank_core` passed after formatting the touched files.\n\n## Outstanding Risks\n\n- Known unrelated architectural issue carried forward from prior review: `Engine::step_hours` still calls `enforce_invariants(&mut self.state)` before returning some invariant errors, so a rejected step can still mutate live state.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 7
+}

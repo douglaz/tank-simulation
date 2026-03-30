@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330104128-final_review-reviewer-1-c2-a1-cr4-artifact",
+  "payload_id": "run-20260330104128-final_review-reviewer-1-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T12:49:39.983679634Z",
+  "content": "# Final Review Proposal\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nReviewed the full `2049a9e70da130617ccdac635d76f8f6c6bf0e21..bc5ff00` change set for `tanksim-6e5.7.2`; no correctness, safety, or significant maintainability defects found in the implemented changes. Targeted `tank_data`, `tank_scenarios`, `tank_core`, and `tank_harness` tests covering the new provenance and parameter-plumbing paths passed; full workspace testing is still blocked by an unrelated compile error at `crates/tank_harness/tests/calibration_report.rs:59` where `field.observed` is now `Option<f64>`.\n\n## Amendments\n\nNone.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

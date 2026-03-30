@@ -1,0 +1,27 @@
+{
+  "payload_id": "run-20260330104128-final_review-reviewer-0-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:37:47.940174230Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "The `colonizable_area_factor` valid_range upper bound for `coarse_porous.toml` is 1.1, which would mean colonizable area exceeds geometric footprint. Add a brief note in the `param_meta.notes` field explaining why >1.0 is physically meaningful for porous media (surface area exceeding projected area due to void structure) or tighten the upper bound to 1.0 if it should not exceed footprint.",
+        "rationale": "A valid_range that allows factor > 1.0 for a parameter described as scaling 'footprint into colonizable area' is confusing without explanation. If a future tuner sets this to 1.05, there is no documentation explaining whether that is physically valid or a loader bug. The notes field should preempt this question."
+      },
+      {
+        "body": "In `docs/PROVENANCE_STATUS.md`, the code-resident solver constants table lists `pKa1(T)` as a formula row but uses a different format from the other rows (inline formula vs. single numeric value). Add an explicit 25°C reference value (≈6.35) alongside the formula for quick cross-referencing with standard carbonate tables, consistent with how `PKA2` is presented.",
+        "rationale": "The other constants in the table carry a single numeric anchor value. pKa1 only shows the temperature-dependent formula, making it harder for a developer doing a quick sanity check to compare against tabulated values without computing the formula at 25°C. Adding the 25°C reference value improves developer-facing usability of the provenance summary."
+      }
+    ],
+    "summary": "Reviewed 18 changed files spanning provenance metadata annotations, denitrification preset extension, shrimp reproduction default corrections, ShrimpHatched event addition, substrate penetration clamping, and molt failure diagnostic improvements. All tests pass; clippy is clean. The core provenance work is solid: TOML param_meta entries are well-structured, denitrification fields now flow through the preset layer instead of falling back to code defaults (verified by test), and the reproduction default changes correctly preserve the legacy decline-span formula (3.0 - 1.0 = 2×1.0, 1.5 - 0.5 = 2×0.5). The substrate effective_penetration_cm clamp is a correct defensive guard. The ShrimpHatched event addition is properly wired and tested. Two minor documentation clarity items proposed as amendments."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}

@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327232421-apply_fixes-c2-a1-cr2-artifact",
+  "payload_id": "run-20260327232421-apply_fixes-c2-a1-cr2",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-28T00:42:46.751714169Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNo code changes were required in this apply-fixes cycle. The prior review returned `approved` with no follow-up amendments, so I left the shrimp-routing implementation untouched and revalidated the relevant suites plus the current `tank_core` full-suite state.\n\n## Steps\n\n1. [Completed] Reviewed the cycle-2 review output and current bead/worktree state to confirm there were no requested follow-up amendments for the shrimp feeding loop.\n2. [Skipped] Skipped code edits because the review outcome was approved and no additional fixes were requested in this cycle.\n3. [Completed] Re-ran the shrimp-routing and preset/materialization validation suites, then checked the current full `tank_core` suite status to capture any remaining unrelated failures.\n\n## Validation Evidence\n\n- `cargo test -p tank_core --test validation --test shrimp_feeding_pathway` passed (17 tests total).\n- `cargo test -p tank_data` passed.\n- `cargo test -p tank_scenarios` passed.\n- `cargo test -p tank_core` was re-run; all exercised suites passed except the unrelated pre-existing failure in `crates/tank_core/tests/substrate_filter_integration.rs::filter_enabled_vs_disabled`.\n\n## Outstanding Risks\n\n- `cargo test -p tank_core` still fails on the pre-existing unrelated `crates/tank_core/tests/substrate_filter_integration.rs::filter_enabled_vs_disabled` regression (`filtered=1.772 mg/L`, `disabled=1.709 mg/L`).\n- The worktree still contains an untracked `.ralph-burning/` directory that was left untouched.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

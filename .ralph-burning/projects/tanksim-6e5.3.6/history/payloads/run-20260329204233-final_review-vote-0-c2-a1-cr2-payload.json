@@ -1,0 +1,44 @@
+{
+  "payload_id": "run-20260329204233-final_review-vote-0-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-29T22:04:52.193298721Z",
+  "payload": {
+    "summary": "Accepted three amendments with real correctness issues verified against the codebase: the DIC shortcut rate fix for closed-system tests, the preset/constant alkalinity divergence, and the hardcoded 'mg' unit in alkalinity assertion messages (Element::Alkalinity exists in the worktree code being reviewed). Rejected two: the nitrification trace field issue is stale (already refactored to tan_oxidized_mg/nitrate_produced_mg_n), and the water change algae omission is safe given the zeroed fixture values.",
+    "votes": [
+      {
+        "amendment_id": "fr-2-7a419098",
+        "decision": "accept",
+        "rationale": "Verified: ProcessParams::default() sets respiration_dic_rate to 0.01875 and photosynthesis_dic_rate to 0.075 (non-zero). The close_budget_gas_exchange() helpers must zero these for closed-system carbon conservation to hold. The fix has apparently been applied in the working tree (both test files show as modified in git status), confirming this was a real breakage that needed addressing. The amendment correctly identifies the root cause and the correct fix pattern, matching what conservation_regression.rs already does with disable_dic_shortcuts()."
+      },
+      {
+        "amendment_id": "fr-2-3d4163b8",
+        "decision": "reject",
+        "rationale": "Verified that both test fixtures explicitly set suspended_biomass_g = 0.0, making the omission of algae N/C from expected values mathematically correct for the tested scenario. If a future edit adds non-zero suspended algae, the resulting assertion failure would correctly force the test expectation to be updated — that's the conservation test doing its job. Adding a comment would be fine but this is not a present correctness defect."
+      },
+      {
+        "amendment_id": "fr-2-adf10e30",
+        "decision": "accept",
+        "rationale": "Verified: NITRIFICATION_ALK_MEQ_PER_MG_N = 2.0/14.007 = 0.14278575... while default.toml hardcodes 0.1428. The scenario startup in process_preset_to_params() copies the preset value directly (line 394), bypassing ProcessParams::default(). This creates two code paths claiming to be 'default' process parameters but using different alkalinity stoichiometry (~0.000014 meq/mg N difference). In a deterministic simulation, any divergence between paths that purport to be equivalent is a real defect that can surface in comparisons."
+      },
+      {
+        "amendment_id": "fr-2-4dda3423",
+        "decision": "reject",
+        "rationale": "Verified stale: the old field total_mg_n_nitrified no longer exists in NitrogenCycleOutput. The struct now has tan_oxidized_mg and nitrate_produced_mg_n as separate fields, and engine.rs traces nitrogen_cycle.tan_oxidized_mg (line 247) and nitrogen_cycle.nitrate_produced_mg_n (lines 248-250). The partial-nitrification concern is already addressed by this separation — tan_oxidized_mg correctly captures AOB activity even when NOB is limited."
+      },
+      {
+        "amendment_id": "fr-2-abc5b76f",
+        "decision": "accept",
+        "rationale": "Verified in the worktree code (which is the code being reviewed): Element::Alkalinity has been added to the enum, and the budget helper assertion surface now supports it. However, two assertion message sites still hardcode 'mg': the per-system totals loop (line 474) and the per-tick error message (line 496). Since Element::Alkalinity uses meq, these messages will print the wrong unit when an alkalinity assertion fails. The planner's rejection was based on the main branch not having Element::Alkalinity, but the worktree — which represents the current changes under review — does have it, making this a real bug in the shipped code."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}
