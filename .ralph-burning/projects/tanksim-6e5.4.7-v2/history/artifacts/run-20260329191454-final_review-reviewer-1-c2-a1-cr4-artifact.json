@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260329191454-final_review-reviewer-1-c2-a1-cr4-artifact",
+  "payload_id": "run-20260329191454-final_review-reviewer-1-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-29T20:57:48.565101192Z",
+  "content": "# Final Review Proposal\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nI found two substantive issues: the new nitrogen-cycle trace metric misreports nitrification relative to alkalinity consumption, and the exported denitrification constant does not actually make the budget/tracing interface ready for denitrification attribution.\n\n## Amendments\n\n1. `crates/tank_core/src/systems/nitrogen_cycle.rs:13-14` and `:343-346` define `total_mg_n_nitrified` as `nob_step + comammox_step`, but `crates/tank_core/src/engine.rs:233-238` exposes it as the per-tick nitrification diagnostic next to `alk_consumed_meq`. That underreports TAN oxidation whenever AOB outpaces NOB, and it overreports alkalinity-driving nitrification in NOB-only ticks (existing nitrite -> nitrate produces `total_n_nitrified_mg > 0` while `alk_consumed_meq == 0`). The new trace output is therefore scientifically inconsistent. Either rename this metric to nitrate production or add/report a separate TAN-oxidized counter for alkalinity attribution.\n   Rationale: Current structured diagnostics can report the wrong nitrification amount in exactly the cases where alkalinity coupling matters, which makes the new tracing output misleading.\n2. `crates/tank_core/src/types/process.rs:19-27` adds a denitrification alkalinity constant, but the bookkeeping surface is still one-sided: `crates/tank_core/src/systems/nitrogen_cycle.rs:15-23` only exposes `alkalinity_consumed_meq`, and `crates/tank_core/src/engine.rs:229-239` records the whole nitrogen-cycle stage via snapshot budgeting. If E4b adds alkalinity return inside the same stage, nitrification loss and denitrification gain will collapse into one net `system:nitrogen_cycle` delta, so you still need an API redesign to attribute both paths. This does not actually satisfy the promised 'ready for later denitrification return path' contract.\n   Rationale: Without separate produced/consumed bookkeeping now, the next bead cannot add denitrification attribution without changing this API again.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

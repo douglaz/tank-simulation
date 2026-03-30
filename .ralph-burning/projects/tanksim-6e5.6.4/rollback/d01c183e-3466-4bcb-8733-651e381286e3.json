@@ -1,0 +1,143 @@
+{
+  "rollback_id": "d01c183e-3466-4bcb-8733-651e381286e3",
+  "created_at": "2026-03-30T09:38:55.587861778Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "301156d56ac40a916fdd61e1c8f234c0f2b6e0ac",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260330074452",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 3
+      },
+      "started_at": "2026-03-30T07:44:52.239585331Z",
+      "prompt_hash_at_cycle_start": "66f17358106a4fe2",
+      "prompt_hash_at_stage_start": "66f17358106a4fe2",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 2
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T08:27:24.787635193Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 3,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-2-ec770b3d",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "The egg drop probability cap of 0.6 (shrimp.rs:793) is hardcoded. Extract to a named species parameter (e.g., `egg_drop_max_probability`) in `neocaridina_davidi.toml` and `ShrimpRuntimeParams`, consistent with the acceptance criterion that all suppression factors be named parameters.",
+          "created_at": "2026-03-30T09:38:55.430505257Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "88747cf8d60674b663927fc8ff187295f790e4ea0ac8a5bee7d393220eb3cfce"
+        },
+        {
+          "amendment_id": "fr-2-8032bdb4",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "The dissolved oxygen reference value of 6.0 mg/L in `egg_development()` (shrimp.rs:876) is hardcoded: `(do_mg_l / 6.0).clamp(0.0, 1.0)`. Extract to a named species parameter (e.g., `egg_oxygen_reference_mg_l`) in `ShrimpRuntimeParams` and `neocaridina_davidi.toml`.",
+          "created_at": "2026-03-30T09:38:55.430507270Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "e01e712d50813ba01c902fbccc98a8b54f3f310947132b1f4825a9ea720c92ec"
+        },
+        {
+          "amendment_id": "fr-2-2d9c08ee",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "The reproductive readiness EMA smoothing rate of 0.1 (shrimp.rs:694) is hardcoded. Extract to a named species parameter (e.g., `reproductive_readiness_smoothing`) in `ShrimpRuntimeParams`. This constant controls how quickly shrimp respond to environmental changes in their breeding readiness — a key tuning lever for the 'lingering suppression after destabilization' behavior.",
+          "created_at": "2026-03-30T09:38:55.430509745Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "3fb533a5ef4472fdabdf2b91a7f18b57041b3258eca22789f1cc9ef6847b854e"
+        },
+        {
+          "amendment_id": "fr-2-dcc5fd12",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "The `clutch_condition_modifier()` function (shrimp.rs:1000) uses a hardcoded threshold of 0.7 for full clutch size. Extract to a named parameter (e.g., `full_clutch_condition_threshold`) alongside the existing `min_clutch_condition` parameter to make the clutch-size curve fully tunable.",
+          "created_at": "2026-03-30T09:38:55.430511438Z",
+          "batch_sequence": 4,
+          "source": "workflow_stage",
+          "dedup_key": "3204fb6791ed8952b0ae9293a843c8a6923fdbe67d9725cc44e6efa817976012"
+        },
+        {
+          "amendment_id": "fr-2-ba3284cb",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "The raw instability computation in `update_stability_tracker()` (shrimp.rs:203-207) sums four normalized swing components and clamps to [0, 1]. However, with four additive terms each potentially reaching 1.0, the theoretical max before clamping is 4.0. This means any single moderate swing (e.g., temp swing = instability_temp_swing_c) already drives raw_instability to 1.0 if any other chemistry moved at all. Consider either (a) dividing by the number of components (4) to normalize, or (b) using a weighted max instead of sum, so individual swings have predictable contribution to the overall instability index.",
+          "created_at": "2026-03-30T09:38:55.430515185Z",
+          "batch_sequence": 5,
+          "source": "workflow_stage",
+          "dedup_key": "e8fbbc3cd7ee4f9567a7c158d52247dade3058691a9a93044537e3992c78cab2"
+        },
+        {
+          "amendment_id": "fr-2-44f51ba5",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "In `crates/tank_harness/tests/e2e_habitat_geometry_probes.rs:454-472`, `probe_biofilter_scaling_bigger_media_faster_cycling` now treats `(None, None)` reduced-N clearance as success, and `crates/tank_harness/tests/e2e_habitat_geometry_probes.rs:476-488` still only applies a TAN envelope. That combination lets the probe pass even when neither tank clears combined TAN+NO2 within the 21-day horizon and the larger filter is still sitting on a worse nitrite plateau. On the current seed, the probe reports `clearance small=Noneh large=Noneh` and the large-media run finishes at `NO2=2.245 mg/L` versus `1.722 mg/L` for the small run, yet the test stays green. Add a failure for the no-clearance case or an explicit NO2 decline/ceiling check so the probe still proves 'faster cycling' instead of just slightly lower cumulative reduced-N exposure.",
+          "created_at": "2026-03-30T09:38:55.430519213Z",
+          "batch_sequence": 6,
+          "source": "workflow_stage",
+          "dedup_key": "89a8614b3c40679024f5dba61a9afb23e7357c89d83d90c1a592cb11bdd87356"
+        },
+        {
+          "amendment_id": "fr-2-94a00996",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "In `crates/tank_harness/tests/e2e_habitat_geometry_probes.rs:1049-1056` and `crates/tank_harness/tests/e2e_habitat_geometry_probes.rs:1117-1148`, the redox probe only asserts suboxic volume at initialization and reduces the denitrifier-maturation requirement to `initial + 0.25`. That means the test can pass even if the planted bed loses its suboxic zone during the 60-day run and never reaches a clearly mature denitrifier state. The current run already shows the blind spot: the planted arm ends with `suboxic_pore_vol: 0.00 cm³` and denitrifier activity only `0.3983`, but the probe still passes. Add a late-run/final suboxic-volume assertion and a stronger final activity floor so the test validates sustained denitrification rather than a transient t=0 setup.",
+          "created_at": "2026-03-30T09:38:55.430523210Z",
+          "batch_sequence": 7,
+          "source": "workflow_stage",
+          "dedup_key": "841d0d7504912fd21a3815f29345da4b5936856d1100433e87e37377c7e890cb"
+        }
+      ],
+      "processed_count": 3
+    },
+    "status_summary": "running: final review restart round 3 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-30T09:23:27.481011733Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

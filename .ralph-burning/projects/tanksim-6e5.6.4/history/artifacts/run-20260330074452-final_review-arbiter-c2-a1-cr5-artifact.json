@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330074452-final_review-arbiter-c2-a1-cr5-artifact",
+  "payload_id": "run-20260330074452-final_review-arbiter-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T11:39:33.017842326Z",
+  "content": "# Final Review Arbiter\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nRejected. The disputed amendment overstates the current defect: the temperature-curve divisors are already parameterized end to end, leaving only the `0.2` floor as a possible follow-up issue.\n\n## Rulings\n\n- `fr-5-bbc523c8`: Reject\n  The amendment is materially inaccurate as written. In `crates/tank_core/src/systems/shrimp.rs`, `temp_condition_factor()` no longer hardcodes the cold and hot divisors; it uses `params.temp_condition_low_divisor_c` and `params.temp_condition_high_divisor_c`. Those fields already exist on `ShrimpRuntimeParams` in `crates/tank_core/src/types/biology.rs`, have defaults of `10.0` and `8.0`, are exposed in `crates/tank_data/data/shrimp/neocaridina_davidi.toml`, and are wired through preset loading in `crates/tank_scenarios/src/lib.rs`. The remaining inline `0.2` clamp floor is still hardcoded, so a narrower amendment about that floor alone could be valid, but this amendment’s core claim that the `10.0` and `8.0` divisors are hardcoded and non-configurable is no longer true.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 5
+}

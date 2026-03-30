@@ -1,0 +1,42 @@
+{
+  "payload_id": "run-20260330064830-review-c2-a1-cr8",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:03:48.589979722Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "Full tank_core package test suite passes with zero failures across all unit and integration test binaries. Clippy clean (-D warnings), formatting clean (cargo fmt --all --check).",
+        "24 substrate unit tests pass covering all acceptance criteria: rooted_plants_increase_o2_penetration, root_oxygenation_proportional_to_biomass_with_diminishing_returns, floating_plant_biomass_does_not_increase_penetration, zero_root_biomass_yields_zero_oxygenation_bonus, root_oxygenation_uses_named_parameter, root_oxygenation_dynamic_tracks_biomass_growth_and_decline, root_oxygenation_requires_rootable_substrate_habitats, zero_rol_rate_removes_rooted_oxygenation_effects, fully_oxic_bed_reports_zero_root_oxygenation_bonus, zero_rol_rate_zeroes_root_bonus_but_preserves_root_demand_baseline.",
+        "5 root_zone_oxygenation integration tests pass: planted_vs_unplanted_diverge_in_penetration_depth (500h), planted_substrate_denitrification_interaction (500h), root_oxygenation_reduces_hourly_denitrification_when_it_shrinks_suboxic_volume, planted_substrate_nitrification_surface_area (500h with nitrifier biomass and nitrate divergence), tracing_exposes_root_oxygenation.",
+        "ROL formula verified correct (substrate.rs:116-133): remaining_depth = (total_depth - base_penetration).max(0); bonus = remaining_depth × (1 - exp(-(active_root_biomass × rol_rate) / remaining_depth)). Saturating exponential — linear at low biomass, asymptotic to remaining substrate depth. Fully oxic beds produce zero bonus.",
+        "Defensive clamp confirmed at substrate.rs:134-135: effective_penetration_cm = (base_penetration_cm + root_oxygenation_bonus_cm).min(total_depth_cm). This addresses the IEEE 754 ULP concern from amendment fr-7-dd6f9b61.",
+        "Public function substrate_oxygenation_breakdown() (substrate.rs:82-91) has doc comment explicitly documenting the fresh-registry behavior vs step_substrate_zones() cached-registry divergence. This addresses amendment fr-7-80ce85a0.",
+        "Only PlantGuild::RootFeedingRosette contributes to active root biomass (substrate.rs:175 guild filter). Floating/epiphytic/fast-stem guilds are excluded.",
+        "rol_rate_cm_per_g is a named parameter in ProcessParams (process.rs:176-189) with serde default 0.15 cm/g, invariant-checked non-negative (invariants.rs:276), and present in default.toml (line 104). Not hardcoded.",
+        "step_substrate_zones returns SubstrateOxygenationBreakdown and engine.rs:509 reuses the returned value for four budget metrics (base_o2_penetration_depth_cm, root_oxygenation_active_biomass_g, root_oxygenation_bonus_cm, o2_penetration_depth_cm) and four trace notes — no redundant recomputation at the engine level.",
+        "Tracing/debug output: structured tracing::debug! at substrate.rs:62-72 exposes base_penetration_cm, root_oxygenation_bonus_cm, active_root_biomass_g, effective_penetration_cm as separate named fields. Integration test tracing_exposes_root_oxygenation validates these are present in both trace notes and budget metrics.",
+        "Engine::from_parts (engine.rs:224-240) refreshes habitat_registry before step_substrate_zones, ensuring initialization uses current habitat data.",
+        "Root respiration demand baseline preserved: estimate_substrate_o2_demand_rate (substrate.rs:268-269) includes active_root_biomass_g × bod_rate × ROOT_RESPIRATION_SUBSTRATE_DEMAND_FRACTION (0.1). Test zero_rol_rate_zeroes_root_bonus_but_preserves_root_demand_baseline verifies planted beds have shallower base penetration even with rol_rate=0."
+      ],
+      "findings_or_gaps": [
+        "Minor: from_parts (engine.rs:231) discards the SubstrateOxygenationBreakdown returned by step_substrate_zones during initialization. Harmless since init-time tracing isn't needed, but a minor API inconsistency with the tick-loop path. Non-blocking.",
+        "Minor: root_oxygenation_active_biomass_g() (substrate.rs:158) and substrate_oxygenation_breakdown() (substrate.rs:88) internally call compute_habitat_registry() on each invocation for standalone/test callers, while the hot path in step_substrate_zones uses the cached registry. This is by design and documented, but test-only callers incur a redundant recomputation. Non-blocking — computation is cheap.",
+        "The rol_rate_cm_per_g invariant check (invariants.rs:276) only validates non-negative, not a meaningful scientific range ceiling. Current code handles any non-negative value correctly through the saturation formula, so this is not a gap."
+      ],
+      "follow_up_or_amendments": [
+        "No blocking amendments required. All acceptance criteria are satisfied with passing tests, clean clippy, and clean formatting. Both final-review amendments from the previous round (fr-7-dd6f9b61 defensive clamp, fr-7-80ce85a0 registry divergence documentation) have been properly implemented and verified in the current code."
+      ],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 8
+}

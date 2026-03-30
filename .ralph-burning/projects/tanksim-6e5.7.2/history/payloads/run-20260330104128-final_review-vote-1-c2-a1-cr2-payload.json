@@ -1,0 +1,44 @@
+{
+  "payload_id": "run-20260330104128-final_review-vote-1-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:53:20.926391562Z",
+  "payload": {
+    "summary": "Accept the documentation/provenance clarifications and reject the two amendments whose defect claims are contradicted by the current validation and shrimp-stress code paths.",
+    "votes": [
+      {
+        "amendment_id": "fr-2-8014730a",
+        "decision": "accept",
+        "rationale": "`coarse_porous.toml` allows `colonizable_area_factor` up to 1.1, but the notes only describe footprint-scaled habitat value and the shipped preset sits at 0.9. Because values above 1.0 are semantically surprising unless porous-media surface area is explicitly intended, either documenting that meaning or tightening the cap improves correctness and maintainability."
+      },
+      {
+        "amendment_id": "fr-2-d7c5dd73",
+        "decision": "accept",
+        "rationale": "Adding an explicit 25°C reference value next to the temperature-dependent `pKa1(T)` formula is a safe documentation improvement. It makes the provenance table easier to cross-check against standard carbonate references and matches the presentation style already used for `PKA2`."
+      },
+      {
+        "amendment_id": "fr-2-1c025102",
+        "decision": "reject",
+        "rationale": "The cited validation defect is not present. `temp_condition_low_divisor_c` and `temp_condition_high_divisor_c` are validated in the positive-only bucket, while the `<= 1.0` bucket covers different fields. The shipped shrimp preset values `10.0` and `8.0` therefore do not get rejected by the current validator."
+      },
+      {
+        "amendment_id": "fr-2-f229f75f",
+        "decision": "reject",
+        "rationale": "The new NH3 tuning already reaches molt-related behavior through the condition path. Hourly NH3 stress feeds `update_condition`, the daily pipeline runs `update_condition` before `update_molt_stress`, and both `update_molt_stress` and `molt_cycle` consume condition. So changing the NH3 threshold/scale can affect `molt_stress_index`, warning emission, and molt success even though `hourly_pressure` itself only includes heat and instability."
+      },
+      {
+        "amendment_id": "fr-2-7893222b",
+        "decision": "accept",
+        "rationale": "These newly exposed shrimp tuning parameters have no corresponding `[param_meta.*]` entries in `neocaridina_davidi.toml`. Adding provenance metadata or explicit provisional notes improves auditability and is consistent with the repository’s stated expectation that new preset parameters carry per-parameter metadata."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

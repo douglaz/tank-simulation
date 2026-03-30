@@ -1,0 +1,54 @@
+{
+  "payload_id": "run-20260328132625-final_review-aggregate-c1-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T14:04:11.105131800Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-2-ac995bdf"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-2-ac995bdf",
+        "normalized_body": "Pre-existing test failure in `crates/tank_core/tests/concentration_helpers.rs::canonical_helpers_use_net_water_volume` — GH helper returns 3.9520 vs expected 3.9518 (tolerance 1e-9). Not caused by the CO2 changes but present on the branch. The test's tolerance (1e-9) is too tight for the observed floating-point discrepancy (~3e-4). Either the test expectation or the helper computation needs updating.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-2-ac995bdf",
+        "normalized_body": "Pre-existing test failure in `crates/tank_core/tests/concentration_helpers.rs::canonical_helpers_use_net_water_volume` — GH helper returns 3.9520 vs expected 3.9518 (tolerance 1e-9). Not caused by the CO2 changes but present on the branch. The test's tolerance (1e-9) is too tight for the observed floating-point discrepancy (~3e-4). Either the test expectation or the helper computation needs updating.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 2,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [],
+    "restart_required": true,
+    "summary": "Final review accepted 1 amendment(s); restart required.",
+    "total_proposed_amendments": 1,
+    "total_reviewers": 2,
+    "unique_amendment_count": 1
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 2
+}

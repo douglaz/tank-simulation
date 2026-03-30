@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260330064830-final_review-aggregate-c2-a1-cr5-artifact",
+  "payload_id": "run-20260330064830-final_review-aggregate-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T09:57:46.852770147Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 2 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 6\n**Final Review Restarts:** 5/20\n\n## Accepted\n\n- `fr-5-9708b232`\n- `fr-5-f084dd66`\n\n## Rejected\n\n- `fr-5-2e04c8d7`\n- `fr-5-a69caaa7`\n- `fr-5-a672a7f8`\n- `fr-5-6409353a`\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-5-9708b232`\n\nIn `e2e_habitat_geometry_probes.rs`, the `all_habitat_geometry_probes_summary` test (#[test]) calls the same `run_probe_*` functions that the 5 individual `#[test]` probe functions also call. When `cargo test` runs the full file, each expensive probe (multi-day simulations) executes twice: once in its own test and once in the summary. Either gate the individual tests behind a feature flag / `#[ignore]` when the summary runner exists, or have the summary runner reuse test results rather than re-executing. This doubles CI wall-clock time for no additional coverage.\n\n### `fr-5-f084dd66`\n\nP1: `crates/tank_core/src/systems/substrate.rs:99-113` computes `root_oxygenation_bonus_cm` against the full substrate depth and only clamps after adding it to `base_penetration_cm`. When the base penetration already spans the whole bed (for example the low-demand path at `crates/tank_core/src/systems/substrate.rs:182-183`), the breakdown can report a positive root bonus even though `effective_penetration_cm` is unchanged. That makes the exposed tracing/debug metric incorrect and turns the intended smooth saturation into a hard clip near fully oxic beds. The reported bonus should be capped to the remaining available depth, or recomputed as `effective_penetration_cm - base_penetration_cm`.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 5
+}

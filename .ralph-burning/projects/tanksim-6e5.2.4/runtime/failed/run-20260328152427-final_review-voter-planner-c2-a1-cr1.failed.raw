@@ -1,0 +1,206 @@
+=== stdout ===
+=== stderr ===
+OpenAI Codex v0.117.0 (research preview)
+--------
+workdir: /home/master/p/tank-simulation
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019d3537-979b-7791-b4f9-2d4ab597c120
+--------
+user
+Contract: final_review:voter
+Role: Planner
+
+# Planner Positions
+
+You are evaluating proposed amendments to this project. Assess each amendment on its technical merit — correctness, safety, robustness, and maintainability.
+
+## Instructions
+
+1. Consider each amendment carefully on its own merits.
+2. If planner positions are provided below, weigh them as additional context when forming your decision.
+3. Vote ACCEPT or REJECT for each amendment with a clear rationale.
+4. Do NOT reject amendments because they are "out of scope" or "beyond the original spec" — any real bug or safety issue is valid regardless of scope.
+5. Do NOT dismiss concurrency or isolation issues as "theoretical" just because they don't currently cause failures — shared mutable state is a defect even if current callers happen to be read-only.
+
+## Proposed Amendments
+
+## Amendment: fr-1-735ec6b6
+
+Fix failing test `plant_limitation_is_tank_size_independent` in `crates/tank_core/tests/plant_nutrient_normalization.rs:75-115`. The test expects 1e-9 tolerance between 10L and 100L tanks (same 50×20cm footprint), but Beer-Lambert light attenuation is now depth-dependent: 10L→10cm fill vs 100L→100cm fill produces legitimately different light factors via `column_average_attenuation_factor(k, h)`. Either adjust the test to use different footprints so both tanks have the same water depth, or separate the assertion into nutrient-limitation-only checks (which are volume-independent) and a light-factor check (which is correctly depth-dependent).
+
+## Amendment: fr-1-7b9d9427
+
+Fix failing test `nitrification_lowers_alkalinity_and_ph` in `crates/tank_core/tests/chemistry.rs:188`. The nitrogen-cycle Ks default values changed dramatically in this PR (e.g., AOB K_s(TAN) effectively went from 0.025 mg/L to 1.0 mg/L — a 40× increase). With 2.0 mg/L TAN, the Monod factor dropped from ~0.99 to ~0.67, significantly slowing nitrification. The test's 48-hour window is no longer sufficient for pH separation. Either increase the simulation duration, increase nitrifier biomass, or adjust the TAN concentration to produce enough nitrification activity under the new parameters.
+
+## Amendment: fr-1-8ab4bd75
+
+Fix wrong serde alias on `ProcessParamsPreset::aob_k_tan_mg_n_per_l` in `crates/tank_data/src/presets.rs:774`. Current alias is `"aob_k_tan_mg_n_per_l"` (identical to the field name — a no-op). It should be `"aob_k_tan_mg"` to accept the legacy TOML field name, matching the pattern used by all other renamed fields (e.g., `aob_k_do_mg_per_l` correctly aliases `"aob_k_do_mg"`, `nob_k_nitrite_mg_n_per_l` correctly aliases `"nob_k_nitrite_mg"`, etc.).
+
+## Amendment: fr-1-63c1dcc1
+
+Evaluate the safety of removing `reconcile_egg_cohort_counts()` from `enforce_invariants` (crates/tank_core/src/invariants.rs:42 removed, :183-192 added strict validation). The old code auto-repaired mismatches between `berried_females_count` and `egg_cohort_count_total()` every tick. The new code returns `SimError::InvariantViolation` if they differ. The save/load path calls `repair_egg_cohort_counts_for_load`, but during live simulation, any edge case that creates a transient mismatch (e.g., a race between mortality clamping and egg resolution) will now crash the engine instead of self-healing. Consider either keeping the repair in enforce_invariants (with the strict check in validate only), or adding an explicit assertion that the shrimp system always maintains the invariant before enforce_invariants runs.
+
+## Amendment: fr-1-eb368b29
+
+Bug: `crates/tank_core/src/systems/plant_growth.rs:201-207` now folds Beer-Lambert depth attenuation into `plant_light_factor`, and `crates/tank_core/src/systems/algae_growth.rs:293-300` does the same for algae. That reintroduces tank-size/depth dependence into the normalization work: two tanks with identical concentrations but different fill heights no longer produce identical plant growth, which is exactly what `crates/tank_core/tests/plant_nutrient_normalization.rs:71-105` asserts. I reproduced the regression with `cargo test -p tank_core plant_limitation_is_tank_size_independent -- --nocapture`, which fails because the 10 L and 100 L tanks diverge. The same change also breaks the hand-computed algae growth contract in `crates/tank_core/tests/plant_algae_integration.rs:520-538`. This depth/turbidity coupling belongs in the later light-attenuation bead, not in the concentration-normalization bead.
+
+## Amendment: fr-1-17096f56
+
+Bug: the new extinction coefficients added to `ProcessParams` at `crates/tank_core/src/types/process.rs:171-184` are not actually configurable from process packs. `crates/tank_data/src/presets.rs:737-871` has no matching preset fields, `crates/tank_data/data/process/default.toml:76-87` does not expose them, and `crates/tank_scenarios/src/lib.rs:424-427` hardcodes `ProcessParams::default()` for all four values. Any TOML/process-pack tuning for attenuation is therefore silently ignored, so scenario behavior depends on hidden compiled defaults instead of inspectable preset data.
+
+## Amendment: fr-1-fd0dfb59
+
+Bug: `crates/tank_data/src/presets.rs:774-776` gives `aob_k_tan_mg_n_per_l` the alias `"aob_k_tan_mg_n_per_l"`, which is just the canonical field name again. Unlike the neighboring renamed fields, it never aliases the legacy key `aob_k_tan_mg`. The custom `parse_process_params_preset` migration masks this on one internal code path, but the public `ProcessParamsPreset` deserializer no longer preserves backward compatibility for callers that use `toml::from_str` directly; those inputs fall back to the default 1.0 mg/L AOB Ks instead of the saved legacy value.
+
+## Authoritative JSON Schema
+
+The JSON schema below is authoritative. Return only JSON that conforms exactly to it.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "FinalReviewVote": {
+      "description": "A vote on a single amendment.",
+      "properties": {
+        "amendment_id": {
+          "type": "string"
+        },
+        "decision": {
+          "$ref": "#/definitions/FinalReviewVoteDecision"
+        },
+        "rationale": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "amendment_id",
+        "decision",
+        "rationale"
+      ],
+      "type": "object"
+    },
+    "FinalReviewVoteDecision": {
+      "description": "Per-amendment vote used by both the planner-position step and reviewer voting.",
+      "enum": [
+        "accept",
+        "reject"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload returned by the planner-position step and each reviewer voting pass.",
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "votes": {
+      "items": {
+        "$ref": "#/definitions/FinalReviewVote"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "summary",
+    "votes"
+  ],
+  "title": "FinalReviewVotePayload",
+  "type": "object"
+}
+```
+
+--- Context JSON ---
+{
+  "amendments": [
+    {
+      "amendment_id": "fr-1-735ec6b6",
+      "body": "Fix failing test `plant_limitation_is_tank_size_independent` in `crates/tank_core/tests/plant_nutrient_normalization.rs:75-115`. The test expects 1e-9 tolerance between 10L and 100L tanks (same 50×20cm footprint), but Beer-Lambert light attenuation is now depth-dependent: 10L→10cm fill vs 100L→100cm fill produces legitimately different light factors via `column_average_attenuation_factor(k, h)`. Either adjust the test to use different footprints so both tanks have the same water depth, or separate the assertion into nutrient-limitation-only checks (which are volume-independent) and a light-factor check (which is correctly depth-dependent)."
+    },
+    {
+      "amendment_id": "fr-1-7b9d9427",
+      "body": "Fix failing test `nitrification_lowers_alkalinity_and_ph` in `crates/tank_core/tests/chemistry.rs:188`. The nitrogen-cycle Ks default values changed dramatically in this PR (e.g., AOB K_s(TAN) effectively went from 0.025 mg/L to 1.0 mg/L — a 40× increase). With 2.0 mg/L TAN, the Monod factor dropped from ~0.99 to ~0.67, significantly slowing nitrification. The test's 48-hour window is no longer sufficient for pH separation. Either increase the simulation duration, increase nitrifier biomass, or adjust the TAN concentration to produce enough nitrification activity under the new parameters."
+    },
+    {
+      "amendment_id": "fr-1-8ab4bd75",
+      "body": "Fix wrong serde alias on `ProcessParamsPreset::aob_k_tan_mg_n_per_l` in `crates/tank_data/src/presets.rs:774`. Current alias is `\"aob_k_tan_mg_n_per_l\"` (identical to the field name — a no-op). It should be `\"aob_k_tan_mg\"` to accept the legacy TOML field name, matching the pattern used by all other renamed fields (e.g., `aob_k_do_mg_per_l` correctly aliases `\"aob_k_do_mg\"`, `nob_k_nitrite_mg_n_per_l` correctly aliases `\"nob_k_nitrite_mg\"`, etc.)."
+    },
+    {
+      "amendment_id": "fr-1-63c1dcc1",
+      "body": "Evaluate the safety of removing `reconcile_egg_cohort_counts()` from `enforce_invariants` (crates/tank_core/src/invariants.rs:42 removed, :183-192 added strict validation). The old code auto-repaired mismatches between `berried_females_count` and `egg_cohort_count_total()` every tick. The new code returns `SimError::InvariantViolation` if they differ. The save/load path calls `repair_egg_cohort_counts_for_load`, but during live simulation, any edge case that creates a transient mismatch (e.g., a race between mortality clamping and egg resolution) will now crash the engine instead of self-healing. Consider either keeping the repair in enforce_invariants (with the strict check in validate only), or adding an explicit assertion that the shrimp system always maintains the invariant before enforce_invariants runs."
+    },
+    {
+      "amendment_id": "fr-1-eb368b29",
+      "body": "Bug: `crates/tank_core/src/systems/plant_growth.rs:201-207` now folds Beer-Lambert depth attenuation into `plant_light_factor`, and `crates/tank_core/src/systems/algae_growth.rs:293-300` does the same for algae. That reintroduces tank-size/depth dependence into the normalization work: two tanks with identical concentrations but different fill heights no longer produce identical plant growth, which is exactly what `crates/tank_core/tests/plant_nutrient_normalization.rs:71-105` asserts. I reproduced the regression with `cargo test -p tank_core plant_limitation_is_tank_size_independent -- --nocapture`, which fails because the 10 L and 100 L tanks diverge. The same change also breaks the hand-computed algae growth contract in `crates/tank_core/tests/plant_algae_integration.rs:520-538`. This depth/turbidity coupling belongs in the later light-attenuation bead, not in the concentration-normalization bead."
+    },
+    {
+      "amendment_id": "fr-1-17096f56",
+      "body": "Bug: the new extinction coefficients added to `ProcessParams` at `crates/tank_core/src/types/process.rs:171-184` are not actually configurable from process packs. `crates/tank_data/src/presets.rs:737-871` has no matching preset fields, `crates/tank_data/data/process/default.toml:76-87` does not expose them, and `crates/tank_scenarios/src/lib.rs:424-427` hardcodes `ProcessParams::default()` for all four values. Any TOML/process-pack tuning for attenuation is therefore silently ignored, so scenario behavior depends on hidden compiled defaults instead of inspectable preset data."
+    },
+    {
+      "amendment_id": "fr-1-fd0dfb59",
+      "body": "Bug: `crates/tank_data/src/presets.rs:774-776` gives `aob_k_tan_mg_n_per_l` the alias `\"aob_k_tan_mg_n_per_l\"`, which is just the canonical field name again. Unlike the neighboring renamed fields, it never aliases the legacy key `aob_k_tan_mg`. The custom `parse_process_params_preset` migration masks this on one internal code path, but the public `ProcessParamsPreset` deserializer no longer preserves backward compatibility for callers that use `toml::from_str` directly; those inputs fall back to the default 1.0 mg/L AOB Ks instead of the saved legacy value."
+    }
+  ]
+}
+
+Return ONLY valid JSON matching the following schema:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "FinalReviewVote": {
+      "description": "A vote on a single amendment.",
+      "properties": {
+        "amendment_id": {
+          "type": "string"
+        },
+        "decision": {
+          "$ref": "#/definitions/FinalReviewVoteDecision"
+        },
+        "rationale": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "amendment_id",
+        "decision",
+        "rationale"
+      ],
+      "type": "object"
+    },
+    "FinalReviewVoteDecision": {
+      "description": "Per-amendment vote used by both the planner-position step and reviewer voting.",
+      "enum": [
+        "accept",
+        "reject"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload returned by the planner-position step and each reviewer voting pass.",
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "votes": {
+      "items": {
+        "$ref": "#/definitions/FinalReviewVote"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "summary",
+    "votes"
+  ],
+  "title": "FinalReviewVotePayload",
+  "type": "object"
+}
+
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:00 PM.
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:00 PM.

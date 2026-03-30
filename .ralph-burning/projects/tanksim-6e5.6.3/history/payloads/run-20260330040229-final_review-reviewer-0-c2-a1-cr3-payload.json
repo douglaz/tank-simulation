@@ -1,0 +1,35 @@
+{
+  "payload_id": "run-20260330040229-final_review-reviewer-0-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T06:26:46.637236524Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "In `molt_condition_breakdown` (shrimp.rs:1419), the reserve target fraction `0.1` is hardcoded: `let reserve_target_g = wet_biomass_g * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G * 0.1;`. This constant defines the minimum reserve-per-shrimp for a healthy molt. The acceptance criteria state 'all molt-related thresholds and modifiers are named parameters in species/process data, not hardcoded constants.' Promote this to a named field on `ShrimpRuntimeParams` (e.g., `molt_reserve_fraction`) with a default of 0.1, and expose it in the species TOML.",
+        "rationale": "The 0.1 fraction directly controls when reserve-limited molt failure triggers. Tuning it requires a code change, violating the named-parameter acceptance criterion. The same constant also appears implicitly in test helper `seed_molt_reserves`, which hardcodes the same 0.1 target — changing one without the other would create a test/production mismatch."
+      },
+      {
+        "body": "In `molt_condition_breakdown` (shrimp.rs:1427), the condition-vs-reserve weights `0.75` and `0.25` are hardcoded: `(0.75 * condition_index.clamp(0.0, 1.0) + 0.25 * reserve_factor)`. Similarly, the `reserve_factor` lower bound of `0.4` (line 1421) is hardcoded. These directly shape molt success probability. Consider promoting at least the condition/reserve split weights to named parameters so the relative importance of body condition vs. energy reserves can be tuned without code changes.",
+        "rationale": "These weights determine how strongly starvation (low reserve) vs. environmental stress (low condition) contributes to molt failure. The split is a scientific modeling choice that differs between species and is non-obvious from the code alone. Making it tunable aligns with the project's inspectability goals."
+      },
+      {
+        "body": "In `molt_cycle` (shrimp.rs:653-659), `failed_molt_accum * 0.5` is added to `molt_stress_index` after `update_molt_stress()` has already set a baseline. In `compute_mortality_probabilities` (shrimp.rs:1048+1052), `molt_stress_index` enters `stress_total` via `(molt_stress_index - 0.5).max(0.0)` AND `failed_molt_accum` enters independently via `molt_mortality = failed_molt_accum * failed_molt_mortality_scale`. This means `failed_molt_accum` drives mortality through two additive channels simultaneously. Add an inline comment at both sites documenting this intentional double-contribution so future maintainers don't 'fix' one path thinking the other is sufficient.",
+        "rationale": "The dual mortality pathway is a deliberate calibration choice but not obvious from the code alone. Without a comment, a future contributor could reasonably remove one path thinking it redundant, which would under-penalize failed molts. A brief comment at each site explaining the interaction prevents accidental de-calibration."
+      },
+      {
+        "body": "In `molt_cycle` (shrimp.rs:515-516), `temp_condition_factor(state.water.temperature_c, &params)` is called twice — once as `temp_factor` with `.max(0.25)` floor (for interval division safety) and once as `thermal_factor` (raw, for success score). Compute the raw value once, then derive both: `let raw_temp = temp_condition_factor(...); let temp_factor = raw_temp.max(0.25); let thermal_factor = raw_temp;`.",
+        "rationale": "Minor efficiency issue — the function is pure so the result is identical both times. More importantly, the current naming (`temp_factor` vs `thermal_factor`) obscures the fact that they're the same function with different clamping. Making the derivation explicit improves readability."
+      }
+    ],
+    "summary": "The mineral budget and molt mechanics implementation is well-structured and correct. All 12 tests pass. The core `molt_mineral_modifier` function properly incorporates GH, Ca, and Mg with configurable thresholds. Per-stage molt intervals with temperature-adjusted cadence work correctly. The `failed_molt_accum` tracks failure history and drives mortality through both the stress system and a direct mortality contribution. Event diagnostics clearly surface GH, Ca/Mg levels, temperature, condition, and reserve shortfalls. Save/load migration relies on serde defaults, which is appropriate for additive fields. The chloride-nitrite protection model integrates cleanly into the existing hourly stress pipeline. No correctness bugs found. Four amendments proposed: (1) promote the hardcoded 0.1 reserve target fraction to a named parameter per acceptance criteria, (2) consider promoting condition/reserve split weights to named parameters for inspectability, (3) document the intentional dual-path mortality contribution from failed_molt_accum to prevent future de-calibration, (4) eliminate redundant double-call to temp_condition_factor in molt_cycle."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 3
+}

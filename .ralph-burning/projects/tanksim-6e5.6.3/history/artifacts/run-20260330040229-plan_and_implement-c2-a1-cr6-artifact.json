@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330040229-plan_and_implement-c2-a1-cr6-artifact",
+  "payload_id": "run-20260330040229-plan_and_implement-c2-a1-cr6",
+  "stage_id": "plan_and_implement",
+  "created_at": "2026-03-30T08:30:31.037031473Z",
+  "content": "# Plan and Implement\n\n## Change Summary\n\nVerified that HEAD already carried the pending runtime fixes: egg dropping already uses the named `egg_drop_temp_swing_c` path via `last_temp_swing_c`, and density-suppressed berried events already surface `EventCause::HighDensity` with density details. The implementation work in this pass therefore focused on locking those amendments down with explicit regression coverage by updating `reproduction_factors.rs` to prove a first-day 4°C shock can trigger egg dropping before the smoothed instability index crosses its generic threshold, and to require high-density berried events to emit `HighDensity` plus density diagnostics. I then revalidated the adjacent save/load, tracing, event, full `tank_core`, `tank_data`, and `tank_scenarios` surfaces on the current branch.\n\n## Steps\n\n1. [Completed] Inspected the shrimp reproduction, egg-drop, stability-tracker, and event paths against the pending amendments and confirmed the runtime-side `egg_drop_temp_swing_c` and `HighDensity` behavior was already present at HEAD.\n2. [Completed] Updated `crates/tank_core/tests/reproduction_factors.rs` so the sudden egg-drop regression now exercises the direct same-day temperature-swing path and added a dedicated regression requiring high-density berried events to include `EventCause::HighDensity` and density details.\n3. [Completed] Ran targeted regressions plus broader package validation to confirm the strengthened coverage and the surrounding save/load, tracing, event, and scenario surfaces all still pass.\n\n## Validation Evidence\n\n- `cargo fmt --all`\n- `cargo test -p tank_core --test reproduction_factors -- --nocapture`\n- `cargo test -p tank_core --test save_load -- --nocapture`\n- `cargo test -p tank_core --test tracing -- --nocapture`\n- `cargo test -p tank_core --test events -- --nocapture`\n- `cargo test -p tank_core -- --nocapture`\n- `cargo test -p tank_data`\n- `cargo test -p tank_scenarios`\n\n## Outstanding Risks\n\nNone identified.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 6
+}

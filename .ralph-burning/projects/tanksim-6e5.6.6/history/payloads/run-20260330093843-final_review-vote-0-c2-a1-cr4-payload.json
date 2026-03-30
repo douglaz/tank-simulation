@@ -1,0 +1,44 @@
+{
+  "payload_id": "run-20260330093843-final_review-vote-0-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T12:06:46.691010681Z",
+  "payload": {
+    "summary": "Accepted one maintainability amendment (misleading template name). Rejected four: one proposes weakening a clear behavioral assertion with speculative tolerance; three have factually incorrect premises — the file is already tracked, the constant is already unified with a regression test, and the Element::Alkalinity branch does not exist.",
+    "votes": [
+      {
+        "amendment_id": "fr-4-5a2e1e96",
+        "decision": "reject",
+        "rationale": "The assertion `<= initial_total` is a clear behavioral invariant: a neglected tank should not end with more shrimp than it started with. The flakiness concern is speculative and depends on hypothetical model retuning. Adding a +2 tolerance weakens the regression's ability to catch real growth bugs in the neglected path. If peak tracking proves insufficient under future model changes, the fix should be better sampling, not a looser bound."
+      },
+      {
+        "amendment_id": "fr-4-87d566aa",
+        "decision": "accept",
+        "rationale": "Verified: the VS-07 bare-bottom arm at line 1034 passes \"medium_planted\" as the scenario template despite overriding plant_selection to None. This is functionally correct but misleading to anyone reading the test without tracing through the override chain. A brief comment explaining the intentional reuse of the planted template as a controlled baseline would cost nothing and prevent future confusion."
+      },
+      {
+        "amendment_id": "fr-4-beaf754d",
+        "decision": "reject",
+        "rationale": "The amendment's premise is factually wrong. `git ls-files crates/tank_core/tests/nitrification_alkalinity.rs` confirms the file is already tracked in version control. The tests will run in CI as expected."
+      },
+      {
+        "amendment_id": "fr-4-c6a42041",
+        "decision": "reject",
+        "rationale": "The inconsistency described no longer exists. The preset path uses `default_alk_per_mg_n()` which returns `NITRIFICATION_ALK_MEQ_PER_MG_N` — the same constant used in `ProcessParams::default()`. Furthermore, a dedicated regression test at presets.rs:3322-3329 asserts they match within 1e-12 tolerance. Both the fix and the guard are already in place."
+      },
+      {
+        "amendment_id": "fr-4-4fc13edd",
+        "decision": "reject",
+        "rationale": "The `Element` enum in budget_helpers.rs contains only Nitrogen, Carbon, and Oxygen — there is no Alkalinity variant. A comment at lines 66-68 explicitly states that alkalinity (meq-based) is intentionally excluded from this mg-based N/C/O ledger. The amendment is fixing a code path that does not exist."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 4
+}

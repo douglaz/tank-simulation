@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260328132625-final_review-aggregate-c1-a1-cr6-artifact",
+  "payload_id": "run-20260328132625-final_review-aggregate-c1-a1-cr6-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T16:05:19.434752761Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 2 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 2\n**Final Review Restarts:** 6/20\n\n## Accepted\n\n- `fr-6-49d40a08`\n- `fr-6-01ebb675`\n\n## Rejected\n\nNone.\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-6-49d40a08`\n\ncrates/tank_core/tests/cycling.rs:965-1015: `per_guild_monod_uses_concentration_not_total` is tautological. It computes `tan_total = tan_conc * volume_l` (and the same for NO2/DOC/DO), immediately divides by the same `volume_l`, and then compares identical `monod(...)` expressions. The test never calls `step_nitrogen_cycle` or any shared concentration helper, so a regression back to total-mass K_s handling would still pass. Replace it with a test that exercises the production nitrogen-cycle path or the actual helper used by that path.\n\n### `fr-6-01ebb675`\n\ncrates/tank_data/src/lib.rs:333-335: `loader_range_diagnostics_use_explicit_warning_lines` was weakened to only assert that some warning exists. After the field rename, the test no longer checks the warning payload at all, so emitting the wrong parameter id/value or accidentally reintroducing bad normalization would still pass. Restore an assertion on the actual warning content for `aob_k_tan_mg_n_per_l`.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 6
+}

@@ -1,0 +1,110 @@
+{
+  "rollback_id": "084b6b53-8067-465f-9cf0-bd2614ff190d",
+  "created_at": "2026-03-30T12:25:11.601614553Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "9e7e0b39aa52e28d0a43f5d5f8358fe5a8fb8ca4",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260330104128",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 4
+      },
+      "started_at": "2026-03-30T10:41:28.541058568Z",
+      "prompt_hash_at_cycle_start": "e9143ec0782506f9",
+      "prompt_hash_at_stage_start": "e9143ec0782506f9",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 3
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T10:57:02.133090283Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 4,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-3-92da51e1",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "The legacy nitrogen kinetics param_meta migration in `crates/tank_data/src/presets.rs` (around line 2172-2205) moves metadata verbatim from legacy keys (e.g. `aob_k_tan_mg`) to canonical keys (e.g. `aob_k_tan_mg_n_per_l`) via `move_legacy_process_param_meta_key()`, but the associated `valid_range` and `unit` fields are not transformed to match the new scale. When `legacy_total_param_to_mg_per_l()` converts a whole-tank-total value to a concentration, the metadata's `valid_range` may no longer be semantically correct for the transformed value. Either the migration should also transform `valid_range` bounds by the same scaling factor, or range-checking of migrated legacy parameters should be skipped/warned.",
+          "created_at": "2026-03-30T12:25:11.493034696Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "a59e6d7bd8d234a92eb76001d9774ea8db9b23835abcae0e83f08ec13e579e7b"
+        },
+        {
+          "amendment_id": "fr-3-f497e356",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "Nitrifier kinetic rate parameters `decomposer_vmax_per_hour`, `decomposer_growth_yield`, `decomposer_decay_rate_per_hour`, and all AOB/NOB/comammox `vmax`, `growth_yield`, and `decay_rate` fields in `process/default.toml` lack `param_meta` entries despite being equally load-bearing for cycling speed as the K_s half-saturation constants that ARE annotated. The acceptance criteria require provenance for 'AOB/NOB/comammox K_s values (nitrogen kinetics)' but the K_s values alone are insufficient — without knowing the confidence of vmax and yield, a calibration bead cannot prioritize which rate constants to tune. Add at minimum a heuristic or placeholder `param_meta` block for each vmax and growth_yield parameter.",
+          "created_at": "2026-03-30T12:25:11.493039676Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "2a6912202fb9526e9f2a7d9a2b1ba383e516067f65132a905d88bdfbfac0724c"
+        },
+        {
+          "amendment_id": "fr-3-7fd25e44",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "The `ATMOSPHERIC_CO2_PPM` constant in `crates/tank_core/src/systems/chemistry.rs:17` is hardcoded to 410.0 with no provenance comment. This value directly affects Henry's law CO2 equilibrium calculations and all downstream carbonate chemistry. It should have at minimum a one-line comment noting the source (e.g., NOAA global average ~2020) and that it is treated as a fixed constant for the current model scope.",
+          "created_at": "2026-03-30T12:25:11.493042461Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "915399d71886de307c19516cdd997a7757cf0a29a36bc82954d5b8de54116810"
+        },
+        {
+          "amendment_id": "fr-3-7fcbfd69",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "Significant maintainability risk: the new alkalinity accounting stores meq values in APIs and fields that are explicitly named as mg, including `ElementBudget.in_mg/out_mg/net_mg` in `.claude/worktrees/tanksim-6e5.4.7/crates/tank_core/src/types/budget.rs:35-56`, the alkalinity field docs in `.claude/worktrees/tanksim-6e5.4.7/crates/tank_core/src/types/budget.rs:72-76`, the concrete assignment in `.claude/worktrees/tanksim-6e5.4.7/crates/tank_core/src/systems/water_change.rs:149-152`, and the helper/assertion surface in `.claude/worktrees/tanksim-6e5.4.7/crates/tank_core/src/budget_helpers.rs:64-83` plus `.claude/worktrees/tanksim-6e5.4.7/crates/tank_core/src/budget_helpers.rs:418-507`. This removes unit safety from the type system and makes it easy for later callers to mix mg and meq tolerances or diagnostics without the compiler catching it.",
+          "created_at": "2026-03-30T12:25:11.493046268Z",
+          "batch_sequence": 4,
+          "source": "workflow_stage",
+          "dedup_key": "dba18635b746d386c70faa4a4d3c9d30baa7a3b3aa1f72a8a34b128dc3d84a96"
+        }
+      ],
+      "processed_count": 5
+    },
+    "status_summary": "running: final review restart round 4 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-30T12:01:51.839881131Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

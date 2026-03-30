@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330083637-final_review-vote-0-c2-a1-cr5-artifact",
+  "payload_id": "run-20260330083637-final_review-vote-0-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T11:45:24.425964621Z",
+  "content": "# Final Review Votes\n**Producer:** agent:claude/claude-opus-4-6\n\n## Summary\n\nRejected the amendment. Code inspection confirms that `temp_condition_low_divisor_c` and `temp_condition_high_divisor_c` are in the `> 0.0` validation bucket (lines 967-972), not in the `<= 1.0` bucket (lines 1014-1113). The amendment cites lines 1050-1056 as containing these fields, but those lines actually contain `molt_stress_mineral_ca_weight` and `molt_stress_mineral_mg_weight`. The shipped preset values of 10.0 and 8.0 pass the actual validation without issue.\n\n## Votes\n\n- `fr-5-cf6e5225`: Reject\n  The amendment's factual claim is wrong. `temp_condition_low_divisor_c` and `temp_condition_high_divisor_c` appear at lines 967-972 in the `> 0.0` validation bucket (lines 950-1013), not in the `<= 1.0` bucket (lines 1014-1119). The lines the amendment cites (1050-1056) actually contain `molt_stress_mineral_ca_weight` and `molt_stress_mineral_mg_weight`, which are correctly constrained to <= 1.0. The shipped preset values of 10.0 and 8.0 for the divisor fields are validated only against `> 0.0`, which they pass. No bug exists.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 5
+}

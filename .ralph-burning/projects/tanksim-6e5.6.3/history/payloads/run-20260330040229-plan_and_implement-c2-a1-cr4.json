@@ -1,0 +1,59 @@
+{
+  "payload_id": "run-20260330040229-plan_and_implement-c2-a1-cr4",
+  "stage_id": "plan_and_implement",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T06:58:57.560151162Z",
+  "payload": {
+    "data": {
+      "change_summary": "Revalidated the pending molt/mineral amendments against the current HEAD and found the runtime-side reserve/condition parameterization, exact molt-cadence handling, high-GH diagnostics, and failed-molt documentation were already present in the branch. The implementation work in this pass focused on the remaining fallout: I restored `rol_rate_cm_per_g` default materialization in `tank_scenarios`, tightened the controlled ideal reproduction regression back to non-zero day-60/day-90 colony floors, and hardened the reproduction-budget fixtures so they isolate hatch/accounting behavior from unrelated mortality and molt noise while still exercising deterministic shrimp reproduction.",
+      "outstanding_risks": [
+        "A full `cargo test -p tank_core -- --nocapture` sweep is still blocked by unrelated local `crates/tank_core/tests/root_zone_oxygenation.rs` compile errors against stale tracer APIs (`Engine::set_tracer`, `TickTrace.stages`), so only the targeted `tank_core` suites relevant to this task were revalidated."
+      ],
+      "steps": [
+        {
+          "description": "Audited the current branch against the pending amendments and confirmed the shrimp runtime already carries the named reserve/condition knobs, exact timer cadence fix, high-GH molt diagnostics, and the intentional failed-molt dual-contribution comments, so the remaining work narrowed to broken fixtures and downstream regression drift.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Patched `tank_scenarios` process preset materialization to carry the missing `rol_rate_cm_per_g` default so scenario and harness builds compile cleanly again.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Retightened the controlled ideal reproduction harness by disabling unrelated shrimp mortality paths, extending molt intervals for that idealized hatch-only guardrail, boosting reserve/periphyton headroom, and restoring non-zero shrimp, juvenile, and readiness floors at the day-60/day-90 checkpoints.",
+          "order": 3,
+          "status": "completed"
+        },
+        {
+          "description": "Updated the closed-system shrimp reproduction budget fixture to disable unrelated mortality/molt pressure so the accounting test stays focused on deterministic hatch bookkeeping, then reran the targeted core/data/scenario/harness regressions and recorded the remaining unrelated full-suite blocker.",
+          "order": 4,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo fmt --all`",
+        "`cargo check -p tank_scenarios`",
+        "`cargo test -p tank_core --test molt_mineral_budget -- --nocapture`",
+        "`cargo test -p tank_core --test shrimp_population -- --nocapture`",
+        "`cargo test -p tank_core --test validation -- --nocapture`",
+        "`cargo test -p tank_core --test save_load -- --nocapture`",
+        "`cargo test -p tank_core --test events -- --nocapture`",
+        "`cargo test -p tank_core --test budget_tracking -- --nocapture`",
+        "`cargo test -p tank_data -- --nocapture`",
+        "`cargo test -p tank_scenarios -- --nocapture`",
+        "`cargo test -p tank_harness controlled_ideal_reproduction_path_still_hatches -- --nocapture`",
+        "`cargo test -p tank_core -- --nocapture` (still fails only in the unrelated local `root_zone_oxygenation` compile break described above)"
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

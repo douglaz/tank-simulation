@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260328140833-final_review-aggregate-c2-a1-cr3-artifact",
+  "payload_id": "run-20260328140833-final_review-aggregate-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T16:03:20.347880334Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 2 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 5\n**Final Review Restarts:** 3/20\n\n## Accepted\n\n- `fr-3-df697556`\n- `fr-3-77143f76`\n\n## Rejected\n\n- `fr-3-dc32db9e`\n- `fr-3-3d1fd76b`\n- `fr-3-bc5a66d7`\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-3-df697556`\n\nIn `affects_habitat_registry()` (actions.rs:159-169), `ChangePhotoperiod` is listed as affecting the habitat registry, but the habitat computation in `compute_habitat_registry` reads `hardware.light.intensity_index` not `hardware.light.photoperiod_hours`. Photoperiod changes produce a redundant registry refresh. Either remove `ChangePhotoperiod` from the match, or add a code comment explaining the deliberate over-approximation so future maintainers don't second-guess it.\n\n### `fr-3-77143f76`\n\nThe legacy `total_colonizable_area_cm2()` (biology.rs:660-669) used by `algae_growth.rs:167` computes colonizable area as `wall_area_cm2 + substrate_layers.colonizable_area_cm2`, which omits `geometry.hardscape_area_cm2`. Now that hardscape area is a configurable field on `TankGeometry`, adding hardscape to a tank increases habitat registry `GlassHardscape` area but the algae carrying-capacity model ignores it entirely. Add a note (doc comment or inline TODO) clarifying this omission so the downstream habitatization task (tanksim-6e5.5.3) knows to migrate algae to the habitat registry rather than the legacy helper.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 3
+}

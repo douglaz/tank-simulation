@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330064830-final_review-vote-1-c2-a1-cr4-artifact",
+  "payload_id": "run-20260330064830-final_review-vote-1-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T09:07:00.677134688Z",
+  "content": "# Final Review Votes\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAll three amendments identify legitimate test-validity regressions. In each case, the probe's current setup or assertions no longer verify the behavior its name and documentation claim to cover, which weakens the suite's ability to catch real regressions.\n\n## Votes\n\n- `fr-4-08002dd1`: Accept\n  The amendment is correct. This probe is still named and documented as showing that larger media yields a larger nitrifier population and faster cycling, but the current assertion only requires both runs to exceed a fixed biomass floor. That means the large-media run can underperform the small-media run and still pass, so the test no longer guards the behavior it claims to validate.\n- `fr-4-e772c7bf`: Accept\n  This is a real coverage hole. Seeding denitrifier_activity_index to 1.0 bypasses the maturation path, and asserting only that the final value remains above 0.5 does not verify ramp-up from a low starting point or robust coupling to the suboxic zone. With the default 60-day maturation timescale, even prolonged decay from 1.0 can still finish above 0.5 after a 30-day run, so a broken maturation/update path could pass.\n- `fr-4-d4d1e581`: Accept\n  The comparison is materially confounded. Substrate oxygen demand is driven directly by decomposer biomass, yet the planted arm is given 10.0 g while the inert control gets 2.0 g, so stronger suboxia and denitrification can arise from the injected decomposer load rather than the planted-substrate properties under test. Clearing plant biomass further weakens the claim that this is validating a planted setup, so the probe can pass without demonstrating the intended mechanism.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

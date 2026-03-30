@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328132625-final_review-reviewer-1-c1-a1-cr5-artifact",
+  "payload_id": "run-20260328132625-final_review-reviewer-1-c1-a1-cr5-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T15:23:04.538416869Z",
+  "content": "# Final Review Proposal\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nReviewed the committed implementation and key files end-to-end across gas exchange, engine/state/save, snapshot/API, scenarios, and shrimp reproduction. `cargo test -q` passed, but I found 2 correctness bugs in the new deterministic shrimp reproduction bookkeeping: the persisted spawn and hatch carry accumulators survive colony/cohort resets and can make later unrelated populations reproduce or hatch earlier than a clean state.\n\n## Amendments\n\n1. Reset `spawn_progress_accum` when the adult population or eligible spawner count drops to zero. The new accumulator is persisted in `crates/tank_core/src/types/biology.rs:128-131`, and `spawning()` both consumes it at `crates/tank_core/src/systems/shrimp.rs:443-444` and returns early at `crates/tank_core/src/systems/shrimp.rs:425-435` without clearing it. That means a later, unrelated colony can inherit fractional spawn progress from a deleted one. I reproduced this by stepping a 10-adult colony at `base_spawn_rate=0.35`, then resetting to a clean 2-adult colony: with the reused carry the new colony produced 1 berried female on day 1, while a clean 2-adult colony produced 0. Clear the accumulator whenever spawning continuity is broken.\n   Rationale: This is a correctness bug in the new deterministic reproduction bookkeeping: rounding memory is leaking across colony resets and changes the outcome for later populations.\n2. Reset `hatch_success_carry` whenever all berried females / egg cohorts are cleared. The accumulator is also persisted in `crates/tank_core/src/types/biology.rs:128-131`, but `egg_development()` reuses it at `crates/tank_core/src/systems/shrimp.rs:517-520` and can return with no cohorts at `crates/tank_core/src/systems/shrimp.rs:465-475` without zeroing it; `clamp_berried_to_adults()` at `crates/tank_core/src/types/biology.rs:546-553` can also delete cohorts without touching the carry. That lets a brand-new clutch inherit old fractional hatch credit. I reproduced this with `hatch_success_base=0.3`: after one large cohort left a positive carry, a later single-cohort state hatched 2 juveniles immediately, while the same clean single-cohort state hatched 0. Clear the carry whenever the hatch process loses continuity.\n   Rationale: This is the same class of state-leak bug as the spawn carry, but on the hatch path. It produces impossible early hatches that are not attributable to the current clutch.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 5
+}

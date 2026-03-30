@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330074452-final_review-reviewer-0-c2-a1-cr6-artifact",
+  "payload_id": "run-20260330074452-final_review-reviewer-0-c2-a1-cr6-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T12:04:53.568696061Z",
+  "content": "# Final Review Proposal\n**Producer:** agent:claude/claude-opus-4-6\n\n## Summary\n\nThe diff adds the `temp_condition_min_factor` parameter throughout the full pipeline (types, defaults, invariants, preset exposure, scenario mapping, TOML data, provenance metadata, and tests). The implementation is mechanically correct: the new field is wired into `temp_condition_factor()`, validated by `check_unit_interval`, exposed in all preset dispatch paths, and covered by unit tests that verify both the default floor and a lowered override. The neglected-tank test assertion tightening is safe (deterministic seed). The e2e type alias cleanup is cosmetic and correct. The PROVENANCE_STATUS.md updates are consistent with the TOML metadata. One issue found: the parameter is redundantly present in two preset validation lists with incompatible strictness levels.\n\n## Amendments\n\n1. In `crates/tank_data/src/presets.rs`, `temp_condition_min_factor` appears in two preset validation loops: the non-negative check (line ~913, `>= 0.0`) and the strictly-positive check (line ~1005, `> 0.0`). The strictly-positive list is designed for divisors and physical quantities where zero would cause division-by-zero; a clamp floor factor semantically can be zero. Remove `temp_condition_min_factor` from the strictly-positive list (line ~1005) to keep only the non-negative + finite check and the runtime `check_unit_interval` invariant. This eliminates an inconsistency where the preset validator rejects `temp_condition_min_factor = 0.0` but the runtime invariant validator (`check_unit_interval`) accepts it.\n   Rationale: Correctness gap: two overlapping validation lists apply contradictory constraints to the same parameter. While the shipped default (0.2) avoids triggering this today, a user who sets the value to 0.0 in a custom preset would get a confusing rejection from the preset validator but acceptance from the runtime invariant validator. The fix is a single-line removal.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 6
+}

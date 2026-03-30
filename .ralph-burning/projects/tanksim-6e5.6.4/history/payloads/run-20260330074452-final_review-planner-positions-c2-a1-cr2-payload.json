@@ -1,0 +1,59 @@
+{
+  "payload_id": "run-20260330074452-final_review-planner-positions-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T09:36:07.566470426Z",
+  "payload": {
+    "summary": "Most amendments identify real robustness or test-validity issues: several important reproduction knobs are still hardcoded, the instability index saturates too easily, and two e2e probes can go false-green. I would reject only the egg-dropping loop optimization, because it is not clearly a material defect and the suggested deterministic alternative would change stochastic behavior.",
+    "votes": [
+      {
+        "amendment_id": "fr-2-ff8c1e16",
+        "decision": "reject",
+        "rationale": "The current loop is linear in berried females, not eggs, and there is no evidence this is a meaningful hotspot. A deterministic transfer would change the stochastic semantics, and if RNG-cost optimization is needed it should be addressed more holistically across similar per-individual paths like mortality."
+      },
+      {
+        "amendment_id": "fr-2-ec770b3d",
+        "decision": "accept",
+        "rationale": "The 0.6 cap materially controls egg-drop severity and is currently hidden in code. Making it a named runtime and preset parameter improves inspectability, tuning, and testability with low risk."
+      },
+      {
+        "amendment_id": "fr-2-8032bdb4",
+        "decision": "accept",
+        "rationale": "The 6.0 mg/L oxygen reference is an ecological threshold embedded directly in hatch logic. Exposing it as a named parameter makes oxygen sensitivity explicit and calibratable instead of hardcoded."
+      },
+      {
+        "amendment_id": "fr-2-2d9c08ee",
+        "decision": "accept",
+        "rationale": "The EMA smoothing constant directly determines how long reproductive suppression lingers after destabilization. Keeping 0.1 hardcoded hides a major behavioral lever; parameterizing it is technically sound."
+      },
+      {
+        "amendment_id": "fr-2-dcc5fd12",
+        "decision": "accept",
+        "rationale": "The 0.7 breakpoint defines when full clutch size resumes, so hardcoding it leaves the clutch curve only partially tunable. Exposing it alongside `min_clutch_condition` is maintainable, with the caveat that validation should enforce sensible ordering."
+      },
+      {
+        "amendment_id": "fr-2-ba3284cb",
+        "decision": "accept",
+        "rationale": "The code comments describe a normalized instability index, but the implementation sums four normalized terms and clamps, which causes premature saturation and unpredictable contribution from each stressor. The exact fix needs design choice, but the defect is real."
+      },
+      {
+        "amendment_id": "fr-2-44f51ba5",
+        "decision": "accept",
+        "rationale": "The probe can currently pass when neither arm clears combined TAN plus NO2 within the horizon and the larger filter finishes with worse nitrite. That is a false-green test outcome, so it needs a no-clearance failure or explicit nitrite decline or ceiling check."
+      },
+      {
+        "amendment_id": "fr-2-94a00996",
+        "decision": "accept",
+        "rationale": "The redox probe only proves initial suboxic setup and a very weak activity increase, so it can pass even after the planted arm loses its suboxic zone. Adding final suboxic-volume and stronger maturity assertions is necessary to validate sustained denitrification."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328125535-final_review-vote-1-c2-a1-cr2-artifact",
+  "payload_id": "run-20260328125535-final_review-vote-1-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T14:03:31.756101334Z",
+  "content": "# Final Review Votes\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nBoth amendments identify real defects: the TUI test is now selecting the wrong action because it is index-coupled to a reordered list, and the save migration silently changes legacy `TrimPlants` behavior from in-tank detritus routing to biomass export.\n\n## Votes\n\n- `fr-2-5f3aaec6`: Accept\n  Accept. The current test fails exactly for the stated reason: after `TrimPlantsAndLeaveCuttings` was inserted into `ActionKind::ALL`, advancing 5 times lands on `CleanFilter` rather than `AddShrimp`, so the test no longer exercises integer-only validation and can succeed incorrectly. Updating the navigation, preferably by selecting `ActionKind::AddShrimp` directly instead of depending on positional order, restores the intended coverage and removes brittle coupling to enum ordering.\n- `fr-2-d613a3c7`: Accept\n  Accept. The migration currently rewrites legacy `TrimPlants` to `TrimPlantsAndRemove`, but repository history shows the old `TrimPlants` implementation reduced plant biomass and routed the trimmed mass into `fine_detritus`, which matches the new `TrimPlantsAndLeaveCuttings` semantics rather than the remove/export variant. That means loading a schema-4 save with queued trim actions now changes gameplay behavior silently, which is a real save-compatibility bug unless it is explicitly documented as an intentional semantic break.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

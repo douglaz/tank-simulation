@@ -1,0 +1,23 @@
+{
+  "payload_id": "run-20260328132625-final_review-reviewer-1-c1-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T14:20:35.195123938Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "Fix gas-exchange scaling so total O2/CO2 surface flux depends on exposed area instead of water volume. `crates/tank_core/src/systems/dissolved_oxygen.rs:14-28` computes `K_LA` from lid/aeration/filter settings only, and `crates/tank_core/src/systems/chemistry.rs:55-58` / `crates/tank_core/src/systems/chemistry.rs:571-580` reuse that coefficient in `delta = k_la * (c_eq - c) * volume_l`. With that math, two tanks that share the same footprint and hardware but have different fill heights exchange different total CO2 masses; the deeper tank strips proportionally more CO2 even though the air-water interface is unchanged. The new regression at `crates/tank_core/tests/co2_exchange.rs:215-285` locks in that incorrect behavior by asserting equal concentration change instead of equal surface flux. Use a surface-area/volume term when deriving gas-transfer rates (for both O2 and CO2); `crates/tank_core/src/types/geometry.rs:64-72` already exposes a ratio helper you can build from.",
+        "rationale": "This is a real physics/correctness bug in the CO2 exchange implementation and it misses the requested surface-exchange behavior."
+      }
+    ],
+    "summary": "Reviewed the committed CO2-exchange implementation and adjacent touched files, then ran targeted `tank_core` test suites. I found one correctness gap: gas exchange still scales with tank volume rather than exposed surface area, and the new volume test currently codifies that wrong behavior."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

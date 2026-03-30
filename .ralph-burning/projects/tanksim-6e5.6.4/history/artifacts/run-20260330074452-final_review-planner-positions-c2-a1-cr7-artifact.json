@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330074452-final_review-planner-positions-c2-a1-cr7-artifact",
+  "payload_id": "run-20260330074452-final_review-planner-positions-c2-a1-cr7-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T12:40:12.150644731Z",
+  "content": "# Final Review Planner Positions\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccepted the hatch-diagnostics gap, the missing explicit GH suppression test, and both alkalinity-patch issues; rejected only the condition-floor proposal because the hard-zero condition behavior appears intentional and not clearly defective.\n\n## Votes\n\n- `fr-7-ae2bf47c`: Accept\n  `ShrimpHatched` currently always reports `RoutineAction` even when hatch conditions are materially suppressed. Because hatching uses deterministic rounding/carry, a small cohort can fully succeed without any accompanying `EggFailure`, which leaves the limiting factor invisible to users. Reusing the existing hatch-failure cause logic for sub-threshold hatch rates is low-risk and consistent with the existing event-diagnostics pattern.\n- `fr-7-8e8338a4`: Reject\n  `condition_index` is the shrimp’s already-smoothed internal body-state signal, not an external suppression curve like density, TAN, or nitrite. Allowing it to reach 0 cleanly stops reproduction when condition is catastrophic; adding a floor would permit breeding pressure even at zero condition. The recovery path through the 0.1 EMA is finite and not obviously pathological, so this does not show a clear correctness bug.\n- `fr-7-5d1c7cc7`: Accept\n  The stated acceptance criteria require independent breeding suppression from very low GH, high TAN, and high NO2. Current coverage directly asserts TAN and NO2 against a clean baseline, but GH is only exercised indirectly through parameter-sensitivity and snapshot-label checks. A direct low-GH readiness assertion would close a real regression gap.\n- `fr-7-e6495363`: Accept\n  In the worktree under review, `git status` shows `?? crates/tank_core/tests/nitrification_alkalinity.rs`, so the new alkalinity/pH regression suite is not actually part of the patch. That is a concrete patch-integrity problem: the claimed coverage will not ship unless the file is added to version control.\n- `fr-7-43506246`: Accept\n  The alkalinity-aware `budget_helpers` code already treats `Element::Alkalinity` as meq in the surrounding assertion text, but the cited per-system and per-tick lines still hardcode `mg`. Those paths are used specifically for debugging conservation failures, so printing the wrong unit is scientifically incorrect and will mislead diagnosis. The fix is straightforward and low risk.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 7
+}
