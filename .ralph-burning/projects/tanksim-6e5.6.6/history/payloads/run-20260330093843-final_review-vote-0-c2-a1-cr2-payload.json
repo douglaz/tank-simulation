@@ -1,0 +1,44 @@
+{
+  "payload_id": "run-20260330093843-final_review-vote-0-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:09:40.675526767Z",
+  "payload": {
+    "summary": "All five amendments identify genuine issues. The doc comment mismatch is trivially verifiable (total_days=60 vs \"~50 days\"). The thermal fixture amendments (aa20fab2, d4d6dec5) correctly identify that the cool control arm is not a healthy baseline due to the AOB:NOB nitrite bottleneck and absence of water changes or chemistry assertions. The egg-dropping amendment (bdcd6707) correctly identifies that egg_dropping() only fires on instability/swings, not steady heat, and the probe never asserts egg-drop counts despite the doc comment promising this. The breeding cycles amendment (b317f92d) correctly identifies that window-occupancy counting is weaker than actual clutch-to-hatch tracking.",
+    "votes": [
+      {
+        "amendment_id": "fr-2-21a3dd5d",
+        "decision": "accept",
+        "rationale": "Verified: line 211 sets total_days=60, which is 1,440 simulated hours (~60 days), but line 183 says '1 200 simulated hours (~50 days)'. Straightforward doc/code mismatch that should be corrected."
+      },
+      {
+        "amendment_id": "fr-2-aa20fab2",
+        "decision": "accept",
+        "rationale": "Verified: thermal_scenario_state sets AOB=2.0g and NOB=1.5g with equal Vmax=10.0 (lines 457-458, 475-476), creating a structural nitrite bottleneck since AOB produces nitrite faster than NOB consumes it. Lines 479-480 zero base_mortality and stress_mortality but — unlike breeding_success_state line 388 — failed_molt_mortality_scale is NOT zeroed. Combined with zero water changes in the run loop, the cool arm can degrade severely while still described as a healthy control. This is a real confound."
+      },
+      {
+        "amendment_id": "fr-2-bdcd6707",
+        "decision": "accept",
+        "rationale": "Verified: egg_dropping() (shrimp.rs:800-813) triggers only on instability_index or last_temp_swing_c, neither of which fires under a steady 31°C constant temperature. The probe records cool_egg_drops/warm_egg_drops (lines 532-541) in the summary string but never asserts them (lines 587-597 only format them for display). The doc comment at line 419 explicitly promises 'more egg dropping in the warm arm' but this outcome is never tested. Both counts can be zero and the probe passes."
+      },
+      {
+        "amendment_id": "fr-2-b317f92d",
+        "decision": "accept",
+        "rationale": "Verified: lines 214-251 track saw_berried_in_window per 10-day window, and line 269 checks berried_cycle_count >= 2. With egg_duration_days=14 (line 484 in breeding fixture, line 387 in breeding_success_state), a single clutch starting on day 8 would mark both window 1 (days 1-10) and window 2 (days 11-20) as containing berried females, satisfying the >= 2 check without a second independent berried-to-hatch cycle. The assertion is genuinely weaker than what the doc comment at line 184 promises ('at least 2 complete reproductive cycles')."
+      },
+      {
+        "amendment_id": "fr-2-d4d6dec5",
+        "decision": "accept",
+        "rationale": "Verified: the thermal suppression run loop (lines 516-526) has NO water changes — only feeding and stepping — unlike the breeding probe which does 20% water changes every 5 days (lines 224-229). The assertions (lines 544-583) are purely relative (warm readiness < cool readiness, warm juveniles < cool juveniles) with no chemistry envelope checks. This means the probe passes even if the cool 'control' arm ends in a nitrite crash with condition near zero. This is a distinct concern from fr-2-aa20fab2 (fixture params vs assertion guardrails) and both should be addressed."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}

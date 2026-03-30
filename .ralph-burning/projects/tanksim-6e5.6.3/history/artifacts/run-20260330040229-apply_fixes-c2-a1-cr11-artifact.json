@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330040229-apply_fixes-c2-a1-cr11-artifact",
+  "payload_id": "run-20260330040229-apply_fixes-c2-a1-cr11",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-30T11:51:04.085847839Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nVerified that the branch already contains the approved tanksim-6e5.6.3 molt/mineral fixes, so this apply-fixes pass was validation-only and required no additional source edits. I rechecked the relevant shrimp runtime/species wiring and reran focused and broad regression coverage; current HEAD passes the full `tank_core` suite plus downstream `tank_data` and `tank_scenarios` tests.\n\n## Steps\n\n1. [Completed] Inspected the current worktree and the relevant shrimp molt/mineral parameter, diagnostic, and regression paths to confirm there were no remaining review-requested fixes to apply on this branch.\n2. [Completed] Reran focused regressions for molt/mineral behavior, validation, save/load, and reproduction-factor coverage, along with downstream `tank_data` and `tank_scenarios` suites.\n3. [Completed] Ran the full `tank_core` test suite to confirm broader stability and recorded this stage as validation-only because no new code changes were needed.\n\n## Validation Evidence\n\n- `git status --short`\n- `git diff -- crates/tank_core/tests/reproduction_factors.rs`\n- `rg -n \"temp_condition_low_divisor_c|temp_condition_high_divisor_c|test_soft_vs_hard_water_shrimp_survival|MarginalFailure|critical_molt_gh_ratio\" crates/tank_core crates/tank_data crates/tank_scenarios`\n- `cargo test -p tank_core --test molt_mineral_budget -- --nocapture`\n- `cargo test -p tank_core --test validation -- --nocapture`\n- `cargo test -p tank_core --test save_load -- --nocapture`\n- `cargo test -p tank_core --test reproduction_factors -- --nocapture`\n- `cargo test -p tank_data -- --nocapture`\n- `cargo test -p tank_scenarios -- --nocapture`\n- `cargo test -p tank_core -- --nocapture`\n\n## Outstanding Risks\n\nNone identified.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 11
+}

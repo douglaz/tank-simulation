@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260329191454-plan_and_implement-c2-a1-cr2-artifact",
+  "payload_id": "run-20260329191454-plan_and_implement-c2-a1-cr2",
+  "stage_id": "plan_and_implement",
+  "created_at": "2026-03-29T19:56:23.621963308Z",
+  "content": "# Plan and Implement\n\n## Change Summary\n\nPatched the two pending amendments in place: comammox now decrements the shared running alkalinity budget in `nitrogen_cycle.rs` so the bookkeeping matches the DO budget and is ready for future downstream consumers, and `StageTrace` now skips `BudgetMetric` allocation unless budget tracking is active. I also added engine unit tests covering the new metric-gating behavior and kept a debug assertion on the running alkalinity budget to document the intended invariant until denitrification or other later consumers use it directly.\n\n## Steps\n\n1. [Completed] Inspect the current nitrogen-cycle and tracing implementations around the two pending amendments and confirm the exact failure surfaces.\n2. [Completed] Update the nitrification bookkeeping so comammox also debits the shared running alkalinity budget, and gate `StageTrace` budget-metric allocation on active budget tracking.\n3. [Completed] Add targeted unit coverage for the new `StageTrace` behavior, run formatting, and rerun focused plus broader validation to confirm the amendments and record remaining out-of-scope failures.\n\n## Validation Evidence\n\n- `cargo fmt --all`\n- `cargo test -p tank_core stage_trace_` passed.\n- `cargo test -p tank_core --test nitrification_alkalinity` passed.\n- `cargo test -p tank_core --test tracing` passed.\n- `cargo test -p tank_core --test budget_tracking` passed.\n- `cargo test -p tank_core --tests` was rerun; all touched surfaces passed, and the suite still exposed the existing `save_load_with_active_cycle_state` failure in `crates/tank_core/tests/save_load.rs:340`.\n\n## Outstanding Risks\n\n- `alkalinity_produced_meq` remains a zero-valued placeholder until denitrification work lands; the return-path interface is prepared, but production is still not implemented.\n- A broader `cargo test -p tank_core --tests` sweep still fails in `save_load_with_active_cycle_state` at `crates/tank_core/tests/save_load.rs:340`; that pre-existing save/load determinism issue remains unresolved in this stage.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

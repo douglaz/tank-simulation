@@ -1,0 +1,39 @@
+{
+  "payload_id": "run-20260330113320-final_review-planner-positions-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T12:22:51.474878450Z",
+  "payload": {
+    "summary": "Accept the three amendments that fix real inconsistencies between configuration, reporting, and runtime behavior. Reject the VS-07 denitrification amendment because the current test already makes the no-substrate behavior clear, and keeping denitrification params equal across arms is the stronger control.",
+    "votes": [
+      {
+        "amendment_id": "fr-1-a2e51b55",
+        "decision": "reject",
+        "rationale": "With `substrate_layers.clear()`, denitrification is already structurally disabled because the nitrogen-cycle code only runs that pathway when suboxic pore volume is nonzero. The test already states that the bare arm has no substrate and therefore no denitrification. Zeroing the params would actually weaken the control by making the two arms differ in more than substrate, and another comment would be redundant rather than a substantive fix."
+      },
+      {
+        "amendment_id": "fr-1-98b4d260",
+        "decision": "accept",
+        "rationale": "The report template is inconsistent with the current scenario contract. The scenario notes and envelope bounds say cycling is judged by nitrification outputs, but the checkpoint lines still present `maturity` inside a pass/fail template, which can mislead readers and automation into treating it as validated criteria. The template should be aligned or explicitly marked observational."
+      },
+      {
+        "amendment_id": "fr-1-e53a714b",
+        "decision": "accept",
+        "rationale": "This is a real behavior mismatch. Runtime validation now permits `temp_condition_min_factor = 0.0`, but molt cadence still forces a hidden `0.01` minimum, so readiness continues to accumulate and molts eventually resolve when the caller asked for a true zero floor. That undermines configuration semantics and should be replaced with explicit zero handling."
+      },
+      {
+        "amendment_id": "fr-1-c1750e41",
+        "decision": "accept",
+        "rationale": "The failure-reporting path should match the success/failure logic. `molt_cycle` already disables critical GH failure when `gh_min_d <= 0.0`, so leaving `emit_molt_failure` unguarded can emit a misleading `critical GH ratio` detail when GH is intentionally disabled. Gating it on `params.gh_min_d > 0.0` fixes an observable diagnostic defect and keeps event details truthful."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

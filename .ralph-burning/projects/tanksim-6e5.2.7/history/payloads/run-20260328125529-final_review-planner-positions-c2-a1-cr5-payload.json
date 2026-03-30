@@ -1,0 +1,44 @@
+{
+  "payload_id": "run-20260328125529-final_review-planner-positions-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T16:00:25.117276965Z",
+  "payload": {
+    "summary": "Accepted 4 amendments: one build-breaking rename, two backward-compatibility regressions, and one invalid test. Rejected 1 amendment because it identifies maintainability debt but not a concrete defect that must be fixed.",
+    "votes": [
+      {
+        "amendment_id": "fr-5-b994c526",
+        "decision": "reject",
+        "rationale": "This identifies unused preparatory code, but not a concrete correctness, compatibility, or safety defect. A well-tested utility module may legitimately exist before callers are wired up, and the amendment does not show that lints fail or behavior is broken today."
+      },
+      {
+        "amendment_id": "fr-5-9227ab6c",
+        "decision": "accept",
+        "rationale": "Adding a new required serde field to a snapshot type without a default or migration path breaks deserialization of older payloads. That is a real backward-compatibility regression and should be handled with a default or equivalent versioned migration."
+      },
+      {
+        "amendment_id": "fr-5-5e3652d6",
+        "decision": "accept",
+        "rationale": "If call sites still construct `ProcessParams` with deleted field names after the rename, the crate does not compile. A rename that leaves scenarios and tests referring to nonexistent fields is an immediate build-breaking defect."
+      },
+      {
+        "amendment_id": "fr-5-a3f02708",
+        "decision": "accept",
+        "rationale": "Serde aliases preserve legacy key names, but they do not preserve legacy units. If old save and preset values are now read directly as mg N/L without conversion, existing data silently changes decomposition and nitrification kinetics at load time, which is a serious correctness and compatibility bug."
+      },
+      {
+        "amendment_id": "fr-5-ed3ca0d0",
+        "decision": "accept",
+        "rationale": "The test is unsound if it mutates `state.water.ph` but snapshot generation recomputes pH from carbonate equilibrium instead of copying that field. In that case the asserted non-finite condition never reaches `Envelope::check`, so the test does not verify the intended behavior."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 5
+}

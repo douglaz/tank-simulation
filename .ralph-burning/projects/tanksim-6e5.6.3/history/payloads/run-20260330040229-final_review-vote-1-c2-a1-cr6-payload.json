@@ -1,0 +1,54 @@
+{
+  "payload_id": "run-20260330040229-final_review-vote-1-c2-a1-cr6-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T08:56:21.342297226Z",
+  "payload": {
+    "summary": "All seven amendments identify valid technical issues: several hardcoded molt-model or diagnostic coefficients remain unnamed despite materially affecting behavior or reporting, and the cited tests overstate what they verify because they do not exercise the intended paths or observe the relevant time window.",
+    "votes": [
+      {
+        "amendment_id": "fr-6-659b3f63",
+        "decision": "accept",
+        "rationale": "The failed-molt accumulation increment and recovery rates are behavior-shaping tuning coefficients, not incidental implementation details. Leaving them as raw literals conflicts with the stated requirement that molt-related thresholds and modifiers live in named species/process parameters."
+      },
+      {
+        "amendment_id": "fr-6-1c45f0d3",
+        "decision": "accept",
+        "rationale": "If the soft-water integration case sets calcium and magnesium exactly at their configured minima, those subfactors never penalize the mineral modifier. That means the integration test only exercises the GH path and does not verify integrated Ca/Mg deficiency effects as claimed."
+      },
+      {
+        "amendment_id": "fr-6-b71a2aad",
+        "decision": "accept",
+        "rationale": "Defaulting to `EventCause::PoorCondition` when no diagnostic threshold actually fired can misreport the reason for a molt failure. For player-visible diagnostics, a misleading fallback cause is a real defect in observability and debuggability."
+      },
+      {
+        "amendment_id": "fr-6-fe4cee4a",
+        "decision": "accept",
+        "rationale": "These thresholds control player-visible failure classification, so keeping them as unnamed literals makes the logic harder to audit, tune, and keep consistent. Even if they are not promoted to runtime config, they should not remain unexplained magic numbers."
+      },
+      {
+        "amendment_id": "fr-6-7ab7e2a1",
+        "decision": "accept",
+        "rationale": "`failed_molt_accum` already has one explicit mortality scale, and the extra hardcoded blend into `molt_stress_index` creates a second consequential path into mortality/readiness. That coupling materially affects outcomes and should be exposed as a named tuning parameter rather than hidden in a literal."
+      },
+      {
+        "amendment_id": "fr-6-86390c91",
+        "decision": "accept",
+        "rationale": "Sampling TAN, NO2, and instability only once after each full `run_day()` cannot detect harmful intra-day excursions that later settle. A test framed as proving chemistry stays in range needs observation at the relevant temporal granularity."
+      },
+      {
+        "amendment_id": "fr-6-faf7e3a2",
+        "decision": "accept",
+        "rationale": "The current test demonstrates lingering low readiness after a hot swing, but it does not isolate instability as the causal mechanism because direct temperature effects and residual damage can produce the same outcome. As written, it verifies correlation, not the specific dependency it claims."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 6
+}

@@ -1,0 +1,24 @@
+{
+  "payload_id": "run-20260330083637-final_review-vote-1-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:45:51.966036192Z",
+  "payload": {
+    "summary": "Inspected the cited code paths and the amendment does not match the current implementation: the temperature divisor fields are validated as positive values, not as unit-interval weights, and the shipped shrimp preset is covered by a passing no-diagnostics load test.",
+    "votes": [
+      {
+        "amendment_id": "fr-5-cf6e5225",
+        "decision": "reject",
+        "rationale": "In the current `crates/tank_data/src/presets.rs`, `temp_condition_low_divisor_c` and `temp_condition_high_divisor_c` appear in the earlier positive-span validation list, alongside other fields that must be finite and greater than zero, not in the later `<= 1.0` bucket. The `<= 1.0` check near the cited later lines covers a different set of fields and does not include either temperature divisor. That matches the shipped data: `crates/tank_data/data/shrimp/neocaridina_davidi.toml` sets these to `10.0` and `8.0`, and `load_shrimp_with_diagnostics(\"neocaridina_davidi\")` is explicitly exercised by `shipped_param_meta_loaders_return_no_diagnostics()` in `crates/tank_data/src/lib.rs`. The claimed immediate preset-rejection failure is therefore not present in the current code."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 5
+}

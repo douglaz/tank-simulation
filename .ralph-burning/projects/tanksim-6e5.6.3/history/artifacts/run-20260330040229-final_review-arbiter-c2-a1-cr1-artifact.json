@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330040229-final_review-arbiter-c2-a1-cr1-artifact",
+  "payload_id": "run-20260330040229-final_review-arbiter-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T05:24:29.048921119Z",
+  "content": "# Final Review Arbiter\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nRejected the disputed `gh_min_d` amendment because the cited divide-by-zero panic is not real, the reviewer’s alternate “unconditional failure” theory is numerically incorrect, and the codebase’s validations/invariants indicate `gh_min_d == 0.0` is intentionally tolerated rather than a demonstrated correctness bug.\n\n## Rulings\n\n- `fr-1-6053d10f`: Reject\n  Reject. The amendment’s stated failure mode is incorrect, and the remaining evidence does not establish a concrete bug. In `crates/tank_core/src/types/water.rs`, `gh_d()` is clamped to `>= 0.0`, so when `gh_min_d == 0.0` the branch-guarded divisions in `crates/tank_core/src/systems/shrimp.rs` (`if gh_d < params.gh_min_d`) are unreachable for normal runtime values. Even if reached, Rust `f64` division by zero yields `inf`/`NaN`, not a panic. The reviewer’s alternate argument also does not hold: `critical_gh_deficit` is computed as `gh_d / params.gh_min_d.max(0.01) < 0.3`, which with `gh_min_d == 0.0` becomes `gh_d / 0.01 < 0.3`; that does not make molt failure unconditional except at essentially zero GH. The strongest evidence points the other way: both preset validation and runtime invariants deliberately allow non-negative `gh_min_d`, and the `.max(0.01)` guard is explicit zero-handling. Tightening this to `> 0.0` could be a modeling change, but this amendment does not prove a correctness defect that requires it.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

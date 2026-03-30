@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "description": "Payload returned by the final-review arbiter.",
+  "properties": {
+    "rulings": {
+      "items": {
+        "additionalProperties": false,
+        "description": "A disputed-amendment ruling returned by the arbiter.",
+        "properties": {
+          "amendment_id": {
+            "type": "string"
+          },
+          "decision": {
+            "description": "Per-amendment vote used by both the planner-position step and reviewer voting.",
+            "enum": [
+              "accept",
+              "reject"
+            ],
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "amendment_id",
+          "decision",
+          "rationale"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "summary": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "rulings",
+    "summary"
+  ],
+  "title": "FinalReviewArbiterPayload",
+  "type": "object"
+}

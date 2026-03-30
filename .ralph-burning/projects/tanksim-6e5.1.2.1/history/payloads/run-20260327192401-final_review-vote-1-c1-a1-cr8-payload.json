@@ -1,0 +1,44 @@
+{
+  "payload_id": "run-20260327192401-final_review-vote-1-c1-a1-cr8-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T01:14:10.964748714Z",
+  "payload": {
+    "summary": "Reviewed all five amendments against the current code. Four are technically sound improvements or corrections, with one of those primarily being a documentation/maintainability clarification. The shrimp water-column funding amendment does not match the current implementation and should be rejected.",
+    "votes": [
+      {
+        "amendment_id": "fr-8-37900497",
+        "decision": "accept",
+        "rationale": "`is_shared_budget_path` currently hard-codes the shrimp mass-bearing count fields, so a future count-based biomass pool could be added without the structural coverage test noticing. That is a real maintainability gap. The fix should be targeted, though: a blanket `animal.*_count` rule would overmatch non-mass counters like `berried_females_count`, so explicit documentation or a narrower discovery rule is preferable."
+      },
+      {
+        "amendment_id": "fr-8-1415e3ec",
+        "decision": "accept",
+        "rationale": "The underlying accounting is intentionally correct: `dissolved_feed_residue_g_total` is a bookkeeping mirror of feed-derived DOC/DON and should be scaled by water changes without being added to the budget delta. The amendment is still worthwhile because a short comment at that mutation site would document the intentional exclusion and reduce the risk of a future double-counting bug."
+      },
+      {
+        "amendment_id": "fr-8-2fe7314b",
+        "decision": "accept",
+        "rationale": "The current helper tests collapse particulate organics and fine detritus into one summed mass before conversion, which means they would not catch a future bug where those two pools diverge in conversion logic or ratio handling. Splitting the expected values by pool is a cheap, more sensitive test improvement."
+      },
+      {
+        "amendment_id": "fr-8-8959bb9b",
+        "decision": "accept",
+        "rationale": "This identifies a real modeling error. Plant respiration is currently routed through `route_plant_loss_to_dissolved_organics`, and algae losses route through the analogous dissolved-organics path as well, so biomass disappears into DOC/DON rather than following a respiration-to-DIC/O2 path or a turnover-to-detritus path. With the default hourly DIC chemistry rates at zero, the default simulation effectively has 'respiration' that does not produce DIC or consume oxygen, and algae turnover also bypasses the documented detritus chain. That should be corrected."
+      },
+      {
+        "amendment_id": "fr-8-65a8127d",
+        "decision": "reject",
+        "rationale": "The claimed defect is not present in the current code. `fund_live_shrimp_biomass()` only checks `animal.reserve_g` and returns `false` when reserve is insufficient; it does not fall back to TAN, DON, DOC, or DIC. The existing shrimp tests also explicitly cover that dissolved pools do not fund hatching when reserve is short. Rejecting this amendment is correct because it is based on an incorrect reading of the implementation."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 8
+}

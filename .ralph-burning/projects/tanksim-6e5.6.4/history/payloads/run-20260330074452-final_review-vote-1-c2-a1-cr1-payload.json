@@ -1,0 +1,49 @@
+{
+  "payload_id": "run-20260330074452-final_review-vote-1-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T09:03:34.697360460Z",
+  "payload": {
+    "summary": "Accept four amendments that identify real behavioral or observability defects in the reproduction and habitat-probe logic. Reject the commit-structure note because it is not a concrete technical defect, and reject the redox water-change report because that failure path is stale for the code under review.",
+    "votes": [
+      {
+        "amendment_id": "fr-1-49d3b132",
+        "decision": "accept",
+        "rationale": "`spawning()` computes a live `density_factor`, the shrimp parameter docs describe density as affecting breeding rate, and the berried-event text reports that factor, but the actual `spawn_rate` ignores it and only sees density through the lagged readiness EMA. That is a real same-day behavior/diagnostic mismatch after abrupt crowding changes. The exact remedy should avoid double-counting density, but the amendment identifies a legitimate defect."
+      },
+      {
+        "amendment_id": "fr-1-c4841f7b",
+        "decision": "accept",
+        "rationale": "`dominant_repro_suppression_label()` is derived from `reproductive_readiness_factors()`, and that factor list omits GH/minerals even though `gh_mineral_factor()` directly suppresses spawning and hatch success. In a low-GH case the snapshot can therefore report `none` or blame the wrong factor while minerals are the true limiter. That is a real observability defect."
+      },
+      {
+        "amendment_id": "fr-1-f9a344a2",
+        "decision": "reject",
+        "rationale": "This is a review-packaging preference, not a concrete correctness, safety, robustness, or maintainability defect in the code itself. If the habitat-probe file has technical problems, they should be captured as behavioral amendments rather than as a commit-structure complaint."
+      },
+      {
+        "amendment_id": "fr-1-ef68088f",
+        "decision": "reject",
+        "rationale": "The cited bug depends on `WaterChangePercent` actions being used with `HarnessRun::from_state(...)`, but the redox probe under review does not do that. It runs daily feeding with no water changes specifically because `from_state()` does not seed the source-water catalog. As written, the reported `UnknownSourceProfile` failure path is stale."
+      },
+      {
+        "amendment_id": "fr-1-153ec732",
+        "decision": "accept",
+        "rationale": "The biofilter probe named `probe_biofilter_scaling_bigger_media_faster_cycling` only asserts final nitrifier biomass parity (`large >= 95% of small`), which is not a stable or direct test of faster cycling. A larger media bed can legitimately end with lower biomass density under the same nutrient load, so the assertion is brittle, and the test no longer measures the behavior its name claims to validate."
+      },
+      {
+        "amendment_id": "fr-1-1d9eb769",
+        "decision": "accept",
+        "rationale": "`TankState::new()` seeds `state.water` totals for the default geometry volume, then this test mutates fill height and only rewrites a handful of pools. The untouched totals therefore remain sized for the old volume and end up at different concentrations between shallow and deep runs. That materially confounds a probe that is supposed to isolate depth/light effects."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

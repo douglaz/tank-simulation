@@ -1,0 +1,56 @@
+{
+  "payload_id": "run-20260330074452-apply_fixes-c2-a1-cr6",
+  "stage_id": "apply_fixes",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T12:00:56.700112597Z",
+  "payload": {
+    "data": {
+      "change_summary": "Applied the remaining review follow-ups in the current tree. I extracted the hardcoded `temp_condition_factor()` floor into a named shrimp parameter, `temp_condition_min_factor`, and wired it through `ShrimpRuntimeParams`, defaults, invariant validation, preset/default lookup, scenario materialization, shipped shrimp data, and regression coverage so the thermal-condition floor is species-tunable instead of fixed at `0.2`. I also tightened `test_neglected_tank_breeding_stalls()` so the neglected tank must now finish at or below its starting population after chemistry/stability degradation, removing the prior peak-decline fallback. Targeted tests were updated to cover the new parameter and stricter neglected-tank expectation.",
+      "outstanding_risks": [
+        "Validation was targeted to the touched tank_core, tank_scenarios, and tank_data surfaces; I did not rerun the full workspace, full tank_harness suite, or `cargo clippy` after this pass.",
+        "The worktree still contains unrelated infrastructure dirtiness outside this deliverable (`.claude/worktrees/tanksim-6e5.4.7` and untracked `.ralph-burning/`), which I left untouched."
+      ],
+      "steps": [
+        {
+          "description": "Reviewed the approved review findings and inspected the shrimp condition-temperature path plus the neglected-tank regression to isolate the remaining concrete fixes.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Patched the shrimp runtime/species plumbing so `temp_condition_factor()` now uses a named `temp_condition_min_factor` parameter with defaults, invariants, preset exposure, scenario mapping, and shipped data coverage.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Tightened the neglected-tank regression to require the degraded tank to finish at or below its initial shrimp count, and extended named-parameter coverage to include the new thermal-condition floor knob.",
+          "order": 3,
+          "status": "completed"
+        },
+        {
+          "description": "Ran formatting and targeted regression/invariant/materialization tests across tank_core, tank_scenarios, and tank_data to verify the fixes.",
+          "order": 4,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo fmt --all` completed successfully.",
+        "`git diff --check -- crates/tank_core/src/types/biology.rs crates/tank_core/src/invariants.rs crates/tank_core/src/systems/shrimp.rs crates/tank_core/tests/reproduction_factors.rs crates/tank_core/tests/validation.rs crates/tank_core/tests/save_load.rs crates/tank_data/src/presets.rs crates/tank_scenarios/src/lib.rs crates/tank_data/data/shrimp/neocaridina_davidi.toml` returned clean.",
+        "`cargo test -p tank_core --test reproduction_factors -- --nocapture` passed with 17/17 tests, including the stricter neglected-tank assertion and named-parameter coverage.",
+        "`cargo test -p tank_core --lib test_temp_condition_parameters_are_named_parameters -- --nocapture` passed.",
+        "`cargo test -p tank_core --test validation step_hours_rejects_invalid_molt_mineral_parameters_before_simulation -- --nocapture` passed.",
+        "`cargo test -p tank_core --test save_load malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected -- --nocapture` passed.",
+        "`cargo test -p tank_scenarios shrimp_preset_mapping_carries_stage_runtime_fields_and_legacy_split -- --nocapture` passed.",
+        "`cargo test -p tank_data shipped_shrimp_condition_and_nh3_tunables_have_provenance_metadata -- --nocapture` passed."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 6
+}

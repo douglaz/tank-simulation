@@ -1,0 +1,48 @@
+{
+  "payload_id": "run-20260328023528-apply_fixes-c2-a1-cr1",
+  "stage_id": "apply_fixes",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T03:08:41.355347433Z",
+  "payload": {
+    "data": {
+      "change_summary": "Added an explicit stage-trace note hook inside the engine and used it to record deterministic intermediate notes for traced chemistry, dissolved-oxygen, and daily biofilter maturity stages. Moved the daily biofilter follow-up event emission into the traced stage so `events_generated` is fully attributed, made `Verbosity::Off` skip tick construction/storage/sink writes entirely, updated the tracing docs to match that contract, and expanded integration coverage for trace notes, post-stage event attribution, summary-note suppression, and off-mode sink behavior.",
+      "outstanding_risks": [],
+      "steps": [
+        {
+          "description": "Inspected the current engine/tracing flow and existing tracing coverage to confirm the three remediation gaps around trace notes, event attribution, and off-mode behavior.",
+          "order": 0,
+          "status": "completed"
+        },
+        {
+          "description": "Patched the engine tracing path to support explicit per-stage note collection, to attribute daily biofilter events inside the traced stage, and to avoid creating or finishing ticks when tracer verbosity is `Off`.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Extended integration tests to assert non-empty trace notes for a deterministic daily biofilter fixture, exact post-stage event attribution for that stage, and zero retained/emitted output when tracing is configured with `Verbosity::Off`.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Formatted the code and ran targeted plus full-package validation to confirm the fixes and guard against regressions.",
+          "order": 3,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo fmt --all` completed successfully.",
+        "`cargo test -p tank_core --lib --test tracing --test dissolved_oxygen` passed.",
+        "`cargo test -p tank_core` passed the full `tank_core` test suite, including the updated tracing integration tests."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

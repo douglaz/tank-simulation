@@ -1,0 +1,31 @@
+{
+  "payload_id": "run-20260330040229-final_review-reviewer-1-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T08:09:13.423513403Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "[high] `crates/tank_core/src/systems/shrimp.rs:741-761` regresses sudden egg-drop behavior. The new code no longer reads `egg_drop_temp_swing_c` and only gates on `instability_index`, but `update_stability_tracker()` only moves that index 30% toward the raw swing each day (`crates/tank_core/src/systems/shrimp.rs:194-205`). From a stable baseline, even a 4°C swing produces only ~0.3 instability, which is still below the default `egg_drop_instability_threshold` of 0.5, so first-day temperature shocks no longer drop eggs at all. That also leaves the species parameter declared at `crates/tank_core/src/types/biology.rs:347-353` effectively dead.",
+        "rationale": "This silently removes the direct temperature-shock path the feature is supposed to model, and the new test setup masks it by pre-seeding instability instead of exercising a fresh swing."
+      },
+      {
+        "body": "[high] `crates/tank_core/tests/reproduction_factors.rs:227-245` breaks `test_reproduction_increases_with_condition`. The 'starved' setup zeroes `shrimp_periphyton_grazing_g_per_shrimp_per_day`, and `update_condition()` treats zero food demand as fully satiated (`crates/tank_core/src/systems/shrimp.rs:393-399`). In practice the starved tank ends up healthier than the fed tank, and `cargo test -p tank_core --test reproduction_factors` now fails at `crates/tank_core/tests/reproduction_factors.rs:252-265`.",
+        "rationale": "The branch currently leaves the targeted regression test red, and the test no longer exercises starvation semantics correctly."
+      },
+      {
+        "body": "[high] `crates/tank_core/tests/reproduction_factors.rs:560-599` still leaves `test_mature_stable_tank_breeds_well` failing. With the retuned scenario (`adult.count = 20`, `Feed { grams: 0.2 }`, faster maturation, etc.), the run only produces one `ShrimpBerried` event, so the `berried_events >= 3` assertion at `crates/tank_core/tests/reproduction_factors.rs:597-600` trips under `cargo test -p tank_core --test reproduction_factors`.",
+        "rationale": "This is a blocking regression in the test suite; the new scenario has not been calibrated to satisfy its own success criteria."
+      }
+    ],
+    "summary": "Read the changed shrimp and reproduction test files end-to-end. Found three blocking issues: egg-dropping no longer responds to a fresh temperature swing on the day it happens, and the updated `reproduction_factors` test target is red in two places (`test_reproduction_increases_with_condition` and `test_mature_stable_tank_breeds_well`)."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 5
+}

@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260330093843-final_review-aggregate-c2-a1-cr3-artifact",
+  "payload_id": "run-20260330093843-final_review-aggregate-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T11:42:08.820282517Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 2 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 6\n**Final Review Restarts:** 3/20\n\n## Accepted\n\n- `fr-3-f6292b8a`\n- `fr-3-94619e54`\n\n## Rejected\n\n- `fr-3-e17508b1`\n- `fr-3-56785ca4`\n- `fr-3-70ade949`\n- `fr-3-b144e01e`\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-3-f6292b8a`\n\nStrengthen `probe_thermal_suppression` so the cool control must itself reproduce. In `crates/tank_harness/tests/e2e_shrimp_scenario_probes.rs:572-576`, the test falls back to `warm_readiness <= cool_readiness` whenever both arms finish with zero juveniles, and the only control-arm check in `crates/tank_harness/tests/e2e_shrimp_scenario_probes.rs:611-624` covers health, not breeding. A regression that suppresses spawning or hatching in both tanks can still pass as long as the warm arm is slightly worse and drops one clutch. Add a positive-control assertion on the cool arm (juveniles, hatch events, berried cycles, or a minimum readiness floor) so this probe actually verifies thermal suppression relative to a working breeding baseline.\n\n### `fr-3-94619e54`\n\nMake the summary run emit structured traces on successful executions instead of keeping them in memory only. `enable_probe_instrumentation()` attaches `SimTracer::new(Verbosity::Trace)` with no sink in `crates/tank_harness/tests/e2e_shrimp_scenario_probes.rs:103-107`, and `HarnessRun::finish()` returns immediately for successful non-verbose runs in `crates/tank_harness/src/lib.rs:649-656`. In practice `all_shrimp_probes_summary` prints the population summary but does not log any trace output unless callers remember `TANK_E2E_VERBOSE=1`. Persist a JSONL sink or write the trace bundle from the summary path unconditionally.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 3
+}

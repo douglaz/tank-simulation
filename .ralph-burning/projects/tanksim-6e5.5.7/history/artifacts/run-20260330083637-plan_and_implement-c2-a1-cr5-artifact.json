@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330083637-plan_and_implement-c2-a1-cr5-artifact",
+  "payload_id": "run-20260330083637-plan_and_implement-c2-a1-cr5",
+  "stage_id": "plan_and_implement",
+  "created_at": "2026-03-30T11:23:38.500195072Z",
+  "content": "# Plan and Implement\n\n## Change Summary\n\nTightened the equipment-scaling habitat probe so plant outcomes are geometry-aware instead of benefiting from the same absolute biomass cap at both sizes. The probe now derives the 1×/2× footprint ratio, checks that final plant biomass scales with that footprint expansion, scales the 2× plant-biomass envelope accordingly, and reports absolute plant biomass plus areal plant density in the summary output.\n\n## Steps\n\n1. [Completed] Reviewed the equipment-scaling probe and confirmed the pending issue: both geometry arms used the same absolute `plant_biomass_g(1.0, 400.0)` envelope even though plant mass should scale with footprint.\n2. [Completed] Patched `crates/tank_harness/tests/e2e_habitat_geometry_probes.rs` so the probe computes the footprint ratio, records a plant-biomass-vs-footprint-scaling check, scales the 2× plant envelope by that ratio, and includes plant biomass/areal-density values in the probe summary.\n3. [Completed] Ran formatting plus targeted validation on the habitat/geometry probe target and clippy-cleaned the updated test.\n\n## Validation Evidence\n\n- `cargo fmt --all` completed successfully.\n- `cargo test -p tank_harness --test e2e_habitat_geometry_probes all_habitat_geometry_probes_summary -- --nocapture` passed: all 5 habitat/geometry probes remained green after the equipment-scaling amendment.\n- The updated equipment-scaling summary now reports geometry-aware plant results alongside the chemistry checks: `1× setup ... 1800 cm² footprint; 2× setup ... 7200 cm² footprint` and `plant biomass 9.32/36.85 g, plant areal density 51.8/51.2 g/m²`, confirming roughly 4× absolute biomass across the 4× footprint.\n- `cargo clippy -p tank_harness --test e2e_habitat_geometry_probes -- -D warnings` completed successfully.\n\n## Outstanding Risks\n\n- Validation for this amendment was targeted to `e2e_habitat_geometry_probes` plus clippy, not the full workspace test matrix.\n- The worktree still contains unrelated pre-existing changes in `.claude/worktrees/tanksim-6e5.4.7` and `.ralph-burning/`; they were left untouched and still need care during staging/commit.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 5
+}

@@ -1,0 +1,126 @@
+{
+  "payload_id": "run-20260330064830-final_review-aggregate-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T09:57:46.852770147Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-5-9708b232",
+      "fr-5-f084dd66"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-5-9708b232",
+        "normalized_body": "In `e2e_habitat_geometry_probes.rs`, the `all_habitat_geometry_probes_summary` test (#[test]) calls the same `run_probe_*` functions that the 5 individual `#[test]` probe functions also call. When `cargo test` runs the full file, each expensive probe (multi-day simulations) executes twice: once in its own test and once in the summary. Either gate the individual tests behind a feature flag / `#[ignore]` when the summary runner exists, or have the summary runner reuse test results rather than re-executing. This doubles CI wall-clock time for no additional coverage.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-2e04c8d7",
+        "normalized_body": "In the biofilter scaling probe (`run_probe_biofilter_scaling_bigger_media_faster_cycling`), the `(None, None)` match arm for `reduced_n_clearance` was changed from `record_failure_all` to a silent no-op (`{}`). This means if both the small AND large filter fail to clear reduced nitrogen to the threshold within the entire 504-hour duration, no check is recorded and the probe silently passes. Add at minimum a `record_check` with a warning or a non-fatal note so that total clearance failure is visible in the probe summary report, even if not treated as a hard failure.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-a69caaa7",
+        "normalized_body": "In `root_oxygenation_active_biomass_g` (substrate.rs:136-161), the function calls `compute_habitat_registry(state)` to build a fresh registry every time it is invoked. Since this function is called from `substrate_oxygenation_breakdown` which is called from `step_substrate_zones` on every hourly tick, AND `compute_habitat_registry` iterates through all habitats and plant guilds, consider accepting the registry as a parameter or caching it. The engine step sequence refreshes habitats at multiple points; passing the already-computed registry would avoid redundant work on every tick.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-a672a7f8",
+        "normalized_body": "In `step_substrate_zones` (substrate.rs:71-73), the same `effective_penetration_cm` is written to every substrate layer regardless of layer position or properties. This means in a multi-layer stack (e.g., 2cm sand over 3cm porous substrate), the bottom layer gets the same `o2_penetration_depth_cm` as the top. While the zone geometry methods correctly interpret this as a global boundary from the top of the stack, the field name `o2_penetration_depth_cm` on each individual layer is misleading — it reads as 'penetration within this layer' rather than 'global boundary from substrate surface'. Add a doc comment to `SubstrateLayerState::o2_penetration_depth_cm` clarifying that this is a global stack-relative boundary, not a per-layer local depth.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-6409353a",
+        "normalized_body": "P0: The workspace does not build. `cargo check -q` fails with E0609 because `crates/tank_scenarios/src/lib.rs:895-940` reads sixteen shrimp preset fields (`density_repro_threshold_per_l`, `egg_drop_temp_swing_c`, `instability_*`, etc.) that do not exist on `ShrimpPreset` in `crates/tank_data/src/presets.rs:452-578`. As written, any CI job that builds `tank_scenarios` fails, so this cannot ship until the preset schema/plumbing is brought back into sync or those assignments are removed.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-f084dd66",
+        "normalized_body": "P1: `crates/tank_core/src/systems/substrate.rs:99-113` computes `root_oxygenation_bonus_cm` against the full substrate depth and only clamps after adding it to `base_penetration_cm`. When the base penetration already spans the whole bed (for example the low-demand path at `crates/tank_core/src/systems/substrate.rs:182-183`), the breakdown can report a positive root bonus even though `effective_penetration_cm` is unchanged. That makes the exposed tracing/debug metric incorrect and turns the intended smooth saturation into a hard clip near fully oxic beds. The reported bonus should be capped to the remaining available depth, or recomputed as `effective_penetration_cm - base_penetration_cm`.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-5-9708b232",
+        "normalized_body": "In `e2e_habitat_geometry_probes.rs`, the `all_habitat_geometry_probes_summary` test (#[test]) calls the same `run_probe_*` functions that the 5 individual `#[test]` probe functions also call. When `cargo test` runs the full file, each expensive probe (multi-day simulations) executes twice: once in its own test and once in the summary. Either gate the individual tests behind a feature flag / `#[ignore]` when the summary runner exists, or have the summary runner reuse test results rather than re-executing. This doubles CI wall-clock time for no additional coverage.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-f084dd66",
+        "normalized_body": "P1: `crates/tank_core/src/systems/substrate.rs:99-113` computes `root_oxygenation_bonus_cm` against the full substrate depth and only clamps after adding it to `base_penetration_cm`. When the base penetration already spans the whole bed (for example the low-demand path at `crates/tank_core/src/systems/substrate.rs:182-183`), the breakdown can report a positive root bonus even though `effective_penetration_cm` is unchanged. That makes the exposed tracing/debug metric incorrect and turns the intended smooth saturation into a hard clip near fully oxic beds. The reported bonus should be capped to the remaining available depth, or recomputed as `effective_penetration_cm - base_penetration_cm`.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 5,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-5-2e04c8d7",
+      "fr-5-a69caaa7",
+      "fr-5-a672a7f8",
+      "fr-5-6409353a"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 2 amendment(s); restart required.",
+    "total_proposed_amendments": 6,
+    "total_reviewers": 2,
+    "unique_amendment_count": 6
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 5
+}

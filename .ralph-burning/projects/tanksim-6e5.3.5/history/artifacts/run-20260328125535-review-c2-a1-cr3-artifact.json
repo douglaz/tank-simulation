@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328125535-review-c2-a1-cr3-artifact",
+  "payload_id": "run-20260328125535-review-c2-a1-cr3",
+  "stage_id": "review",
+  "created_at": "2026-03-28T14:07:31.028639727Z",
+  "content": "# Review\n\n## Outcome\n\n**Approved**\n\n## Evidence\n\n- All tank_core tests pass (196+ tests across 15 binaries, 0 failures). All tank_tui tests pass (3 tests). clippy clean with -D warnings. cargo fmt --check clean.\n- Amendment fr-2-5f3aaec6 applied correctly: TUI test `rejects_invalid_integer_counts` (actions.rs:544-551) now uses `select_action(&mut form, ActionKind::AddShrimp)` helper (actions.rs:520-524) which iterates by kind match, eliminating index fragility.\n- Amendment fr-2-d613a3c7 applied correctly: save.rs:558 comment updated to 'legacy TrimPlants left cuttings in-tank'; save.rs:567 now inserts `TrimPlantsAndLeaveCuttings` instead of `TrimPlantsAndRemove`, preserving original closed-system semantics.\n- Save migration test renamed to `legacy_schema_v4_saves_preserve_trim_plants_as_leave_cuttings` (save_load.rs:417) and assertions at lines 477-494 verify migrated actions are `TrimPlantsAndLeaveCuttings`.\n- Action model correctly split: PlayerAction::TrimPlantsAndRemove exports biomass (engine.rs:600-618, open-system label at engine.rs:792 and engine.rs:905); PlayerAction::TrimPlantsAndLeaveCuttings routes to fine_detritus (engine.rs:620-642, closed-system label at engine.rs:793).\n- Event log text distinguishes: Remove says 'clippings removed from tank (X g exported)'; LeaveCuttings says 'cuttings left in tank (X g to detritus)'.\n- Budget instrumentation: TrimPlantsAndRemove is listed in `is_open_system_action_label` (engine.rs:905), so budget guard treats export as intentional removal. TrimPlantsAndLeaveCuttings is not in that list, so it is treated as closed-system.\n- Unit test `test_trim_plants_and_remove_exports_n_and_c` verifies total N/C decreases by exactly the exported biomass amount.\n- Unit test `test_trim_plants_and_leave_cuttings_preserves_n_and_c` verifies total N/C is conserved.\n- Integration test `test_weekly_trim_and_remove_exports_nutrients_over_500_hours` confirms cumulative nutrient export over 500 simulated hours.\n- SUB_ADULT_FEEDING_WEIGHT is unified: single definition at biology.rs, re-exported via types/mod.rs, imported by shrimp.rs. No duplicate values remain.\n\n## Findings and Gaps\n\n- No gaps found. All seven acceptance criteria are met. Both final-review amendments (fr-2-5f3aaec6 TUI test fragility, fr-2-d613a3c7 migration semantic correctness) have been properly applied and verified.\n\n## Follow-up and Amendments\n\nNone.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 3
+}

@@ -1,0 +1,39 @@
+{
+  "payload_id": "run-20260330051540-final_review-vote-1-c3-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 3,
+  "attempt": 1,
+  "created_at": "2026-03-30T06:58:21.060879611Z",
+  "payload": {
+    "summary": "Verified the current tree. `compute_effective_nitrite_hazard` still has a real IEEE-754 NaN edge case when `chloride_protection_factor == 0.0` and nitrite is tiny positive, and `TankSnapshot` still omits chloride/effective hazard observability. The two blocking amendments are stale: the shrimp pathway already applies chloride-aware nitrite stress, `ShrimpRuntimeParams` already includes `chloride_protection_factor`, trace output already records the required diagnostics, and regression coverage already exists including a salt-treatment scenario.",
+    "votes": [
+      {
+        "amendment_id": "fr-3-609a7743",
+        "decision": "accept",
+        "rationale": "`compute_effective_nitrite_hazard` only guards `nitrite_mg_l <= 0.0`. With tiny positive nitrite, very large chloride, and `chloride_protection_factor == 0.0`, `chloride / nitrite` can overflow to `inf`, `0.0 * inf` becomes `NaN`, and the function returns `NaN`. A fast-path returning raw nitrite when chloride protection is non-positive or chloride is non-positive preserves the intended semantics and avoids the floating-point defect."
+      },
+      {
+        "amendment_id": "fr-3-9bf708db",
+        "decision": "accept",
+        "rationale": "`TankSnapshot` currently exposes nitrite but not chloride concentration or effective nitrite hazard, so callers using snapshots cannot monitor salt-treatment state except indirectly through events or traces. That is a real observability gap for this feature. Adding at least `chloride_mg_per_l`, and ideally effective hazard as well, would improve API/TUI usefulness without changing core behavior."
+      },
+      {
+        "amendment_id": "fr-3-685b9673",
+        "decision": "reject",
+        "rationale": "The amendment is factually wrong against the current code. `step_hourly_shrimp_stress` and `update_condition` both call `compute_nitrite_stress_diagnostics`, which derives stress from chloride-adjusted effective hazard rather than raw nitrite. `ShrimpRuntimeParams` already includes `chloride_protection_factor`. As implemented, tanks with equal NO2 and different chloride do not behave identically."
+      },
+      {
+        "amendment_id": "fr-3-4a3fdfe3",
+        "decision": "reject",
+        "rationale": "The claimed coverage and diagnostics gaps are already addressed in the current tree. There are dedicated chloride/nitrite tests, including monotonic hazard reduction, species-parameterized protection, stress/mortality differences under different chloride levels, and an end-to-end salt-treatment emergency scenario. The engine trace for `system:shrimp_stress` already records nitrite, chloride, effective hazard, stress increment, and accumulator values."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

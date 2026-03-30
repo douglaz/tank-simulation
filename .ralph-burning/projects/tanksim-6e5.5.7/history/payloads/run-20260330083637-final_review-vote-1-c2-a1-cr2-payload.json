@@ -1,0 +1,59 @@
+{
+  "payload_id": "run-20260330083637-final_review-vote-1-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T10:20:28.122161874Z",
+  "payload": {
+    "summary": "Accept the amendments that address real robustness or documentation defects in the current probes: the thermal probe should explain the observed molt-stress inversion, the redox nitrate comparison needs a non-vacuous threshold, the successful-breeding story must match what it actually asserts, and the fouling ratio check should not silently become unmeasurable. Reject the amendments whose factual premises are contradicted by the current code: the habitat/geometry suite, diagnostics, and aggregate runner are present, the biofilter clearance branch is already visible in probe output and `record_check` cannot record passes, and the cited budget-helper mg diagnostics do not apply to alkalinity.",
+    "votes": [
+      {
+        "amendment_id": "fr-2-f0c30ecb",
+        "decision": "reject",
+        "rationale": "The `(None, Some(_))` branch is not invisible: the probe's `observed` summary already includes `clearance {small:?}->{large:?}`, so `None->Some(...)` is distinguishable from a skipped probe. Also, `record_check` only records failures, so calling it on a passing branch would not create the claimed positive result record."
+      },
+      {
+        "amendment_id": "fr-2-553aead6",
+        "decision": "accept",
+        "rationale": "This is a real maintainability gap. The thermal probe still narrates heat-driven molt stress, but the current run shows the opposite ordering (`cool` molt stress 1.000 vs `warm` 0.351) and there is no comment explaining why that dimension is no longer asserted. That inversion should be documented rather than silently papered over."
+      },
+      {
+        "amendment_id": "fr-2-6e9f307b",
+        "decision": "accept",
+        "rationale": "`snap_planted.nitrate_mg_n_per_l < snap_inert.nitrate_mg_n_per_l * 0.5` becomes non-diagnostic when the inert arm is itself driven near zero. A floor or absolute-signal requirement is needed so the check keeps measuring meaningful nitrate removal instead of passing vacuously after retuning or alternate nitrate sinks."
+      },
+      {
+        "amendment_id": "fr-2-90a58efd",
+        "decision": "accept",
+        "rationale": "The probe documentation says the colony should grow, but both the assertion and the summary logic only require `final >= initial`, and the current run finishes `10 -> 10`. That mismatch between narrative and verification is real and should be resolved either by strengthening the assertion or softening the doc comment."
+      },
+      {
+        "amendment_id": "fr-2-e05696ff",
+        "decision": "accept",
+        "rationale": "If either filter decomposer denominator collapses to near zero, `fouling_ratio_shift` is not recorded at all, while the summary still reports `ratio shift=0.00%`. That conflates `no measurable shift` with `not measurable`, so an explicit skip/precondition/failure path is warranted."
+      },
+      {
+        "amendment_id": "fr-2-51cbb5be",
+        "decision": "reject",
+        "rationale": "The blocking premise is factually wrong. The repository already contains `crates/tank_harness/tests/e2e_habitat_geometry_probes.rs` with the habitat/geometry suite, including probes for biofilter scaling, light depth, habitat-specific fouling, substrate redox/denitrification, and equipment scaling."
+      },
+      {
+        "amendment_id": "fr-2-8de1a215",
+        "decision": "reject",
+        "rationale": "The claimed missing diagnostics and runner are already implemented. `format_habitat_debug` and `dump_habitat_debug` emit per-habitat biomass, area, and exposure modifiers; the habitat probes enable instrumentation; and `all_habitat_geometry_probes_summary` runs all five probes and returns an error if any probe fails."
+      },
+      {
+        "amendment_id": "fr-2-569f9fef",
+        "decision": "reject",
+        "rationale": "The cited unit-label bug does not exist in the referenced code path. `budget_helpers.rs` limits `Element` to nitrogen, carbon, and oxygen, and its mg-formatted per-system/per-tick diagnostics are for that mg-only ledger. Alkalinity remains a separate `BudgetMetric` in meq, so those `mg` lines are not mislabeling alkalinity values."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

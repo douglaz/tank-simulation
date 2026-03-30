@@ -1,0 +1,103 @@
+{
+  "payload_id": "run-20260330083637-final_review-aggregate-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:19:53.448409544Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-4-fa502cd0"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-4-8001ff1d",
+        "normalized_body": "In `emit_molt_failure` (shrimp.rs ~line 1403-1411), the diagnostic message reports `min_condition_factor` and `min_condition_index` which are always co-tracked from the same stage. However, `poor_condition_involved` is set via a separate `|=` on line 640-641 and can be triggered by a DIFFERENT stage than the one whose values end up in the diagnostic. When multiple stages fail a molt simultaneously, the message could report a condition_factor from stage B (the global minimum) while `poor_condition_involved` was first triggered by stage A. Because the global minimum is always <= the triggering value, the diagnostic is always *accurate* (the reported factor is definitely below threshold), but it could be *misleading* — the stage reported as the worst case may not have been the one that actually caused the poor-condition flag. Consider adding a comment documenting this multi-stage interaction or tracking the triggering stage separately.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-fa502cd0",
+        "normalized_body": "In the equipment-scaling probe (e2e_habitat_geometry_probes.rs ~lines 1527-1546), the `plant_biomass_g(1.0, 400.0)` envelope is identical for both the 1× and 2× geometry runs. Since the 2× geometry has 4× footprint and proportionally scaled plant defaults, the 2× tank should accumulate roughly 4× the absolute plant biomass. Using the same 400g ceiling for both means the envelope is proportionally 4× looser for the larger tank. The acceptance criteria state the probe should verify \"proportionally scaled hardware, plants, and stocking\" with \"per-liter concentrations and qualitative outcomes stay within envelope.\" Consider either (a) scaling the plant envelope with geometry (e.g., `plant_biomass_g(1.0 * scale_factor, 400.0 * scale_factor)`) or (b) adding an explicit per-liter plant biomass density comparison via `record_within_fraction`.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-5e81fa2c",
+        "normalized_body": "The patch does not implement `tanksim-6e5.5.7`. All substantive edits are alkalinity-accounting work in `crates/tank_core/src/systems/nitrogen_cycle.rs:12-385`, `crates/tank_core/src/types/budget.rs:67-124`, `crates/tank_core/src/budget_helpers.rs:64-640`, and the new `crates/tank_core/tests/nitrification_alkalinity.rs:1-336`. None of the requested habitat/geometry deliverables are added: there are no probes for biofilter scaling, light-depth, habitat-specific fouling, substrate redox, or equipment scaling, and there is no habitat/geometry e2e harness/report change under the scenario/harness crates. Closing the bead with this patch would leave the requested regression coverage absent.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-46c961d8",
+        "normalized_body": "The only new regression file, `crates/tank_core/tests/nitrification_alkalinity.rs:1-336`, is currently untracked, while the tracked diff only contains the production edits in `crates/tank_core/src/budget_helpers.rs:64-640`, `crates/tank_core/src/engine.rs:224-279`, `crates/tank_core/src/systems/nitrogen_cycle.rs:12-385`, `crates/tank_core/src/systems/water_change.rs:99-153`, `crates/tank_core/src/types/budget.rs:67-124`, `crates/tank_core/src/types/mod.rs:43-46`, and `crates/tank_core/src/types/process.rs:6-27,335-338`. The local `cargo test` run passes because that file exists in the working tree, but it would not ship in the actual patch unless it is added, leaving the new alkalinity accounting changes without their intended coverage.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-1f9e983d",
+        "normalized_body": "The new trace field `nitrogen_cycle.total_n_nitrified_mg` is internally inconsistent. `crates/tank_core/src/systems/nitrogen_cycle.rs:13-23` describes the output as total nitrified N, and `crates/tank_core/src/engine.rs:229-239` emits it as a debugging note, but the implementation at `crates/tank_core/src/systems/nitrogen_cycle.rs:343-346` only sums `nob_step.oxidized_n_mg + comammox_step.oxidized_n_mg`. In any tick where AOB converts TAN to nitrite faster than NOB clears nitrite, the trace will report too little nitrification while `alkalinity_consumed_meq` at `crates/tank_core/src/systems/nitrogen_cycle.rs:366-384` still reflects `aob + comammox`. That makes the new scientific diagnostics misleading exactly in the NOB-limited cases they are meant to help debug.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-4-fa502cd0",
+        "normalized_body": "In the equipment-scaling probe (e2e_habitat_geometry_probes.rs ~lines 1527-1546), the `plant_biomass_g(1.0, 400.0)` envelope is identical for both the 1× and 2× geometry runs. Since the 2× geometry has 4× footprint and proportionally scaled plant defaults, the 2× tank should accumulate roughly 4× the absolute plant biomass. Using the same 400g ceiling for both means the envelope is proportionally 4× looser for the larger tank. The acceptance criteria state the probe should verify \"proportionally scaled hardware, plants, and stocking\" with \"per-liter concentrations and qualitative outcomes stay within envelope.\" Consider either (a) scaling the plant envelope with geometry (e.g., `plant_biomass_g(1.0 * scale_factor, 400.0 * scale_factor)`) or (b) adding an explicit per-liter plant biomass density comparison via `record_within_fraction`.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 4,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-4-8001ff1d",
+      "fr-4-5e81fa2c",
+      "fr-4-46c961d8",
+      "fr-4-1f9e983d"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 1 amendment(s); restart required.",
+    "total_proposed_amendments": 5,
+    "total_reviewers": 2,
+    "unique_amendment_count": 5
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 4
+}

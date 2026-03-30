@@ -1,0 +1,24 @@
+{
+  "payload_id": "run-20260330074452-final_review-planner-positions-c2-a1-cr6-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T12:11:28.966630760Z",
+  "payload": {
+    "summary": "Accept the amendment. `temp_condition_min_factor` behaves like a clamp floor, not a divisor, and the current preset validation is internally inconsistent with the runtime invariant that already allows `0.0` via unit-interval checking.",
+    "votes": [
+      {
+        "amendment_id": "fr-6-67e44980",
+        "decision": "accept",
+        "rationale": "The proposed change is technically sound. In `temp_condition_factor`, `temp_condition_min_factor` is only used as the lower bound to `clamp(min_factor, 1.0)`, so `0.0` is safe and does not introduce division-by-zero or similar failures. The preset validator currently applies both a non-negative check and a strictly-positive check to this field, while runtime invariants validate it as a unit-interval value. Removing it from the strictly-positive list resolves that contradiction and aligns preset validation with actual runtime semantics. This also matches the treatment of similar floor-style parameters that can validly be zero."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 6
+}

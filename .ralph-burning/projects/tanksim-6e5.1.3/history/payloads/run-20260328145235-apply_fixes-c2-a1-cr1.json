@@ -1,0 +1,45 @@
+{
+  "payload_id": "run-20260328145235-apply_fixes-c2-a1-cr1",
+  "stage_id": "apply_fixes",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T15:21:35.771118582Z",
+  "payload": {
+    "data": {
+      "change_summary": "Extended the tank harness envelope API to cover reproduction metrics (`juveniles_count`, `berried_females_count`, `shrimp_reproductive_readiness`) and added `HarnessRun::from_state` so scenario-derived maintained variants can still use the standard trace/artifact flow. Updated `e2e_baseline_scenarios.rs` to add late-run nitrate guardrails for `nano_cycle`, `medium_planted`, and `warm_room`, replaced the loose light/dark DO check with a stricter lit-peak vs late-dark-trough assertion, and added a maintained `medium_planted` reproduction baseline that asserts a berried/juvenile reproduction window under shrimp-friendly overrides.",
+      "outstanding_risks": [
+        "Reproduction coverage currently relies on a scenario-derived maintained `medium_planted` variant with explicit reserve, mortality, and maturation tweaks; if the project later adds a first-class shrimp-husbandry preset, this guardrail should migrate to that preset."
+      ],
+      "steps": [
+        {
+          "description": "Inspected the baseline harness and scenario tests to confirm the missing reproduction coverage, missing nitrate guardrails, and the weak DO day/night assertion.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Patched the harness and baseline e2e suite to add reproduction-aware envelope checks, explicit NO3 envelopes at mature checkpoints, a scenario-derived maintained reproduction run, and a stricter dark-vs-light DO regression.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Ran formatting and package-level validation to confirm the updated harness and e2e scenarios pass together.",
+          "order": 3,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo fmt --all` completed successfully after the edits.",
+        "`cargo test -p tank_harness --test e2e_baseline_scenarios -- --nocapture` passed all 8 baseline scenario tests, including the new reproduction-window test and the tightened DO regression.",
+        "`cargo test -p tank_harness` passed the full `tank_harness` package test suite, including the new reproduction-envelope unit coverage and all existing e2e/discovery tests."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

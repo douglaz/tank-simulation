@@ -1,0 +1,191 @@
+=== stdout ===
+=== stderr ===
+OpenAI Codex v0.117.0 (research preview)
+--------
+workdir: /home/master/p/tank-simulation
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019d3281-9473-7e22-aee7-72ef868939c8
+--------
+user
+Contract: final_review:reviewer
+Role: Reviewer
+
+# Final Review Proposals
+
+You are a code reviewer. Review the changes in this project for correctness, safety, and robustness.
+
+Run `git diff` to see all changes, then read the key implementation files end-to-end. For each issue found, cite specific files and line numbers.
+
+Ignore style and cosmetics — only report real bugs, safety problems, correctness gaps, and significant maintainability risks.
+
+## Project Prompt
+
+○ tanksim-6e5.3.2 · Implement shrimp ingestion → assimilation → excretion → feces → respiration loop   [● P0 · OPEN]
+Owner: master · Type: task
+Created: 2026-03-26 · Updated: 2026-03-27
+Labels: ecology, mass-balance, phase-1, scientific-core, shrimp
+
+Context:
+- Shrimp currently remove periphyton and fine detritus (shrimp.rs:136-146) without returning enough of that mass to the system.
+- state.animal.daily_food_consumed_g records how much was eaten (line 147) but no mass flows back as feces, dissolved waste, or O2 demand.
+- This makes grazing look cleaner and less bioload-generating than it should.
+
+Deliverable:
+- Refactor shrimp feeding so consumed matter is partitioned into named pathways for assimilation, TAN excretion, feces, and respiration.
+- Track assimilated reserve/condition explicitly enough that later shrimp realism work can build on the same pathway instead of bypassing it.
+- Route TAN back into water chemistry, feces back into fine detritus, and respiration into O2 demand plus DIC using the engine canonical pools and diagnostics.
+- Keep the first pass simple and inspectable: one shared food-quality assumption for periphyton and detritus is acceptable if it is documented rather than hidden.
+- Keep organism death routing in C7; this bead is only the continuous feeding/waste loop.
+
+Likely touch points:
+- crates/tank_core/src/systems/shrimp.rs (lines 119-148)
+- crates/tank_core/src/types/biology.rs (AnimalState may need reserve field)
+- crates/tank_core/src/types/process.rs (new routing parameters)
+- crates/tank_data/data/shrimp/neocaridina_davidi.toml
+
+## Acceptance Criteria
+
+Acceptance Criteria:
+- shrimp grazing no longer deletes matter: assimilated plus fecal mass equals consumed mass within tolerance, and assimilated N/C are routed explicitly through reserve, excretion, and respiration.
+- shrimp feeding generates TAN, detritus, O2 demand, and DIC in proportion to feeding rate and those deltas are visible in budget/diagnostic outputs.
+- named parameters control the assimilation, excretion, and respiration fractions, and the first-pass food-composition simplifications are documented in code/data comments.
+- a closed-system grazing regression shows total N and total C remain conserved within tolerance for the shrimp feeding loop.
+
+Dependencies:
+  -> tanksim-6e5.3.1 (blocks) - Define closed-loop matter-routing conventions for consumers and maintenance actions
+  -> tanksim-6e5.2.2 (blocks) - Implement canonical concentration and compartment helper APIs
+  -> tanksim-6e5.3 (parent-child) - Phase 1B — mass conservation and husbandry action semantics
+
+Dependents:
+  <- tanksim-6e5.6.2 (blocks) - Implement stage- or size-structured shrimp population dynamics
+  <- tanksim-6e5.6.1 (blocks) - Define shrimp state model for reserve, condition, stage, molt, and reproduction
+  <- tanksim-6e5.3.4 (blocks) - Audit feeding, detritus, DOC, and mineralization bookkeeping end to end
+  <- tanksim-6e5.3.3 (blocks) - Implement microfauna matter routing and recycling
+
+Comments:
+  [2026-03-26 20:44 UTC] master: Canonicalization note: merged former C2a-C2d micro-beads into C2 so the shrimp feeding and waste loop is planned as one coherent conservation change. C7 remains separate because death-to-detritus routing is episodic and cross-organism, not part of the continuous feeding loop.
+  [2026-03-26 13:46 UTC] backlog-planner: Future-self notes:
+- Keep the first implementation transparent. A few explicit fractions with clear names are better than opaque "efficiency" magic.
+- This bead is a prerequisite for later molt/reproduction realism (F1-F4) because condition and stress should emerge from the same intake/waste loop.
+- Avoid double-counting with decomposition or generic waste systems; pick one owner for each transfer.
+
+Mass balance example (for 1g of periphyton consumed):
+- Assimilation efficiency = 0.5 → 0.5g assimilated, 0.5g feces
+- Of assimilated 0.5g: ~0.35g respired (→ O2 demand, DIC), ~0.05g excreted (→ TAN), ~0.10g retained (→ body reserve)
+- Feces 0.5g → fine detritus (which then enters decomposition pathway)
+- N content: if periphyton is ~5% N by mass, 1g consumed = 0.05g N. Of that, ~0.025g N in feces, ~0.005g N excreted as TAN, ~0.005g N retained, ~0.015g N respired as part of organic matter oxidation.
+- These fractions should be named parameters, not hardcoded.
+  [2026-03-26 17:09 UTC] reviewer: Scope clarification: C2 focuses on the FEEDING/WASTE loop (ingestion → assimilation → excretion → feces → respiration). The DEATH → DETRITUS routing for shrimp mortality has been split into a new bead C7 (tanksim-6e5.3.7) because:
+1. Death routing is a separate concern from feeding waste routing
+2. It also covers plant senescence and algae death routing (not just shrimp)
+3. It needs its own test coverage (death events are rare/episodic vs continuous feeding)
+4. C7 depends on C1 (routing conventions) and B2 (concentration helpers) but NOT on C2
+
+C4 (bookkeeping audit) and C6 (conservation tests) both depend on C7 to ensure the death pathway is verified end-to-end.
+
+## Authoritative JSON Schema
+
+The JSON schema below is authoritative. Return only JSON that conforms exactly to it.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "FinalReviewProposal": {
+      "description": "A raw amendment proposal returned by a final-review reviewer.",
+      "properties": {
+        "body": {
+          "description": "The free-form amendment body. This is canonicalized and deduplicated by the orchestration layer before voting.",
+          "type": "string"
+        },
+        "rationale": {
+          "description": "Optional reviewer-provided rationale for why this amendment matters.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "body"
+      ],
+      "type": "object"
+    }
+  },
+  "description": "Payload returned by each final-review reviewer during proposal collection.",
+  "properties": {
+    "amendments": {
+      "description": "Proposed amendments. An empty list means \"no amendments\".",
+      "items": {
+        "$ref": "#/definitions/FinalReviewProposal"
+      },
+      "type": "array"
+    },
+    "summary": {
+      "description": "Summary of the reviewer pass.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "amendments",
+    "summary"
+  ],
+  "title": "FinalReviewProposalPayload",
+  "type": "object"
+}
+```
+
+Return ONLY valid JSON matching the following schema:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "FinalReviewProposal": {
+      "description": "A raw amendment proposal returned by a final-review reviewer.",
+      "properties": {
+        "body": {
+          "description": "The free-form amendment body. This is canonicalized and deduplicated by the orchestration layer before voting.",
+          "type": "string"
+        },
+        "rationale": {
+          "description": "Optional reviewer-provided rationale for why this amendment matters.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "body"
+      ],
+      "type": "object"
+    }
+  },
+  "description": "Payload returned by each final-review reviewer during proposal collection.",
+  "properties": {
+    "amendments": {
+      "description": "Proposed amendments. An empty list means \"no amendments\".",
+      "items": {
+        "$ref": "#/definitions/FinalReviewProposal"
+      },
+      "type": "array"
+    },
+    "summary": {
+      "description": "Summary of the reviewer pass.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "amendments",
+    "summary"
+  ],
+  "title": "FinalReviewProposalPayload",
+  "type": "object"
+}
+
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 4:47 AM.
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 4:47 AM.

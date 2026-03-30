@@ -1,0 +1,39 @@
+{
+  "payload_id": "run-20260328140833-review-c2-a1-cr3",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T15:41:04.570102481Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "Full test suite passes: all test crates green (3+49+5+13+24+21+12+11+14+1+5+17+7+1+32 tests across unit, integration, scenario, and e2e suites), 0 failures, 2 ignored doc-tests (unrelated). Clippy clean except one unrelated unused-method warning in water.rs.",
+        "HabitatKind enum (5 variants: FilterMedia, GlassHardscape, PlantSurfaces, SubstrateSurface, SubstrateDeep) and HabitatEntry struct are serde-serializable with documented purpose (habitat.rs:13-58). Registry stored in TankState.habitat_registry with #[serde(default)] for backward-compatible deserialization (state.rs:53).",
+        "Colonizable areas are derived from live state: FilterMedia from hardware config (habitat.rs:140-142), GlassHardscape from wall_area+hardscape (habitat.rs:164), PlantSurfaces from biomass×SLA per guild (habitat.rs:173-184), SubstrateSurface from footprint gated on depth>0 (habitat.rs:194-198), SubstrateDeep from footprint×depth×resolved_colonizable_area_factor (habitat.rs:209-215).",
+        "All exposure modifiers clamped to [0,1] at HabitatEntry construction (habitat.rs:122-124). Flow responds to filter flow rate (normalized to 10 turnovers/hr). Oxygen responds to aeration, clogging (FilterMedia), rooted plants (SubstrateSurface). Light responds to intensity, plant crowding, and water depth attenuation using water_depth_above_substrate_cm.",
+        "refresh_habitat_registry() (state.rs:240-252) recomputes plant crowding for all guilds, materializes resolved colonizable_area_factor per substrate layer, derives colonizable_area_cm2 from current footprint, then rebuilds full registry via compute_habitat_registry().",
+        "Post-action refresh gated by affects_habitat_registry() (engine.rs:562,732-733), excluding non-habitat actions (Feed, WaterChange, SiphonDetritus, AddShrimp, RemoveShrimp).",
+        "Daily dual-refresh documented (engine.rs:356 and 384): first refresh for plant-driven surfaces before downstream daily systems, second refresh after filter clogging updates FilterMedia oxygen exposure.",
+        "Amendment fr-2-5ed4a8bc addressed: SubstrateLayerState::default() (substrate.rs:61-79) now derives colonizable_area_cm2 from TankGeometry::default().footprint_area_cm2() via derived_colonizable_area_cm2(), with colonizable_area_factor initialized to 0.0 so resolved_colonizable_area_factor() falls back to kind default.",
+        "Amendment fr-2-211b5df3 addressed: do_dips_at_night_in_planted_tank (e2e_baseline_scenarios.rs:798-802) now uses is_light_on(hour, snap.photoperiod_hours) instead of hard-coding hours 0-7 as lit window.",
+        "Amendment fr-2-24f6329b addressed: build_substrate_layers() (scenarios/lib.rs:758) persists sub_preset.colonizable_area_factor into SubstrateLayerState. resolved_colonizable_area_factor() (substrate.rs:44-49) uses the serialized factor when positive and finite, falling back to kind default only for legacy/zero values. refresh_habitat_registry() (state.rs:247) materializes the resolved factor before recomputing area.",
+        "32 dedicated habitat_registry tests cover: serialization round-trips (3 tests), area computation for all 5 habitats including zero-depth edge cases (8+ tests), modifier sensitivity for flow/aeration/clogging/light/crowding/rooted plants/depth (7 tests), bounds under extreme inputs (1 test), biomass responsiveness and engine refresh paths (5+ tests), registry structure invariants (2 tests), and geometry scaling (1 test).",
+        "Save/load tests verify habitat registry staleness detection on current-schema load and colonizable_area_factor preservation through serialization round-trip. Scenario materialization and startup-override tests assert registry freshness via equality with compute_habitat_registry()."
+      ],
+      "findings_or_gaps": [
+        "Minor: derived_plant_crowding_index() is called twice during a single refresh cycle — once in refresh_habitat_registry() to update plant guild fields (state.rs:241), and again inside compute_habitat_registry() for the HabitatEnv (habitat.rs:103). Both produce the same value; passing the pre-computed value would eliminate one traversal but has no correctness impact.",
+        "One unrelated clippy warning exists: unused method conductivity_us_cm_with_bicarbonate_total in water.rs. Not introduced by this change."
+      ],
+      "follow_up_or_amendments": [],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 3
+}

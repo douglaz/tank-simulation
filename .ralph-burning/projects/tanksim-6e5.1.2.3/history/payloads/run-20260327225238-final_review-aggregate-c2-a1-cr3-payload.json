@@ -1,0 +1,100 @@
+{
+  "payload_id": "run-20260327225238-final_review-aggregate-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T00:00:45.659799824Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-3-5d8c9ede",
+      "fr-3-6289fe3d",
+      "fr-3-e6606032"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-3-5d8c9ede",
+        "normalized_body": "The `hatch_produces_juveniles` test in `crates/tank_core/tests/shrimp_population.rs:110-137` is failing. After the branch's chemistry/nitrogen cycle changes, the test setup no longer maintains good enough water conditions for shrimp reproduction — TAN reaches 2.168 mg/L (toxic) and population drops from 10 to 2 adults with 0 juveniles. Either the test's water chemistry setup needs retuning (higher nitrifier biomass, more frequent water changes, or lower feeding) to match the updated simulation dynamics, or there is a regression in the nitrogen cycle that causes ammonia to accumulate excessively despite the already-boosted nitrifier params.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-6289fe3d",
+        "normalized_body": "Migration functions use an infallible signature `fn(&mut Value)` (save.rs:29). Future migrations planned for phases B7 (nitrogen pool renames), D2 (carbonate state), E1 (habitat state), and F2 (richer shrimp state) may need to report errors — e.g., when a required source field is missing or has an unexpected type during a rename/transform. Consider changing `MigrationFn` to `fn(&mut Value) -> Result<(), SimError>` now, while there are only two migrations to update (one is a no-op), rather than after more migrations accumulate. The current `migrate_v2_to_v3` already has silent early-returns on missing `state`/`water` that would be better served by returning an error.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-e6606032",
+        "normalized_body": "Make the new pre-step validation in `crates/tank_core/src/engine.rs:490-492` non-mutating. `enforce_invariants` currently normalizes state in place at `crates/tank_core/src/invariants.rs:6-8`, `crates/tank_core/src/invariants.rs:95`, `crates/tank_core/src/invariants.rs:109-147`, and `crates/tank_core/src/invariants.rs:212-215` before it reaches the new hard failures at `crates/tank_core/src/invariants.rs:129` and `crates/tank_core/src/invariants.rs:185-210`. As a result, `step_hours(1)` can return `InvariantViolation` while still modifying the live engine; for example, a state with `water.ph = 9.0` and `shrimp_assimilation_efficiency = 1.2` comes back with `water.ph` clamped to `8.5`. Validate against a clone or split pure validation from normalization so rejected steps leave state untouched.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-3-5d8c9ede",
+        "normalized_body": "The `hatch_produces_juveniles` test in `crates/tank_core/tests/shrimp_population.rs:110-137` is failing. After the branch's chemistry/nitrogen cycle changes, the test setup no longer maintains good enough water conditions for shrimp reproduction — TAN reaches 2.168 mg/L (toxic) and population drops from 10 to 2 adults with 0 juveniles. Either the test's water chemistry setup needs retuning (higher nitrifier biomass, more frequent water changes, or lower feeding) to match the updated simulation dynamics, or there is a regression in the nitrogen cycle that causes ammonia to accumulate excessively despite the already-boosted nitrifier params.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-6289fe3d",
+        "normalized_body": "Migration functions use an infallible signature `fn(&mut Value)` (save.rs:29). Future migrations planned for phases B7 (nitrogen pool renames), D2 (carbonate state), E1 (habitat state), and F2 (richer shrimp state) may need to report errors — e.g., when a required source field is missing or has an unexpected type during a rename/transform. Consider changing `MigrationFn` to `fn(&mut Value) -> Result<(), SimError>` now, while there are only two migrations to update (one is a no-op), rather than after more migrations accumulate. The current `migrate_v2_to_v3` already has silent early-returns on missing `state`/`water` that would be better served by returning an error.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-e6606032",
+        "normalized_body": "Make the new pre-step validation in `crates/tank_core/src/engine.rs:490-492` non-mutating. `enforce_invariants` currently normalizes state in place at `crates/tank_core/src/invariants.rs:6-8`, `crates/tank_core/src/invariants.rs:95`, `crates/tank_core/src/invariants.rs:109-147`, and `crates/tank_core/src/invariants.rs:212-215` before it reaches the new hard failures at `crates/tank_core/src/invariants.rs:129` and `crates/tank_core/src/invariants.rs:185-210`. As a result, `step_hours(1)` can return `InvariantViolation` while still modifying the live engine; for example, a state with `water.ph = 9.0` and `shrimp_assimilation_efficiency = 1.2` comes back with `water.ph` clamped to `8.5`. Validate against a clone or split pure validation from normalization so rejected steps leave state untouched.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 3,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [],
+    "restart_required": true,
+    "summary": "Final review accepted 3 amendment(s); restart required.",
+    "total_proposed_amendments": 3,
+    "total_reviewers": 2,
+    "unique_amendment_count": 3
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 3
+}

@@ -1,0 +1,51 @@
+{
+  "payload_id": "run-20260330064830-apply_fixes-c2-a1-cr8",
+  "stage_id": "apply_fixes",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:04:05.785798741Z",
+  "payload": {
+    "data": {
+      "change_summary": "No additional code changes were required in this Apply Fixes pass. The latest review approved the root-zone oxygenation implementation and the final follow-up amendments, including the defensive effective-penetration clamp and the cached-vs-fresh habitat-registry documentation, with no blocking fixes requested.",
+      "outstanding_risks": [
+        "This stage relies on the latest approved validation results rather than rerunning a fresh test pass.",
+        "Validation in the latest implementation/review pass was scoped to the `tank_core` package; broader workspace packages such as `tank_harness` were not rerun in this stage.",
+        "Two non-blocking cleanup opportunities remain from review: `Engine::from_parts` still discards the returned `SubstrateOxygenationBreakdown` during initialization, and the public `root_oxygenation_active_biomass_g()` / `substrate_oxygenation_breakdown()` accessors still recompute the habitat registry for standalone callers."
+      ],
+      "steps": [
+        {
+          "description": "Inspect the latest approved review results to confirm whether any blocking amendments were requested for the implemented root-zone oxygenation fixes.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Apply additional code changes for review follow-up items.",
+          "order": 2,
+          "status": "skipped"
+        },
+        {
+          "description": "Record the approved validation state from the latest package test, clippy, formatting, and targeted regression runs.",
+          "order": 3,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "Latest review outcome was `approved` with no blocking amendments required.",
+        "`cargo fmt --all --check` was clean in the latest review validation.",
+        "`cargo test -p tank_core --lib systems::substrate::tests -- --nocapture` passed (24/24).",
+        "`cargo test -p tank_core --test root_zone_oxygenation -- --nocapture` passed (5/5).",
+        "`cargo test -p tank_core` passed across the full `tank_core` package test suite.",
+        "`cargo clippy -p tank_core -- -D warnings` passed.",
+        "Review confirmed the final amendments were present: the defensive `effective_penetration_cm` clamp and the explicit `substrate_oxygenation_breakdown()` documentation for fresh-registry standalone callers versus the cached-registry hot path."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 8
+}

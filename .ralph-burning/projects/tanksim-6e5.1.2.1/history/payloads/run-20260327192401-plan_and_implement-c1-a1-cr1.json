@@ -1,0 +1,52 @@
+{
+  "payload_id": "run-20260327192401-plan_and_implement-c1-a1-cr1",
+  "stage_id": "plan_and_implement",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T19:37:34.876652284Z",
+  "payload": {
+    "data": {
+      "change_summary": "Added canonical N/C/O2 budget plumbing to `tank_core`: `TankState` now exposes canonical `total_nitrogen()`, `total_carbon()`, and `budget_totals()` helpers backed by shared stoichiometry helpers in `types/budget.rs`, and `Engine` now supports optional per-tick budget tracking via `enable_budget_tracking()` / `budget_ledger()`. When enabled, the engine records per-action and per-system N/C/O2 deltas into a `BudgetLedger`/`TickBudgetRecord` history without allocating or recording anything on the default disabled path. Added integration coverage for helper completeness, 24-tick closed-system conservation, explicit water-change export accounting, and disabled-path behavior.",
+      "outstanding_risks": [
+        "Canonical live-biomass C/N totals still depend on shared stoichiometric helper assumptions in `types/budget.rs`; if future phases add new explicit element-bearing fields or refine biomass composition, those helpers and tests must be updated together.",
+        "The closed-system conservation checks use a quiescent no-growth scenario. Richer gameplay states may still expose pre-existing stoichiometry gaps in systems that do not yet move every element explicitly, but the new ledger will now make those imbalances inspectable.",
+        "The worktree also contains unrelated user changes outside this task in `crates/tank_scenarios/src/lib.rs`, `crates/tank_tui/src/main.rs`, and `.ralph-burning/`."
+      ],
+      "steps": [
+        {
+          "description": "Audit the existing state layout and hourly/daily systems to identify every currently modeled N-, C-, and O2-bearing pool plus the engine stages that need per-tick attribution.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Implement canonical element-total helpers and shared stoichiometry utilities, then wire an optional `BudgetLedger` into `Engine` so queued actions and systems record per-stage budget deltas only when tracking is enabled.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Add budget-focused integration tests covering helper completeness, 24-tick closed-system N/C conservation, explicit water-change export attribution, and the disabled tracking path.",
+          "order": 3,
+          "status": "completed"
+        },
+        {
+          "description": "Format and validate the change set against the broader `tank_core` test suite to catch regressions beyond the new ledger coverage.",
+          "order": 4,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo test -p tank_core --test budget_tracking` passed (6 tests covering canonical totals, 24-tick conservation, water-change export attribution, and disabled-path gating).",
+        "`cargo test -p tank_core --test water_change_mass_balance` passed (8 tests), confirming the new engine instrumentation did not regress existing water-change behavior.",
+        "`cargo test -p tank_core` passed across the full `tank_core` suite."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

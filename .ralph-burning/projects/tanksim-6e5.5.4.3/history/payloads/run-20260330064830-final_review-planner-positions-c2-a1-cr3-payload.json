@@ -1,0 +1,49 @@
+{
+  "payload_id": "run-20260330064830-final_review-planner-positions-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T08:37:50.655563859Z",
+  "payload": {
+    "summary": "Only the `temp_repro_factor_pub` cleanup looks like a valid maintainability amendment. The other proposed amendments are contradicted by the current code or by passing regression coverage.",
+    "votes": [
+      {
+        "amendment_id": "fr-3-a011636a",
+        "decision": "reject",
+        "rationale": "The premise is incorrect in the current code. `egg_drop_temp_swing_c` is read via `egg_drop_temp_swing_pressure()` and contributes directly to egg-drop probability, and the emitted diagnostics also report that threshold."
+      },
+      {
+        "amendment_id": "fr-3-717340b3",
+        "decision": "reject",
+        "rationale": "The premise is incorrect. `EventCause::HighDensity` is already emitted on `ShrimpBerried` events when density suppresses reproduction, and there is a regression test asserting that cause code is present."
+      },
+      {
+        "amendment_id": "fr-3-a7b12680",
+        "decision": "accept",
+        "rationale": "`temp_repro_factor_pub` has no remaining workspace call sites and exposes a `_pub` wrapper as public API for no demonstrated benefit. Unless there is a known downstream consumer, this is leftover surface area that should be removed or deliberately justified."
+      },
+      {
+        "amendment_id": "fr-3-72451f87",
+        "decision": "reject",
+        "rationale": "Although the nitrate assertion is looser, the refactored test now also asserts lower total nitrogen and higher cumulative N2 export in the denitrifying case. Those checks validate denitrification efficacy more directly than a strict nitrate-only comparison, so the claimed blind spot is not established."
+      },
+      {
+        "amendment_id": "fr-3-6f64c62a",
+        "decision": "reject",
+        "rationale": "This does not match the current codebase. Root-zone oxygenation is implemented in the substrate system with habitat-aware rooted biomass, saturated penetration-depth bonuses, planted-vs-unplanted integration coverage, and tracing/budget exposure."
+      },
+      {
+        "amendment_id": "fr-3-ed44ead5",
+        "decision": "reject",
+        "rationale": "I could not validate the claimed regression. The save/load determinism tests, including the active-cycle round-trip case, pass in the current tree, so the asserted carbonate-cache divergence is not supported by the present code and tests."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

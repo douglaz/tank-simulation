@@ -1,0 +1,125 @@
+{
+  "payload_id": "run-20260327232428-final_review-aggregate-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T02:52:36.211056237Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-5-99ac0bab",
+      "fr-5-dc23910b",
+      "fr-5-87d2c25b"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-5-99ac0bab",
+        "normalized_body": "In `shrimp_feeding()` (shrimp.rs:165-168), the N/C elemental routing for periphyton uses `periph_consumed_biomass_g` (wet-biomass grams) while the N/C routing for detritus uses `detritus_consumed_route_g` (organic-matter grams). Both function signatures accept their respective input conventions correctly (`algae_nitrogen_mg` takes biomass, `detritus_nitrogen_mg` takes organic mass). However, there is no guard or debug assertion ensuring `periph_consumed_route_g + detritus_consumed_route_g` (the value written to `daily_food_consumed_g`) stays consistent with the sum of `consumed_n_mg + consumed_c_mg` converted back to grams. Add a debug_assert verifying `(consumed_n_mg + consumed_c_mg) / 1000.0` approximately equals `daily_food_consumed_g` so that any future refactor of the mass-conversion helpers cannot silently break the invariant between the organic-matter tracking and the elemental routing.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-2081bdc4",
+        "normalized_body": "The `migrate_v3_to_v4` function (save.rs:329-331) was changed from seeding `reserve_g` proportionally to existing shrimp counts to a complete no-op (`let _ = value; Ok(())`). Legacy v3 saves with active shrimp colonies will now deserialize with `reserve_g = 0.0` (serde default), which means `fund_live_shrimp_biomass()` will return false for every hatching and maturation attempt until the colony accumulates enough feeding reserve organically. This could stall reproduction for multiple in-game days after upgrade. Consider either: (a) adding an inline comment documenting this intentional stall window and its expected recovery timeline, or (b) seeding a minimal non-zero reserve (e.g. one day's feeding output) so legacy colonies do not experience a hard reproduction freeze immediately post-upgrade.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-756bc64e",
+        "normalized_body": "The `validate_source_water_carbonate_profile` boundary check (chemistry.rs:423) uses `eq.ph >= CARBONATE_PH_MAX` with a special exemption for `ZeroDicBufferedLimit`, but the `fallback_high_buffer` function (chemistry.rs:213) returns `CarbonateSolveStatus::Stable` at `ph == CARBONATE_PH_MAX`. This means two different solver paths produce the same pH 8.5 output with different validation outcomes: zero-DIC-buffered passes, high-buffer-ceiling rejects. Both are ceiling-clamp cases. Add a brief comment at the validation check explaining why this asymmetry is intentional (zero-DIC-buffered is a physical limit, while high-buffer-ceiling indicates the solver couldn't resolve within bounds), so future maintainers don't 'fix' the exemption.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-dc23910b",
+        "normalized_body": "Fix hidden N/C loss in shrimp mortality routing. `crates/tank_core/src/systems/shrimp.rs:624-642` multiplies corpse and reserve routing by `death_biomass_to_detritus_fraction` and silently drops the remainder, but there is no explicit export pool/action/budget entry to balance that removed mass. Because live shrimp biomass and reserve are still counted in `crates/tank_core/src/types/budget.rs:239-248` and `crates/tank_core/src/types/budget.rs:324-344`, any value below `1.0` makes total nitrogen/carbon disappear during mortality. Keep the fraction fixed at `1.0` until an explicit export path exists, or add real export accounting.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-87d2c25b",
+        "normalized_body": "Validate `death_biomass_to_detritus_fraction` instead of silently clamping it. The new serialized field is introduced in `crates/tank_core/src/types/process.rs:211-217`, but `crates/tank_core/src/invariants.rs:198-223` never checks it and `crates/tank_core/src/systems/shrimp.rs:624-626` coerces out-of-range values into `[0, 1]` at use time. A save can therefore persist `-5.0` or `2.0`, yet runtime behavior becomes `0.0` or `1.0`, so the inspectable state no longer matches the simulation. Add a unit-interval invariant and validation coverage, and remove the runtime clamp.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-5-99ac0bab",
+        "normalized_body": "In `shrimp_feeding()` (shrimp.rs:165-168), the N/C elemental routing for periphyton uses `periph_consumed_biomass_g` (wet-biomass grams) while the N/C routing for detritus uses `detritus_consumed_route_g` (organic-matter grams). Both function signatures accept their respective input conventions correctly (`algae_nitrogen_mg` takes biomass, `detritus_nitrogen_mg` takes organic mass). However, there is no guard or debug assertion ensuring `periph_consumed_route_g + detritus_consumed_route_g` (the value written to `daily_food_consumed_g`) stays consistent with the sum of `consumed_n_mg + consumed_c_mg` converted back to grams. Add a debug_assert verifying `(consumed_n_mg + consumed_c_mg) / 1000.0` approximately equals `daily_food_consumed_g` so that any future refactor of the mass-conversion helpers cannot silently break the invariant between the organic-matter tracking and the elemental routing.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-dc23910b",
+        "normalized_body": "Fix hidden N/C loss in shrimp mortality routing. `crates/tank_core/src/systems/shrimp.rs:624-642` multiplies corpse and reserve routing by `death_biomass_to_detritus_fraction` and silently drops the remainder, but there is no explicit export pool/action/budget entry to balance that removed mass. Because live shrimp biomass and reserve are still counted in `crates/tank_core/src/types/budget.rs:239-248` and `crates/tank_core/src/types/budget.rs:324-344`, any value below `1.0` makes total nitrogen/carbon disappear during mortality. Keep the fraction fixed at `1.0` until an explicit export path exists, or add real export accounting.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-87d2c25b",
+        "normalized_body": "Validate `death_biomass_to_detritus_fraction` instead of silently clamping it. The new serialized field is introduced in `crates/tank_core/src/types/process.rs:211-217`, but `crates/tank_core/src/invariants.rs:198-223` never checks it and `crates/tank_core/src/systems/shrimp.rs:624-626` coerces out-of-range values into `[0, 1]` at use time. A save can therefore persist `-5.0` or `2.0`, yet runtime behavior becomes `0.0` or `1.0`, so the inspectable state no longer matches the simulation. Add a unit-interval invariant and validation coverage, and remove the runtime clamp.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 5,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-5-2081bdc4",
+      "fr-5-756bc64e"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 3 amendment(s); restart required.",
+    "total_proposed_amendments": 5,
+    "total_reviewers": 2,
+    "unique_amendment_count": 5
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 5
+}
