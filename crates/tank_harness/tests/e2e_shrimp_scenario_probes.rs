@@ -62,15 +62,31 @@ where
     }
 }
 
-fn finish_probe(name: &'static str, observed: String, runs: Vec<HarnessRun>) -> ProbeResult {
+fn finish_probe(
+    name: &'static str,
+    observed: String,
+    runs: Vec<HarnessRun>,
+    artifact_suffix: Option<&str>,
+) -> ProbeResult {
+    let persist_success_artifacts = matches!(artifact_suffix, Some("summary"));
     let mut finish_errors = Vec::new();
+    let mut trace_paths = Vec::new();
     for run in runs {
+        if persist_success_artifacts {
+            let trace_path = run.persist_artifacts().join("trace.jsonl");
+            trace_paths.push(format!("{}={}", run.scenario_id(), trace_path.display()));
+        }
         if let Err(err) = run.finish() {
             finish_errors.push(err);
         }
     }
 
     let failure_detail = finish_errors.join("\n");
+    let observed = if trace_paths.is_empty() {
+        observed
+    } else {
+        format!("{observed}, traces=[{}]", trace_paths.join(", "))
+    };
     ProbeResult {
         name,
         passed: failure_detail.is_empty(),
@@ -325,7 +341,12 @@ fn run_probe_successful_breeding_with_suffix(
         shrimp_diag(&final_state),
     );
 
-    Ok(finish_probe("successful_breeding", observed, vec![run]))
+    Ok(finish_probe(
+        "successful_breeding",
+        observed,
+        vec![run],
+        artifact_suffix,
+    ))
 }
 
 /// Build a well-maintained planted tank optimised for breeding success.
@@ -547,10 +568,20 @@ fn run_probe_thermal_suppression_with_suffix(
         .iter()
         .filter(|event| event.kind == EventKind::EggDropping)
         .count();
+    let cool_hatch_events = cool_state
+        .event_log
+        .iter()
+        .filter(|event| event.kind == EventKind::ShrimpHatched)
+        .count();
     let warm_egg_drops = warm_state
         .event_log
         .iter()
         .filter(|event| event.kind == EventKind::EggDropping)
+        .count();
+    let warm_hatch_events = warm_state
+        .event_log
+        .iter()
+        .filter(|event| event.kind == EventKind::ShrimpHatched)
         .count();
     let mut runs = [&mut cool_run, &mut warm_run];
 
@@ -569,8 +600,12 @@ fn run_probe_thermal_suppression_with_suffix(
         );
     }
 
-    let warm_worse = if cool_snap.juveniles_count > 0 || warm_snap.juveniles_count > 0 {
-        warm_snap.juveniles_count < cool_snap.juveniles_count
+    let cool_offspring_present = cool_snap.juveniles_count + cool_snap.sub_adult_count;
+    let warm_offspring_present = warm_snap.juveniles_count + warm_snap.sub_adult_count;
+    let warm_worse = if cool_offspring_present > 0 || warm_offspring_present > 0 {
+        warm_offspring_present < cool_offspring_present
+    } else if cool_hatch_events > 0 || warm_hatch_events > 0 {
+        warm_hatch_events < cool_hatch_events
     } else {
         warm_snap.shrimp_reproductive_readiness <= cool_snap.shrimp_reproductive_readiness
     };
@@ -583,10 +618,13 @@ fn run_probe_thermal_suppression_with_suffix(
             "warm_worse_outcomes",
             format!(
                 "warm tank should have worse reproductive outcomes. \
-                 Cool juv={}, Warm juv={}, Cool readiness={:.3}, Warm readiness={:.3}. \
+                 Cool offspring={}, Warm offspring={}, Cool hatches={}, Warm hatches={}, \
+                 Cool readiness={:.3}, Warm readiness={:.3}. \
                  Cool: {} | Warm: {}",
-                cool_snap.juveniles_count,
-                warm_snap.juveniles_count,
+                cool_offspring_present,
+                warm_offspring_present,
+                cool_hatch_events,
+                warm_hatch_events,
                 cool_snap.shrimp_reproductive_readiness,
                 warm_snap.shrimp_reproductive_readiness,
                 shrimp_diag(&cool_state),
@@ -604,6 +642,18 @@ fn run_probe_thermal_suppression_with_suffix(
                  warm_egg_drops={warm_egg_drops}. Cool: {} | Warm: {}",
                 shrimp_diag(&cool_state),
                 shrimp_diag(&warm_state),
+            ),
+        );
+    }
+
+    if cool_hatch_events == 0 && cool_offspring_present == 0 {
+        record_failure_all(
+            &mut runs,
+            "cool_control_breeding",
+            format!(
+                "cool control must prove the breeding baseline with hatch evidence or offspring. \
+                 cool_hatches={cool_hatch_events}, cool_offspring={cool_offspring_present}. {}",
+                shrimp_diag(&cool_state),
             ),
         );
     }
@@ -627,6 +677,7 @@ fn run_probe_thermal_suppression_with_suffix(
     warm_run.checkpoint("final");
     let observed = format!(
         "cool_readiness={:.3}, warm_readiness={:.3}, cool_juv={}, warm_juv={}, \
+         cool_hatches={cool_hatch_events}, warm_hatches={warm_hatch_events}, \
          cool_egg_drops={cool_egg_drops}, warm_egg_drops={warm_egg_drops}, \
          cool_molt_stress={:.3}, warm_molt_stress={:.3}",
         cool_snap.shrimp_reproductive_readiness,
@@ -647,6 +698,7 @@ fn run_probe_thermal_suppression_with_suffix(
         "thermal_suppression",
         observed,
         vec![cool_run, warm_run],
+        artifact_suffix,
     ))
 }
 
@@ -835,7 +887,12 @@ fn run_probe_chemistry_stress_with_suffix(
         shrimp_diag(&final_state),
     );
 
-    Ok(finish_probe("chemistry_stress", observed, vec![run]))
+    Ok(finish_probe(
+        "chemistry_stress",
+        observed,
+        vec![run],
+        artifact_suffix,
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -1107,6 +1164,7 @@ fn run_probe_chloride_protection_with_suffix(
         "chloride_protection",
         observed,
         vec![pre_treatment_run, treated_run, control_run],
+        artifact_suffix,
     ))
 }
 
@@ -1272,7 +1330,12 @@ fn run_probe_crash_mode_with_suffix(
         shrimp_diag(&final_state),
     );
 
-    Ok(finish_probe("crash_mode", observed, vec![run]))
+    Ok(finish_probe(
+        "crash_mode",
+        observed,
+        vec![run],
+        artifact_suffix,
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -1316,7 +1379,9 @@ fn all_shrimp_probes_summary() -> Result<(), Box<dyn std::error::Error>> {
 
     eprintln!();
     eprintln!("=== Shrimp Scenario Probe Summary Report ===");
-    eprintln!("Structured trace capture is enabled for every probe run; set TANK_E2E_VERBOSE=1 to stream trace.jsonl-equivalent output on success.");
+    eprintln!(
+        "Structured trace artifacts are persisted for every summary probe run; set TANK_E2E_VERBOSE=1 to also stream the trace JSONL to stderr."
+    );
     eprintln!();
     let mut all_passed = true;
     for (i, r) in results.iter().enumerate() {

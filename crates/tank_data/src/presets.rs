@@ -141,6 +141,12 @@ fn shrimp_runtime_default_param_value(name: &str) -> Option<f64> {
         "chloride_protection_factor" => Some(defaults.chloride_protection_factor),
         "nh3_stress_threshold_mg_n_per_l" => Some(defaults.nh3_stress_threshold_mg_n_per_l),
         "nh3_stress_response_scale" => Some(defaults.nh3_stress_response_scale),
+        "condition_do_reference_mg_l" => Some(defaults.condition_do_reference_mg_l),
+        "condition_nh3_sensitivity" => Some(defaults.condition_nh3_sensitivity),
+        "condition_nitrite_sensitivity" => Some(defaults.condition_nitrite_sensitivity),
+        "condition_hourly_stress_penalty_weight" => {
+            Some(defaults.condition_hourly_stress_penalty_weight)
+        }
         "density_repro_threshold_per_l" => Some(defaults.density_repro_threshold_per_l),
         "density_repro_half_suppression_per_l" => {
             Some(defaults.density_repro_half_suppression_per_l)
@@ -616,6 +622,14 @@ pub struct ShrimpPreset {
     #[serde(default)]
     pub nh3_stress_response_scale: Option<f64>,
     #[serde(default)]
+    pub condition_do_reference_mg_l: Option<f64>,
+    #[serde(default)]
+    pub condition_nh3_sensitivity: Option<f64>,
+    #[serde(default)]
+    pub condition_nitrite_sensitivity: Option<f64>,
+    #[serde(default)]
+    pub condition_hourly_stress_penalty_weight: Option<f64>,
+    #[serde(default)]
     pub density_repro_threshold_per_l: Option<f64>,
     #[serde(default)]
     pub density_repro_half_suppression_per_l: Option<f64>,
@@ -881,6 +895,22 @@ impl ShrimpPreset {
             ),
             ("nh3_stress_response_scale", self.nh3_stress_response_scale),
             (
+                "condition_do_reference_mg_l",
+                self.condition_do_reference_mg_l,
+            ),
+            (
+                "condition_nh3_sensitivity",
+                self.condition_nh3_sensitivity,
+            ),
+            (
+                "condition_nitrite_sensitivity",
+                self.condition_nitrite_sensitivity,
+            ),
+            (
+                "condition_hourly_stress_penalty_weight",
+                self.condition_hourly_stress_penalty_weight,
+            ),
+            (
                 "density_repro_threshold_per_l",
                 self.density_repro_threshold_per_l,
             ),
@@ -974,6 +1004,10 @@ impl ShrimpPreset {
             ("ca_min_mg_per_l", self.ca_min_mg_per_l),
             ("mg_min_mg_per_l", self.mg_min_mg_per_l),
             ("molt_reserve_fraction", self.molt_reserve_fraction),
+            (
+                "condition_do_reference_mg_l",
+                self.condition_do_reference_mg_l,
+            ),
             (
                 "molt_gh_excess_penalty_divisor",
                 self.molt_gh_excess_penalty_divisor,
@@ -1101,6 +1135,10 @@ impl ShrimpPreset {
             (
                 "full_clutch_condition_threshold",
                 self.full_clutch_condition_threshold,
+            ),
+            (
+                "condition_hourly_stress_penalty_weight",
+                self.condition_hourly_stress_penalty_weight,
             ),
             (
                 "instability_rise_smoothing",
@@ -1382,6 +1420,18 @@ impl ParamMetaPreset for ShrimpPreset {
             "nh3_stress_response_scale" => self
                 .nh3_stress_response_scale
                 .or_else(|| shrimp_runtime_default_param_value(name)),
+            "condition_do_reference_mg_l" => self
+                .condition_do_reference_mg_l
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "condition_nh3_sensitivity" => self
+                .condition_nh3_sensitivity
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "condition_nitrite_sensitivity" => self
+                .condition_nitrite_sensitivity
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "condition_hourly_stress_penalty_weight" => self
+                .condition_hourly_stress_penalty_weight
+                .or_else(|| shrimp_runtime_default_param_value(name)),
             "density_repro_threshold_per_l" => self
                 .density_repro_threshold_per_l
                 .or_else(|| shrimp_runtime_default_param_value(name)),
@@ -1501,6 +1551,10 @@ impl ParamMetaPreset for ShrimpPreset {
                 | "chloride_protection_factor"
                 | "nh3_stress_threshold_mg_n_per_l"
                 | "nh3_stress_response_scale"
+                | "condition_do_reference_mg_l"
+                | "condition_nh3_sensitivity"
+                | "condition_nitrite_sensitivity"
+                | "condition_hourly_stress_penalty_weight"
                 | "density_repro_threshold_per_l"
                 | "density_repro_half_suppression_per_l"
                 | "tan_repro_threshold_mg_n_per_l"

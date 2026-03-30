@@ -434,6 +434,22 @@ pub struct ShrimpRuntimeParams {
     /// mortality and molt-stress channels.
     #[serde(default = "default_nh3_stress_response_scale")]
     pub nh3_stress_response_scale: f64,
+    /// Dissolved-oxygen reference (mg/L) used to normalize the daily
+    /// condition-support factor.
+    #[serde(default = "default_condition_do_reference_mg_l")]
+    pub condition_do_reference_mg_l: f64,
+    /// Linear NH3 sensitivity applied inside the daily condition-support
+    /// factor: `1 - nh3_mg_l * sensitivity`.
+    #[serde(default = "default_condition_nh3_sensitivity")]
+    pub condition_nh3_sensitivity: f64,
+    /// Linear effective-nitrite sensitivity applied inside the daily
+    /// condition-support factor: `1 - effective_hazard_mg_l * sensitivity`.
+    #[serde(default = "default_condition_nitrite_sensitivity")]
+    pub condition_nitrite_sensitivity: f64,
+    /// Weight applied to the accumulated hourly stress sum before it is
+    /// subtracted from the daily condition-support product.
+    #[serde(default = "default_condition_hourly_stress_penalty_weight")]
+    pub condition_hourly_stress_penalty_weight: f64,
 
     // ── Reproduction suppression parameters ────────────────────────────────
     /// Density (shrimp per litre) below which per-capita reproduction is
@@ -897,6 +913,11 @@ impl Default for ShrimpRuntimeParams {
             chloride_protection_factor: default_chloride_protection_factor(),
             nh3_stress_threshold_mg_n_per_l: default_nh3_stress_threshold_mg_n_per_l(),
             nh3_stress_response_scale: default_nh3_stress_response_scale(),
+            condition_do_reference_mg_l: default_condition_do_reference_mg_l(),
+            condition_nh3_sensitivity: default_condition_nh3_sensitivity(),
+            condition_nitrite_sensitivity: default_condition_nitrite_sensitivity(),
+            condition_hourly_stress_penalty_weight:
+                default_condition_hourly_stress_penalty_weight(),
             density_repro_threshold_per_l: default_density_repro_threshold_per_l(),
             density_repro_half_suppression_per_l: default_density_repro_half_suppression_per_l(),
             tan_repro_threshold_mg_n_per_l: default_tan_repro_threshold_mg_n_per_l(),
@@ -1128,6 +1149,22 @@ fn default_nh3_stress_threshold_mg_n_per_l() -> f64 {
 
 fn default_nh3_stress_response_scale() -> f64 {
     2.0
+}
+
+fn default_condition_do_reference_mg_l() -> f64 {
+    6.0
+}
+
+fn default_condition_nh3_sensitivity() -> f64 {
+    3.0
+}
+
+fn default_condition_nitrite_sensitivity() -> f64 {
+    0.5
+}
+
+fn default_condition_hourly_stress_penalty_weight() -> f64 {
+    0.5
 }
 
 fn default_density_repro_threshold_per_l() -> f64 {

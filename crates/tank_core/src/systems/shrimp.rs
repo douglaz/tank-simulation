@@ -405,6 +405,7 @@ fn update_condition(state: &mut TankState) {
     let do_mg_l = chemistry.do_mg_per_l();
     let temp = state.water.temperature_c;
     let gh_d = chemistry.gh_d();
+    let params = &state.shrimp_params;
 
     // Compute population-level food factor using the same access-adjusted
     // routing target as shrimp_feeding().
@@ -415,16 +416,16 @@ fn update_condition(state: &mut TankState) {
     } else {
         1.0
     };
-    let do_factor = (do_mg_l / 6.0).clamp(0.0, 1.0);
-    let nh3_factor = (1.0 - nh3_mg_l * 3.0).clamp(0.0, 1.0);
+    let do_factor = (do_mg_l / params.condition_do_reference_mg_l.max(0.01)).clamp(0.0, 1.0);
+    let nh3_factor = (1.0 - nh3_mg_l * params.condition_nh3_sensitivity).clamp(0.0, 1.0);
     let nitrite_diagnostics = compute_nitrite_stress_diagnostics(
         nitrite_mg_l,
         chloride_mg_l,
-        state.shrimp_params.chloride_protection_factor,
+        params.chloride_protection_factor,
     );
-    let nitrite_factor = (1.0 - nitrite_diagnostics.effective_hazard_mg_l * 0.5).clamp(0.0, 1.0);
-
-    let params = &state.shrimp_params;
+    let nitrite_factor =
+        (1.0 - nitrite_diagnostics.effective_hazard_mg_l * params.condition_nitrite_sensitivity)
+            .clamp(0.0, 1.0);
     let temp_factor = temp_condition_factor(temp, params);
     let gh_factor = gh_mineral_factor(gh_d, params);
     let instability_factor = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
@@ -442,7 +443,7 @@ fn update_condition(state: &mut TankState) {
         * temp_factor
         * gh_factor
         * instability_factor
-        - stress_penalty * 0.5)
+        - stress_penalty * params.condition_hourly_stress_penalty_weight)
         .clamp(0.0, 1.0);
 
     let smoothing = state.process_params.shrimp_condition_smoothing;
@@ -1976,6 +1977,107 @@ mod tests {
             low_access.animal.adult.condition_index,
             full_access.animal.adult.condition_index,
             1e-3,
+        );
+    }
+
+    #[test]
+    fn test_condition_environment_reference_and_sensitivities_are_named_parameters() {
+        let mut do_strict = carbonate_condition_test_state();
+        do_strict.animal.sub_adult.count = 0;
+        do_strict.animal.juvenile.count = 0;
+        do_strict.animal.adult.condition_index = 1.0;
+        do_strict.process_params.shrimp_condition_smoothing = 1.0;
+        do_strict.water.dissolved_oxygen_mg_total = 4.0 * do_strict.water_volume_l();
+        do_strict.water.ammonia_total_mg_n_total = 0.0;
+        do_strict.water.nitrite_mg_n_total = 0.0;
+        do_strict.animal.daily_food_consumed_g = shrimp_target_food_route_g(&do_strict);
+        do_strict.shrimp_params.condition_do_reference_mg_l = 8.0;
+
+        let mut do_relaxed = do_strict.clone();
+        do_relaxed.shrimp_params.condition_do_reference_mg_l = 4.0;
+
+        update_condition(&mut do_strict);
+        update_condition(&mut do_relaxed);
+
+        assert!(
+            do_relaxed.animal.adult.condition_index > do_strict.animal.adult.condition_index,
+            "lowering the named DO reference should preserve more condition at the same low oxygen"
+        );
+
+        let mut nh3_strict = carbonate_condition_test_state();
+        nh3_strict.animal.sub_adult.count = 0;
+        nh3_strict.animal.juvenile.count = 0;
+        nh3_strict.animal.adult.condition_index = 1.0;
+        nh3_strict.process_params.shrimp_condition_smoothing = 1.0;
+        nh3_strict.water.dissolved_oxygen_mg_total = 8.0 * nh3_strict.water_volume_l();
+        nh3_strict.water.ammonia_total_mg_n_total = 2.0 * nh3_strict.water_volume_l();
+        nh3_strict.water.nitrite_mg_n_total = 0.0;
+        nh3_strict.animal.daily_food_consumed_g = shrimp_target_food_route_g(&nh3_strict);
+        nh3_strict.shrimp_params.condition_nh3_sensitivity = 6.0;
+
+        let mut nh3_relaxed = nh3_strict.clone();
+        nh3_relaxed.shrimp_params.condition_nh3_sensitivity = 1.0;
+
+        update_condition(&mut nh3_strict);
+        update_condition(&mut nh3_relaxed);
+
+        assert!(
+            nh3_relaxed.animal.adult.condition_index > nh3_strict.animal.adult.condition_index,
+            "lowering the named NH3 sensitivity should soften condition loss at the same ammonia load"
+        );
+
+        let mut nitrite_strict = carbonate_condition_test_state();
+        nitrite_strict.animal.sub_adult.count = 0;
+        nitrite_strict.animal.juvenile.count = 0;
+        nitrite_strict.animal.adult.condition_index = 1.0;
+        nitrite_strict.process_params.shrimp_condition_smoothing = 1.0;
+        nitrite_strict.water.dissolved_oxygen_mg_total = 8.0 * nitrite_strict.water_volume_l();
+        nitrite_strict.water.ammonia_total_mg_n_total = 0.0;
+        nitrite_strict.water.nitrite_mg_n_total = 1.0 * nitrite_strict.water_volume_l();
+        nitrite_strict.water.chloride_mg_total = 0.0;
+        nitrite_strict.animal.daily_food_consumed_g = shrimp_target_food_route_g(&nitrite_strict);
+        nitrite_strict.shrimp_params.condition_nitrite_sensitivity = 1.0;
+
+        let mut nitrite_relaxed = nitrite_strict.clone();
+        nitrite_relaxed.shrimp_params.condition_nitrite_sensitivity = 0.2;
+
+        update_condition(&mut nitrite_strict);
+        update_condition(&mut nitrite_relaxed);
+
+        assert!(
+            nitrite_relaxed.animal.adult.condition_index
+                > nitrite_strict.animal.adult.condition_index,
+            "lowering the named nitrite sensitivity should soften condition loss at the same nitrite hazard"
+        );
+    }
+
+    #[test]
+    fn test_condition_hourly_stress_penalty_weight_is_named_parameter() {
+        let mut low_weight = carbonate_condition_test_state();
+        low_weight.animal.sub_adult.count = 0;
+        low_weight.animal.juvenile.count = 0;
+        low_weight.animal.adult.condition_index = 1.0;
+        low_weight.process_params.shrimp_condition_smoothing = 1.0;
+        low_weight.water.dissolved_oxygen_mg_total = 8.0 * low_weight.water_volume_l();
+        low_weight.water.ammonia_total_mg_n_total = 0.0;
+        low_weight.water.nitrite_mg_n_total = 0.0;
+        low_weight.animal.daily_food_consumed_g = shrimp_target_food_route_g(&low_weight);
+        low_weight.animal.hourly_nh3_stress_accum = 0.2;
+        low_weight.animal.hourly_nitrite_stress_accum = 0.1;
+        low_weight.animal.hourly_low_do_stress_accum = 0.15;
+        low_weight.animal.hourly_heat_stress_accum = 0.1;
+        low_weight.animal.hourly_instability_stress_accum = 0.1;
+        low_weight.shrimp_params.condition_hourly_stress_penalty_weight = 0.1;
+
+        let mut high_weight = low_weight.clone();
+        high_weight.shrimp_params.condition_hourly_stress_penalty_weight = 0.9;
+
+        update_condition(&mut low_weight);
+        update_condition(&mut high_weight);
+
+        assert!(
+            low_weight.animal.adult.condition_index > high_weight.animal.adult.condition_index,
+            "raising the named hourly stress penalty weight should lower condition under the same accumulated stress"
         );
     }
 

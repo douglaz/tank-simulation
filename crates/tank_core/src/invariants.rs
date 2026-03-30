@@ -565,6 +565,22 @@ fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), Si
         "shrimp_params.nh3_stress_response_scale",
         params.nh3_stress_response_scale,
     )?;
+    check_positive(
+        "shrimp_params.condition_do_reference_mg_l",
+        params.condition_do_reference_mg_l,
+    )?;
+    check_non_negative(
+        "shrimp_params.condition_nh3_sensitivity",
+        params.condition_nh3_sensitivity,
+    )?;
+    check_non_negative(
+        "shrimp_params.condition_nitrite_sensitivity",
+        params.condition_nitrite_sensitivity,
+    )?;
+    check_unit_interval(
+        "shrimp_params.condition_hourly_stress_penalty_weight",
+        params.condition_hourly_stress_penalty_weight,
+    )?;
     check_non_negative(
         "shrimp_params.density_repro_threshold_per_l",
         params.density_repro_threshold_per_l,
