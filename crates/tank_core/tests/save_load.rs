@@ -1094,6 +1094,9 @@ fn malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected() -> 
     let invalid_cases = [
         ("shrimp_params.ca_min_mg_per_l", -1.0),
         ("shrimp_params.mg_min_mg_per_l", 0.0),
+        ("shrimp_params.molt_reserve_fraction", 0.0),
+        ("shrimp_params.molt_condition_weight", 1.2),
+        ("shrimp_params.molt_reserve_weight", -0.1),
         ("shrimp_params.juvenile_molt_interval_days", 0.0),
         ("shrimp_params.sub_adult_molt_interval_days", 0.0),
         ("shrimp_params.molt_success_threshold", 1.2),
@@ -1106,6 +1109,15 @@ fn malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected() -> 
         match field {
             "shrimp_params.ca_min_mg_per_l" => state.shrimp_params.ca_min_mg_per_l = value,
             "shrimp_params.mg_min_mg_per_l" => state.shrimp_params.mg_min_mg_per_l = value,
+            "shrimp_params.molt_reserve_fraction" => {
+                state.shrimp_params.molt_reserve_fraction = value;
+            }
+            "shrimp_params.molt_condition_weight" => {
+                state.shrimp_params.molt_condition_weight = value;
+            }
+            "shrimp_params.molt_reserve_weight" => {
+                state.shrimp_params.molt_reserve_weight = value;
+            }
             "shrimp_params.juvenile_molt_interval_days" => {
                 state.shrimp_params.juvenile_molt_interval_days = value;
             }
@@ -1136,6 +1148,35 @@ fn malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected() -> 
         let err = loaded.into_engine().unwrap_err();
         assert_eq!(err, SimError::InvariantViolation { field, value });
     }
+
+    Ok(())
+}
+
+#[test]
+fn malformed_current_save_with_invalid_molt_condition_weight_sum_is_rejected(
+) -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(127));
+    state.shrimp_params.molt_condition_weight = 0.8;
+    state.shrimp_params.molt_reserve_weight = 0.3;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    let err = loaded.into_engine().unwrap_err();
+
+    assert_eq!(
+        err,
+        SimError::InvariantViolation {
+            field: "shrimp_params.molt_condition_weight + shrimp_params.molt_reserve_weight",
+            value: 1.1,
+        }
+    );
 
     Ok(())
 }

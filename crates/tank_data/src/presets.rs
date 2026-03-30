@@ -95,6 +95,10 @@ fn shrimp_runtime_default_param_value(name: &str) -> Option<f64> {
         "min_clutch_condition" => Some(defaults.min_clutch_condition),
         "ca_min_mg_per_l" => Some(defaults.ca_min_mg_per_l),
         "mg_min_mg_per_l" => Some(defaults.mg_min_mg_per_l),
+        "molt_reserve_fraction" => Some(defaults.molt_reserve_fraction),
+        "molt_reserve_factor_floor" => Some(defaults.molt_reserve_factor_floor),
+        "molt_condition_weight" => Some(defaults.molt_condition_weight),
+        "molt_reserve_weight" => Some(defaults.molt_reserve_weight),
         "juvenile_molt_interval_days" => Some(defaults.juvenile_molt_interval_days),
         "sub_adult_molt_interval_days" => Some(defaults.sub_adult_molt_interval_days),
         "molt_success_threshold" => Some(defaults.molt_success_threshold),
@@ -481,6 +485,14 @@ pub struct ShrimpPreset {
     #[serde(default)]
     pub mg_min_mg_per_l: Option<f64>,
     #[serde(default)]
+    pub molt_reserve_fraction: Option<f64>,
+    #[serde(default)]
+    pub molt_reserve_factor_floor: Option<f64>,
+    #[serde(default)]
+    pub molt_condition_weight: Option<f64>,
+    #[serde(default)]
+    pub molt_reserve_weight: Option<f64>,
+    #[serde(default)]
     pub juvenile_molt_interval_days: Option<f64>,
     #[serde(default)]
     pub sub_adult_molt_interval_days: Option<f64>,
@@ -617,6 +629,10 @@ impl ShrimpPreset {
             ("min_clutch_condition", self.min_clutch_condition),
             ("ca_min_mg_per_l", self.ca_min_mg_per_l),
             ("mg_min_mg_per_l", self.mg_min_mg_per_l),
+            ("molt_reserve_fraction", self.molt_reserve_fraction),
+            ("molt_reserve_factor_floor", self.molt_reserve_factor_floor),
+            ("molt_condition_weight", self.molt_condition_weight),
+            ("molt_reserve_weight", self.molt_reserve_weight),
             (
                 "juvenile_molt_interval_days",
                 self.juvenile_molt_interval_days,
@@ -656,6 +672,7 @@ impl ShrimpPreset {
             ("base_molt_interval_days", self.base_molt_interval_days),
             ("ca_min_mg_per_l", self.ca_min_mg_per_l),
             ("mg_min_mg_per_l", self.mg_min_mg_per_l),
+            ("molt_reserve_fraction", self.molt_reserve_fraction),
             (
                 "juvenile_molt_interval_days",
                 self.juvenile_molt_interval_days,
@@ -681,6 +698,9 @@ impl ShrimpPreset {
                 self.subadult_maturation_condition_threshold,
             ),
             ("min_clutch_condition", self.min_clutch_condition),
+            ("molt_reserve_factor_floor", self.molt_reserve_factor_floor),
+            ("molt_condition_weight", self.molt_condition_weight),
+            ("molt_reserve_weight", self.molt_reserve_weight),
             ("molt_success_threshold", self.molt_success_threshold),
             ("critical_molt_gh_ratio", self.critical_molt_gh_ratio),
         ] {
@@ -707,6 +727,17 @@ impl ShrimpPreset {
         if sub_adult_molt_interval_days >= base_molt_interval_days {
             return Err(format!(
                 "sub_adult_molt_interval_days ({sub_adult_molt_interval_days}) must be < base_molt_interval_days ({base_molt_interval_days})"
+            ));
+        }
+        let molt_condition_weight = self
+            .molt_condition_weight
+            .unwrap_or(ShrimpRuntimeParams::default().molt_condition_weight);
+        let molt_reserve_weight = self
+            .molt_reserve_weight
+            .unwrap_or(ShrimpRuntimeParams::default().molt_reserve_weight);
+        if (molt_condition_weight + molt_reserve_weight - 1.0).abs() > 1.0e-9 {
+            return Err(format!(
+                "molt_condition_weight ({molt_condition_weight}) + molt_reserve_weight ({molt_reserve_weight}) must sum to 1.0"
             ));
         }
         if let Some(base_clutch_size) = self.base_clutch_size {
@@ -775,6 +806,18 @@ impl ParamMetaPreset for ShrimpPreset {
             "mg_min_mg_per_l" => self
                 .mg_min_mg_per_l
                 .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_reserve_fraction" => self
+                .molt_reserve_fraction
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_reserve_factor_floor" => self
+                .molt_reserve_factor_floor
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_condition_weight" => self
+                .molt_condition_weight
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_reserve_weight" => self
+                .molt_reserve_weight
+                .or_else(|| shrimp_runtime_default_param_value(name)),
             "juvenile_molt_interval_days" => self
                 .juvenile_molt_interval_days
                 .or_else(|| shrimp_runtime_default_param_value(name)),
@@ -820,6 +863,10 @@ impl ParamMetaPreset for ShrimpPreset {
                 | "min_clutch_condition"
                 | "ca_min_mg_per_l"
                 | "mg_min_mg_per_l"
+                | "molt_reserve_fraction"
+                | "molt_reserve_factor_floor"
+                | "molt_condition_weight"
+                | "molt_reserve_weight"
                 | "juvenile_molt_interval_days"
                 | "sub_adult_molt_interval_days"
                 | "molt_success_threshold"

@@ -415,6 +415,26 @@ fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), Si
     check_positive("shrimp_params.ca_min_mg_per_l", params.ca_min_mg_per_l)?;
     check_positive("shrimp_params.mg_min_mg_per_l", params.mg_min_mg_per_l)?;
     check_positive(
+        "shrimp_params.molt_reserve_fraction",
+        params.molt_reserve_fraction,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_reserve_factor_floor",
+        params.molt_reserve_factor_floor,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_condition_weight",
+        params.molt_condition_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_reserve_weight",
+        params.molt_reserve_weight,
+    )?;
+    check_sum_close_to_one(
+        "shrimp_params.molt_condition_weight + shrimp_params.molt_reserve_weight",
+        params.molt_condition_weight + params.molt_reserve_weight,
+    )?;
+    check_positive(
         "shrimp_params.juvenile_molt_interval_days",
         params.juvenile_molt_interval_days,
     )?;

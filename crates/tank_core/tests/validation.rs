@@ -342,6 +342,9 @@ fn step_hours_rejects_invalid_molt_mineral_parameters_before_simulation() {
     let invalid_cases = [
         ("shrimp_params.ca_min_mg_per_l", -1.0),
         ("shrimp_params.mg_min_mg_per_l", 0.0),
+        ("shrimp_params.molt_reserve_fraction", 0.0),
+        ("shrimp_params.molt_condition_weight", 1.2),
+        ("shrimp_params.molt_reserve_weight", -0.1),
         ("shrimp_params.juvenile_molt_interval_days", 0.0),
         ("shrimp_params.sub_adult_molt_interval_days", 0.0),
         ("shrimp_params.molt_success_threshold", 1.2),
@@ -354,6 +357,15 @@ fn step_hours_rejects_invalid_molt_mineral_parameters_before_simulation() {
         match field {
             "shrimp_params.ca_min_mg_per_l" => state.shrimp_params.ca_min_mg_per_l = value,
             "shrimp_params.mg_min_mg_per_l" => state.shrimp_params.mg_min_mg_per_l = value,
+            "shrimp_params.molt_reserve_fraction" => {
+                state.shrimp_params.molt_reserve_fraction = value;
+            }
+            "shrimp_params.molt_condition_weight" => {
+                state.shrimp_params.molt_condition_weight = value;
+            }
+            "shrimp_params.molt_reserve_weight" => {
+                state.shrimp_params.molt_reserve_weight = value;
+            }
             "shrimp_params.juvenile_molt_interval_days" => {
                 state.shrimp_params.juvenile_molt_interval_days = value;
             }
@@ -379,6 +391,26 @@ fn step_hours_rejects_invalid_molt_mineral_parameters_before_simulation() {
         assert_eq!(result, Err(SimError::InvariantViolation { field, value }));
         assert_eq!(engine.full_state(), &expected);
     }
+}
+
+#[test]
+fn step_hours_rejects_invalid_molt_condition_weight_sum_before_simulation() {
+    let mut state = tank_core::TankState::new(SimSeed(44));
+    state.shrimp_params.molt_condition_weight = 0.8;
+    state.shrimp_params.molt_reserve_weight = 0.3;
+    let expected = state.clone();
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    let result = engine.step_hours(1);
+
+    assert_eq!(
+        result,
+        Err(SimError::InvariantViolation {
+            field: "shrimp_params.molt_condition_weight + shrimp_params.molt_reserve_weight",
+            value: 1.1,
+        })
+    );
+    assert_eq!(engine.full_state(), &expected);
 }
 
 #[test]

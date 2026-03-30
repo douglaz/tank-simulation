@@ -512,9 +512,20 @@ fn molt_cycle(state: &mut TankState) {
     let mg_mg_per_l = chemistry.magnesium_mg_per_l();
     let mineral_factor = molt_mineral_modifier(gh_d, ca_mg_per_l, mg_mg_per_l, &params);
     let critical_gh_deficit = (gh_d / params.gh_min_d.max(0.01)) < params.critical_molt_gh_ratio;
-    let temp_factor = temp_condition_factor(state.water.temperature_c, &params).max(0.25);
-    let thermal_factor = temp_condition_factor(state.water.temperature_c, &params);
+    let raw_temp_factor = temp_condition_factor(state.water.temperature_c, &params);
+    let temp_factor = raw_temp_factor.max(0.25);
+    let thermal_factor = raw_temp_factor;
     let instability_factor = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
+
+    if state.animal.juvenile.count > 0 {
+        state.animal.juvenile.molt_timer_days += 1.0;
+    }
+    if state.animal.sub_adult.count > 0 {
+        state.animal.sub_adult.molt_timer_days += 1.0;
+    }
+    if state.animal.adult.count > 0 {
+        state.animal.adult.molt_timer_days += 1.0;
+    }
 
     let stage_state = [
         (
@@ -580,7 +591,7 @@ fn molt_cycle(state: &mut TankState) {
             any_resolved = true;
 
             let condition_breakdown =
-                molt_condition_breakdown(condition_index, reserve_g, count, biomass_g);
+                molt_condition_breakdown(condition_index, reserve_g, count, biomass_g, &params);
             let condition_factor = condition_breakdown.modifier;
             let success_score =
                 (mineral_factor * condition_factor * instability_factor * thermal_factor)
@@ -614,16 +625,6 @@ fn molt_cycle(state: &mut TankState) {
 
     state.animal.molt_readiness = max_readiness;
 
-    if state.animal.juvenile.count > 0 {
-        state.animal.juvenile.molt_timer_days += 1.0;
-    }
-    if state.animal.sub_adult.count > 0 {
-        state.animal.sub_adult.molt_timer_days += 1.0;
-    }
-    if state.animal.adult.count > 0 {
-        state.animal.adult.molt_timer_days += 1.0;
-    }
-
     if any_resolved {
         if failed_stage_count > 0 {
             state.animal.last_molt_success = false;
@@ -653,7 +654,8 @@ fn molt_cycle(state: &mut TankState) {
     // Derive molt_stress_index from failed_molt_accum and current factors.
     // This grounds the existing index in explicit state rather than independent
     // integration. The update_molt_stress call has already set a baseline; we
-    // blend in the failed_molt_accum contribution.
+    // intentionally blend in failed_molt_accum here as a separate stress path
+    // even though mortality also reads failed_molt_accum directly below.
     let accum_stress = state.animal.failed_molt_accum * 0.5;
     state.animal.molt_stress_index =
         (state.animal.molt_stress_index + accum_stress).clamp(0.0, 1.0);
@@ -1048,6 +1050,9 @@ fn compute_mortality_probabilities(state: &TankState) -> MortalityProbabilities 
         + (state.animal.molt_stress_index - 0.5).max(0.0)
         + (0.5 - pop_condition).max(0.0);
 
+    // Keep a direct lethality channel from failed molts in addition to the
+    // stress/readiness path above so repeated exoskeleton failures remain
+    // explicitly more deadly than generic background stress alone.
     let molt_mortality =
         state.animal.failed_molt_accum * state.shrimp_params.failed_molt_mortality_scale;
     let adult = (base_rate + stress_total * stress_scale + molt_mortality).clamp(0.0, 0.5);
@@ -1180,6 +1185,9 @@ fn emit_molt_failure(
     if gh_d < params.gh_min_d {
         causes.push(EventCause::LowMinerals);
         details.push(format!("GH {:.1}<{:.1} dGH", gh_d, params.gh_min_d));
+    } else if gh_d > params.gh_max_d {
+        causes.push(EventCause::HighMinerals);
+        details.push(format!("GH {:.1}>{:.1} dGH", gh_d, params.gh_max_d));
     }
     if ca_mg_per_l < params.ca_min_mg_per_l {
         if !causes.contains(&EventCause::LowMinerals) {
@@ -1260,6 +1268,8 @@ fn emit_molt_stress_warning(state: &mut TankState) {
         || mg_mg_per_l < state.shrimp_params.mg_min_mg_per_l
     {
         causes.push(EventCause::LowMinerals);
+    } else if gh_d > state.shrimp_params.gh_max_d {
+        causes.push(EventCause::HighMinerals);
     }
     if state.stability_tracker.instability_index > 0.3 {
         causes.push(EventCause::ChemistryInstability);
@@ -1405,6 +1415,7 @@ fn molt_condition_breakdown(
     reserve_g: f64,
     count: u32,
     wet_biomass_g: f64,
+    params: &ShrimpRuntimeParams,
 ) -> MoltConditionBreakdown {
     if count == 0 {
         return MoltConditionBreakdown {
@@ -1416,15 +1427,18 @@ fn molt_condition_breakdown(
     }
 
     let reserve_per_shrimp_g = reserve_g / f64::from(count);
-    let reserve_target_g = wet_biomass_g * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G * 0.1;
+    let reserve_target_g =
+        wet_biomass_g * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G * params.molt_reserve_fraction;
     let reserve_factor = if reserve_target_g > f64::EPSILON {
-        (reserve_per_shrimp_g / reserve_target_g).clamp(0.4, 1.0)
+        (reserve_per_shrimp_g / reserve_target_g).clamp(params.molt_reserve_factor_floor, 1.0)
     } else {
         1.0
     };
 
     MoltConditionBreakdown {
-        modifier: (0.75 * condition_index.clamp(0.0, 1.0) + 0.25 * reserve_factor).clamp(0.0, 1.0),
+        modifier: (params.molt_condition_weight * condition_index.clamp(0.0, 1.0)
+            + params.molt_reserve_weight * reserve_factor)
+            .clamp(0.0, 1.0),
         reserve_factor,
         reserve_per_shrimp_g,
         reserve_target_g,

@@ -1101,9 +1101,9 @@ fn controlled_ideal_reproduction_path_still_hatches() -> Result<(), Box<dyn std:
                     .nitrite_mg_n_per_l(0.0, 2.0)
                     .nitrate_mg_n_per_l(0.0, 15.0)
                     .do_min(6.0)
-                    .shrimp_count(0, 140)
-                    .juveniles_count(0, 100)
-                    .shrimp_reproductive_readiness(0.0, 0.8),
+                    .shrimp_count(10, 140)
+                    .juveniles_count(5, 100)
+                    .shrimp_reproductive_readiness(0.05, 0.8),
             );
         }
         if day == 90 {
@@ -1114,8 +1114,9 @@ fn controlled_ideal_reproduction_path_still_hatches() -> Result<(), Box<dyn std:
                     .nitrite_mg_n_per_l(0.0, 2.0)
                     .nitrate_mg_n_per_l(0.0, 15.0)
                     .do_min(6.0)
-                    .shrimp_count(0, 120)
-                    .juveniles_count(0, 80),
+                    .shrimp_count(10, 120)
+                    .juveniles_count(5, 80)
+                    .shrimp_reproductive_readiness(0.05, 0.8),
             );
         }
     }

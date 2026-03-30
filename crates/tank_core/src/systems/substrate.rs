@@ -36,7 +36,7 @@ pub fn step_substrate_zones(state: &mut TankState) {
     let temperature_c = state.water.temperature_c;
     let r_total = estimate_substrate_o2_demand_rate(state);
     let effective_porosity = effective_substrate_porosity(state);
-    let o2_penetration_depth_cm = compute_o2_penetration_depth_cm(
+    let base_penetration = compute_o2_penetration_depth_cm(
         effective_porosity,
         total_depth_cm,
         do_mg_per_cm3,
@@ -44,9 +44,45 @@ pub fn step_substrate_zones(state: &mut TankState) {
         r_total,
     );
 
+    let root_oxygenation_bonus = root_oxygenation_bonus_cm(state);
+    let o2_penetration_depth_cm =
+        (base_penetration + root_oxygenation_bonus).clamp(0.0, total_depth_cm);
+
+    tracing::debug!(
+        base_penetration_cm = base_penetration,
+        root_oxygenation_bonus_cm = root_oxygenation_bonus,
+        effective_penetration_cm = o2_penetration_depth_cm,
+        "substrate O₂ penetration: base {base_penetration:.4} + ROL {root_oxygenation_bonus:.4} = {o2_penetration_depth_cm:.4} cm"
+    );
+
     for layer in &mut state.substrate_layers {
         layer.o2_penetration_depth_cm = o2_penetration_depth_cm;
     }
+}
+
+/// Root-zone oxygenation bonus from radial oxygen loss (ROL).
+///
+/// Rooted plants (RootFeedingRosette) transport O₂ from photosynthesis
+/// through their roots into the substrate, creating micro-oxic zones.
+/// The bonus uses a sqrt model for diminishing returns:
+///
+///   bonus = sqrt(root_biomass_g) × rol_rate_cm_per_g
+///
+/// Only rooted plant guilds contribute; floating or epiphytic plants do not.
+pub fn root_oxygenation_bonus_cm(state: &TankState) -> f64 {
+    let rooted_biomass_g: f64 = state
+        .plant_guilds
+        .iter()
+        .filter(|p| matches!(p.guild, PlantGuild::RootFeedingRosette))
+        .map(|p| p.biomass_g.max(0.0))
+        .sum();
+
+    if rooted_biomass_g <= f64::EPSILON {
+        return 0.0;
+    }
+
+    let rol_rate = state.process_params.rol_rate_cm_per_g;
+    rooted_biomass_g.sqrt() * rol_rate
 }
 
 /// Bouldin penetration depth for the full stacked substrate bed.

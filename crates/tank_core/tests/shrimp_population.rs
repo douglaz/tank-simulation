@@ -853,6 +853,41 @@ fn severe_soft_water_stage_timer_path_still_forces_failed_molt() {
 }
 
 #[test]
+fn adult_molt_resolves_on_configured_interval() {
+    let mut state = shrimp_test_state(SimSeed(7_159));
+    state
+        .process_params
+        .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.animal.sub_adult.count = 0;
+    state.animal.juvenile.count = 0;
+    state.animal.set_population_condition_index(1.0);
+    state.animal.adult.reserve_g = f64::from(state.animal.adult.count)
+        * ADULT_SHRIMP_BIOMASS_G
+        * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G
+        * state.shrimp_params.molt_reserve_fraction;
+    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days - 1.0;
+
+    step_daily_shrimp(&mut state);
+
+    assert!(
+        state.animal.last_molt_success,
+        "healthy adults should resolve the molt when the configured interval elapses"
+    );
+    assert!(
+        state.animal.adult.molt_timer_days.abs() < 1e-9,
+        "the adult molt timer should reset on the configured day rather than one day late"
+    );
+    assert!(
+        (state.animal.molt_readiness - 1.0).abs() < 1e-9,
+        "molt readiness should reach 1.0 exactly on the configured interval"
+    );
+}
+
+#[test]
 fn prior_molt_failure_does_not_block_subadult_maturation() {
     let mut state = shrimp_test_state(SimSeed(7_156));
     state

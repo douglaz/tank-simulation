@@ -79,15 +79,15 @@ fn seed_molt_reserves(state: &mut TankState) {
     state.animal.adult.reserve_g = f64::from(state.animal.adult.count)
         * ADULT_SHRIMP_BIOMASS_G
         * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G
-        * 0.1;
+        * state.shrimp_params.molt_reserve_fraction;
     state.animal.sub_adult.reserve_g = f64::from(state.animal.sub_adult.count)
         * SUB_ADULT_SHRIMP_BIOMASS_G
         * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G
-        * 0.1;
+        * state.shrimp_params.molt_reserve_fraction;
     state.animal.juvenile.reserve_g = f64::from(state.animal.juvenile.count)
         * JUVENILE_SHRIMP_BIOMASS_G
         * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G
-        * 0.1;
+        * state.shrimp_params.molt_reserve_fraction;
 }
 
 fn load_source_profile(id: &str) -> SourceWaterProfile {
@@ -309,8 +309,60 @@ fn test_mineral_modifier_named_parameters() {
 
     assert_eq!(params.molt_success_threshold, 0.55);
     assert_eq!(params.critical_molt_gh_ratio, 0.3);
+    assert_eq!(params.molt_reserve_fraction, 0.1);
+    assert_eq!(params.molt_reserve_factor_floor, 0.4);
+    assert_eq!(params.molt_condition_weight, 0.75);
+    assert_eq!(params.molt_reserve_weight, 0.25);
     assert!(params.juvenile_molt_interval_days < params.sub_adult_molt_interval_days);
     assert!(params.sub_adult_molt_interval_days < params.base_molt_interval_days);
+}
+
+#[test]
+fn test_molt_condition_modifier_named_parameters() {
+    let run_case = |configure: fn(&mut TankState)| {
+        let mut state = molt_test_state(SimSeed(8_345));
+        configure_stage_locked_population(&mut state, 10, 0, 0);
+        set_minerals(&mut state, 40.0, 10.0);
+        state.process_params.shrimp_condition_smoothing = 0.0;
+        state.process_params.shrimp_base_mortality_per_day = 0.0;
+        state.process_params.shrimp_stress_mortality_scale = 0.0;
+        state.shrimp_params.base_spawn_rate = 0.0;
+        state.shrimp_params.molt_success_threshold = 0.6;
+        state.animal.adult.condition_index = 0.6;
+        state.animal.adult.reserve_g = 0.0;
+        state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days;
+        configure(&mut state);
+        step_daily_shrimp(&mut state);
+        state.animal.last_molt_success
+    };
+
+    assert!(
+        !run_case(|_| {}),
+        "default reserve/condition tuning should fail a reserve-empty shrimp at a 0.6 threshold"
+    );
+    assert!(
+        run_case(|state| {
+            state.shrimp_params.molt_reserve_factor_floor = 0.9;
+        }),
+        "raising the named reserve floor should soften reserve shortfall"
+    );
+    assert!(
+        run_case(|state| {
+            state.shrimp_params.molt_condition_weight = 1.0;
+            state.shrimp_params.molt_reserve_weight = 0.0;
+        }),
+        "shifting the named blend fully onto condition should change the molt outcome"
+    );
+    assert!(
+        run_case(|state| {
+            state.shrimp_params.molt_reserve_fraction = 0.05;
+            state.animal.adult.reserve_g = f64::from(state.animal.adult.count)
+                * ADULT_SHRIMP_BIOMASS_G
+                * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G
+                * 0.05;
+        }),
+        "lowering the named reserve target should let the same reserve pool clear the molt gate"
+    );
 }
 
 #[test]
@@ -480,4 +532,27 @@ fn test_molt_failure_reports_reserve_shortfall() {
         .expect("reserve-limited molt failure should emit an event");
     assert!(failure.cause_codes.contains(&EventCause::Starvation));
     assert!(failure.summary.contains("reserve"));
+}
+
+#[test]
+fn test_high_gh_molt_failure_reports_high_minerals() {
+    let mut state = molt_test_state(SimSeed(9_102));
+    configure_stage_locked_population(&mut state, 10, 0, 0);
+    set_minerals(&mut state, 120.0, 30.0);
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.animal.adult.condition_index = 1.0;
+    seed_molt_reserves(&mut state);
+    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days;
+
+    step_daily_shrimp(&mut state);
+
+    let failure = state
+        .event_log
+        .iter()
+        .find(|event| event.kind == EventKind::MoltFailure)
+        .expect("high-GH molt failure should emit an event");
+    assert!(failure.cause_codes.contains(&EventCause::HighMinerals));
+    assert!(failure.summary.contains("GH"));
+    assert!(failure.summary.contains('>'));
+    assert!(!failure.cause_codes.contains(&EventCause::PoorCondition));
 }

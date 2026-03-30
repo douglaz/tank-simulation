@@ -37,6 +37,7 @@ pub enum EventCause {
     LowTemperature,
     HighTemperature,
     LowMinerals,
+    HighMinerals,
     BiofilterImmature,
     SurfaceExchangeRestricted,
     HighNutrients,

@@ -173,6 +173,16 @@ pub struct ProcessParams {
     #[serde(default = "crate::types::process::default_denitrification_activity_maturation_days")]
     pub denitrification_activity_maturation_days: f64,
 
+    // -- Root-zone oxygenation (radial oxygen loss) --
+    /// Marginal O₂ penetration depth bonus per gram of root biomass (cm/g).
+    /// Represents radial oxygen loss (ROL) from rooted plant roots into the
+    /// surrounding substrate.  The effective bonus is `sqrt(root_biomass_g) × rate`
+    /// to model diminishing returns at high biomass.
+    /// Literature: ROL varies widely (0.01–0.5 cm/g depending on species);
+    /// 0.15 cm/g is a moderate default for mixed planted-tank rosettes.
+    #[serde(default = "crate::types::process::default_rol_rate_cm_per_g")]
+    pub rol_rate_cm_per_g: f64,
+
     // -- Biofilter carrying capacity --
     /// Base nitrifier density (g biomass / cm² colonizable area).
     /// Multiplied by habitat area, flow, and oxygen exposure to compute
@@ -391,6 +401,8 @@ impl Default for ProcessParams {
             denitrification_activity_maturation_days:
                 crate::types::process::default_denitrification_activity_maturation_days(),
 
+            rol_rate_cm_per_g: crate::types::process::default_rol_rate_cm_per_g(),
+
             nitrifier_base_density_g_per_cm2: default_nitrifier_base_density_g_per_cm2(),
 
             o2_per_mg_n_nitrified: 4.57,
@@ -513,6 +525,14 @@ pub(crate) fn default_denitrification_pore_water_mixing_factor() -> f64 {
 /// Anaerobic communities establish slowly: ~60 days typical for aquaria.
 pub(crate) fn default_denitrification_activity_maturation_days() -> f64 {
     60.0
+}
+
+// -- Root-zone oxygenation (radial oxygen loss) defaults --
+
+/// Default ROL rate: 0.15 cm per gram of root biomass.
+/// Applied as `sqrt(biomass) × rate` so high biomass saturates.
+pub(crate) fn default_rol_rate_cm_per_g() -> f64 {
+    0.15
 }
 
 // -- Biofilter carrying capacity defaults --

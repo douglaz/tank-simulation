@@ -807,6 +807,18 @@ fn shrimp_preset_to_params(
     if let Some(value) = shrimp_preset.mg_min_mg_per_l {
         params.mg_min_mg_per_l = value;
     }
+    if let Some(value) = shrimp_preset.molt_reserve_fraction {
+        params.molt_reserve_fraction = value;
+    }
+    if let Some(value) = shrimp_preset.molt_reserve_factor_floor {
+        params.molt_reserve_factor_floor = value;
+    }
+    if let Some(value) = shrimp_preset.molt_condition_weight {
+        params.molt_condition_weight = value;
+    }
+    if let Some(value) = shrimp_preset.molt_reserve_weight {
+        params.molt_reserve_weight = value;
+    }
     if let Some(value) = shrimp_preset.juvenile_molt_interval_days {
         params.juvenile_molt_interval_days = value;
     }

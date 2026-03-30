@@ -291,6 +291,20 @@ pub struct ShrimpRuntimeParams {
     /// Minimum magnesium concentration (mg/L) for full molt mineral support.
     #[serde(default = "default_mg_min_mg_per_l")]
     pub mg_min_mg_per_l: f64,
+    /// Reserve target as a fraction of organic body mass required for full
+    /// molt support.
+    #[serde(default = "default_molt_reserve_fraction")]
+    pub molt_reserve_fraction: f64,
+    /// Lower bound applied to reserve support so reserve shortfall degrades,
+    /// but does not zero out, the blended molt condition score.
+    #[serde(default = "default_molt_reserve_factor_floor")]
+    pub molt_reserve_factor_floor: f64,
+    /// Blend weight for condition index in the molt condition modifier.
+    #[serde(default = "default_molt_condition_weight")]
+    pub molt_condition_weight: f64,
+    /// Blend weight for reserve support in the molt condition modifier.
+    #[serde(default = "default_molt_reserve_weight")]
+    pub molt_reserve_weight: f64,
     /// Base inter-molt period for juveniles (days). Shorter than adults.
     #[serde(default = "default_juvenile_molt_interval_days")]
     pub juvenile_molt_interval_days: f64,
@@ -668,6 +682,10 @@ impl Default for ShrimpRuntimeParams {
             min_clutch_condition: default_min_clutch_condition(),
             ca_min_mg_per_l: default_ca_min_mg_per_l(),
             mg_min_mg_per_l: default_mg_min_mg_per_l(),
+            molt_reserve_fraction: default_molt_reserve_fraction(),
+            molt_reserve_factor_floor: default_molt_reserve_factor_floor(),
+            molt_condition_weight: default_molt_condition_weight(),
+            molt_reserve_weight: default_molt_reserve_weight(),
             juvenile_molt_interval_days: default_juvenile_molt_interval_days(),
             sub_adult_molt_interval_days: default_sub_adult_molt_interval_days(),
             molt_success_threshold: default_molt_success_threshold(),
@@ -746,6 +764,22 @@ fn default_ca_min_mg_per_l() -> f64 {
 
 fn default_mg_min_mg_per_l() -> f64 {
     5.0
+}
+
+fn default_molt_reserve_fraction() -> f64 {
+    0.1
+}
+
+fn default_molt_reserve_factor_floor() -> f64 {
+    0.4
+}
+
+fn default_molt_condition_weight() -> f64 {
+    0.75
+}
+
+fn default_molt_reserve_weight() -> f64 {
+    0.25
 }
 
 fn default_juvenile_molt_interval_days() -> f64 {
