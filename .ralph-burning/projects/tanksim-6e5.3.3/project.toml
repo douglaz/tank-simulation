@@ -1,7 +1,0 @@
-id = "tanksim-6e5.3.3"
-name = "Microfauna mass routing"
-flow = "quick_dev"
-prompt_reference = "prompt.md"
-prompt_hash = "a9eb55e3a934c058"
-created_at = "2026-03-28T03:28:59.110065629Z"
-status_summary = "created"

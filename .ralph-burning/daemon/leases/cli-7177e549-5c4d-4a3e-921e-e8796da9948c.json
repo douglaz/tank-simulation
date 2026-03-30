@@ -1,9 +1,0 @@
-{
-  "lease_kind": "cli_writer",
-  "lease_id": "cli-7177e549-5c4d-4a3e-921e-e8796da9948c",
-  "project_id": "tanksim-6e5.5.3-v2",
-  "owner": "cli",
-  "acquired_at": "2026-03-30T01:04:46.003233824Z",
-  "ttl_seconds": 300,
-  "last_heartbeat": "2026-03-30T01:45:16.650088058Z"
-}
