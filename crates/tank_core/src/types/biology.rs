@@ -424,6 +424,22 @@ pub struct ShrimpRuntimeParams {
     /// Instability index threshold above which egg dropping can occur.
     #[serde(default = "default_egg_drop_instability_threshold")]
     pub egg_drop_instability_threshold: f64,
+    /// Maximum daily egg-drop probability even under severe instability.
+    #[serde(default = "default_egg_drop_max_probability")]
+    pub egg_drop_max_probability: f64,
+    /// Dissolved-oxygen reference used to normalize hatch success during egg
+    /// development.
+    #[serde(default = "default_egg_oxygen_reference_mg_l")]
+    pub egg_oxygen_reference_mg_l: f64,
+    /// EMA smoothing factor applied when reproductive readiness moves toward
+    /// today's target.
+    #[serde(default = "default_reproductive_readiness_smoothing")]
+    pub reproductive_readiness_smoothing: f64,
+    /// Condition threshold at which clutches reach full size. Below this, the
+    /// clutch-size modifier linearly tapers down toward
+    /// `min_clutch_condition`.
+    #[serde(default = "default_full_clutch_condition_threshold")]
+    pub full_clutch_condition_threshold: f64,
     /// Temperature swing (°C per day) that contributes a full unit of
     /// instability pressure.
     #[serde(default = "default_instability_temp_swing_c")]
@@ -837,6 +853,10 @@ impl Default for ShrimpRuntimeParams {
             no2_repro_threshold_mg_n_per_l: default_no2_repro_threshold_mg_n_per_l(),
             egg_drop_temp_swing_c: default_egg_drop_temp_swing_c(),
             egg_drop_instability_threshold: default_egg_drop_instability_threshold(),
+            egg_drop_max_probability: default_egg_drop_max_probability(),
+            egg_oxygen_reference_mg_l: default_egg_oxygen_reference_mg_l(),
+            reproductive_readiness_smoothing: default_reproductive_readiness_smoothing(),
+            full_clutch_condition_threshold: default_full_clutch_condition_threshold(),
             instability_temp_swing_c: default_instability_temp_swing_c(),
             instability_ph_swing: default_instability_ph_swing(),
             instability_gh_swing_d: default_instability_gh_swing_d(),
@@ -1052,6 +1072,22 @@ fn default_egg_drop_temp_swing_c() -> f64 {
 
 fn default_egg_drop_instability_threshold() -> f64 {
     0.5
+}
+
+fn default_egg_drop_max_probability() -> f64 {
+    0.6
+}
+
+fn default_egg_oxygen_reference_mg_l() -> f64 {
+    6.0
+}
+
+fn default_reproductive_readiness_smoothing() -> f64 {
+    0.1
+}
+
+fn default_full_clutch_condition_threshold() -> f64 {
+    0.7
 }
 
 fn default_instability_temp_swing_c() -> f64 {

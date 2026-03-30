@@ -28,8 +28,11 @@
 //! Exit codes: 0 = all pass, non-zero = envelope violation.
 
 use tank_core::{
-    Engine, PlayerAction, ProcessParams, SimSeed, SimulationEngine, TankGeometry, TankSnapshot,
-    TankState, WaterState,
+    systems::chemistry::{
+        bicarbonate_mg_total_from_mmol_per_l, validate_source_water_carbonate_profile,
+    },
+    Engine, PlayerAction, ProcessParams, SimSeed, SimulationEngine, SourceWaterProfile,
+    TankGeometry, TankSnapshot, TankState, WaterState,
 };
 use tank_harness::{Envelope, HarnessRun};
 use tank_scenarios::{
@@ -109,9 +112,8 @@ fn probe_successful_breeding() -> Result<(), Box<dyn std::error::Error>> {
         ..StartupOverrides::default()
     };
 
-    let mut run =
-        HarnessRun::with_overrides(SimSeed(6600), "medium_planted", overrides)?
-            .with_artifact_label("shrimp_successful_breeding");
+    let mut run = HarnessRun::with_overrides(SimSeed(6600), "medium_planted", overrides)?
+        .with_artifact_label("shrimp_successful_breeding");
     run.enable_instrumentation();
 
     let initial_snap = run.snapshot();
@@ -227,9 +229,8 @@ fn run_probe_successful_breeding() -> Result<ProbeResult, Box<dyn std::error::Er
         ..StartupOverrides::default()
     };
 
-    let mut run =
-        HarnessRun::with_overrides(SimSeed(6600), "medium_planted", overrides)?
-            .with_artifact_label("shrimp_breeding_summary");
+    let mut run = HarnessRun::with_overrides(SimSeed(6600), "medium_planted", overrides)?
+        .with_artifact_label("shrimp_breeding_summary");
     run.enable_instrumentation();
 
     let initial_count = run.snapshot().total_shrimp_count;
@@ -463,7 +464,9 @@ fn thermal_scenario_state(seed: SimSeed, ambient_temp_c: f64) -> TankState {
     state.shrimp_params.base_spawn_rate = 0.08;
     state.shrimp_params.hatch_success_base = 1.0;
     state.shrimp_params.egg_duration_days = 14;
-    state.shrimp_params.apply_legacy_total_maturation_days(120.0);
+    state
+        .shrimp_params
+        .apply_legacy_total_maturation_days(120.0);
 
     state.reseed_stability_tracker();
     state
@@ -519,7 +522,12 @@ fn run_probe_thermal_suppression() -> Result<ProbeResult, Box<dyn std::error::Er
         if !elevated_stress {
             issues.push("warm tank did not show elevated molt stress");
         }
-        format!("{} | Cool: {} | Warm: {}", issues.join("; "), shrimp_diag(&cool_snap), shrimp_diag(&warm_snap))
+        format!(
+            "{} | Cool: {} | Warm: {}",
+            issues.join("; "),
+            shrimp_diag(&cool_snap),
+            shrimp_diag(&warm_snap)
+        )
     };
 
     Ok(ProbeResult {
@@ -740,96 +748,168 @@ fn run_probe_chemistry_stress() -> Result<ProbeResult, Box<dyn std::error::Error
 /// Chloride protection against nitrite hazard.
 ///
 /// **Husbandry story**: Two tanks experience the same nitrite crisis
-/// (4 mg N/L from an incomplete cycle). In the first tank the keeper adds
-/// aquarium salt (NaCl), raising chloride to ~100 mg/L. In the second tank
-/// no salt is added and chloride stays near zero. Chloride competes with
-/// nitrite at the gill uptake sites, reducing the effective toxicity. Over
-/// 3 days followed by a salt treatment and 3 more days, the salted tank
-/// should show lower mortality than the unsalted control.
+/// (4 mg N/L from an incomplete cycle). Both run 3 days unprotected. Then
+/// the keeper performs a 50 % water change on both tanks, but only one uses
+/// salt-enriched replacement water (NaCl raising chloride to ~200 mg/L).
+/// The control gets a matched water change without extra salt. Chloride
+/// competes with nitrite at the gill uptake sites, reducing effective
+/// toxicity. After 3 more days the salted tank should show lower mortality
+/// than the unsalted control.
 #[test]
 fn probe_chloride_protection() -> Result<(), Box<dyn std::error::Error>> {
-    // Both tanks start with the same nitrite crash conditions
     let base_state = chloride_test_base_state(SimSeed(6603));
     let initial_count = base_state.animal.total_count();
 
-    // Phase 1: both tanks run 3 days unprotected to accumulate stress
-    let mut protected_engine = Engine::from_parts(base_state.clone(), vec![]);
-    let mut unprotected_engine = Engine::from_parts(base_state, vec![]);
+    // Phase 1: both tanks run 3 days unprotected
+    let mut crash_engine = Engine::from_parts(base_state, vec![]);
+    crash_engine.step_hours(3 * 24)?;
+    let pre_treatment = crash_engine.full_state().clone();
+    let count_before_treatment = pre_treatment.animal.total_count();
+    let phase1_deaths = initial_count - count_before_treatment;
 
-    protected_engine.step_hours(72)?;
-    unprotected_engine.step_hours(72)?;
+    // Build source-water profiles: one with salt, one matched control
+    let vol = pre_treatment.water_volume_l().max(f64::EPSILON);
+    let baseline_sodium = pre_treatment.water.sodium_mg_total / vol;
+    let baseline_chloride = pre_treatment.concentrations().chloride_mg_per_l();
 
-    let count_after_phase1 = protected_engine.full_state().animal.total_count();
+    let salt_profile = chloride_source_profile(&pre_treatment, baseline_sodium + 130.0, 200.0);
+    let control_profile =
+        chloride_source_profile(&pre_treatment, baseline_sodium, baseline_chloride);
 
-    // Phase 2: add chloride to the protected tank, leave the other as-is
+    // Treated branch: 50% water change with salt-enriched water
+    let mut treated_state = pre_treatment.clone();
+    treated_state
+        .source_water_catalog
+        .insert("salt_treatment".to_string(), salt_profile);
+    let mut treated_engine = Engine::from_parts(treated_state, vec![]);
+
+    // Control branch: 50% water change with matched (no extra salt) water
+    let mut control_state = pre_treatment;
+    control_state
+        .source_water_catalog
+        .insert("matched_control".to_string(), control_profile);
+    let mut control_engine = Engine::from_parts(control_state, vec![]);
+
+    // Apply water changes
+    treated_engine.apply_action(PlayerAction::WaterChangePercent {
+        percent: 50.0,
+        source_profile_id: "salt_treatment".to_string(),
+    })?;
+    control_engine.apply_action(PlayerAction::WaterChangePercent {
+        percent: 50.0,
+        source_profile_id: "matched_control".to_string(),
+    })?;
+    treated_engine.step_hours(1)?;
+    control_engine.step_hours(1)?;
+
+    // Phase 2: run both for 3 more days
+    treated_engine.step_hours(71)?;
+    control_engine.step_hours(71)?;
+
+    let treated_snap = treated_engine.snapshot();
+    let control_snap = control_engine.snapshot();
+    let treated_deaths =
+        count_before_treatment.saturating_sub(treated_engine.full_state().animal.total_count());
+    let control_deaths =
+        count_before_treatment.saturating_sub(control_engine.full_state().animal.total_count());
+
+    // Use a HarnessRun for structured failure recording
+    let mut run =
+        HarnessRun::from_state(SimSeed(6603), "chloride_probe", TankState::new(SimSeed(0)))
+            .with_artifact_label("shrimp_chloride_protection");
+
+    if treated_deaths >= control_deaths {
+        run.record_failure(
+            "chloride_less_mortality",
+            format!(
+                "salt-treated tank should have fewer post-treatment deaths: \
+                 treated={treated_deaths}, control={control_deaths}. \
+                 Treated: {} | Control: {}",
+                shrimp_diag(&treated_snap),
+                shrimp_diag(&control_snap),
+            ),
+        );
+    }
+
+    if treated_snap.effective_nitrite_hazard_mg_per_l
+        >= control_snap.effective_nitrite_hazard_mg_per_l
     {
-        let prot_state = protected_engine.full_state();
-        let vol = prot_state.water_volume_l();
-        // Raise chloride to ~100 mg/L by adding NaCl
-        let target_cl_mg_per_l = 100.0;
-        let current_cl_mg_per_l = prot_state.water.chloride_mg_total / vol;
-        let add_cl_mg = (target_cl_mg_per_l - current_cl_mg_per_l).max(0.0) * vol;
-        // NaCl has ~60.7% chloride by mass, so sodium is ~39.3%
-        let add_na_mg = add_cl_mg * (23.0 / 35.45);
-        let state_mut = protected_engine.full_state_mut();
-        state_mut.water.chloride_mg_total += add_cl_mg;
-        state_mut.water.sodium_mg_total += add_na_mg;
+        run.record_failure(
+            "chloride_reduces_hazard",
+            format!(
+                "chloride should reduce effective nitrite hazard: \
+                 treated={:.4}, control={:.4}",
+                treated_snap.effective_nitrite_hazard_mg_per_l,
+                control_snap.effective_nitrite_hazard_mg_per_l,
+            ),
+        );
     }
-
-    // Phase 3: run both for 4 more days under continued nitrite pressure
-    for _ in 0..4 {
-        protected_engine.step_hours(24)?;
-        unprotected_engine.step_hours(24)?;
-    }
-
-    let prot_snap = protected_engine.snapshot();
-    let unprot_snap = unprotected_engine.snapshot();
-
-    let protected_deaths = count_after_phase1.saturating_sub(
-        protected_engine.full_state().animal.total_count(),
-    );
-    let unprotected_deaths = count_after_phase1.saturating_sub(
-        unprotected_engine.full_state().animal.total_count(),
-    );
-
-    // Protected tank should have fewer post-treatment deaths
-    let mut run = HarnessRun::from_state(SimSeed(6603), "chloride_protection", TankState::new(SimSeed(0)))
-        .with_artifact_label("shrimp_chloride_protection");
-
-    run.record_failure_if(
-        "chloride_less_mortality",
-        protected_deaths >= unprotected_deaths,
-        format!(
-            "chloride-protected tank should have fewer deaths post-treatment: \
-             protected_deaths={protected_deaths}, unprotected_deaths={unprotected_deaths}, \
-             Protected: {} | Unprotected: {}",
-            shrimp_diag(&prot_snap),
-            shrimp_diag(&unprot_snap),
-        ),
-    );
-
-    // Protected tank should have lower effective nitrite hazard
-    run.record_failure_if(
-        "chloride_reduces_hazard",
-        prot_snap.effective_nitrite_hazard_mg_per_l >= unprot_snap.effective_nitrite_hazard_mg_per_l,
-        format!(
-            "chloride should reduce effective nitrite hazard: \
-             protected={:.4}, unprotected={:.4}",
-            prot_snap.effective_nitrite_hazard_mg_per_l,
-            unprot_snap.effective_nitrite_hazard_mg_per_l,
-        ),
-    );
 
     eprintln!(
-        "probe_chloride_protection: phase1_deaths={}, \
-         post_treatment: protected_deaths={protected_deaths}, unprotected_deaths={unprotected_deaths}. \
-         Protected: {} | Unprotected: {}",
-        initial_count - count_after_phase1,
-        shrimp_diag(&prot_snap),
-        shrimp_diag(&unprot_snap),
+        "probe_chloride_protection: phase1_deaths={phase1_deaths}, \
+         post_treatment: treated_deaths={treated_deaths}, control_deaths={control_deaths}. \
+         Treated: {} | Control: {}",
+        shrimp_diag(&treated_snap),
+        shrimp_diag(&control_snap),
     );
 
     run.finish().map_err(|e| e.into())
+}
+
+/// Build a carbonate-consistent source-water profile that matches the
+/// current tank chemistry except for sodium and chloride.
+fn chloride_source_profile(
+    state: &TankState,
+    sodium_mg_per_l: f64,
+    chloride_mg_per_l: f64,
+) -> SourceWaterProfile {
+    let vol = state.water_volume_l().max(f64::EPSILON);
+    let (dic, alk, bicarb) = valid_source_profile_carbonate(state);
+    SourceWaterProfile {
+        temperature_c: state.water.temperature_c,
+        ammonia_mg_n_per_l: state.tan_mg_n_per_l(),
+        nitrite_mg_n_per_l: state.nitrite_mg_n_per_l(),
+        nitrate_mg_n_per_l: state.nitrate_mg_n_per_l(),
+        phosphate_mg_p_per_l: state.phosphate_mg_p_per_l(),
+        dic_mg_c_per_l: dic,
+        doc_mg_c_per_l: state.doc_mg_c_per_l(),
+        don_mg_n_per_l: state.don_mg_n_per_l(),
+        alkalinity_meq_per_l: alk,
+        calcium_mg_per_l: state.calcium_mg_per_l(),
+        magnesium_mg_per_l: state.magnesium_mg_per_l(),
+        sodium_mg_per_l,
+        potassium_mg_per_l: state.water.potassium_mg_total / vol,
+        bicarbonate_mg_per_l: bicarb,
+        chloride_mg_per_l,
+        sulfate_mg_per_l: state.water.sulfate_mg_total / vol,
+    }
+}
+
+/// Resolve a valid DIC/alkalinity/bicarbonate triple for source-water
+/// construction, falling back to defaults if the current state is out of
+/// the solver's valid range.
+fn valid_source_profile_carbonate(state: &TankState) -> (f64, f64, f64) {
+    let dic = state.dic_mg_c_per_l();
+    let alk = state.alkalinity_meq_per_l();
+    if let Ok(eq) = validate_source_water_carbonate_profile(dic, alk, state.water.temperature_c) {
+        return (
+            dic,
+            alk,
+            bicarbonate_mg_total_from_mmol_per_l(eq.hco3_mmol_per_l, 1.0),
+        );
+    }
+    let fallback = WaterState::default_for_volume_l(1.0);
+    let eq = validate_source_water_carbonate_profile(
+        fallback.dissolved_inorganic_carbon_mg_c_total,
+        fallback.alkalinity_meq_total,
+        state.water.temperature_c,
+    )
+    .expect("default source-water carbonate profile should validate");
+    (
+        fallback.dissolved_inorganic_carbon_mg_c_total,
+        fallback.alkalinity_meq_total,
+        bicarbonate_mg_total_from_mmol_per_l(eq.hco3_mmol_per_l, 1.0),
+    )
 }
 
 /// Build a nitrite-crash state for chloride protection testing.
@@ -893,52 +973,63 @@ fn run_probe_chloride_protection() -> Result<ProbeResult, Box<dyn std::error::Er
     let base_state = chloride_test_base_state(SimSeed(6603));
     let initial_count = base_state.animal.total_count();
 
-    let mut protected_engine = Engine::from_parts(base_state.clone(), vec![]);
-    let mut unprotected_engine = Engine::from_parts(base_state, vec![]);
+    let mut crash_engine = Engine::from_parts(base_state, vec![]);
+    crash_engine.step_hours(3 * 24)?;
+    let pre_treatment = crash_engine.full_state().clone();
+    let count_before_treatment = pre_treatment.animal.total_count();
 
-    protected_engine.step_hours(72)?;
-    unprotected_engine.step_hours(72)?;
+    let vol = pre_treatment.water_volume_l().max(f64::EPSILON);
+    let baseline_sodium = pre_treatment.water.sodium_mg_total / vol;
+    let baseline_chloride = pre_treatment.concentrations().chloride_mg_per_l();
 
-    let count_after_phase1 = protected_engine.full_state().animal.total_count();
+    let salt_profile = chloride_source_profile(&pre_treatment, baseline_sodium + 130.0, 200.0);
+    let control_profile =
+        chloride_source_profile(&pre_treatment, baseline_sodium, baseline_chloride);
 
-    // Add chloride to the protected tank
-    {
-        let prot_state = protected_engine.full_state();
-        let vol = prot_state.water_volume_l();
-        let target_cl = 100.0;
-        let current_cl = prot_state.water.chloride_mg_total / vol;
-        let add_cl = (target_cl - current_cl).max(0.0) * vol;
-        let add_na = add_cl * (23.0 / 35.45);
-        let state_mut = protected_engine.full_state_mut();
-        state_mut.water.chloride_mg_total += add_cl;
-        state_mut.water.sodium_mg_total += add_na;
-    }
+    let mut treated_state = pre_treatment.clone();
+    treated_state
+        .source_water_catalog
+        .insert("salt_treatment".to_string(), salt_profile);
+    let mut treated_engine = Engine::from_parts(treated_state, vec![]);
 
-    for _ in 0..4 {
-        protected_engine.step_hours(24)?;
-        unprotected_engine.step_hours(24)?;
-    }
+    let mut control_state = pre_treatment;
+    control_state
+        .source_water_catalog
+        .insert("matched_control".to_string(), control_profile);
+    let mut control_engine = Engine::from_parts(control_state, vec![]);
 
-    let prot_snap = protected_engine.snapshot();
-    let unprot_snap = unprotected_engine.snapshot();
-    let prot_deaths = count_after_phase1.saturating_sub(
-        protected_engine.full_state().animal.total_count(),
-    );
-    let unprot_deaths = count_after_phase1.saturating_sub(
-        unprotected_engine.full_state().animal.total_count(),
-    );
+    treated_engine.apply_action(PlayerAction::WaterChangePercent {
+        percent: 50.0,
+        source_profile_id: "salt_treatment".to_string(),
+    })?;
+    control_engine.apply_action(PlayerAction::WaterChangePercent {
+        percent: 50.0,
+        source_profile_id: "matched_control".to_string(),
+    })?;
+    treated_engine.step_hours(1)?;
+    control_engine.step_hours(1)?;
 
-    let less_mortality = prot_deaths < unprot_deaths;
-    let lower_hazard = prot_snap.effective_nitrite_hazard_mg_per_l
-        < unprot_snap.effective_nitrite_hazard_mg_per_l;
+    treated_engine.step_hours(71)?;
+    control_engine.step_hours(71)?;
+
+    let treated_snap = treated_engine.snapshot();
+    let control_snap = control_engine.snapshot();
+    let treated_deaths =
+        count_before_treatment.saturating_sub(treated_engine.full_state().animal.total_count());
+    let control_deaths =
+        count_before_treatment.saturating_sub(control_engine.full_state().animal.total_count());
+
+    let less_mortality = treated_deaths < control_deaths;
+    let lower_hazard = treated_snap.effective_nitrite_hazard_mg_per_l
+        < control_snap.effective_nitrite_hazard_mg_per_l;
     let passed = less_mortality && lower_hazard;
 
     let observed = format!(
-        "phase1_deaths={}, post: prot_deaths={prot_deaths}, unprot_deaths={unprot_deaths}, \
-         prot_hazard={:.4}, unprot_hazard={:.4}",
-        initial_count - count_after_phase1,
-        prot_snap.effective_nitrite_hazard_mg_per_l,
-        unprot_snap.effective_nitrite_hazard_mg_per_l,
+        "phase1_deaths={}, post: treated_deaths={treated_deaths}, control_deaths={control_deaths}, \
+         treated_hazard={:.4}, control_hazard={:.4}",
+        initial_count - count_before_treatment,
+        treated_snap.effective_nitrite_hazard_mg_per_l,
+        control_snap.effective_nitrite_hazard_mg_per_l,
     );
     let failure_detail = if passed {
         String::new()
@@ -946,21 +1037,21 @@ fn run_probe_chloride_protection() -> Result<ProbeResult, Box<dyn std::error::Er
         let mut issues = Vec::new();
         if !less_mortality {
             issues.push(format!(
-                "protected deaths ({prot_deaths}) not less than unprotected ({unprot_deaths})"
+                "treated deaths ({treated_deaths}) not less than control ({control_deaths})"
             ));
         }
         if !lower_hazard {
             issues.push(format!(
-                "protected hazard ({:.4}) not lower than unprotected ({:.4})",
-                prot_snap.effective_nitrite_hazard_mg_per_l,
-                unprot_snap.effective_nitrite_hazard_mg_per_l,
+                "treated hazard ({:.4}) not lower than control ({:.4})",
+                treated_snap.effective_nitrite_hazard_mg_per_l,
+                control_snap.effective_nitrite_hazard_mg_per_l,
             ));
         }
         format!(
-            "{} | Protected: {} | Unprotected: {}",
+            "{} | Treated: {} | Control: {}",
             issues.join("; "),
-            shrimp_diag(&prot_snap),
-            shrimp_diag(&unprot_snap),
+            shrimp_diag(&treated_snap),
+            shrimp_diag(&control_snap),
         )
     };
 
@@ -1009,8 +1100,7 @@ fn probe_crash_mode() -> Result<(), Box<dyn std::error::Error>> {
 
     // At least 50% mortality expected
     run.assert_snapshot("population_crashed", |snap| {
-        let frac =
-            1.0 - (snap.total_shrimp_count as f64 / initial_count.max(1) as f64);
+        let frac = 1.0 - (snap.total_shrimp_count as f64 / initial_count.max(1) as f64);
         if frac < 0.50 {
             Err(format!(
                 "crash mode should produce >= 50% mortality, got {:.1}% \
@@ -1154,7 +1244,10 @@ fn run_probe_crash_mode() -> Result<ProbeResult, Box<dyn std::error::Error>> {
     } else {
         let mut issues = Vec::new();
         if !crashed {
-            issues.push(format!("mortality only {:.1}% (need >= 50%)", mortality_frac * 100.0));
+            issues.push(format!(
+                "mortality only {:.1}% (need >= 50%)",
+                mortality_frac * 100.0
+            ));
         }
         if !bad_water {
             issues.push(format!(
@@ -1163,7 +1256,10 @@ fn run_probe_crash_mode() -> Result<ProbeResult, Box<dyn std::error::Error>> {
             ));
         }
         if !poor_condition {
-            issues.push(format!("condition not poor ({:.3})", snap.shrimp_condition_index));
+            issues.push(format!(
+                "condition not poor ({:.3})",
+                snap.shrimp_condition_index
+            ));
         }
         format!("{} | {}", issues.join("; "), shrimp_diag(&snap))
     };

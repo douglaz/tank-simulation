@@ -133,6 +133,24 @@ fn shrimp_runtime_default_param_value(name: &str) -> Option<f64> {
         "molt_success_threshold" => Some(defaults.molt_success_threshold),
         "critical_molt_gh_ratio" => Some(defaults.critical_molt_gh_ratio),
         "chloride_protection_factor" => Some(defaults.chloride_protection_factor),
+        "density_repro_threshold_per_l" => Some(defaults.density_repro_threshold_per_l),
+        "density_repro_half_suppression_per_l" => {
+            Some(defaults.density_repro_half_suppression_per_l)
+        }
+        "tan_repro_threshold_mg_n_per_l" => Some(defaults.tan_repro_threshold_mg_n_per_l),
+        "no2_repro_threshold_mg_n_per_l" => Some(defaults.no2_repro_threshold_mg_n_per_l),
+        "egg_drop_temp_swing_c" => Some(defaults.egg_drop_temp_swing_c),
+        "egg_drop_instability_threshold" => Some(defaults.egg_drop_instability_threshold),
+        "egg_drop_max_probability" => Some(defaults.egg_drop_max_probability),
+        "egg_oxygen_reference_mg_l" => Some(defaults.egg_oxygen_reference_mg_l),
+        "reproductive_readiness_smoothing" => Some(defaults.reproductive_readiness_smoothing),
+        "full_clutch_condition_threshold" => Some(defaults.full_clutch_condition_threshold),
+        "instability_temp_swing_c" => Some(defaults.instability_temp_swing_c),
+        "instability_ph_swing" => Some(defaults.instability_ph_swing),
+        "instability_gh_swing_d" => Some(defaults.instability_gh_swing_d),
+        "instability_do_swing_mg_l" => Some(defaults.instability_do_swing_mg_l),
+        "instability_rise_smoothing" => Some(defaults.instability_rise_smoothing),
+        "instability_decay_smoothing" => Some(defaults.instability_decay_smoothing),
         _ => None,
     }
 }
@@ -569,6 +587,38 @@ pub struct ShrimpPreset {
     pub critical_molt_gh_ratio: Option<f64>,
     #[serde(default)]
     pub chloride_protection_factor: Option<f64>,
+    #[serde(default)]
+    pub density_repro_threshold_per_l: Option<f64>,
+    #[serde(default)]
+    pub density_repro_half_suppression_per_l: Option<f64>,
+    #[serde(default)]
+    pub tan_repro_threshold_mg_n_per_l: Option<f64>,
+    #[serde(default)]
+    pub no2_repro_threshold_mg_n_per_l: Option<f64>,
+    #[serde(default)]
+    pub egg_drop_temp_swing_c: Option<f64>,
+    #[serde(default)]
+    pub egg_drop_instability_threshold: Option<f64>,
+    #[serde(default)]
+    pub egg_drop_max_probability: Option<f64>,
+    #[serde(default)]
+    pub egg_oxygen_reference_mg_l: Option<f64>,
+    #[serde(default)]
+    pub reproductive_readiness_smoothing: Option<f64>,
+    #[serde(default)]
+    pub full_clutch_condition_threshold: Option<f64>,
+    #[serde(default)]
+    pub instability_temp_swing_c: Option<f64>,
+    #[serde(default)]
+    pub instability_ph_swing: Option<f64>,
+    #[serde(default)]
+    pub instability_gh_swing_d: Option<f64>,
+    #[serde(default)]
+    pub instability_do_swing_mg_l: Option<f64>,
+    #[serde(default)]
+    pub instability_rise_smoothing: Option<f64>,
+    #[serde(default)]
+    pub instability_decay_smoothing: Option<f64>,
     pub provenance: Option<Provenance>,
 
     /// Per-parameter provenance metadata keyed by parameter name.
@@ -784,6 +834,49 @@ impl ShrimpPreset {
                 "chloride_protection_factor",
                 self.chloride_protection_factor,
             ),
+            (
+                "density_repro_threshold_per_l",
+                self.density_repro_threshold_per_l,
+            ),
+            (
+                "density_repro_half_suppression_per_l",
+                self.density_repro_half_suppression_per_l,
+            ),
+            (
+                "tan_repro_threshold_mg_n_per_l",
+                self.tan_repro_threshold_mg_n_per_l,
+            ),
+            (
+                "no2_repro_threshold_mg_n_per_l",
+                self.no2_repro_threshold_mg_n_per_l,
+            ),
+            ("egg_drop_temp_swing_c", self.egg_drop_temp_swing_c),
+            (
+                "egg_drop_instability_threshold",
+                self.egg_drop_instability_threshold,
+            ),
+            ("egg_drop_max_probability", self.egg_drop_max_probability),
+            ("egg_oxygen_reference_mg_l", self.egg_oxygen_reference_mg_l),
+            (
+                "reproductive_readiness_smoothing",
+                self.reproductive_readiness_smoothing,
+            ),
+            (
+                "full_clutch_condition_threshold",
+                self.full_clutch_condition_threshold,
+            ),
+            ("instability_temp_swing_c", self.instability_temp_swing_c),
+            ("instability_ph_swing", self.instability_ph_swing),
+            ("instability_gh_swing_d", self.instability_gh_swing_d),
+            ("instability_do_swing_mg_l", self.instability_do_swing_mg_l),
+            (
+                "instability_rise_smoothing",
+                self.instability_rise_smoothing,
+            ),
+            (
+                "instability_decay_smoothing",
+                self.instability_decay_smoothing,
+            ),
         ] {
             let Some(value) = value else {
                 continue;
@@ -822,6 +915,16 @@ impl ShrimpPreset {
                 "sub_adult_molt_interval_days",
                 self.sub_adult_molt_interval_days,
             ),
+            (
+                "density_repro_half_suppression_per_l",
+                self.density_repro_half_suppression_per_l,
+            ),
+            ("egg_drop_temp_swing_c", self.egg_drop_temp_swing_c),
+            ("egg_oxygen_reference_mg_l", self.egg_oxygen_reference_mg_l),
+            ("instability_temp_swing_c", self.instability_temp_swing_c),
+            ("instability_ph_swing", self.instability_ph_swing),
+            ("instability_gh_swing_d", self.instability_gh_swing_d),
+            ("instability_do_swing_mg_l", self.instability_do_swing_mg_l),
         ] {
             if let Some(value) = value {
                 if value <= 0.0 {
@@ -902,6 +1005,27 @@ impl ShrimpPreset {
             ("molt_mineral_factor_floor", self.molt_mineral_factor_floor),
             ("molt_success_threshold", self.molt_success_threshold),
             ("critical_molt_gh_ratio", self.critical_molt_gh_ratio),
+            (
+                "egg_drop_instability_threshold",
+                self.egg_drop_instability_threshold,
+            ),
+            ("egg_drop_max_probability", self.egg_drop_max_probability),
+            (
+                "reproductive_readiness_smoothing",
+                self.reproductive_readiness_smoothing,
+            ),
+            (
+                "full_clutch_condition_threshold",
+                self.full_clutch_condition_threshold,
+            ),
+            (
+                "instability_rise_smoothing",
+                self.instability_rise_smoothing,
+            ),
+            (
+                "instability_decay_smoothing",
+                self.instability_decay_smoothing,
+            ),
         ] {
             if let Some(value) = value {
                 if value > 1.0 {
@@ -963,6 +1087,28 @@ impl ShrimpPreset {
             if base_clutch_size == 0 {
                 return Err("base_clutch_size must be > 0".to_string());
             }
+        }
+        let density_repro_threshold_per_l = self
+            .density_repro_threshold_per_l
+            .unwrap_or(ShrimpRuntimeParams::default().density_repro_threshold_per_l);
+        let density_repro_half_suppression_per_l = self
+            .density_repro_half_suppression_per_l
+            .unwrap_or(ShrimpRuntimeParams::default().density_repro_half_suppression_per_l);
+        if density_repro_threshold_per_l >= density_repro_half_suppression_per_l {
+            return Err(format!(
+                "density_repro_threshold_per_l ({density_repro_threshold_per_l}) must be < density_repro_half_suppression_per_l ({density_repro_half_suppression_per_l})"
+            ));
+        }
+        let min_clutch_condition = self
+            .min_clutch_condition
+            .unwrap_or(ShrimpRuntimeParams::default().min_clutch_condition);
+        let full_clutch_condition_threshold = self
+            .full_clutch_condition_threshold
+            .unwrap_or(ShrimpRuntimeParams::default().full_clutch_condition_threshold);
+        if min_clutch_condition >= full_clutch_condition_threshold {
+            return Err(format!(
+                "min_clutch_condition ({min_clutch_condition}) must be < full_clutch_condition_threshold ({full_clutch_condition_threshold})"
+            ));
         }
         Ok(())
     }
@@ -1109,6 +1255,54 @@ impl ParamMetaPreset for ShrimpPreset {
             "chloride_protection_factor" => self
                 .chloride_protection_factor
                 .or_else(|| shrimp_runtime_default_param_value(name)),
+            "density_repro_threshold_per_l" => self
+                .density_repro_threshold_per_l
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "density_repro_half_suppression_per_l" => self
+                .density_repro_half_suppression_per_l
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "tan_repro_threshold_mg_n_per_l" => self
+                .tan_repro_threshold_mg_n_per_l
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "no2_repro_threshold_mg_n_per_l" => self
+                .no2_repro_threshold_mg_n_per_l
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "egg_drop_temp_swing_c" => self
+                .egg_drop_temp_swing_c
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "egg_drop_instability_threshold" => self
+                .egg_drop_instability_threshold
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "egg_drop_max_probability" => self
+                .egg_drop_max_probability
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "egg_oxygen_reference_mg_l" => self
+                .egg_oxygen_reference_mg_l
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "reproductive_readiness_smoothing" => self
+                .reproductive_readiness_smoothing
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "full_clutch_condition_threshold" => self
+                .full_clutch_condition_threshold
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "instability_temp_swing_c" => self
+                .instability_temp_swing_c
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "instability_ph_swing" => self
+                .instability_ph_swing
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "instability_gh_swing_d" => self
+                .instability_gh_swing_d
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "instability_do_swing_mg_l" => self
+                .instability_do_swing_mg_l
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "instability_rise_smoothing" => self
+                .instability_rise_smoothing
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "instability_decay_smoothing" => self
+                .instability_decay_smoothing
+                .or_else(|| shrimp_runtime_default_param_value(name)),
             _ => None,
         }
     }
@@ -1167,6 +1361,22 @@ impl ParamMetaPreset for ShrimpPreset {
                 | "molt_success_threshold"
                 | "critical_molt_gh_ratio"
                 | "chloride_protection_factor"
+                | "density_repro_threshold_per_l"
+                | "density_repro_half_suppression_per_l"
+                | "tan_repro_threshold_mg_n_per_l"
+                | "no2_repro_threshold_mg_n_per_l"
+                | "egg_drop_temp_swing_c"
+                | "egg_drop_instability_threshold"
+                | "egg_drop_max_probability"
+                | "egg_oxygen_reference_mg_l"
+                | "reproductive_readiness_smoothing"
+                | "full_clutch_condition_threshold"
+                | "instability_temp_swing_c"
+                | "instability_ph_swing"
+                | "instability_gh_swing_d"
+                | "instability_do_swing_mg_l"
+                | "instability_rise_smoothing"
+                | "instability_decay_smoothing"
         )
     }
 }

@@ -777,6 +777,34 @@ fn test_multiple_stressors_compound() -> Result<(), SimError> {
 
 #[test]
 fn test_all_reproduction_factors_are_named_parameters() -> Result<(), SimError> {
+    let preset = tank_data::load_shrimp("neocaridina_davidi")
+        .expect("neocaridina_davidi preset should load with reproduction knobs");
+    for param in [
+        "high_temp_repro_penalty_start_c",
+        "high_temp_repro_penalty_full_c",
+        "density_repro_threshold_per_l",
+        "density_repro_half_suppression_per_l",
+        "tan_repro_threshold_mg_n_per_l",
+        "no2_repro_threshold_mg_n_per_l",
+        "egg_drop_temp_swing_c",
+        "egg_drop_instability_threshold",
+        "egg_drop_max_probability",
+        "egg_oxygen_reference_mg_l",
+        "reproductive_readiness_smoothing",
+        "full_clutch_condition_threshold",
+        "instability_temp_swing_c",
+        "instability_ph_swing",
+        "instability_gh_swing_d",
+        "instability_do_swing_mg_l",
+        "instability_rise_smoothing",
+        "instability_decay_smoothing",
+    ] {
+        assert!(
+            preset.param_value(param).is_some(),
+            "Shrimp preset should expose `{param}` as a named tuning parameter"
+        );
+    }
+
     // Temperature curve knobs should change readiness under the same warm state.
     let mut temp_default = breeding_fixture(SimSeed(8008));
     temp_default.water.temperature_c = 29.0;
@@ -983,6 +1011,125 @@ fn test_all_reproduction_factors_are_named_parameters() -> Result<(), SimError> 
     );
 
     Ok(())
+}
+
+#[test]
+fn test_extracted_reproduction_tuning_parameters_change_behavior() {
+    // Readiness smoothing should control how quickly a bad environment
+    // suppresses breeding readiness.
+    let mut fast_smoothing = breeding_fixture(SimSeed(8018));
+    fast_smoothing.animal.reproductive_readiness_index = 1.0;
+    fast_smoothing.animal.adult.condition_index = 1.0;
+    fast_smoothing.animal.molt_stress_index = 0.0;
+    fast_smoothing.shrimp_params.base_spawn_rate = 0.0;
+    fast_smoothing
+        .shrimp_params
+        .reproductive_readiness_smoothing = 0.8;
+    fast_smoothing.water.temperature_c = 31.0;
+    fast_smoothing.environment.ambient_temp_c = 31.0;
+    fast_smoothing.stability_tracker.prev_temp_c = 31.0;
+    fast_smoothing.hardware.heater.enabled = false;
+
+    let mut slow_smoothing = fast_smoothing.clone();
+    slow_smoothing
+        .shrimp_params
+        .reproductive_readiness_smoothing = 0.02;
+
+    step_daily_shrimp(&mut fast_smoothing);
+    step_daily_shrimp(&mut slow_smoothing);
+
+    assert!(
+        fast_smoothing.animal.reproductive_readiness_index
+            < slow_smoothing.animal.reproductive_readiness_index,
+        "Higher readiness smoothing should react faster to the same heat stress: fast={:.4}, slow={:.4}",
+        fast_smoothing.animal.reproductive_readiness_index,
+        slow_smoothing.animal.reproductive_readiness_index,
+    );
+
+    // Egg-drop cap should tune clutch-loss severity under the same shock.
+    let mut low_cap = breeding_fixture(SimSeed(8019));
+    low_cap.animal.adult.count = 120;
+    low_cap.animal.berried_females_count = 60;
+    low_cap.animal.egg_cohorts = vec![EggCohort {
+        count: 60,
+        progress_days: 5.0,
+    }];
+    low_cap.shrimp_params.base_spawn_rate = 0.0;
+    low_cap.shrimp_params.egg_duration_days = 30;
+    low_cap.shrimp_params.egg_drop_instability_threshold = 0.0;
+    low_cap.shrimp_params.egg_drop_temp_swing_c = 1.0;
+    low_cap.shrimp_params.egg_drop_max_probability = 0.2;
+    low_cap.stability_tracker.instability_index = 1.0;
+    low_cap.stability_tracker.last_temp_swing_c = 5.0;
+
+    let mut high_cap = low_cap.clone();
+    high_cap.shrimp_params.egg_drop_max_probability = 0.9;
+
+    step_daily_shrimp(&mut low_cap);
+    step_daily_shrimp(&mut high_cap);
+
+    assert!(
+        low_cap.animal.berried_females_count > high_cap.animal.berried_females_count,
+        "Higher egg-drop cap should remove more clutches under the same disturbance: low_cap={} high_cap={}",
+        low_cap.animal.berried_females_count,
+        high_cap.animal.berried_females_count,
+    );
+
+    // Egg oxygen reference should tune hatch success at the same low DO level.
+    let mut oxygen_easy = breeding_fixture(SimSeed(8020));
+    oxygen_easy.animal.berried_females_count = 10;
+    oxygen_easy.animal.egg_cohorts = vec![EggCohort {
+        count: 10,
+        progress_days: f64::from(oxygen_easy.shrimp_params.egg_duration_days) - 1.0,
+    }];
+    oxygen_easy.shrimp_params.base_spawn_rate = 0.0;
+    oxygen_easy.shrimp_params.hatch_success_base = 1.0;
+    oxygen_easy.shrimp_params.base_clutch_size = 4;
+    oxygen_easy.animal.adult.condition_index = 1.0;
+    oxygen_easy.animal.adult.reserve_g = 100.0;
+    oxygen_easy.water.dissolved_oxygen_mg_total = 4.0 * oxygen_easy.water_volume_l();
+    oxygen_easy.shrimp_params.egg_oxygen_reference_mg_l = 4.0;
+
+    let mut oxygen_strict = oxygen_easy.clone();
+    oxygen_strict.shrimp_params.egg_oxygen_reference_mg_l = 8.0;
+
+    step_daily_shrimp(&mut oxygen_easy);
+    step_daily_shrimp(&mut oxygen_strict);
+
+    assert!(
+        oxygen_easy.animal.juvenile.count > oxygen_strict.animal.juvenile.count,
+        "Lower oxygen reference should permit more hatching at the same DO: easy={} strict={}",
+        oxygen_easy.animal.juvenile.count,
+        oxygen_strict.animal.juvenile.count,
+    );
+
+    // Full-clutch threshold should tune clutch size for middling-condition adults.
+    let mut relaxed_clutch = breeding_fixture(SimSeed(8021));
+    relaxed_clutch.animal.adult.condition_index = 0.6;
+    relaxed_clutch.animal.adult.reserve_g = 100.0;
+    relaxed_clutch.animal.berried_females_count = 6;
+    relaxed_clutch.animal.egg_cohorts = vec![EggCohort {
+        count: 6,
+        progress_days: f64::from(relaxed_clutch.shrimp_params.egg_duration_days) - 1.0,
+    }];
+    relaxed_clutch.shrimp_params.base_spawn_rate = 0.0;
+    relaxed_clutch.shrimp_params.hatch_success_base = 1.0;
+    relaxed_clutch.shrimp_params.base_clutch_size = 10;
+    relaxed_clutch.shrimp_params.min_clutch_condition = 0.3;
+    relaxed_clutch.shrimp_params.full_clutch_condition_threshold = 0.55;
+
+    let mut strict_clutch = relaxed_clutch.clone();
+    strict_clutch.shrimp_params.full_clutch_condition_threshold = 0.75;
+
+    step_daily_shrimp(&mut relaxed_clutch);
+    step_daily_shrimp(&mut strict_clutch);
+
+    assert!(
+        relaxed_clutch.animal.juvenile.count > strict_clutch.animal.juvenile.count,
+        "Lower full-clutch threshold should yield larger clutches at the same adult condition: relaxed={} strict={}",
+        relaxed_clutch.animal.juvenile.count,
+        strict_clutch.animal.juvenile.count,
+    );
 }
 
 // ── Integration tests ──────────────────────────────────────────────────────

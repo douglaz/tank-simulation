@@ -396,3 +396,54 @@ fn molt_stress_warning_reports_low_temperature() -> Result<(), tank_core::SimErr
 
     Ok(())
 }
+
+#[test]
+fn molt_stress_warning_threshold_is_named_parameter() -> Result<(), tank_core::SimError> {
+    let mut state = TankState::new(SimSeed(5502));
+    state.water.temperature_c = 24.0;
+    state.environment.ambient_temp_c = 24.0;
+    let vol = state.water_volume_l();
+    state.water.calcium_mg_total = 40.0 * vol;
+    state.water.magnesium_mg_total = 10.0 * vol;
+    state.water.alkalinity_meq_total = 8.0 * vol;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * vol;
+    state.water.dissolved_oxygen_mg_total = 8.0 * vol;
+
+    state.animal.adult.count = 10;
+    state.animal.adult.condition_index = 0.3;
+    state.animal.molt_stress_index = 0.55;
+    state.reseed_stability_tracker();
+
+    let mut default_engine = Engine::from_parts(state.clone(), vec![]);
+    default_engine.step_hours(24)?;
+    let default_warnings = default_engine
+        .full_state()
+        .event_log
+        .iter()
+        .filter(|e| e.kind == EventKind::MoltStressWarning)
+        .count();
+
+    state.shrimp_params.molt_stress_warning_threshold = 0.5;
+    let mut permissive_engine = Engine::from_parts(state, vec![]);
+    permissive_engine.step_hours(24)?;
+    let permissive_warnings: Vec<_> = permissive_engine
+        .full_state()
+        .event_log
+        .iter()
+        .filter(|e| e.kind == EventKind::MoltStressWarning)
+        .collect();
+
+    assert_eq!(
+        default_warnings, 0,
+        "default threshold should not emit when stress decays just below 0.6"
+    );
+    assert!(
+        !permissive_warnings.is_empty(),
+        "lowering the named warning threshold should emit a warning for the same stress state"
+    );
+    assert!(permissive_warnings
+        .iter()
+        .any(|event| event.cause_codes.contains(&EventCause::PoorCondition)));
+
+    Ok(())
+}

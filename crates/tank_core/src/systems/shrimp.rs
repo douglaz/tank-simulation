@@ -199,12 +199,14 @@ pub fn update_stability_tracker(state: &mut TankState) {
     let do_swing = (do_mg_l - tracker.prev_do_mg_l).abs();
     tracker.last_temp_swing_c = temp_swing;
 
-    // Weighted instability normalised to 0..1
-    let raw_instability = (temp_swing / params.instability_temp_swing_c.max(0.01)
-        + ph_swing / params.instability_ph_swing.max(0.01)
-        + gh_swing / params.instability_gh_swing_d.max(0.01)
-        + do_swing / params.instability_do_swing_mg_l.max(0.01))
-    .clamp(0.0, 1.0);
+    // Use the dominant normalized swing rather than summing components, so a
+    // single moderate chemistry nudge does not saturate the instability index
+    // just because another channel moved slightly on the same day.
+    let raw_instability = (temp_swing / params.instability_temp_swing_c.max(0.01))
+        .max(ph_swing / params.instability_ph_swing.max(0.01))
+        .max(gh_swing / params.instability_gh_swing_d.max(0.01))
+        .max(do_swing / params.instability_do_swing_mg_l.max(0.01))
+        .clamp(0.0, 1.0);
 
     let rise_smoothing = params.instability_rise_smoothing.clamp(0.0, 1.0);
     let decay_smoothing = params.instability_decay_smoothing.clamp(0.0, 1.0);
@@ -694,9 +696,13 @@ fn molt_cycle(state: &mut TankState) {
 
 fn update_reproductive_readiness(state: &mut TankState) {
     let target = reproductive_readiness_target(state);
+    let smoothing = state
+        .shrimp_params
+        .reproductive_readiness_smoothing
+        .clamp(0.0, 1.0);
 
     state.animal.reproductive_readiness_index +=
-        0.1 * (target - state.animal.reproductive_readiness_index);
+        smoothing * (target - state.animal.reproductive_readiness_index);
     state.animal.reproductive_readiness_index =
         state.animal.reproductive_readiness_index.clamp(0.0, 1.0);
 }
@@ -793,7 +799,7 @@ fn egg_dropping(state: &mut TankState) {
     let temp_swing_pressure = egg_drop_temp_swing_pressure(temp_swing_c, params);
     let drop_prob = instability_pressure
         .max(temp_swing_pressure)
-        .clamp(0.0, 0.6);
+        .clamp(0.0, params.egg_drop_max_probability.clamp(0.0, 1.0));
 
     if drop_prob <= f64::EPSILON {
         return;
@@ -876,7 +882,7 @@ fn egg_development(state: &mut TankState) {
     let params = &state.shrimp_params;
 
     let f_condition = state.animal.adult.condition_index;
-    let f_oxygen = (do_mg_l / 6.0).clamp(0.0, 1.0);
+    let f_oxygen = (do_mg_l / params.egg_oxygen_reference_mg_l.max(0.01)).clamp(0.0, 1.0);
     let f_temp = temp_repro_factor(temp, params);
     let f_stability = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
     let f_tan = tan_repro_factor(tan_mg_n_per_l, params);
@@ -999,12 +1005,16 @@ fn egg_development(state: &mut TankState) {
 fn clutch_condition_modifier(adult_condition: f64, params: &ShrimpRuntimeParams) -> u32 {
     let base = params.base_clutch_size;
     let min_cond = params.min_clutch_condition;
+    let full_cond = params
+        .full_clutch_condition_threshold
+        .max(min_cond + f64::EPSILON);
 
-    let modifier = if adult_condition >= 0.7 {
+    let modifier = if adult_condition >= full_cond {
         1.0
     } else if adult_condition >= min_cond {
-        // Linear taper from 1.0 at 0.7 to 0.5 at min_clutch_condition
-        0.5 + 0.5 * (adult_condition - min_cond) / (0.7 - min_cond).max(f64::EPSILON)
+        // Linear taper from 1.0 at the configured full-clutch threshold to
+        // 0.5 at min_clutch_condition.
+        0.5 + 0.5 * (adult_condition - min_cond) / (full_cond - min_cond).max(f64::EPSILON)
     } else {
         0.0
     };
@@ -2163,6 +2173,39 @@ mod tests {
             low_cl_mortality > high_cl_mortality,
             "low chloride should produce higher adult mortality probability: \
              low_cl={low_cl_mortality}, high_cl={high_cl_mortality}"
+        );
+    }
+
+    #[test]
+    fn test_molt_stress_mortality_threshold_is_named_parameter() {
+        let mut baseline = TankState::new(SimSeed(20_003));
+        baseline.animal.adult.count = 10;
+        baseline.animal.adult.condition_index = 1.0;
+        baseline.animal.molt_stress_index = 0.55;
+        baseline.process_params.shrimp_base_mortality_per_day = 0.0;
+        baseline.process_params.shrimp_stress_mortality_scale = 1.0;
+
+        let mut lower_threshold = baseline.clone();
+        lower_threshold
+            .shrimp_params
+            .molt_stress_mortality_threshold = 0.3;
+
+        let mut higher_threshold = baseline.clone();
+        higher_threshold
+            .shrimp_params
+            .molt_stress_mortality_threshold = 0.7;
+
+        let baseline_mortality = compute_mortality_probabilities(&baseline).adult;
+        let lower_threshold_mortality = compute_mortality_probabilities(&lower_threshold).adult;
+        let higher_threshold_mortality = compute_mortality_probabilities(&higher_threshold).adult;
+
+        assert!(
+            lower_threshold_mortality > baseline_mortality,
+            "lowering the named molt-stress mortality threshold should increase mortality ({lower_threshold_mortality} > {baseline_mortality})"
+        );
+        assert!(
+            baseline_mortality > higher_threshold_mortality,
+            "raising the named molt-stress mortality threshold should reduce mortality ({baseline_mortality} > {higher_threshold_mortality})"
         );
     }
 }

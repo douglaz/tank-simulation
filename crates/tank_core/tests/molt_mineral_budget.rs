@@ -307,6 +307,19 @@ fn test_mineral_modifier_named_parameters() {
     let permissive_mg = molt_mineral_modifier(4.0, 15.0, 3.0, &params);
     assert!(permissive_mg > baseline);
 
+    params = ShrimpRuntimeParams::default();
+    let strict_high_gh = molt_mineral_modifier(14.0, 20.0, 5.0, &params);
+    params.molt_gh_excess_penalty_divisor = 20.0;
+    let permissive_high_gh = molt_mineral_modifier(14.0, 20.0, 5.0, &params);
+    assert!(permissive_high_gh > strict_high_gh);
+
+    params = ShrimpRuntimeParams::default();
+    let default_floor = molt_mineral_modifier(8.0, 2.0, 0.5, &params);
+    params.molt_mineral_factor_floor = 0.1;
+    let lower_floor = molt_mineral_modifier(8.0, 2.0, 0.5, &params);
+    assert!(lower_floor < default_floor);
+
+    params = ShrimpRuntimeParams::default();
     assert_eq!(params.molt_success_threshold, 0.55);
     assert_eq!(params.critical_molt_gh_ratio, 0.3);
     assert_eq!(params.failed_molt_accum_increase_per_failed_stage, 0.3);
@@ -318,6 +331,20 @@ fn test_mineral_modifier_named_parameters() {
     assert_eq!(params.molt_reserve_weight, 0.25);
     assert_eq!(params.molt_failure_poor_condition_threshold, 0.65);
     assert_eq!(params.molt_failure_instability_threshold, 0.3);
+    assert_eq!(params.molt_stress_warning_threshold, 0.6);
+    assert_eq!(params.molt_stress_mortality_threshold, 0.5);
+    assert_eq!(params.molt_stress_mineral_gh_weight, 0.5);
+    assert_eq!(params.molt_stress_mineral_ca_weight, 0.3);
+    assert_eq!(params.molt_stress_mineral_mg_weight, 0.2);
+    assert_eq!(params.molt_stress_pressure_mineral_weight, 0.3);
+    assert_eq!(params.molt_stress_pressure_instability_weight, 0.3);
+    assert_eq!(params.molt_stress_pressure_condition_weight, 0.2);
+    assert_eq!(params.molt_stress_pressure_thermal_weight, 0.2);
+    assert_eq!(params.molt_stress_pressure_hourly_weight, 0.3);
+    assert_eq!(params.molt_stress_rise_smoothing, 0.2);
+    assert_eq!(params.molt_stress_decay_smoothing, 0.05);
+    assert_eq!(params.molt_gh_excess_penalty_divisor, 10.0);
+    assert_eq!(params.molt_mineral_factor_floor, 0.3);
     assert!(params.juvenile_molt_interval_days < params.sub_adult_molt_interval_days);
     assert!(params.sub_adult_molt_interval_days < params.base_molt_interval_days);
 }
@@ -427,6 +454,57 @@ fn test_molt_condition_modifier_named_parameters() {
                 * 0.05;
         }),
         "lowering the named reserve target should let the same reserve pool clear the molt gate"
+    );
+}
+
+#[test]
+fn test_molt_stress_parameters_are_named() {
+    let build_state = |seed: SimSeed| {
+        let mut state = molt_test_state(seed);
+        configure_stage_locked_population(&mut state, 10, 0, 0);
+        set_minerals(&mut state, 10.0, 20.0);
+        state.animal.set_population_condition_index(1.0);
+        state.animal.molt_stress_index = 0.0;
+        state.process_params.shrimp_condition_smoothing = 0.0;
+        state
+    };
+
+    let mut baseline = build_state(SimSeed(8_348));
+    step_daily_shrimp(&mut baseline);
+
+    let mut ca_weighted = build_state(SimSeed(8_349));
+    ca_weighted.shrimp_params.molt_stress_mineral_gh_weight = 0.0;
+    ca_weighted.shrimp_params.molt_stress_mineral_ca_weight = 1.0;
+    ca_weighted.shrimp_params.molt_stress_mineral_mg_weight = 0.0;
+    step_daily_shrimp(&mut ca_weighted);
+
+    let mut no_mineral_pressure = build_state(SimSeed(8_350));
+    no_mineral_pressure
+        .shrimp_params
+        .molt_stress_pressure_mineral_weight = 0.0;
+    step_daily_shrimp(&mut no_mineral_pressure);
+
+    let mut fast_rise = build_state(SimSeed(8_351));
+    fast_rise.shrimp_params.molt_stress_rise_smoothing = 1.0;
+    step_daily_shrimp(&mut fast_rise);
+
+    assert!(
+        ca_weighted.animal.molt_stress_index > baseline.animal.molt_stress_index,
+        "raising the named calcium weight should increase stress under isolated Ca deficiency ({:.4} > {:.4})",
+        ca_weighted.animal.molt_stress_index,
+        baseline.animal.molt_stress_index
+    );
+    assert!(
+        no_mineral_pressure.animal.molt_stress_index < baseline.animal.molt_stress_index,
+        "zeroing the named mineral-pressure weight should soften molt stress ({:.4} < {:.4})",
+        no_mineral_pressure.animal.molt_stress_index,
+        baseline.animal.molt_stress_index
+    );
+    assert!(
+        fast_rise.animal.molt_stress_index > baseline.animal.molt_stress_index,
+        "raising the named rise smoothing should make stress respond faster ({:.4} > {:.4})",
+        fast_rise.animal.molt_stress_index,
+        baseline.animal.molt_stress_index
     );
 }
 

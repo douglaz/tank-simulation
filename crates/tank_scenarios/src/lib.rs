@@ -892,6 +892,54 @@ fn shrimp_preset_to_params(
     if let Some(value) = shrimp_preset.chloride_protection_factor {
         params.chloride_protection_factor = value;
     }
+    if let Some(value) = shrimp_preset.density_repro_threshold_per_l {
+        params.density_repro_threshold_per_l = value;
+    }
+    if let Some(value) = shrimp_preset.density_repro_half_suppression_per_l {
+        params.density_repro_half_suppression_per_l = value;
+    }
+    if let Some(value) = shrimp_preset.tan_repro_threshold_mg_n_per_l {
+        params.tan_repro_threshold_mg_n_per_l = value;
+    }
+    if let Some(value) = shrimp_preset.no2_repro_threshold_mg_n_per_l {
+        params.no2_repro_threshold_mg_n_per_l = value;
+    }
+    if let Some(value) = shrimp_preset.egg_drop_temp_swing_c {
+        params.egg_drop_temp_swing_c = value;
+    }
+    if let Some(value) = shrimp_preset.egg_drop_instability_threshold {
+        params.egg_drop_instability_threshold = value;
+    }
+    if let Some(value) = shrimp_preset.egg_drop_max_probability {
+        params.egg_drop_max_probability = value;
+    }
+    if let Some(value) = shrimp_preset.egg_oxygen_reference_mg_l {
+        params.egg_oxygen_reference_mg_l = value;
+    }
+    if let Some(value) = shrimp_preset.reproductive_readiness_smoothing {
+        params.reproductive_readiness_smoothing = value;
+    }
+    if let Some(value) = shrimp_preset.full_clutch_condition_threshold {
+        params.full_clutch_condition_threshold = value;
+    }
+    if let Some(value) = shrimp_preset.instability_temp_swing_c {
+        params.instability_temp_swing_c = value;
+    }
+    if let Some(value) = shrimp_preset.instability_ph_swing {
+        params.instability_ph_swing = value;
+    }
+    if let Some(value) = shrimp_preset.instability_gh_swing_d {
+        params.instability_gh_swing_d = value;
+    }
+    if let Some(value) = shrimp_preset.instability_do_swing_mg_l {
+        params.instability_do_swing_mg_l = value;
+    }
+    if let Some(value) = shrimp_preset.instability_rise_smoothing {
+        params.instability_rise_smoothing = value;
+    }
+    if let Some(value) = shrimp_preset.instability_decay_smoothing {
+        params.instability_decay_smoothing = value;
+    }
 
     params
 }

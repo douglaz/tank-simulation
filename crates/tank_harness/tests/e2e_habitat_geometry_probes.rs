@@ -225,6 +225,13 @@ fn panic_message(panic: Box<dyn std::any::Any + Send>) -> String {
         .unwrap_or_else(|| "unknown panic".to_string())
 }
 
+fn probe_artifact_label(base: &str, suffix: Option<&str>) -> String {
+    match suffix {
+        Some(suffix) => format!("{base}_{suffix}"),
+        None => base.to_string(),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // 1. Biofilter scaling: bigger filter media → higher nitrifier capacity
 //    → faster cycling
@@ -246,8 +253,8 @@ fn panic_message(panic: Box<dyn std::any::Any + Send>) -> String {
 ///   higher nitrifier carrying capacity
 /// - Under the same ammonia challenge, the larger filter clears combined
 ///   reduced nitrogen (TAN + NO₂) at least as fast, or if neither run fully
-///   clears the pulse inside the horizon, it still supports more nitrifier
-///   biomass
+///   clears the pulse inside the horizon, it still ends with lower reduced-N
+///   plus more nitrifier biomass from post-seeding growth
 /// - Both tanks remain within basic stability envelopes
 #[test]
 fn probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<(), Box<dyn std::error::Error>> {
@@ -256,14 +263,20 @@ fn probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<(), Box<dyn s
 
 fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
 ) -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix(None)
+}
+
+fn run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix(
+    artifact_suffix: Option<&str>,
+) -> Result<ProbeResult, Box<dyn std::error::Error>> {
     const SMALL_MEDIA_CM2: f64 = 500.0;
     const LARGE_MEDIA_CM2: f64 = 4000.0;
     const INITIAL_CAPACITY_FRACTION: f64 = 0.35;
     const INITIAL_TAN_MG_N_PER_L: f64 = 4.0;
-    const DURATION_HOURS: u32 = 24 * 21;
+    const DURATION_HOURS: u32 = 24 * 28;
     const REDUCED_N_CLEARANCE_THRESHOLD: f64 = 1.0;
 
-    let build_state = |seed: SimSeed, media_area_cm2: f64| -> TankState {
+    let base_state = |seed: SimSeed, media_area_cm2: f64| -> TankState {
         let mut state = TankState::new(seed);
         state.geometry.length_cm = 60.0;
         state.geometry.width_cm = 30.0;
@@ -309,15 +322,32 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
         state.process_params.feed_leach_rate_per_hour = 0.0;
         state.process_params.decomposer_vmax_per_hour = 0.0;
         state.refresh_habitat_registry();
+        state
+    };
 
+    let small_reference = base_state(SimSeed(42), SMALL_MEDIA_CM2);
+    let reference_seeded_total_nitrifier_g = compute_biofilter_carrying_capacity(
+        &small_reference.habitat_registry,
+        small_reference
+            .process_params
+            .nitrifier_base_density_g_per_cm2,
+    ) * INITIAL_CAPACITY_FRACTION;
+
+    let build_state = |seed: SimSeed, media_area_cm2: f64| -> TankState {
+        let mut state = base_state(seed, media_area_cm2);
         let carrying_capacity_g = compute_biofilter_carrying_capacity(
             &state.habitat_registry,
             state.process_params.nitrifier_base_density_g_per_cm2,
         );
-        let seeded_total_nitrifier_g = carrying_capacity_g * INITIAL_CAPACITY_FRACTION;
-        state.microbe.ammonia_oxidizer_biomass_g = seeded_total_nitrifier_g * 0.6;
-        state.microbe.nitrite_oxidizer_biomass_g = seeded_total_nitrifier_g * 0.3;
+        let seeded_total_nitrifier_g = reference_seeded_total_nitrifier_g.min(carrying_capacity_g);
+        state.microbe.ammonia_oxidizer_biomass_g = seeded_total_nitrifier_g * 0.45;
+        state.microbe.nitrite_oxidizer_biomass_g = seeded_total_nitrifier_g * 0.45;
         state.microbe.comammox_biomass_g = seeded_total_nitrifier_g * 0.1;
+        state.filter_state.biofilter_maturity_index = if carrying_capacity_g > f64::EPSILON {
+            (seeded_total_nitrifier_g / carrying_capacity_g).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
         state.refresh_habitat_registry();
         state
     };
@@ -327,14 +357,14 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
         "biofilter_capacity",
         build_state(SimSeed(42), SMALL_MEDIA_CM2),
     )
-    .with_artifact_label("biofilter_small");
+    .with_artifact_label(probe_artifact_label("biofilter_small", artifact_suffix));
     run_small.enable_instrumentation();
     let mut run_large = HarnessRun::from_state(
         SimSeed(42),
         "biofilter_capacity",
         build_state(SimSeed(42), LARGE_MEDIA_CM2),
     )
-    .with_artifact_label("biofilter_large");
+    .with_artifact_label(probe_artifact_label("biofilter_large", artifact_suffix));
     run_large.enable_instrumentation();
 
     let filter_area = |state: &TankState| {
@@ -399,6 +429,8 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
 
     let snap_small = run_small.snapshot();
     let snap_large = run_large.snapshot();
+    let final_reduced_n_small = snap_small.tan_mg_n_per_l + snap_small.nitrite_mg_n_per_l;
+    let final_reduced_n_large = snap_large.tan_mg_n_per_l + snap_large.nitrite_mg_n_per_l;
     let nitrifier_small = nitrifier_biomass(run_small.engine().full_state());
     let nitrifier_large = nitrifier_biomass(run_large.engine().full_state());
 
@@ -410,7 +442,13 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
         "Biofilter metrics: filter_area small={filter_area_small:.1} cm² large={filter_area_large:.1} cm²; \
          capacity small={capacity_small:.4}g large={capacity_large:.4}g; \
          reduced-N exposure small={reduced_n_exposure_small:.2} large={reduced_n_exposure_large:.2}; \
-         clearance small={reduced_n_clearance_small:?}h large={reduced_n_clearance_large:?}h"
+         final TAN small={:.3} large={:.3}; final NO₂ small={:.3} large={:.3}; \
+         final reduced-N small={final_reduced_n_small:.3} large={final_reduced_n_large:.3}; \
+         clearance small={reduced_n_clearance_small:?}h large={reduced_n_clearance_large:?}h",
+        snap_small.tan_mg_n_per_l,
+        snap_large.tan_mg_n_per_l,
+        snap_small.nitrite_mg_n_per_l,
+        snap_large.nitrite_mg_n_per_l,
     );
 
     {
@@ -435,11 +473,11 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
         );
         record_check(
             &mut runs,
-            "biofilter_reduced_n_exposure",
-            reduced_n_exposure_large < reduced_n_exposure_small,
+            "biofilter_terminal_reduced_n",
+            final_reduced_n_large < final_reduced_n_small,
             format!(
-                "larger filter should reduce TAN+NO₂ exposure under the same ammonia challenge: \
-                 small={reduced_n_exposure_small:.2}, large={reduced_n_exposure_large:.2}"
+                "after the same seeded biomass warm-up, the larger filter should finish with lower TAN+NO₂: \
+                 small={final_reduced_n_small:.3}, large={final_reduced_n_large:.3}"
             ),
         );
         record_check(
@@ -469,7 +507,20 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
                     "smaller filter cleared TAN+NO₂ by {small_hour}h but the larger filter never did"
                 ),
             ),
-            (None, None) => {}
+            (None, None) => record_check(
+                &mut runs,
+                "biofilter_no_clearance_fallback",
+                snap_large.tan_mg_n_per_l < snap_small.tan_mg_n_per_l
+                    && snap_large.nitrite_mg_n_per_l <= snap_small.nitrite_mg_n_per_l,
+                format!(
+                    "if neither filter clears TAN+NO₂ inside the horizon, the larger media pack should still finish with lower TAN and no worse NO₂: \
+                     TAN small={:.4} large={:.4}, NO₂ small={:.4} large={:.4}",
+                    snap_small.tan_mg_n_per_l,
+                    snap_large.tan_mg_n_per_l,
+                    snap_small.nitrite_mg_n_per_l,
+                    snap_large.nitrite_mg_n_per_l,
+                ),
+            ),
         }
     }
 
@@ -492,7 +543,13 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
         "biofilter_scaling",
         format!(
             "area {filter_area_small:.0}->{filter_area_large:.0} cm², capacity {capacity_small:.3}->{capacity_large:.3} g, \
-             reduced-N exposure {reduced_n_exposure_small:.2}->{reduced_n_exposure_large:.2}, clearance {reduced_n_clearance_small:?}->{reduced_n_clearance_large:?}"
+             reduced-N exposure {reduced_n_exposure_small:.2}->{reduced_n_exposure_large:.2}, \
+             final TAN {tan_small:.3}->{tan_large:.3}, final NO₂ {no2_small:.3}->{no2_large:.3}, \
+             final reduced-N {final_reduced_n_small:.3}->{final_reduced_n_large:.3}, clearance {reduced_n_clearance_small:?}->{reduced_n_clearance_large:?}",
+            tan_small = snap_small.tan_mg_n_per_l,
+            tan_large = snap_large.tan_mg_n_per_l,
+            no2_small = snap_small.nitrite_mg_n_per_l,
+            no2_large = snap_large.nitrite_mg_n_per_l,
         ),
         vec![run_small, run_large],
     ))
@@ -525,6 +582,12 @@ fn probe_light_depth_shallow_vs_deep_growth() -> Result<(), Box<dyn std::error::
 
 fn run_probe_light_depth_shallow_vs_deep_growth() -> Result<ProbeResult, Box<dyn std::error::Error>>
 {
+    run_probe_light_depth_shallow_vs_deep_growth_with_suffix(None)
+}
+
+fn run_probe_light_depth_shallow_vs_deep_growth_with_suffix(
+    artifact_suffix: Option<&str>,
+) -> Result<ProbeResult, Box<dyn std::error::Error>> {
     // Build two tanks with SAME footprint but different fill heights.
     // Use from_state to control geometry directly without size_scale
     // (which would change footprint and starting biomass).
@@ -571,11 +634,11 @@ fn run_probe_light_depth_shallow_vs_deep_growth() -> Result<ProbeResult, Box<dyn
     let state_deep = build_state(55.0);
 
     let mut run_shallow = HarnessRun::from_state(SimSeed(77), "light_depth", state_shallow)
-        .with_artifact_label("light_shallow");
+        .with_artifact_label(probe_artifact_label("light_shallow", artifact_suffix));
     run_shallow.enable_instrumentation();
 
     let mut run_deep = HarnessRun::from_state(SimSeed(77), "light_depth", state_deep)
-        .with_artifact_label("light_deep");
+        .with_artifact_label(probe_artifact_label("light_deep", artifact_suffix));
     run_deep.enable_instrumentation();
 
     let shallow_depth = run_shallow
@@ -732,6 +795,12 @@ fn probe_habitat_fouling_glass_vs_filter() -> Result<(), Box<dyn std::error::Err
 }
 
 fn run_probe_habitat_fouling_glass_vs_filter() -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_habitat_fouling_glass_vs_filter_with_suffix(None)
+}
+
+fn run_probe_habitat_fouling_glass_vs_filter_with_suffix(
+    artifact_suffix: Option<&str>,
+) -> Result<ProbeResult, Box<dyn std::error::Error>> {
     let build_run = |light_preset: StartupLightPreset,
                      feed_g: f64,
                      label: &str|
@@ -749,7 +818,7 @@ fn run_probe_habitat_fouling_glass_vs_filter() -> Result<ProbeResult, Box<dyn st
             ..StartupOverrides::default()
         };
         let mut run = HarnessRun::with_overrides(SimSeed(55), "medium_planted", overrides)?
-            .with_artifact_label(label);
+            .with_artifact_label(probe_artifact_label(label, artifact_suffix));
         run.enable_instrumentation();
         Ok((run, feed_g))
     };
@@ -922,9 +991,16 @@ fn probe_substrate_redox_denitrification() -> Result<(), Box<dyn std::error::Err
 }
 
 fn run_probe_substrate_redox_denitrification() -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_substrate_redox_denitrification_with_suffix(None)
+}
+
+fn run_probe_substrate_redox_denitrification_with_suffix(
+    artifact_suffix: Option<&str>,
+) -> Result<ProbeResult, Box<dyn std::error::Error>> {
     const ROOTED_BIOMASS_G: f64 = 6.0;
     const DECOMPOSER_BIOMASS_G: f64 = 10.0;
     const DURATION_DAYS: u32 = 60;
+    const LATE_WINDOW_START_DAY: u32 = 30;
 
     let configure_redox_baseline = |state: &mut TankState| {
         let volume_l = state.water_volume_l();
@@ -988,11 +1064,11 @@ fn run_probe_substrate_redox_denitrification() -> Result<ProbeResult, Box<dyn st
         // Thick planted substrate
         state.substrate_layers = vec![SubstrateLayerState {
             kind: SubstrateKind::ActivePlanted,
-            depth_cm: 8.0,
+            depth_cm: 12.0,
             o2_penetration_depth_cm: 1.5,
             porosity: 0.50,
             colonizable_area_factor: 0.8,
-            colonizable_area_cm2: footprint_cm2 * 8.0 * 0.8,
+            colonizable_area_cm2: footprint_cm2 * 12.0 * 0.8,
             nutrient_store_mg_n_total: 0.0,
             nutrient_store_mg_p_total: 0.0,
             cation_exchange_capacity_index: 0.5,
@@ -1046,11 +1122,11 @@ fn run_probe_substrate_redox_denitrification() -> Result<ProbeResult, Box<dyn st
     };
 
     let mut run_planted = HarnessRun::from_state(SimSeed(88), "redox", build_planted())
-        .with_artifact_label("redox_planted");
+        .with_artifact_label(probe_artifact_label("redox_planted", artifact_suffix));
     run_planted.enable_instrumentation();
 
     let mut run_inert = HarnessRun::from_state(SimSeed(88), "redox", build_inert())
-        .with_artifact_label("redox_inert");
+        .with_artifact_label(probe_artifact_label("redox_inert", artifact_suffix));
     run_inert.enable_instrumentation();
 
     let planted_initial_activity = run_planted
@@ -1087,10 +1163,27 @@ fn run_probe_substrate_redox_denitrification() -> Result<ProbeResult, Box<dyn st
         .find(|entry| entry.kind == HabitatKind::PlantSurfaces)
         .map(|entry| entry.colonizable_area_cm2)
         .unwrap_or(0.0);
+    let mut planted_late_min_suboxic_vol = f64::INFINITY;
+    let mut inert_late_max_suboxic_vol = 0.0;
 
     for _day in 0..DURATION_DAYS {
         run_planted.step_hours(24)?;
         run_inert.step_hours(24)?;
+
+        if run_planted.engine().full_state().environment.day >= LATE_WINDOW_START_DAY {
+            planted_late_min_suboxic_vol = planted_late_min_suboxic_vol.min(
+                run_planted
+                    .engine()
+                    .full_state()
+                    .substrate_suboxic_pore_volume_cm3(),
+            );
+            inert_late_max_suboxic_vol = inert_late_max_suboxic_vol.max(
+                run_inert
+                    .engine()
+                    .full_state()
+                    .substrate_suboxic_pore_volume_cm3(),
+            );
+        }
     }
 
     let state_planted = run_planted.engine().full_state();
@@ -1109,14 +1202,23 @@ fn run_probe_substrate_redox_denitrification() -> Result<ProbeResult, Box<dyn st
 
     let planted_final_activity = state_planted.microbe.denitrifier_activity_index;
     let inert_final_activity = state_inert.microbe.denitrifier_activity_index;
+    let planted_final_suboxic_vol = state_planted.substrate_suboxic_pore_volume_cm3();
+    let inert_final_suboxic_vol = state_inert.substrate_suboxic_pore_volume_cm3();
+    if !planted_late_min_suboxic_vol.is_finite() {
+        planted_late_min_suboxic_vol = planted_final_suboxic_vol;
+    }
     eprintln!(
-        "N₂ export: planted={:.4} mg N, inert={:.4} mg N; denitrifier activity planted {:.4}->{:.4}, inert {:.4}->{:.4}",
+        "N₂ export: planted={:.4} mg N, inert={:.4} mg N; denitrifier activity planted {:.4}->{:.4}, inert {:.4}->{:.4}; suboxic volume initial {:.2}->{:.2} cm³, inert {:.2}->{:.2} cm³",
         planted_export,
         inert_export,
         planted_initial_activity,
         planted_final_activity,
         inert_initial_activity,
-        inert_final_activity
+        inert_final_activity,
+        planted_initial_suboxic_vol,
+        planted_final_suboxic_vol,
+        inert_initial_suboxic_vol,
+        inert_final_suboxic_vol,
     );
     {
         let mut runs = [&mut run_planted, &mut run_inert];
@@ -1220,6 +1322,12 @@ fn probe_equipment_scaling_1x_vs_2x() -> Result<(), Box<dyn std::error::Error>> 
 }
 
 fn run_probe_equipment_scaling_1x_vs_2x() -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_equipment_scaling_1x_vs_2x_with_suffix(None)
+}
+
+fn run_probe_equipment_scaling_1x_vs_2x_with_suffix(
+    artifact_suffix: Option<&str>,
+) -> Result<ProbeResult, Box<dyn std::error::Error>> {
     let duration_hours: u32 = 500;
     let feed_per_adult_per_day: f64 = 0.001;
     let base_adult_count: u32 = 10;
@@ -1247,7 +1355,7 @@ fn run_probe_equipment_scaling_1x_vs_2x() -> Result<ProbeResult, Box<dyn std::er
             };
             Ok(
                 HarnessRun::with_overrides(SimSeed(42), "medium_planted", overrides)?
-                    .with_artifact_label(label),
+                    .with_artifact_label(probe_artifact_label(label, artifact_suffix)),
             )
         };
 
@@ -1365,6 +1473,31 @@ fn run_probe_equipment_scaling_1x_vs_2x() -> Result<ProbeResult, Box<dyn std::er
     ))
 }
 
+fn run_probe_biofilter_scaling_bigger_media_faster_cycling_summary(
+) -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix(Some("summary"))
+}
+
+fn run_probe_light_depth_shallow_vs_deep_growth_summary(
+) -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_light_depth_shallow_vs_deep_growth_with_suffix(Some("summary"))
+}
+
+fn run_probe_habitat_fouling_glass_vs_filter_summary(
+) -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_habitat_fouling_glass_vs_filter_with_suffix(Some("summary"))
+}
+
+fn run_probe_substrate_redox_denitrification_summary(
+) -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_substrate_redox_denitrification_with_suffix(Some("summary"))
+}
+
+fn run_probe_equipment_scaling_1x_vs_2x_summary() -> Result<ProbeResult, Box<dyn std::error::Error>>
+{
+    run_probe_equipment_scaling_1x_vs_2x_with_suffix(Some("summary"))
+}
+
 // ---------------------------------------------------------------------------
 // Summary runner
 // ---------------------------------------------------------------------------
@@ -1377,12 +1510,24 @@ fn all_habitat_geometry_probes_summary() -> Result<(), Box<dyn std::error::Error
     let probes: [(&str, ProbeFn); 5] = [
         (
             "biofilter_scaling",
-            run_probe_biofilter_scaling_bigger_media_faster_cycling,
+            run_probe_biofilter_scaling_bigger_media_faster_cycling_summary,
         ),
-        ("light_depth", run_probe_light_depth_shallow_vs_deep_growth),
-        ("habitat_fouling", run_probe_habitat_fouling_glass_vs_filter),
-        ("substrate_redox", run_probe_substrate_redox_denitrification),
-        ("equipment_scaling", run_probe_equipment_scaling_1x_vs_2x),
+        (
+            "light_depth",
+            run_probe_light_depth_shallow_vs_deep_growth_summary,
+        ),
+        (
+            "habitat_fouling",
+            run_probe_habitat_fouling_glass_vs_filter_summary,
+        ),
+        (
+            "substrate_redox",
+            run_probe_substrate_redox_denitrification_summary,
+        ),
+        (
+            "equipment_scaling",
+            run_probe_equipment_scaling_1x_vs_2x_summary,
+        ),
     ];
 
     let mut results = Vec::new();

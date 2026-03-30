@@ -371,6 +371,10 @@ fn step_hours_rejects_invalid_molt_mineral_parameters_before_simulation() {
         ("shrimp_params.molt_success_threshold", 1.2),
         ("shrimp_params.critical_molt_gh_ratio", 1.2),
         ("shrimp_params.chloride_protection_factor", -1.0),
+        ("shrimp_params.egg_drop_max_probability", 1.2),
+        ("shrimp_params.egg_oxygen_reference_mg_l", 0.0),
+        ("shrimp_params.reproductive_readiness_smoothing", -0.1),
+        ("shrimp_params.full_clutch_condition_threshold", 1.2),
     ];
 
     for (index, (field, value)) in invalid_cases.into_iter().enumerate() {
@@ -450,6 +454,18 @@ fn step_hours_rejects_invalid_molt_mineral_parameters_before_simulation() {
             }
             "shrimp_params.chloride_protection_factor" => {
                 state.shrimp_params.chloride_protection_factor = value;
+            }
+            "shrimp_params.egg_drop_max_probability" => {
+                state.shrimp_params.egg_drop_max_probability = value;
+            }
+            "shrimp_params.egg_oxygen_reference_mg_l" => {
+                state.shrimp_params.egg_oxygen_reference_mg_l = value;
+            }
+            "shrimp_params.reproductive_readiness_smoothing" => {
+                state.shrimp_params.reproductive_readiness_smoothing = value;
+            }
+            "shrimp_params.full_clutch_condition_threshold" => {
+                state.shrimp_params.full_clutch_condition_threshold = value;
             }
             _ => unreachable!(),
         }
