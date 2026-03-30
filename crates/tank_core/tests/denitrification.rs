@@ -77,9 +77,9 @@ fn denitrifying_state(seed: SimSeed) -> TankState {
     state
 }
 
-/// Build a long-horizon nitrifying setup that contrasts an active planted bed
-/// with mature denitrification against a shallow fully oxic control while
-/// holding upstream TAN loading and nitrifier seeding constant.
+/// Build a long-horizon nitrate-rich setup that contrasts an active planted
+/// bed with mature denitrification against a shallow fully oxic control while
+/// keeping the water-column chemistry and DOC supply fixed.
 fn long_horizon_denitrification_state(seed: SimSeed, active_denitrification: bool) -> TankState {
     let mut state = TankState::new(seed);
     let vol = state.water_volume_l();
@@ -117,17 +117,18 @@ fn long_horizon_denitrification_state(seed: SimSeed, active_denitrification: boo
         }]
     };
 
-    state.water.ammonia_total_mg_n_total = 2.0 * vol;
-    state.water.nitrate_mg_n_total = 0.0;
+    state.water.ammonia_total_mg_n_total = 0.0;
+    state.water.nitrate_mg_n_total = 20.0 * vol;
     state.water.dissolved_organic_carbon_mg_c_total = 10.0 * vol;
     state.water.dissolved_organic_nitrogen_mg_n_total = 1.0 * vol;
+    state.water.dissolved_oxygen_mg_total = 5.0 * vol;
 
-    state.microbe.ammonia_oxidizer_biomass_g = 0.2;
-    state.microbe.nitrite_oxidizer_biomass_g = 0.1;
-    state.microbe.comammox_biomass_g = 0.03;
-    state.microbe.denitrifier_activity_index = if active_denitrification { 0.8 } else { 0.0 };
-    state.microbe.decomposer_biomass_g = 0.0;
-    state.filter_state.biofilter_maturity_index = 0.7;
+    state.microbe.ammonia_oxidizer_biomass_g = 0.0;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.0;
+    state.microbe.comammox_biomass_g = 0.0;
+    state.microbe.denitrifier_activity_index = if active_denitrification { 1.0 } else { 0.0 };
+    state.microbe.decomposer_biomass_g = 2.0;
+    state.filter_state.biofilter_maturity_index = 0.0;
 
     state
         .process_params
@@ -144,6 +145,10 @@ fn long_horizon_denitrification_state(seed: SimSeed, active_denitrification: boo
     state.process_params.feed_leach_rate_per_hour = 0.0;
     state.process_params.fine_detritus_dissolution_rate_per_hour = 0.02;
     state.process_params.decomposer_vmax_per_hour = 0.0;
+    state.process_params.reaeration_kla_base = 0.0;
+    state
+        .process_params
+        .denitrification_vmax_mg_n_per_l_per_hour = 0.25;
 
     state.detritus.particulate_organics_g_total = 0.0;
     state.detritus.fine_detritus_g_total = 0.5;
@@ -570,31 +575,30 @@ fn test_denitrification_rate_scales_with_doc() -> Result<(), Box<dyn std::error:
 }
 
 // ---------------------------------------------------------------------------
-// Integration test: mature planted substrate shows lower steady-state nitrate
-// NOTE: Temporarily ignored — root-zone oxygenation hooks (5.4.3) interact
-// with denitrification in ways that need a more sophisticated test setup.
-// The 11 denitrification unit tests cover core logic; this integration test
-// should be revisited after the substrate redox model stabilizes.
+// Integration test: coupled substrate-zone + nitrogen-cycle stepping preserves
+// a nitrate gap between an active denitrifying bed and a shallow oxic control.
 // ---------------------------------------------------------------------------
 
 #[test]
-#[ignore]
 fn test_denitrification_reduces_nitrate_accumulation() -> Result<(), Box<dyn std::error::Error>> {
-    use tank_core::{Engine, SimulationEngine};
-
     let with_denit = long_horizon_denitrification_state(SimSeed(60), true);
     let without_denit = long_horizon_denitrification_state(SimSeed(60), false);
 
-    let mut engine_with = Engine::from_parts(with_denit, vec![]);
-    let mut engine_without = Engine::from_parts(without_denit, vec![]);
+    let run_case = |mut state: TankState| {
+        for _ in 0..500 {
+            tank_core::systems::substrate::step_substrate_zones(&mut state);
+            let _ = step_nitrogen_cycle(&mut state);
+        }
+        state
+    };
 
-    engine_with.step_hours(500)?;
-    engine_without.step_hours(500)?;
+    let final_with = run_case(with_denit);
+    let final_without = run_case(without_denit);
 
-    let no3_with = engine_with.full_state().nitrate_mg_n_per_l();
-    let no3_without = engine_without.full_state().nitrate_mg_n_per_l();
-    let export_with = engine_with.full_state().cumulative_n2_export_mg_n;
-    let export_without = engine_without.full_state().cumulative_n2_export_mg_n;
+    let no3_with = final_with.nitrate_mg_n_per_l();
+    let no3_without = final_without.nitrate_mg_n_per_l();
+    let export_with = final_with.cumulative_n2_export_mg_n;
+    let export_without = final_without.cumulative_n2_export_mg_n;
 
     assert!(
         no3_with < no3_without,

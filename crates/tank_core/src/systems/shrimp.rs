@@ -150,8 +150,9 @@ pub fn step_hourly_shrimp_stress(state: &mut TankState) {
 // ── Daily ───────────────────────────────────────────────────────────────────
 
 /// Full daily shrimp lifecycle: feeding -> condition -> molt stress ->
-/// molt cycle -> reproductive readiness -> spawning -> egg development/hatching ->
-/// juvenile recruitment (two-stage) -> mortality -> events.
+/// molt cycle -> reproductive readiness -> spawning -> egg dropping ->
+/// egg development/hatching -> juvenile recruitment (two-stage) ->
+/// mortality -> events.
 pub fn step_daily_shrimp(state: &mut TankState) {
     if state.animal.total_count() == 0 && state.animal.berried_females_count == 0 {
         reset_hourly_accumulators(state);
@@ -171,6 +172,7 @@ pub fn step_daily_shrimp(state: &mut TankState) {
     molt_cycle(state);
     update_reproductive_readiness(state);
     spawning(state);
+    egg_dropping(state);
     egg_development(state);
     juvenile_to_subadult(state);
     subadult_to_adult(state);
@@ -668,13 +670,19 @@ fn molt_cycle(state: &mut TankState) {
 fn update_reproductive_readiness(state: &mut TankState) {
     let temp = state.water.temperature_c;
     let params = &state.shrimp_params;
+    let chemistry = state.concentrations();
+    let volume_l = chemistry.volume_l();
 
     let f_temp = temp_repro_factor(temp, params);
     let f_condition = state.animal.adult.condition_index;
     let f_stability = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
     let f_molt = (1.0 - state.animal.molt_stress_index).clamp(0.0, 1.0);
+    let f_density = density_repro_factor(state.animal.total_count(), volume_l, params);
+    let f_tan = tan_repro_factor(chemistry.tan_mg_n_per_l(), params);
+    let f_no2 = no2_repro_factor(chemistry.nitrite_mg_n_per_l(), params);
 
-    let target = (f_temp * f_condition * f_stability * f_molt).clamp(0.0, 1.0);
+    let target =
+        (f_temp * f_condition * f_stability * f_molt * f_density * f_tan * f_no2).clamp(0.0, 1.0);
 
     state.animal.reproductive_readiness_index +=
         0.1 * (target - state.animal.reproductive_readiness_index);

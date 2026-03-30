@@ -328,6 +328,29 @@ pub struct ShrimpRuntimeParams {
     /// calibrated so that Cl:NO2 > 10:1 yields < 20% of unprotected hazard.
     #[serde(default = "default_chloride_protection_factor")]
     pub chloride_protection_factor: f64,
+
+    // ── Reproduction suppression parameters ────────────────────────────────
+    /// Density (shrimp per litre) below which per-capita reproduction is
+    /// unaffected. Above this, breeding rate declines monotonically.
+    #[serde(default = "default_density_repro_threshold_per_l")]
+    pub density_repro_threshold_per_l: f64,
+    /// Density (shrimp per litre) at which the density factor reaches 50%
+    /// of its unpenalised value (half-suppression point).
+    #[serde(default = "default_density_repro_half_suppression_per_l")]
+    pub density_repro_half_suppression_per_l: f64,
+    /// TAN concentration (mg N/L) above which reproduction is suppressed.
+    #[serde(default = "default_tan_repro_threshold_mg_n_per_l")]
+    pub tan_repro_threshold_mg_n_per_l: f64,
+    /// NO2 concentration (mg N/L) above which reproduction is suppressed.
+    #[serde(default = "default_no2_repro_threshold_mg_n_per_l")]
+    pub no2_repro_threshold_mg_n_per_l: f64,
+    /// Temperature swing (°C per day) that begins to trigger egg dropping
+    /// in berried females.
+    #[serde(default = "default_egg_drop_temp_swing_c")]
+    pub egg_drop_temp_swing_c: f64,
+    /// Instability index threshold above which egg dropping can occur.
+    #[serde(default = "default_egg_drop_instability_threshold")]
+    pub egg_drop_instability_threshold: f64,
 }
 
 /// Tracks recent chemistry swings for shrimp stress calculations.
@@ -691,6 +714,12 @@ impl Default for ShrimpRuntimeParams {
             molt_success_threshold: default_molt_success_threshold(),
             critical_molt_gh_ratio: default_critical_molt_gh_ratio(),
             chloride_protection_factor: default_chloride_protection_factor(),
+            density_repro_threshold_per_l: default_density_repro_threshold_per_l(),
+            density_repro_half_suppression_per_l: default_density_repro_half_suppression_per_l(),
+            tan_repro_threshold_mg_n_per_l: default_tan_repro_threshold_mg_n_per_l(),
+            no2_repro_threshold_mg_n_per_l: default_no2_repro_threshold_mg_n_per_l(),
+            egg_drop_temp_swing_c: default_egg_drop_temp_swing_c(),
+            egg_drop_instability_threshold: default_egg_drop_instability_threshold(),
         }
     }
 }
@@ -799,6 +828,30 @@ fn default_critical_molt_gh_ratio() -> f64 {
 }
 
 fn default_chloride_protection_factor() -> f64 {
+    0.5
+}
+
+fn default_density_repro_threshold_per_l() -> f64 {
+    10.0
+}
+
+fn default_density_repro_half_suppression_per_l() -> f64 {
+    20.0
+}
+
+fn default_tan_repro_threshold_mg_n_per_l() -> f64 {
+    1.0
+}
+
+fn default_no2_repro_threshold_mg_n_per_l() -> f64 {
+    0.5
+}
+
+fn default_egg_drop_temp_swing_c() -> f64 {
+    2.0
+}
+
+fn default_egg_drop_instability_threshold() -> f64 {
     0.5
 }
 
