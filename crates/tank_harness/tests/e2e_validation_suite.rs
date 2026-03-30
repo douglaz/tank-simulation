@@ -1307,7 +1307,7 @@ fn validation_suite_summary() {
     )> = vec![
         (
             "VS-01 Cycling timeline",
-            Box::new(|| run_vs01_cycling_timeline()),
+            Box::new(run_vs01_cycling_timeline),
         ),
         (
             "VS-02 Aeration effects",
@@ -1321,21 +1321,15 @@ fn validation_suite_summary() {
             "VS-04 Source-water differentiation",
             Box::new(|| run_vs04_source_water_differentiation().map_err(|e| e.into())),
         ),
-        (
-            "VS-05 Shrimp breeding",
-            Box::new(|| run_vs05_shrimp_breeding()),
-        ),
+        ("VS-05 Shrimp breeding", Box::new(run_vs05_shrimp_breeding)),
         (
             "VS-06 Algae-plant competition",
             Box::new(|| run_vs06_algae_plant_competition().map_err(|e| e.into())),
         ),
-        (
-            "VS-07 Nitrate removal",
-            Box::new(|| run_vs07_nitrate_removal()),
-        ),
+        ("VS-07 Nitrate removal", Box::new(run_vs07_nitrate_removal)),
         (
             "VS-08 Stocking density crash",
-            Box::new(|| run_vs08_stocking_density_crash()),
+            Box::new(run_vs08_stocking_density_crash),
         ),
     ];
 
@@ -1347,7 +1341,7 @@ fn validation_suite_summary() {
     eprintln!("============================================================\n");
 
     for (label, runner) in &probes {
-        let result = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| runner())) {
+        let result = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(runner)) {
             Ok(Ok(probe)) => probe,
             Ok(Err(err)) => ProbeResult {
                 name: label,
