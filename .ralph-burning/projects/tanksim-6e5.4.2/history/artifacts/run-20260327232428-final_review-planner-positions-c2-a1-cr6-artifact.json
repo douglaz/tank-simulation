@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327232428-final_review-planner-positions-c2-a1-cr6-artifact",
+  "payload_id": "run-20260327232428-final_review-planner-positions-c2-a1-cr6-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T03:22:36.887868831Z",
+  "content": "# Final Review Planner Positions\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nBoth amendments improve maintainability by making the carbonate-state contract explicit. The first removes misleading placeholder data in constructors; the second documents a real stage-order dependency where derived carbonate fields remain stale until chemistry runs.\n\n## Votes\n\n- `fr-6-ac16acee`: Accept\n  `bicarbonate_mg_total` is solver-derived and is immediately overwritten by `resolve_carbonate_state` in both constructors, so seeding it from `70.0 * volume_l` or `profile.bicarbonate_mg_per_l * volume_l` is misleading. That is especially true because `SourceWaterProfile.bicarbonate_mg_per_l` is already documented as display-only, not an authoritative runtime input. Initializing to `0.0` with an inline note makes the invariant clear without changing behavior, since the field is resolved before the constructed state escapes.\n- `fr-6-c7d4a16a`: Accept\n  The nitrogen cycle does mutate `alkalinity_meq_total` and intentionally leaves carbonate-derived fields stale until the later chemistry stage re-resolves them. That coupling is real and easy to break during refactors or step reordering. The existing note near the mutation mentions cached bicarbonate, but it does not clearly call out that `ph` is stale too or that any system inserted between steps 8 and 9 must not read those derived values. An explicit comment there improves safety by documenting the engine-order dependency where it matters.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 6
+}

@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330010446-apply_fixes-c2-a1-cr2-artifact",
+  "payload_id": "run-20260330010446-apply_fixes-c2-a1-cr2",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-30T02:03:24.422649185Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNo additional code changes were required after review; the previously applied habitat-pool redistribution, habitat-aware grazing, periphyton light-scaling correction, decomposer decay budgeting, and habitat-specific filter-cleaning setback remain the final scoped fixes for tanksim-6e5.5.3.\n\n## Steps\n\n1. [Completed] Reviewed the approved validation output and follow-up notes to determine whether any additional scoped fixes were required after the habitat-pool implementation changes.\n2. [Skipped] Applied scoped follow-up repository edits from review feedback.\n3. [Completed] Recorded the committed-state validation evidence and remaining non-blocking risks for handoff.\n\n## Validation Evidence\n\n- Full workspace tests passed on the committed state with 0 failures, including habitat biomass regressions, tank_core unit tests, budget tracking, and other regression suites.\n- Clippy was clean on the committed state with no warnings.\n- Full-workspace compilation succeeded on the committed state via cargo check.\n- Review verified acceptance-criteria coverage for habitat-specific periphyton and decomposer pools, habitat-aware grazing, conservation checks, save/load roundtrip behavior, and the lit-surface preference scenario.\n\n## Outstanding Risks\n\n- Filter-cleaning decomposer setback coefficients remain hardcoded heuristics and may need later scenario-level retuning as more maintenance and habitat interactions land.\n- The working tree still contains an unrelated uncommitted compile error in crates/tank_scenarios/src/lib.rs involving auto_stock_shrimp; that issue is outside this bead and was intentionally left untouched.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

@@ -1,0 +1,99 @@
+{
+  "rollback_id": "cc98483c-d66b-4c11-9dfb-2e590924ff9a",
+  "created_at": "2026-03-28T01:49:39.619805815Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "f18035738c586c6f4d25dbced428aa23896fea6b",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260327232428",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 4
+      },
+      "started_at": "2026-03-27T23:24:28.209316216Z",
+      "prompt_hash_at_cycle_start": "5abde49e7a84a16b",
+      "prompt_hash_at_stage_start": "5abde49e7a84a16b",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 3
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-27T23:59:18.757877469Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 4,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-3-fb8e9ac7",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "In carbonate_species_for_ph (chemistry.rs:66-73), the function receives dic_mol_per_l but after pH clamping at line 290, species are reprojected at the clamped pH. While species fractions still sum to DIC (mass conservation is preserved), the implicit alkalinity (HCO3 + 2*CO3) at the clamped pH no longer equals the input alkalinity. This is a deliberate design trade-off and is currently undocumented at the call site. Add a brief comment at line 290-292 noting that DIC conservation is maintained but alkalinity consistency is sacrificed at the clamp boundaries, so future maintainers don't try to 'fix' this by rebalancing.",
+          "created_at": "2026-03-28T01:49:39.533107126Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "85fb99c7612a8ee1a2c08ad8862b7c16e242c31adcdc9238745bfaf6fe6743cd"
+        },
+        {
+          "amendment_id": "fr-3-7d1a12fe",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "The bicarbonate_mg_total field in WaterState is a solver-derived cache (set by resolve_carbonate_state) but is included in total_tracked_ions_mg() (water.rs:215) which feeds TDS and conductivity calculations. Between a mutation of DIC/alkalinity and the next resolve_carbonate_state call, bicarbonate_mg_total is stale. The nitrogen cycle (nitrogen_cycle.rs:348-350) modifies alkalinity without resolving, relying on the subsequent chemistry step. This stale-window is safe today because the engine step ordering guarantees resolution before any TDS read, but it's a footgun for future system additions. Consider adding a doc comment on total_tracked_ions_mg() noting that callers must ensure resolve_carbonate_state has been called after the most recent DIC/alkalinity mutation.",
+          "created_at": "2026-03-28T01:49:39.533113157Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "e5d59fb4cba8107d09d52aa4a27594f0e5ab987626f0547cda4573936fde83f5"
+        },
+        {
+          "amendment_id": "fr-3-19b114c9",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "Correctness: `crates/tank_core/src/save.rs:331-340` seeds missing `animal.reserve_g` from existing shrimp biomass during the v3->v4 migration. That changes the physical state of every migrated save instead of preserving it. `reserve_g` is documented as post-feeding retained reserve, not structural shrimp biomass (`crates/tank_core/src/types/biology.rs:94-99`), and it is counted as separate N/C mass in the budget (`crates/tank_core/src/types/budget.rs:246-248`, `crates/tank_core/src/types/budget.rs:331-333`) and later spent for hatching/maturation (`crates/tank_core/src/systems/shrimp.rs:641-651`) or exported on shrimp removal (`crates/tank_core/src/engine.rs:402-408`). A schema-3 save with existing shrimp therefore gains free reserve, extra total mass, and potentially immediate reproduction/maturation progress just by loading. The migration should preserve old behavior by leaving `reserve_g` at its serde default of `0.0`, or by introducing a separate non-budgeted compatibility/display field if an inspectable value is still desired.",
+          "created_at": "2026-03-28T01:49:39.533120141Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "084481b8df057073b85a373047d13ae9224a6fb0fdf61322ab194cd6a5299dc3"
+        }
+      ],
+      "processed_count": 11
+    },
+    "status_summary": "running: final review restart round 4 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T01:36:02.881558664Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

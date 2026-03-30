@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-3-611309a2",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 3,
+  "body": "In `molt_condition_breakdown` (shrimp.rs:1419), the reserve target fraction `0.1` is hardcoded: `let reserve_target_g = wet_biomass_g * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G * 0.1;`. This constant defines the minimum reserve-per-shrimp for a healthy molt. The acceptance criteria state 'all molt-related thresholds and modifiers are named parameters in species/process data, not hardcoded constants.' Promote this to a named field on `ShrimpRuntimeParams` (e.g., `molt_reserve_fraction`) with a default of 0.1, and expose it in the species TOML.",
+  "created_at": "2026-03-30T06:44:08.366399629Z",
+  "batch_sequence": 1,
+  "source": "workflow_stage",
+  "dedup_key": "bdaa201c4e6a6b0190dd7ba38c68cbad22edab928fc6beb03fcec8dcc53bfbcb"
+}

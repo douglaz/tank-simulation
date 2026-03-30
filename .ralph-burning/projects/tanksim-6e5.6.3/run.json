@@ -1,0 +1,144 @@
+{
+  "active_run": {
+    "run_id": "run-20260330040229",
+    "stage_cursor": {
+      "stage": "plan_and_implement",
+      "cycle": 2,
+      "attempt": 1,
+      "completion_round": 4
+    },
+    "started_at": "2026-03-30T04:02:29.670494821Z",
+    "prompt_hash_at_cycle_start": "0382c2f612a24a4a",
+    "prompt_hash_at_stage_start": "0382c2f612a24a4a",
+    "qa_iterations_current_cycle": 0,
+    "review_iterations_current_cycle": 0,
+    "final_review_restart_count": 3,
+    "stage_resolution_snapshot": {
+      "stage_id": "plan_and_implement",
+      "resolved_at": "2026-03-30T06:44:08.609399739Z",
+      "primary_target": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  },
+  "status": "running",
+  "cycle_history": [
+    {
+      "cycle": 2,
+      "stage_id": "apply_fixes",
+      "started_at": "2026-03-30T04:41:52.787819971Z",
+      "completed_at": null
+    }
+  ],
+  "completion_rounds": 4,
+  "rollback_point_meta": {
+    "last_rollback_id": null,
+    "rollback_count": 0
+  },
+  "amendment_queue": {
+    "pending": [
+      {
+        "amendment_id": "fr-3-611309a2",
+        "source_stage": "final_review",
+        "source_cycle": 2,
+        "source_completion_round": 3,
+        "body": "In `molt_condition_breakdown` (shrimp.rs:1419), the reserve target fraction `0.1` is hardcoded: `let reserve_target_g = wet_biomass_g * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G * 0.1;`. This constant defines the minimum reserve-per-shrimp for a healthy molt. The acceptance criteria state 'all molt-related thresholds and modifiers are named parameters in species/process data, not hardcoded constants.' Promote this to a named field on `ShrimpRuntimeParams` (e.g., `molt_reserve_fraction`) with a default of 0.1, and expose it in the species TOML.",
+        "created_at": "2026-03-30T06:44:08.366399629Z",
+        "batch_sequence": 1,
+        "source": "workflow_stage",
+        "dedup_key": "bdaa201c4e6a6b0190dd7ba38c68cbad22edab928fc6beb03fcec8dcc53bfbcb"
+      },
+      {
+        "amendment_id": "fr-3-ae494480",
+        "source_stage": "final_review",
+        "source_cycle": 2,
+        "source_completion_round": 3,
+        "body": "In `molt_condition_breakdown` (shrimp.rs:1427), the condition-vs-reserve weights `0.75` and `0.25` are hardcoded: `(0.75 * condition_index.clamp(0.0, 1.0) + 0.25 * reserve_factor)`. Similarly, the `reserve_factor` lower bound of `0.4` (line 1421) is hardcoded. These directly shape molt success probability. Consider promoting at least the condition/reserve split weights to named parameters so the relative importance of body condition vs. energy reserves can be tuned without code changes.",
+        "created_at": "2026-03-30T06:44:08.366403266Z",
+        "batch_sequence": 2,
+        "source": "workflow_stage",
+        "dedup_key": "9ca25b7d9eab9e889f19461007b6cddd8114571bdac32617d9a5183b76cef903"
+      },
+      {
+        "amendment_id": "fr-3-8ff9da72",
+        "source_stage": "final_review",
+        "source_cycle": 2,
+        "source_completion_round": 3,
+        "body": "In `molt_cycle` (shrimp.rs:653-659), `failed_molt_accum * 0.5` is added to `molt_stress_index` after `update_molt_stress()` has already set a baseline. In `compute_mortality_probabilities` (shrimp.rs:1048+1052), `molt_stress_index` enters `stress_total` via `(molt_stress_index - 0.5).max(0.0)` AND `failed_molt_accum` enters independently via `molt_mortality = failed_molt_accum * failed_molt_mortality_scale`. This means `failed_molt_accum` drives mortality through two additive channels simultaneously. Add an inline comment at both sites documenting this intentional double-contribution so future maintainers don't 'fix' one path thinking the other is sufficient.",
+        "created_at": "2026-03-30T06:44:08.366406692Z",
+        "batch_sequence": 3,
+        "source": "workflow_stage",
+        "dedup_key": "862f21957256a6c281af1971beb4c602a245da7173cce9e1e7a650b59cb0d55e"
+      },
+      {
+        "amendment_id": "fr-3-a23a3630",
+        "source_stage": "final_review",
+        "source_cycle": 2,
+        "source_completion_round": 3,
+        "body": "In `molt_cycle` (shrimp.rs:515-516), `temp_condition_factor(state.water.temperature_c, &params)` is called twice — once as `temp_factor` with `.max(0.25)` floor (for interval division safety) and once as `thermal_factor` (raw, for success score). Compute the raw value once, then derive both: `let raw_temp = temp_condition_factor(...); let temp_factor = raw_temp.max(0.25); let thermal_factor = raw_temp;`.",
+        "created_at": "2026-03-30T06:44:08.366409137Z",
+        "batch_sequence": 4,
+        "source": "workflow_stage",
+        "dedup_key": "4ee370ddaf49b182386af1d3a670ccb6883cbf57a40872acde4e6badaa795dda"
+      },
+      {
+        "amendment_id": "fr-3-63c5d776",
+        "source_stage": "final_review",
+        "source_cycle": 2,
+        "source_completion_round": 3,
+        "body": "Fix `crates/tank_core/src/systems/shrimp.rs:575-624`: `molt_cycle()` checks `readiness = timer_days / effective_interval` before incrementing `molt_timer_days`, then increments the timer after the resolution branch. A cohort that starts at `0.0` therefore resolves on daily step `interval + 1` instead of on the configured interval (for example, a 28-day adult interval resolves on day 29, and a 14-day juvenile interval resolves on day 15). That makes the species cadence parameters systematically one day slower than the values in data. Either increment the timers before the readiness check or compute readiness from the post-step timer.",
+        "created_at": "2026-03-30T06:44:08.366413485Z",
+        "batch_sequence": 5,
+        "source": "workflow_stage",
+        "dedup_key": "89c0984dc326046a15dd4b002e1ec71d0c2628e9e2b4e7ed2a4ef836c70bc811"
+      },
+      {
+        "amendment_id": "fr-3-87421c36",
+        "source_stage": "final_review",
+        "source_cycle": 2,
+        "source_completion_round": 3,
+        "body": "Fix the mismatch between the modeled high-GH penalty and the failure diagnostics. `crates/tank_core/src/systems/shrimp.rs:1389-1400` reduces `molt_mineral_modifier()` when `gh_d > gh_max_d`, which can push a healthy shrimp below `molt_success_threshold`. But `emit_molt_failure()` at `crates/tank_core/src/systems/shrimp.rs:1180-1232` only reports low GH/Ca/Mg and otherwise falls back to `PoorCondition`, so a very hard-water failure can be logged as `condition 1.00` even though the modeled driver was excessive GH. Either surface a high-GH/high-mineral diagnostic or remove the above-range GH penalty from the molt mechanic.",
+        "created_at": "2026-03-30T06:44:08.366416922Z",
+        "batch_sequence": 6,
+        "source": "workflow_stage",
+        "dedup_key": "2592d285f325c1a245dbe4bc1b16bbe2bb317d74c03e37b414eaaa17657f785f"
+      },
+      {
+        "amendment_id": "fr-3-4c43add6",
+        "source_stage": "final_review",
+        "source_cycle": 2,
+        "source_completion_round": 3,
+        "body": "Re-tighten `crates/tank_harness/tests/e2e_baseline_scenarios.rs:1095-1118`. This test explicitly disables shrimp mortality at `crates/tank_harness/tests/e2e_baseline_scenarios.rs:1048-1049`, but the updated day-60/day-90 envelopes now accept `shrimp_count(0, ...)`, `juveniles_count(0, ...)`, and zero reproductive readiness. That means a total colony collapse after an early hatch pulse would still satisfy the checkpoint envelopes, materially weakening the regression that is supposed to guard the controlled ideal reproduction path. Restore non-zero floors at those checkpoints.",
+        "created_at": "2026-03-30T06:44:08.366419797Z",
+        "batch_sequence": 7,
+        "source": "workflow_stage",
+        "dedup_key": "f85b86f41a9b3832deaae0760cdebc278cbad97ae52e1bd6f260259716a1e872"
+      }
+    ],
+    "processed_count": 8
+  },
+  "status_summary": "running: Plan and Implement",
+  "last_stage_resolution_snapshot": {
+    "stage_id": "final_review",
+    "resolved_at": "2026-03-30T06:18:00.708489155Z",
+    "final_review_reviewers": [
+      {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      },
+      {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    ],
+    "final_review_planner": {
+      "backend_family": "codex",
+      "model_id": "gpt-5.4"
+    },
+    "final_review_arbiter": {
+      "backend_family": "codex",
+      "model_id": "gpt-5.4"
+    }
+  }
+}

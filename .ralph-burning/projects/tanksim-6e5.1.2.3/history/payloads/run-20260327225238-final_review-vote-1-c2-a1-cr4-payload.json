@@ -1,0 +1,24 @@
+{
+  "payload_id": "run-20260327225238-final_review-vote-1-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T00:20:38.043067429Z",
+  "payload": {
+    "summary": "Accept the amendment: the current v2->v3 migration violates its own contract by coercing malformed geometry/depth values into a migrated save, which can silently zero or distort dissolved totals instead of raising a schema-migration error.",
+    "votes": [
+      {
+        "amendment_id": "fr-4-bc2dc25a",
+        "decision": "accept",
+        "rationale": "`migrate_v2_to_v3` currently uses `depth.max(0.0)`, clamps cumulative depth against `fill_height.max(0.0)`, and falls back to `scale = 0.0` when gross volume is non-positive. That means malformed schema-2 inputs can deserialize successfully as newer saves while chemistry totals are silently rewritten, directly contradicting the documented requirement that malformed legacy payloads fail with `SimError::SchemaMigration`. Later invariant checks in `into_engine` are not an adequate substitute because `SaveFile::from_json` already accepted and mutated bad data. Rejecting invalid geometry/depth values up front and adding regression coverage is the safer, more correct behavior."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

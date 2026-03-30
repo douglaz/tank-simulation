@@ -1,0 +1,70 @@
+{
+  "rollback_id": "bcef6d6d-e731-4188-b31c-b50153438e1c",
+  "created_at": "2026-03-28T14:24:19.774085432Z",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "git_sha": "7e2e92d6e571cb51cb9942095d1910ab4198229a",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260328132625",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 1,
+        "attempt": 1,
+        "completion_round": 4
+      },
+      "started_at": "2026-03-28T13:26:25.386753572Z",
+      "prompt_hash_at_cycle_start": "0bee02f77dd8aaf9",
+      "prompt_hash_at_stage_start": "0bee02f77dd8aaf9",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 3
+    },
+    "status": "running",
+    "cycle_history": [],
+    "completion_rounds": 4,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-3-95d007dd",
+          "source_stage": "final_review",
+          "source_cycle": 1,
+          "source_completion_round": 3,
+          "body": "Fix gas-exchange scaling so total O2/CO2 surface flux depends on exposed area instead of water volume. `crates/tank_core/src/systems/dissolved_oxygen.rs:14-28` computes `K_LA` from lid/aeration/filter settings only, and `crates/tank_core/src/systems/chemistry.rs:55-58` / `crates/tank_core/src/systems/chemistry.rs:571-580` reuse that coefficient in `delta = k_la * (c_eq - c) * volume_l`. With that math, two tanks that share the same footprint and hardware but have different fill heights exchange different total CO2 masses; the deeper tank strips proportionally more CO2 even though the air-water interface is unchanged. The new regression at `crates/tank_core/tests/co2_exchange.rs:215-285` locks in that incorrect behavior by asserting equal concentration change instead of equal surface flux. Use a surface-area/volume term when deriving gas-transfer rates (for both O2 and CO2); `crates/tank_core/src/types/geometry.rs:64-72` already exposes a ratio helper you can build from.",
+          "created_at": "2026-03-28T14:24:19.716386722Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "d44a4dfa52b52964856e29a71befb4cabe86a4630e25f58f974de59902d47646"
+        }
+      ],
+      "processed_count": 3
+    },
+    "status_summary": "running: final review restart round 4 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T14:07:46.541183446Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      },
+      "final_review_arbiter": {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      }
+    }
+  }
+}

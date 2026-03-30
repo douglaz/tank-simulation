@@ -1,0 +1,64 @@
+{
+  "payload_id": "run-20260330051540-apply_fixes-c3-a2-cr2",
+  "stage_id": "apply_fixes",
+  "cycle": 3,
+  "attempt": 2,
+  "created_at": "2026-03-30T06:16:18.823771978Z",
+  "payload": {
+    "data": {
+      "change_summary": "Fixed the CRITICAL nitrogen conservation regression by adding cumulative_n2_export_mg_n as the 20th component in nitrogen_budget_components (budget.rs). This treats denitrification N₂ gas export as tracked nitrogen so the budget sums to zero. Updated BudgetSnapshot struct array size from 19 to 20. Updated the denitrification test test_denitrification_tracked_as_export to assert conservation (n_decrease ≈ 0) instead of matching decrease to export, since total_nitrogen_mg now includes the export counter. Updated is_nitrogen_budget_path in budget_tracking.rs to recognize the cumulative export field for structural coverage. Applied cargo fmt to fix pre-existing formatting in mod.rs and denitrification.rs.",
+      "outstanding_risks": [
+        "Pre-existing test failure: thermal_reproduction_penalty fails independently of this bead's changes (0 juveniles produced at both temperatures). This was already documented in cycle 2 review as a pre-existing issue.",
+        "SCOPE: The denitrification implementation (~80 lines in nitrogen_cycle.rs) rides along with this bead because it fixes compile blockers. It is now properly integrated into the nitrogen budget but could benefit from its own bead for independent review."
+      ],
+      "steps": [
+        {
+          "description": "Added cumulative_n2_export_mg_n as the 20th BudgetComponent in nitrogen_budget_components (budget.rs:229, array size 19→20) and updated BudgetSnapshot struct field (budget.rs:123) to match.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Updated is_nitrogen_budget_path in budget_tracking.rs test to recognize 'cumulative_n2_export_mg_n' so the structural coverage test (test_budget_component_labels_cover_all_element_bearing_fields) passes with the new 20-component array.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Updated test_denitrification_tracked_as_export assertion (denitrification.rs:276-280): changed from asserting n_decrease ≈ n_exported to asserting n_decrease ≈ 0 (conservation), since total_nitrogen_mg now includes the export counter.",
+          "order": 3,
+          "status": "completed"
+        },
+        {
+          "description": "Verified MINOR finding: ran cargo check -p tank_core and cargo clippy -- -D warnings with zero warnings. The reported unused import/constant warnings in nitrogen_cycle.rs were stale incremental build artifacts.",
+          "order": 4,
+          "status": "completed"
+        },
+        {
+          "description": "Applied cargo fmt to fix pre-existing formatting issues in mod.rs and denitrification.rs. Verified cargo fmt --check returns clean.",
+          "order": 5,
+          "status": "completed"
+        },
+        {
+          "description": "SCOPE assessment: denitrification implementation rides along with this bead since it fixes compile blockers and is now properly integrated into the nitrogen budget. Could be extracted to its own bead for independent review in future.",
+          "order": 6,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "cargo test -p tank_core --test budget_tracking: 24 passed, 0 failed (was 23 passed, 1 failed before fix — test_closed_system_shrimp_reproduction_conserves_n_and_c now passes)",
+        "cargo test -p tank_core --test denitrification: 12 passed, 0 failed (was 11 passed, 1 failed before fix — test_denitrification_tracked_as_export now passes)",
+        "cargo test (full workspace): 36 test suites pass, only pre-existing thermal_reproduction_penalty failure remains",
+        "cargo clippy -- -D warnings: zero warnings across entire workspace",
+        "cargo fmt --check: clean, no formatting differences",
+        "cargo check -p tank_core: zero warnings, confirming nitrogen_cycle.rs unused import/constant warnings were stale incremental artifacts"
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}

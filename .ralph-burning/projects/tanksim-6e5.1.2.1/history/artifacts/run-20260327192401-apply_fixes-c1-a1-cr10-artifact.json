@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327192401-apply_fixes-c1-a1-cr10-artifact",
+  "payload_id": "run-20260327192401-apply_fixes-c1-a1-cr10",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-28T01:56:17.179173119Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNo additional fixes were applied in this Apply Fixes stage. The latest review approved the round-10 budget-tracking amendments without follow-up changes, so the code remains as produced in the most recent implement stage.\n\n## Steps\n\n1. [Completed] Reviewed the latest validation output and confirmed the round-10 review approved the implementation with no required amendments.\n2. [Completed] Verified that no additional code or documentation edits were necessary for the residual clamp assertions, `SiphonDetritus` budget coverage, or source-water carbonate fallback validation changes.\n3. [Skipped] Rerun validation after applying fixes.\n\n## Validation Evidence\n\n- Review outcome was `approved` with no follow-up amendments or blocking findings.\n- No new validation commands were run in this stage because no code changed.\n- The latest review recorded `cargo fmt --all -- --check` passing.\n- The latest review recorded `cargo test -p tank_core --test budget_tracking --test chemistry --test water_change_mass_balance` passing, including the new `SiphonDetritus` export and carbonate fallback rejection regressions.\n- The latest review recorded `cargo test -p tank_data` passing, plus `cargo test -p tank_core` across the full `tank_core` suite and `cargo clippy -p tank_core -p tank_data -- -D warnings` passing.\n\n## Outstanding Risks\n\n- The canonical helper coverage guard for element-bearing state remains convention-based rather than reflective; future explicit N/C pools with non-standard names will require updating the discovery rules and tests together.\n- Complex multi-process stages such as `system:nitrogen_cycle` still rely on snapshot-derived gross component budgets, so same-component turnover inside a single stage can remain collapsed until those systems emit fully explicit source/sink deltas.\n- The carbonate validation path only special-cases the known non-finite neutral fallback outcome; if future solver changes introduce different internal failure modes, the validation helper will need to be extended in lockstep.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 10
+}

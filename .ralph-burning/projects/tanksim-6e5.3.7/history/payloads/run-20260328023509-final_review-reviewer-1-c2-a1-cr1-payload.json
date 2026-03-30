@@ -1,0 +1,27 @@
+{
+  "payload_id": "run-20260328023509-final_review-reviewer-1-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T03:32:22.034478403Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "Custom shrimp body composition is not preserved once a carcass enters `fine_detritus_g_total`. `route_dead_shrimp_to_detritus` converts shrimp N+C into a generic detritus mass in `crates/tank_core/src/systems/shrimp.rs:642-648`, but every downstream consumer of `fine_detritus_g_total` re-derives N/C from `feed_n_to_c_ratio` (`crates/tank_core/src/types/budget.rs:301-304`, `crates/tank_core/src/types/budget.rs:395-396`, `crates/tank_core/src/types/budget.rs:520-535`, `crates/tank_core/src/systems/nitrogen_cycle.rs:73-85`). Any non-default `body_nitrogen_mg_per_g_wet_mass` / `body_carbon_mg_per_g_wet_mass` will therefore create or destroy N/C at death and during later detritus dissolution. Either validate the new body-composition fields against the detritus stoichiometry, or carry carcass-specific stoichiometry through the detritus path.",
+        "rationale": "The new fields are serialized species parameters, so they look configurable; right now conservation only holds at the legacy default values."
+      },
+      {
+        "body": "The new shrimp body-composition fields are also incompatible with live biomass funding. `fund_live_shrimp_biomass` still charges a fixed `biomass_g * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G` reserve cost in `crates/tank_core/src/systems/shrimp.rs:666-677`, while adults/juveniles are budgeted with `body_nitrogen_mg_per_g_wet_mass` and `body_carbon_mg_per_g_wet_mass` in `crates/tank_core/src/types/budget.rs:275-288` and `crates/tank_core/src/types/budget.rs:368-381`. If those body-composition parameters differ from the old implicit 200 mg organic matter per gram wet mass, hatching and maturation will create or delete tracked matter. The new parameters need invariants that lock them to the reserve stoichiometry, or the reserve funding logic must derive directly from them.",
+        "rationale": "This is the same class of bug as the death-routing issue, but it affects reproduction/maturation even before any shrimp dies."
+      }
+    ],
+    "summary": "Reviewed the death-routing implementation and read the shrimp, plant, algae, process, biology, and budget code paths end-to-end. Targeted `budget_tracking` tests for shrimp death, plant loss, algae loss, and the 200-hour mortality scenario pass, and plant/algae routing is internally consistent with the current single-detritus model. I found two correctness gaps: the new shrimp body-composition parameters are only conservative at the legacy default values, because neither detritus stoichiometry nor reserve funding was updated to support non-default compositions. A full `cargo test -p tank_core` run is currently blocked by an unrelated `TraceSink::emit_tick` signature error in `crates/tank_core/tests/tracing.rs:45`."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

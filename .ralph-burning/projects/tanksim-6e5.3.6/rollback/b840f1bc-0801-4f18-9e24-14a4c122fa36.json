@@ -1,0 +1,99 @@
+{
+  "rollback_id": "b840f1bc-0801-4f18-9e24-14a4c122fa36",
+  "created_at": "2026-03-29T21:39:36.020734075Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "67d592d4e6183c971bfa6ef635f6944dc7ad8c6f",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260329204233",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 2
+      },
+      "started_at": "2026-03-29T20:42:33.839050449Z",
+      "prompt_hash_at_cycle_start": "8d57197a9f9687ec",
+      "prompt_hash_at_stage_start": "8d57197a9f9687ec",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 1
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-29T21:13:25.781194340Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 2,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-1-d5896362",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "In conservation_regression.rs, the grazing test (closed_system_grazing_conserves_n_and_c, lines 257-271) still uses bare `assert!()` for pathway verification instead of the new `assert_or_dump()` helper that all other five tests use. This means a grazing pathway assertion failure will NOT dump the trace to /tmp/tank_conservation_traces/grazing.jsonl, violating the acceptance criterion that 'failures dump the full trace to a file for debugging.' Replace the three bare `assert!()` calls with `assert_or_dump(\"grazing\", &engine, ...)` calls.",
+          "created_at": "2026-03-29T21:39:35.923004150Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "f0f67ad8cb8b07078db7a771b949422f4b66302748bcbc16a570dcaf927f4195"
+        },
+        {
+          "amendment_id": "fr-1-0ed6fb15",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "In e2e_conservation.rs, `run_grazing()` (lines 375-390) has no pathway-verification assertions (ensure/ensure_trace_delta), while all other five scenario runners (run_feeding, run_mortality_senescence, run_trim_and_remove, run_trim_and_leave, run_water_change) were enhanced with these checks in this diff. Add at minimum: ensure that periphyton decreased, TAN increased, and fine detritus increased (mirroring the unit test), so the e2e runner catches the case where grazing is silently not exercised.",
+          "created_at": "2026-03-29T21:39:35.923008398Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "7b62325a4c301d88ca782d0d22b6ad0f24c40d902de1aee4ee1a772eb59c8f36"
+        },
+        {
+          "amendment_id": "fr-1-bd5aaa0c",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "In the water-change test (both files), the expected_n_import calculation only sums `source.ammonia_mg_n_per_l + source.nitrate_mg_n_per_l + source.don_mg_n_per_l`, omitting `source.nitrite_mg_n_per_l`. The engine's budget (apply_water_change_with_budget, line 125-128) sums all four source species including nitrite. This only works because the source profile's nitrite is implicitly zero from SourceWaterProfile::zero(). Add `+ source.nitrite_mg_n_per_l` to the test's expected_n_import formula for correctness and resilience against fixture evolution.",
+          "created_at": "2026-03-29T21:39:35.923011784Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "50c59db72fd752e94caf60972a951aa153c222c5b113e2970f6fa52bc0b4b9a6"
+        }
+      ],
+      "processed_count": 0
+    },
+    "status_summary": "running: final review restart round 2 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-29T21:21:35.099984701Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

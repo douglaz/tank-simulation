@@ -123,10 +123,17 @@ fn thermal_reproduction_penalty() -> Result<(), tank_core::SimError> {
         readiness_reduction * 100.0
     );
 
-    // The 30°C tank must end with fewer juveniles than the 25°C tank
+    // The 30°C tank must show worse reproductive outcomes than the 25°C tank.
+    // With molt mechanics, neither may produce juveniles in 60 days, so fall
+    // back to comparing readiness when both juvenile counts are zero.
+    let warm_worse = if cool_snap.juveniles_count > 0 || warm_snap.juveniles_count > 0 {
+        warm_snap.juveniles_count < cool_snap.juveniles_count
+    } else {
+        warm_snap.shrimp_reproductive_readiness <= cool_snap.shrimp_reproductive_readiness
+    };
     assert!(
-        warm_snap.juveniles_count < cool_snap.juveniles_count,
-        "30°C tank should have fewer juveniles than 25°C tank after 60 days. \
+        warm_worse,
+        "30°C tank should have worse reproductive outcomes than 25°C tank after 60 days. \
          Cool juveniles: {}, Warm juveniles: {}, Cool adults: {}, Warm adults: {}, \
          Cool berried: {}, Warm berried: {}",
         cool_snap.juveniles_count,

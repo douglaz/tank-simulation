@@ -1,0 +1,23 @@
+{
+  "payload_id": "run-20260327155320-final_review-reviewer-1-c1-a1-cr8-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T19:51:51.388418847Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "crates/tank_core/src/types/geometry.rs:19 still defines `TankGeometry::water_volume_l()` as gross filled volume, and crates/tank_core/src/types/geometry.rs:56 plus crates/tank_core/src/types/geometry.rs:65 build ratio helpers on that same gross basis, while crates/tank_core/src/types/state.rs:177 defines `TankState::water_volume_l()` as the new canonical net-water volume. Leaving both public APIs under the same `water_volume_l` name preserves two incompatible meanings of water volume and makes future concentration/normalization code easy to wire back to gross volume. Rename the geometry-side gross helpers or move the canonical name there so callers only have one public `water_volume_l` semantics.",
+        "rationale": "This is a significant maintainability risk: the task is supposed to establish one canonical concentration/volume API, but the current public surface still exposes an easy path back to the pre-migration gross-vs-net mistake."
+      }
+    ],
+    "summary": "`git diff` at HEAD was empty, so I reviewed the task-related implementation state directly. I found one significant maintainability risk: the new net-volume helper API coexists with a public gross-volume `TankGeometry::water_volume_l()` API under the same name."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 8
+}

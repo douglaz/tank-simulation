@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-3-63c5d776",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 3,
+  "body": "Fix `crates/tank_core/src/systems/shrimp.rs:575-624`: `molt_cycle()` checks `readiness = timer_days / effective_interval` before incrementing `molt_timer_days`, then increments the timer after the resolution branch. A cohort that starts at `0.0` therefore resolves on daily step `interval + 1` instead of on the configured interval (for example, a 28-day adult interval resolves on day 29, and a 14-day juvenile interval resolves on day 15). That makes the species cadence parameters systematically one day slower than the values in data. Either increment the timers before the readiness check or compute readiness from the post-step timer.",
+  "created_at": "2026-03-30T06:44:08.366413485Z",
+  "batch_sequence": 5,
+  "source": "workflow_stage",
+  "dedup_key": "89c0984dc326046a15dd4b002e1ec71d0c2628e9e2b4e7ed2a4ef836c70bc811"
+}

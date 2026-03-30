@@ -1,0 +1,386 @@
+=== stdout ===
+=== stderr ===
+OpenAI Codex v0.117.0 (research preview)
+--------
+workdir: /home/master/p/tank-simulation
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019d353b-0170-7551-a883-fabc4594bd25
+--------
+user
+Contract: apply_fixes
+Role: Implementer
+
+# Stage Execution Prompt
+
+You are the Implementer. Your objective for this Apply Fixes stage is to apply the requested fixes, summarize the edits, and record the validation performed.
+
+## Original Project Prompt
+
+○ tanksim-6e5.1.3 · Capture baseline scenario envelopes for current v0.1 behavior   [● P0 · OPEN]
+Owner: master · Type: task
+Created: 2026-03-26 · Updated: 2026-03-27
+Labels: guardrails, phase-0, scenarios, scientific-core, testing
+
+Context:
+- The current code already has scenario presets and regression tests for cycling, oxygen, shrimp reproduction, water changes, ambient temperature, and tank-size effects.
+- Those scenarios should become explicit envelopes that future refactors compare against, even if exact trajectories change.
+
+Deliverable:
+- Baseline fixtures or notes for current scenarios such as nano_cycle, medium_planted, and warm_room.
+- Envelope-based tests or documentation describing the intended qualitative behavior, not just exact current numbers.
+- Coverage of the behavioral stories that matter most: cycling timeline, stable-state nutrient ranges, DO behavior, shrimp reproduction windows, thermal response, and algae/plant competition.
+- Runnable e2e test scripts that exercise each scenario for a full simulated cycle (500+ hours), capture structured trace output (A2d), and assert envelope compliance. These scripts become the regression harness for all later phases.
+
+Likely touch points:
+- crates/tank_data/data/scenarios/*.toml
+- crates/tank_scenarios/src/lib.rs
+- crates/tank_core/tests/ (existing test modules)
+
+## Acceptance Criteria
+
+Acceptance Criteria:
+- each reference scenario has a short "what should happen and why" note
+- later phases can compare against qualitative envelopes rather than brittle exact traces
+- tank-size, oxygen, and reproduction behavior are explicitly preserved where still desired
+- at least one runnable e2e test per shipped scenario that logs structured traces and asserts envelope bounds
+- e2e tests support --verbose for full trace dumps and produce CI-friendly exit codes
+
+Dependencies:
+  -> tanksim-6e5.1.2.5 (blocks) - Build deterministic scientific-regression harness, e2e runner, and failure artifact capture
+  -> tanksim-6e5.1.2.4 (blocks) - Add structured simulation tracing with per-system deltas and configurable verbosity
+  -> tanksim-6e5.1.2 (blocks) - Add conservation/debug instrumentation and save-schema migration scaffolding
+  -> tanksim-6e5.1.1 (blocks) - Inventory current scientific semantics, units, invariants, and shortcuts
+  -> tanksim-6e5.1 (parent-child) - Phase 0 — guardrails, baselines, and migration safety
+
+Dependents:
+  <- tanksim-6e5.2.3 (blocks) - Normalize nitrogen-cycle kinetics to concentration-based terms
+  <- tanksim-6e5.7.3 (blocks) - Build literature-backed scenario envelopes and expected qualitative outcomes
+  <- tanksim-6e5.6.6 (blocks) - Add shrimp-focused scenario tests for breeding, heat stress, molt failure, and crash modes
+  <- tanksim-6e5.5.7 (blocks) - Add habitat/geometry scenario tests and probes
+  <- tanksim-6e5.5.6 (blocks) - Scale equipment, plant mass, and stocking defaults with tank geometry
+  <- tanksim-6e5.4.6 (blocks) - Add carbonate regression tests and scenario probes
+  <- tanksim-6e5.2.5 (blocks) - Normalize algae kinetics around concentration, light, and temperature interactions
+  <- tanksim-6e5.2.4 (blocks) - Normalize plant nutrient uptake and growth limitation semantics
+
+Comments:
+  [2026-03-26 13:46 UTC] backlog-planner: Rationale:
+- The goal is not to freeze today's outputs; it is to preserve the useful behavioral intent while allowing scientifically motivated changes.
+- Scenario envelopes should be broad enough to survive tuning but narrow enough to catch regressions.
+- These baselines will be especially useful once parameter retuning begins after concentration normalization (B6).
+
+Existing tests to review and potentially convert to envelope-style:
+- cycling.rs — TAN peak timing and magnitude, NO2 intermediate, NO3 accumulation
+- dissolved_oxygen.rs — DO response to light/dark, aeration, biomass
+- shrimp_population.rs — reproduction onset, steady-state population
+- tank_size_thermal_response.rs — thermal inertia scaling
+- water_change_mass_balance.rs — dilution accuracy
+- plant_algae_integration.rs — competition dynamics
+
+Each test should capture: "after N hours of scenario X, quantity Y should be in range [a, b] because Z."
+The "because Z" part is critical — it prevents cargo-cult tolerance widening when numbers change.
+  [2026-03-26 16:24 UTC] reviewer: E2E test script convention (to be established by this bead):
+
+Location: crates/tank_core/tests/e2e/ (or a dedicated test crate crates/tank_e2e/tests/)
+
+Structure for each e2e script:
+- Named test binary or module: e2e_baseline_scenarios.rs, e2e_conservation.rs, etc.
+- Each scenario is a #[test] function that:
+  1. Constructs a scenario from presets or fixtures
+  2. Enables A2d tracing at "detail" verbosity to an in-memory buffer
+  3. Runs the simulation for N hours (scenario-specific, typically 500-1000+)
+  4. Asserts envelope compliance for key metrics at checkpoint hours
+  5. On failure: dumps the full structured trace to a temp file and prints the path
+- Supports --verbose via an environment variable (TANK_E2E_VERBOSE=1) for full trace dumps even on success
+- Produces CI-friendly exit codes: 0 = all pass, non-zero = envelope violation
+- Each test function has a doc comment explaining: what scenario, what behavior it protects, why the envelope bounds are what they are
+
+Convention for envelope assertions:
+  assert_in_envelope!(metric, min, max, "explanation of why this range");
+  — macro or helper that on failure prints: metric=X, expected=[min, max], at tick=N
+
+This convention applies to: A3 (baselines), C6 (conservation), D6 (carbonate), E7 (habitat/geometry), F6 (shrimp), and G3 (validation scenarios).
+
+All later phase test beads should follow this pattern rather than inventing their own.
+
+## Prior Stage Outputs This Cycle
+
+### Apply Fixes (`apply_fixes`)
+- Payload ID: `run-20260328145235-apply_fixes-c2-a1-cr1`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "Extended the tank harness envelope API to cover reproduction metrics (`juveniles_count`, `berried_females_count`, `shrimp_reproductive_readiness`) and added `HarnessRun::from_state` so scenario-derived maintained variants can still use the standard trace/artifact flow. Updated `e2e_baseline_scenarios.rs` to add late-run nitrate guardrails for `nano_cycle`, `medium_planted`, and `warm_room`, replaced the loose light/dark DO check with a stricter lit-peak vs late-dark-trough assertion, and added a maintained `medium_planted` reproduction baseline that asserts a berried/juvenile reproduction window under shrimp-friendly overrides.",
+    "outstanding_risks": [
+      "Reproduction coverage currently relies on a scenario-derived maintained `medium_planted` variant with explicit reserve, mortality, and maturation tweaks; if the project later adds a first-class shrimp-husbandry preset, this guardrail should migrate to that preset."
+    ],
+    "steps": [
+      {
+        "description": "Inspected the baseline harness and scenario tests to confirm the missing reproduction coverage, missing nitrate guardrails, and the weak DO day/night assertion.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Patched the harness and baseline e2e suite to add reproduction-aware envelope checks, explicit NO3 envelopes at mature checkpoints, a scenario-derived maintained reproduction run, and a stricter dark-vs-light DO regression.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Ran formatting and package-level validation to confirm the updated harness and e2e scenarios pass together.",
+        "order": 3,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "`cargo fmt --all` completed successfully after the edits.",
+      "`cargo test -p tank_harness --test e2e_baseline_scenarios -- --nocapture` passed all 8 baseline scenario tests, including the new reproduction-window test and the tightened DO regression.",
+      "`cargo test -p tank_harness` passed the full `tank_harness` package test suite, including the new reproduction-envelope unit coverage and all existing e2e/discovery tests."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Plan and Implement (`plan_and_implement`)
+- Payload ID: `run-20260328145235-plan_and_implement-c2-a1-cr2`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "Applied the pending baseline-harness amendments by adding explicit artifact labels to harness runs and metadata, hardening envelope checks so constrained floating-point metrics fail on NaN/Inf, widening scenario nitrate envelopes to preserve qualitative source-water-aware behavior, and splitting shrimp egg bookkeeping so malformed cohorts are repaired only at save-load boundaries while runtime invariants now fail fast on mismatches. Updated the baseline e2e suite to avoid artifact collisions, document the widened NO3 reasoning, replace the synthetic reproduction baseline with a public-startup berried-window fixture plus a clearly labeled controlled-ideal hatch-path test, and made the small scenario/core compile-fix updates needed to keep the affected packages building for targeted validation.",
+    "outstanding_risks": [
+      "Full `cargo test -p tank_core` validation is still blocked by unrelated unresolved merge-conflict markers in the worktree, notably `crates/tank_core/src/systems/plant_growth.rs`, so only targeted `tank_core` suites were run.",
+      "The new public-startup shrimp fixture preserves current v0.1 behavior as a berried-window plus egg-failure baseline; natural juvenile hatching still does not occur under normal mortality/starting-state semantics, so hatch mechanics are only guarded by the separate controlled-ideal test.",
+      "The repository remains in a dirty merge state with unrelated `UU` files outside this bead, which increases integration risk until those conflicts are resolved."
+    ],
+    "steps": [
+      {
+        "description": "Reviewed the pending amendments against the existing harness, baseline e2e suite, and shrimp invariant/save-load paths to identify the concrete code and test changes needed.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Patched the harness and scenario tests to add artifact labels, finite-value envelope guards, broader source-water-aware NO3 envelopes, and separated public-startup reproduction coverage from the controlled-ideal hatch-path regression.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Moved shrimp egg-cohort repair to load-time normalization, made runtime invariant enforcement reject bookkeeping mismatches, added targeted regression coverage, and applied the small compile-fix updates required for affected packages.",
+        "order": 3,
+        "status": "completed"
+      },
+      {
+        "description": "Ran formatting and targeted package/test validation, then recorded the remaining full-package validation blocker caused by unrelated merge-conflict files.",
+        "order": 4,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "`cargo fmt --all` completed successfully.",
+      "`cargo test -p tank_core --test validation` passed.",
+      "`cargo test -p tank_core --test save_load` passed.",
+      "`cargo test -p tank_scenarios` passed.",
+      "`cargo test -p tank_harness --test e2e_baseline_scenarios -- --nocapture` passed.",
+      "`cargo test -p tank_harness` passed.",
+      "`cargo test -p tank_core` could not complete because unrelated unresolved merge markers remain in the worktree, including `crates/tank_core/src/systems/plant_growth.rs`."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Review (`review`)
+- Payload ID: `run-20260328145235-review-c2-a1-cr2`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "evidence": [
+      "All 9 e2e baseline scenario tests pass: nano_cycle, medium_planted, warm_room baselines, cross_scenario_relative_behaviors, thermal_inertia_scales_with_tank_size, do_dips_at_night_in_planted_tank, shrimp_husbandry_fixture_reaches_berried_window, controlled_ideal_reproduction_path_still_hatches, biofilter_reaches_scenario_specific_cycle_floors.",
+      "Full tank_harness package test suite passes (e2e_baseline_scenarios, e2e_medium_planted, e2e_nano_neglect, discovery tests).",
+      "tank_core validation tests pass: 14/14 including step_hours_rejects_mismatched_shrimp_cohort_bookkeeping (confirms runtime fail-fast for egg bookkeeping) and enforce_invariants_still_trims_zero_count_cohorts_and_clamps_stage_progress.",
+      "tank_core save_load tests relevant to this bead pass: current_schema_load_repairs_missing_shrimp_egg_cohort_bookkeeping and save_load_resume_determinism.",
+      "tank_scenarios: 4/4 pass.",
+      "cargo clippy -p tank_harness -p tank_core: clean, no warnings.",
+      "Amendment fr-1-32fa1988 (NO3 widening): Verified — medium_planted NO3 bounds now 2.0–8.0 mg/L, warm_room 2.0–8.5 mg/L with source-water documentation in comments.",
+      "Amendment fr-1-423a179e (NaN guards): Verified — check_f64_bounds helper with is_finite() guard, non_finite_label categorizer, and dedicated unit test.",
+      "Amendment fr-1-3081f78c + fr-1-2d8bb6d0 (reproduction test split): Verified — shrimp_husbandry_fixture uses public startup params with normal mortality; controlled_ideal_reproduction_path explicitly documented as 'not a claim about what the shipped presets do without hidden-state help'.",
+      "Amendment fr-1-fe5ff040 (egg reconciliation): Verified — method renamed to repair_egg_cohort_counts_for_load, called only in normalize_loaded_shrimp_reproduction_state at load time (save.rs:848); runtime invariant enforcement returns SimError::InvariantViolation on mismatch instead of repairing.",
+      "Amendment fr-1-7371c682 (artifact labels): Verified — all 10 harness runs use with_artifact_label(), artifact_dir() includes label when distinct from scenario_id, with sanitization and unit test coverage.",
+      "Each test has comprehensive doc comments explaining what scenario, what behavior it protects, and why bounds are set as they are — fulfilling the 'because Z' convention from the bead spec.",
+      "TANK_E2E_VERBOSE=1 support and CI-friendly exit codes documented in module header."
+    ],
+    "findings_or_gaps": [
+      "Two pre-existing tank_core test failures NOT caused by this bead: save_load_with_active_cycle_state (from bead 6e5.2.4 — floating-point determinism drift after save/load round-trip) and photoperiod_action_does_not_mark_habitat_registry_dirty (from bead 6e5.4.3-v2). These are in the working tree from other concurrent beads and do not represent regressions from this bead's work.",
+      "The latest checkpoint commit (ec50053) appears to be an empty commit — the actual changes were committed in earlier checkpoints (visible via file history). The working tree also has dirty files (actions.rs, state.rs, substrate.rs, depth_light_attenuation.rs) from other beads, plus a formatting issue in depth_light_attenuation.rs from another bead.",
+      "The shrimp_husbandry_fixture test verifies that berried females appear under public startup conditions with normal mortality, but natural juvenile hatching still does not occur without controlled-ideal overrides. This is documented behavior and appropriate for v0.1, but downstream beads (6e5.6.6) should eventually establish a fixture where natural hatch succeeds.",
+      "from_state() initializes artifact_label to None (defaults to scenario_id) rather than auto-generating a distinct label. This is mitigated by all callers chaining .with_artifact_label(), but a future caller could forget this step. Low risk since the pattern is well-established in the current test suite."
+    ],
+    "follow_up_or_amendments": [
+      "The two pre-existing tank_core test failures (save_load_with_active_cycle_state, photoperiod_action_does_not_mark_habitat_registry_dirty) must be resolved by their owning beads (6e5.2.4 and 6e5.4.3-v2) before integration — they are not blockers for this bead's acceptance.",
+      "Downstream bead 6e5.6.6 (shrimp-focused scenario tests) should establish a fixture where natural juvenile hatching succeeds under realistic maintained-tank conditions, building on the berried-window baseline established here."
+    ],
+    "outcome": "conditionally_approved"
+  },
+  "family": "Validation"
+}
+```
+
+## Authoritative JSON Schema
+
+The JSON schema below is authoritative. Return only JSON that conforms exactly to it.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ExecutionStep": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "order": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/definitions/StepStatus"
+        }
+      },
+      "required": [
+        "description",
+        "order",
+        "status"
+      ],
+      "type": "object"
+    },
+    "StepStatus": {
+      "enum": [
+        "intended",
+        "completed",
+        "skipped"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload for execution/update stages.\n\nRequires structured change summaries, intended or completed steps, validation evidence or plans, and outstanding-risk fields.",
+  "properties": {
+    "change_summary": {
+      "type": "string"
+    },
+    "outstanding_risks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/definitions/ExecutionStep"
+      },
+      "type": "array"
+    },
+    "validation_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "change_summary",
+    "outstanding_risks",
+    "steps",
+    "validation_evidence"
+  ],
+  "title": "ExecutionPayload",
+  "type": "object"
+}
+```
+
+--- Context JSON ---
+{
+  "attempt": 1,
+  "completion_round": 2,
+  "cycle": 2
+}
+
+Return ONLY valid JSON matching the following schema:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ExecutionStep": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "order": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/definitions/StepStatus"
+        }
+      },
+      "required": [
+        "description",
+        "order",
+        "status"
+      ],
+      "type": "object"
+    },
+    "StepStatus": {
+      "enum": [
+        "intended",
+        "completed",
+        "skipped"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload for execution/update stages.\n\nRequires structured change summaries, intended or completed steps, validation evidence or plans, and outstanding-risk fields.",
+  "properties": {
+    "change_summary": {
+      "type": "string"
+    },
+    "outstanding_risks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/definitions/ExecutionStep"
+      },
+      "type": "array"
+    },
+    "validation_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "change_summary",
+    "outstanding_risks",
+    "steps",
+    "validation_evidence"
+  ],
+  "title": "ExecutionPayload",
+  "type": "object"
+}
+
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:00 PM.
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:00 PM.

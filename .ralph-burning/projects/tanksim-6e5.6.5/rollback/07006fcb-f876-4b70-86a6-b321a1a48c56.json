@@ -1,0 +1,71 @@
+{
+  "rollback_id": "07006fcb-f876-4b70-86a6-b321a1a48c56",
+  "created_at": "2026-03-30T06:44:46.881428652Z",
+  "stage_id": "apply_fixes",
+  "cycle": 3,
+  "git_sha": "6a0ebb34e8aa38522f88d0d23fcb7f301163e34b",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260330051540",
+      "stage_cursor": {
+        "stage": "final_review",
+        "cycle": 3,
+        "attempt": 1,
+        "completion_round": 3
+      },
+      "started_at": "2026-03-30T05:15:40.946675787Z",
+      "prompt_hash_at_cycle_start": "2461063947d911b8",
+      "prompt_hash_at_stage_start": "2461063947d911b8",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 2
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T05:33:45.789166401Z",
+        "completed_at": null
+      },
+      {
+        "cycle": 3,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T06:10:01.725094408Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 3,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [],
+      "processed_count": 5
+    },
+    "status_summary": "running: completed Apply Fixes, next Final Review",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-30T06:16:18.938927318Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      },
+      "final_review_arbiter": {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      }
+    }
+  }
+}

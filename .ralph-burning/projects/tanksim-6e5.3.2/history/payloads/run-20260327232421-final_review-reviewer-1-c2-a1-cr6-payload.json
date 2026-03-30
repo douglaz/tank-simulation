@@ -1,0 +1,27 @@
+{
+  "payload_id": "run-20260327232421-final_review-reviewer-1-c2-a1-cr6-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T03:00:19.389781890Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "`crates/tank_core/src/budget_helpers.rs:227-248` adds `assert_o2_balanced`, but the check only proves `inventory_delta == sum(entry.net_mg())`; it never proves that the recorded oxygen `in_mg`/`out_mg` pairs are themselves correct. That is a real gap because snapshot-derived budgets still collapse oxygen to a single net delta (`crates/tank_core/src/types/budget.rs:81-85`), and stage recording only debug-asserts net consistency (`crates/tank_core/src/types/budget.rs:161-174`). The new regression at `crates/tank_core/tests/budget_helpers.rs:348-365` can therefore pass even if a stage regresses from correct gross O2 bookkeeping to a net-only or otherwise wrong gross split, which is exactly the class of bug this helper is supposed to guard against.",
+        "rationale": "This gives false confidence in the new open-system oxygen coverage: the helper is advertised as a gross-flow balance check, but today it only enforces net conservation."
+      },
+      {
+        "body": "`crates/tank_core/tests/budget_helpers.rs:109-126` tries to isolate `TANK_BUDGET_DEBUG` with a mutex, but the mutex only protects callers that also take that same lock. The smoke test at `crates/tank_core/tests/budget_helpers.rs:389-395` sets a process-global environment variable and then runs under Rust’s default parallel test harness, so unrelated tests in the same integration-test process can execute `step_and_inspect()` while debug mode is still enabled. When I ran `cargo test -p tank_core --test budget_helpers -- --nocapture`, other tests emitted budget debug blocks while this guard was live. That makes the suite order-dependent and sets up future stderr/debug-path flakes.",
+        "rationale": "Process-global env mutation inside a parallel test binary is not actually isolated here; the current test already leaks state across cases."
+      }
+    ],
+    "summary": "Reviewed the changed budget helper, tracing, and test files end-to-end. I found two issues: the new `assert_o2_balanced` helper does not really verify gross oxygen bookkeeping, and the new debug-output smoke test leaks a process-global env var across parallel tests."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 6
+}
