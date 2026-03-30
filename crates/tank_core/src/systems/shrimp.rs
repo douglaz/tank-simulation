@@ -491,8 +491,9 @@ fn update_molt_stress(state: &mut TankState) {
         .clamp(0.0, 1.0);
 
     let instability_stress = state.stability_tracker.instability_index;
-    let condition_stress =
-        (params.molt_stress_condition_midpoint - state.animal.population_condition_index()).max(0.0);
+    let condition_stress = (params.molt_stress_condition_midpoint
+        - state.animal.population_condition_index())
+    .max(0.0);
     let thermal_stress = if state.water.temperature_c > params.optimal_temp_max_c {
         ((state.water.temperature_c - params.optimal_temp_max_c)
             / params.temp_condition_high_divisor_c.max(0.01))
@@ -1811,10 +1812,10 @@ fn molt_condition_breakdown(
 #[cfg(test)]
 mod tests {
     use super::{
-        compute_effective_nitrite_hazard, compute_mortality_probabilities, refresh_carbonate_state,
-        route_consumed_food, shrimp_feeding, shrimp_grazing_access_factor,
-        shrimp_target_food_route_g, step_daily_shrimp, step_hourly_shrimp_stress, update_condition,
-        MG_N_PER_MEQ_AMMONIA,
+        compute_effective_nitrite_hazard, compute_mortality_probabilities, compute_nh3_mg_n_per_l,
+        refresh_carbonate_state, route_consumed_food, shrimp_feeding, shrimp_grazing_access_factor,
+        shrimp_target_food_route_g, step_daily_shrimp, step_hourly_shrimp_stress,
+        temp_condition_factor, update_condition, update_molt_stress, MG_N_PER_MEQ_AMMONIA,
     };
     use crate::{algae_detrital_mass_g, SimSeed, TankState, WaterState};
 
@@ -2237,6 +2238,142 @@ mod tests {
             low_cl_mortality > high_cl_mortality,
             "low chloride should produce higher adult mortality probability: \
              low_cl={low_cl_mortality}, high_cl={high_cl_mortality}"
+        );
+    }
+
+    #[test]
+    fn test_temp_condition_divisors_are_named_parameters() {
+        let params = crate::types::ShrimpRuntimeParams::default();
+        let cold_temp = params.optimal_temp_min_c - 2.0;
+        let hot_temp = params.optimal_temp_max_c + 2.0;
+
+        let baseline_cold = temp_condition_factor(cold_temp, &params);
+        let baseline_hot = temp_condition_factor(hot_temp, &params);
+
+        let mut relaxed = params.clone();
+        relaxed.temp_condition_low_divisor_c = 20.0;
+        relaxed.temp_condition_high_divisor_c = 16.0;
+
+        assert!(
+            temp_condition_factor(cold_temp, &relaxed) > baseline_cold,
+            "widening the named cold divisor should soften low-temperature penalties"
+        );
+        assert!(
+            temp_condition_factor(hot_temp, &relaxed) > baseline_hot,
+            "widening the named hot divisor should soften high-temperature penalties"
+        );
+    }
+
+    #[test]
+    fn test_molt_stress_midpoint_and_thermal_cap_are_named_parameters() {
+        let mut condition_baseline = carbonate_condition_test_state();
+        condition_baseline.animal.adult.condition_index = 0.45;
+        condition_baseline.animal.sub_adult.count = 0;
+        condition_baseline.animal.juvenile.count = 0;
+        condition_baseline.animal.molt_stress_index = 0.0;
+        condition_baseline
+            .shrimp_params
+            .molt_stress_pressure_mineral_weight = 0.0;
+        condition_baseline
+            .shrimp_params
+            .molt_stress_pressure_instability_weight = 0.0;
+        condition_baseline
+            .shrimp_params
+            .molt_stress_pressure_condition_weight = 1.0;
+        condition_baseline
+            .shrimp_params
+            .molt_stress_pressure_thermal_weight = 0.0;
+        condition_baseline
+            .shrimp_params
+            .molt_stress_pressure_hourly_weight = 0.0;
+        condition_baseline.shrimp_params.molt_stress_rise_smoothing = 1.0;
+
+        let mut condition_relaxed = condition_baseline.clone();
+        condition_relaxed
+            .shrimp_params
+            .molt_stress_condition_midpoint = 0.4;
+
+        update_molt_stress(&mut condition_baseline);
+        update_molt_stress(&mut condition_relaxed);
+
+        assert!(
+            condition_baseline.animal.molt_stress_index
+                > condition_relaxed.animal.molt_stress_index,
+            "lowering the named condition midpoint should reduce condition-driven molt stress"
+        );
+
+        let mut thermal_baseline = carbonate_condition_test_state();
+        thermal_baseline.animal.adult.condition_index = 1.0;
+        thermal_baseline.animal.sub_adult.count = 0;
+        thermal_baseline.animal.juvenile.count = 0;
+        thermal_baseline.animal.molt_stress_index = 0.0;
+        thermal_baseline.water.temperature_c =
+            thermal_baseline.shrimp_params.optimal_temp_max_c + 4.0;
+        thermal_baseline.environment.ambient_temp_c = thermal_baseline.water.temperature_c;
+        thermal_baseline
+            .shrimp_params
+            .molt_stress_pressure_mineral_weight = 0.0;
+        thermal_baseline
+            .shrimp_params
+            .molt_stress_pressure_instability_weight = 0.0;
+        thermal_baseline
+            .shrimp_params
+            .molt_stress_pressure_condition_weight = 0.0;
+        thermal_baseline
+            .shrimp_params
+            .molt_stress_pressure_thermal_weight = 1.0;
+        thermal_baseline
+            .shrimp_params
+            .molt_stress_pressure_hourly_weight = 0.0;
+        thermal_baseline.shrimp_params.molt_stress_rise_smoothing = 1.0;
+
+        let mut thermal_relaxed = thermal_baseline.clone();
+        thermal_relaxed.shrimp_params.temp_condition_high_divisor_c = 16.0;
+        thermal_relaxed.shrimp_params.molt_stress_thermal_cap = 0.25;
+
+        update_molt_stress(&mut thermal_baseline);
+        update_molt_stress(&mut thermal_relaxed);
+
+        assert!(
+            thermal_baseline.animal.molt_stress_index > thermal_relaxed.animal.molt_stress_index,
+            "relaxing the named thermal divisor/cap should reduce heat-driven molt stress"
+        );
+    }
+
+    #[test]
+    fn test_nh3_stress_threshold_and_scale_are_named_parameters() {
+        let mut baseline = carbonate_condition_test_state();
+        baseline.animal.hourly_nh3_stress_accum = 0.0;
+        let nh3_mg_n_per_l = compute_nh3_mg_n_per_l(
+            baseline.concentrations().tan_mg_n_per_l(),
+            baseline.water.ph,
+            baseline.water.temperature_c,
+        );
+        assert!(
+            nh3_mg_n_per_l > baseline.shrimp_params.nh3_stress_threshold_mg_n_per_l,
+            "test setup must exceed the default NH3 stress threshold"
+        );
+
+        let mut higher_threshold = baseline.clone();
+        higher_threshold
+            .shrimp_params
+            .nh3_stress_threshold_mg_n_per_l = nh3_mg_n_per_l + 0.01;
+
+        let mut higher_scale = baseline.clone();
+        higher_scale.shrimp_params.nh3_stress_response_scale = 4.0;
+
+        step_hourly_shrimp_stress(&mut baseline);
+        step_hourly_shrimp_stress(&mut higher_threshold);
+        step_hourly_shrimp_stress(&mut higher_scale);
+
+        assert!(
+            baseline.animal.hourly_nh3_stress_accum
+                > higher_threshold.animal.hourly_nh3_stress_accum,
+            "raising the named NH3 threshold should suppress hourly NH3 stress"
+        );
+        assert!(
+            higher_scale.animal.hourly_nh3_stress_accum > baseline.animal.hourly_nh3_stress_accum,
+            "raising the named NH3 response scale should increase hourly NH3 stress"
         );
     }
 

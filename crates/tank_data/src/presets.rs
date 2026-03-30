@@ -804,14 +804,6 @@ impl ShrimpPreset {
                 self.molt_failure_instability_threshold,
             ),
             (
-                "temp_condition_low_divisor_c",
-                self.temp_condition_low_divisor_c,
-            ),
-            (
-                "temp_condition_high_divisor_c",
-                self.temp_condition_high_divisor_c,
-            ),
-            (
                 "molt_stress_warning_threshold",
                 self.molt_stress_warning_threshold,
             ),
@@ -851,10 +843,7 @@ impl ShrimpPreset {
                 "molt_stress_pressure_thermal_weight",
                 self.molt_stress_pressure_thermal_weight,
             ),
-            (
-                "molt_stress_thermal_cap",
-                self.molt_stress_thermal_cap,
-            ),
+            ("molt_stress_thermal_cap", self.molt_stress_thermal_cap),
             (
                 "molt_stress_pressure_hourly_weight",
                 self.molt_stress_pressure_hourly_weight,
@@ -890,10 +879,7 @@ impl ShrimpPreset {
                 "nh3_stress_threshold_mg_n_per_l",
                 self.nh3_stress_threshold_mg_n_per_l,
             ),
-            (
-                "nh3_stress_response_scale",
-                self.nh3_stress_response_scale,
-            ),
+            ("nh3_stress_response_scale", self.nh3_stress_response_scale),
             (
                 "density_repro_threshold_per_l",
                 self.density_repro_threshold_per_l,

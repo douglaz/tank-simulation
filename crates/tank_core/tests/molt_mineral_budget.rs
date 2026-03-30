@@ -280,8 +280,13 @@ fn test_very_low_gh_causes_molt_deaths() -> Result<(), SimError> {
         event.summary.contains("GH") || event.summary.contains("Ca") || event.summary.contains("Mg")
     }));
     assert!(
-        final_state.animal.total_count() < 30,
-        "very low GH should drive detectable deaths, got {} survivors",
+        molt_failures.len() >= 2,
+        "very low GH should trigger repeated molt-failure events, got {}",
+        molt_failures.len()
+    );
+    assert!(
+        final_state.animal.total_count() <= 24,
+        "very low GH should drive substantial deaths, got {} survivors",
         final_state.animal.total_count()
     );
 
@@ -331,6 +336,8 @@ fn test_mineral_modifier_named_parameters() {
     assert_eq!(params.molt_reserve_weight, 0.25);
     assert_eq!(params.molt_failure_poor_condition_threshold, 0.65);
     assert_eq!(params.molt_failure_instability_threshold, 0.3);
+    assert_eq!(params.temp_condition_low_divisor_c, 10.0);
+    assert_eq!(params.temp_condition_high_divisor_c, 8.0);
     assert_eq!(params.molt_stress_warning_threshold, 0.6);
     assert_eq!(params.molt_stress_mortality_threshold, 0.5);
     assert_eq!(params.molt_stress_mineral_gh_weight, 0.5);
@@ -339,14 +346,38 @@ fn test_mineral_modifier_named_parameters() {
     assert_eq!(params.molt_stress_pressure_mineral_weight, 0.3);
     assert_eq!(params.molt_stress_pressure_instability_weight, 0.3);
     assert_eq!(params.molt_stress_pressure_condition_weight, 0.2);
+    assert_eq!(params.molt_stress_condition_midpoint, 0.5);
     assert_eq!(params.molt_stress_pressure_thermal_weight, 0.2);
+    assert_eq!(params.molt_stress_thermal_cap, 0.5);
     assert_eq!(params.molt_stress_pressure_hourly_weight, 0.3);
     assert_eq!(params.molt_stress_rise_smoothing, 0.2);
     assert_eq!(params.molt_stress_decay_smoothing, 0.05);
     assert_eq!(params.molt_gh_excess_penalty_divisor, 10.0);
     assert_eq!(params.molt_mineral_factor_floor, 0.3);
+    assert_eq!(params.nh3_stress_threshold_mg_n_per_l, 0.02);
+    assert_eq!(params.nh3_stress_response_scale, 2.0);
     assert!(params.juvenile_molt_interval_days < params.sub_adult_molt_interval_days);
     assert!(params.sub_adult_molt_interval_days < params.base_molt_interval_days);
+}
+
+#[test]
+fn test_low_gh_branch_respects_mineral_floor() {
+    let mut params = ShrimpRuntimeParams::default();
+    let floored =
+        molt_mineral_modifier(2.5, params.ca_min_mg_per_l, params.mg_min_mg_per_l, &params);
+    assert!(
+        (floored - params.molt_mineral_factor_floor).abs() < 1e-9,
+        "the named mineral floor should clamp the low-GH branch ({floored} vs {})",
+        params.molt_mineral_factor_floor
+    );
+
+    params.molt_mineral_factor_floor = 0.1;
+    let less_floored =
+        molt_mineral_modifier(2.5, params.ca_min_mg_per_l, params.mg_min_mg_per_l, &params);
+    assert!(
+        less_floored < floored,
+        "lowering the named mineral floor should soften the low-GH clamp ({less_floored:.3} < {floored:.3})"
+    );
 }
 
 #[test]
@@ -694,8 +725,8 @@ fn test_molt_failure_diagnostic_thresholds_are_named() {
 
 #[test]
 fn test_soft_vs_hard_water_shrimp_survival() -> Result<(), SimError> {
-    let run_profile = |profile: &SourceWaterProfile, seed: u64| -> Result<TankState, SimError> {
-        let mut state = molt_test_state(SimSeed(seed));
+    let run_profile = |profile: &SourceWaterProfile| -> Result<TankState, SimError> {
+        let mut state = molt_test_state(SimSeed(9_000));
         apply_source_profile(&mut state, profile);
         configure_stage_locked_population(&mut state, 12, 12, 12);
         state.animal.set_population_condition_index(0.8);
@@ -712,8 +743,8 @@ fn test_soft_vs_hard_water_shrimp_survival() -> Result<(), SimError> {
     soft_profile.calcium_mg_per_l = 10.0;
     soft_profile.magnesium_mg_per_l = 2.0;
 
-    let hard_state = run_profile(&hard_profile, 9_000)?;
-    let soft_state = run_profile(&soft_profile, 9_001)?;
+    let hard_state = run_profile(&hard_profile)?;
+    let soft_state = run_profile(&soft_profile)?;
 
     let hard_population = hard_state.animal.total_count();
     let soft_population = soft_state.animal.total_count();
@@ -732,8 +763,21 @@ fn test_soft_vs_hard_water_shrimp_survival() -> Result<(), SimError> {
         "population gap should be noticeable after 1000 hours ({hard_population} vs {soft_population})"
     );
     assert!(
+        hard_population.saturating_sub(soft_population) >= 12,
+        "population gap should stay materially worse in mineral-poor water ({hard_population} vs {soft_population})"
+    );
+    assert!(
+        soft_population <= 22,
+        "the mineral-poor soft-water case should lose a large share of the starting colony, got {soft_population} survivors"
+    );
+    assert!(
         !soft_molt_failures.is_empty(),
         "the mineral-poor soft-water case should log molt failures tied to the source-water minerals"
+    );
+    assert!(
+        soft_molt_failures.len() >= 3,
+        "the mineral-poor soft-water case should log repeated molt failures, got {}",
+        soft_molt_failures.len()
     );
     assert!(soft_molt_failures
         .iter()
