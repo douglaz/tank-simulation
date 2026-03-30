@@ -793,6 +793,15 @@ fn shrimp_preset_to_params(
     if let Some(value) = shrimp_preset.failed_molt_mortality_scale {
         params.failed_molt_mortality_scale = value;
     }
+    if let Some(value) = shrimp_preset.failed_molt_accum_increase_per_failed_stage {
+        params.failed_molt_accum_increase_per_failed_stage = value;
+    }
+    if let Some(value) = shrimp_preset.failed_molt_accum_recovery_per_successful_stage {
+        params.failed_molt_accum_recovery_per_successful_stage = value;
+    }
+    if let Some(value) = shrimp_preset.failed_molt_stress_blend {
+        params.failed_molt_stress_blend = value;
+    }
     if let Some(value) = shrimp_preset.sub_adult_sensitivity {
         params.sub_adult_sensitivity = value;
     }
@@ -819,6 +828,12 @@ fn shrimp_preset_to_params(
     }
     if let Some(value) = shrimp_preset.molt_reserve_weight {
         params.molt_reserve_weight = value;
+    }
+    if let Some(value) = shrimp_preset.molt_failure_poor_condition_threshold {
+        params.molt_failure_poor_condition_threshold = value;
+    }
+    if let Some(value) = shrimp_preset.molt_failure_instability_threshold {
+        params.molt_failure_instability_threshold = value;
     }
     if let Some(value) = shrimp_preset.juvenile_molt_interval_days {
         params.juvenile_molt_interval_days = value;
@@ -1288,11 +1303,16 @@ mod tests {
         preset.subadult_maturation_condition_threshold = Some(0.41);
         preset.base_molt_interval_days = Some(19.0);
         preset.failed_molt_mortality_scale = Some(0.27);
+        preset.failed_molt_accum_increase_per_failed_stage = Some(0.18);
+        preset.failed_molt_accum_recovery_per_successful_stage = Some(0.41);
+        preset.failed_molt_stress_blend = Some(0.33);
         preset.sub_adult_sensitivity = Some(1.9);
         preset.base_clutch_size = Some(17);
         preset.min_clutch_condition = Some(0.44);
         preset.ca_min_mg_per_l = Some(18.0);
         preset.mg_min_mg_per_l = Some(4.0);
+        preset.molt_failure_poor_condition_threshold = Some(0.7);
+        preset.molt_failure_instability_threshold = Some(0.24);
         preset.juvenile_molt_interval_days = Some(11.0);
         preset.sub_adult_molt_interval_days = Some(17.0);
         preset.molt_success_threshold = Some(0.61);
@@ -1307,11 +1327,16 @@ mod tests {
         assert_eq!(params.subadult_maturation_condition_threshold, 0.41);
         assert_eq!(params.base_molt_interval_days, 19.0);
         assert_eq!(params.failed_molt_mortality_scale, 0.27);
+        assert_eq!(params.failed_molt_accum_increase_per_failed_stage, 0.18);
+        assert_eq!(params.failed_molt_accum_recovery_per_successful_stage, 0.41);
+        assert_eq!(params.failed_molt_stress_blend, 0.33);
         assert_eq!(params.sub_adult_sensitivity, 1.9);
         assert_eq!(params.base_clutch_size, 17);
         assert_eq!(params.min_clutch_condition, 0.44);
         assert_eq!(params.ca_min_mg_per_l, 18.0);
         assert_eq!(params.mg_min_mg_per_l, 4.0);
+        assert_eq!(params.molt_failure_poor_condition_threshold, 0.7);
+        assert_eq!(params.molt_failure_instability_threshold, 0.24);
         assert_eq!(params.juvenile_molt_interval_days, 11.0);
         assert_eq!(params.sub_adult_molt_interval_days, 17.0);
         assert_eq!(params.molt_success_threshold, 0.61);

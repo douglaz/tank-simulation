@@ -49,6 +49,7 @@ pub enum EventCause {
     HighDensity,
     Starvation,
     PoorCondition,
+    MarginalFailure,
     PlantTrimming,
 }
 

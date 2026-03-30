@@ -400,6 +400,18 @@ fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), Si
         params.failed_molt_mortality_scale,
     )?;
     check_non_negative(
+        "shrimp_params.failed_molt_accum_increase_per_failed_stage",
+        params.failed_molt_accum_increase_per_failed_stage,
+    )?;
+    check_non_negative(
+        "shrimp_params.failed_molt_accum_recovery_per_successful_stage",
+        params.failed_molt_accum_recovery_per_successful_stage,
+    )?;
+    check_unit_interval(
+        "shrimp_params.failed_molt_stress_blend",
+        params.failed_molt_stress_blend,
+    )?;
+    check_non_negative(
         "shrimp_params.sub_adult_sensitivity",
         params.sub_adult_sensitivity,
     )?;
@@ -430,6 +442,14 @@ fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), Si
     check_unit_interval(
         "shrimp_params.molt_reserve_weight",
         params.molt_reserve_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_failure_poor_condition_threshold",
+        params.molt_failure_poor_condition_threshold,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_failure_instability_threshold",
+        params.molt_failure_instability_threshold,
     )?;
     check_sum_close_to_one(
         "shrimp_params.molt_condition_weight + shrimp_params.molt_reserve_weight",

@@ -276,6 +276,18 @@ pub struct ShrimpRuntimeParams {
     /// Additional daily mortality fraction per unit of failed_molt_accum.
     #[serde(default = "default_failed_molt_mortality_scale")]
     pub failed_molt_mortality_scale: f64,
+    /// Failed-molt accumulator increase applied for each stage that fails
+    /// a molt on a resolved day.
+    #[serde(default = "default_failed_molt_accum_increase_per_failed_stage")]
+    pub failed_molt_accum_increase_per_failed_stage: f64,
+    /// Failed-molt accumulator recovery applied for each stage that succeeds
+    /// on a fully successful resolved day.
+    #[serde(default = "default_failed_molt_accum_recovery_per_successful_stage")]
+    pub failed_molt_accum_recovery_per_successful_stage: f64,
+    /// Fraction of `failed_molt_accum` blended back into `molt_stress_index`
+    /// after the explicit daily molt resolution pass.
+    #[serde(default = "default_failed_molt_stress_blend")]
+    pub failed_molt_stress_blend: f64,
     /// Stress sensitivity multiplier for sub-adult mortality.
     #[serde(default = "default_sub_adult_sensitivity")]
     pub sub_adult_sensitivity: f64,
@@ -305,6 +317,14 @@ pub struct ShrimpRuntimeParams {
     /// Blend weight for reserve support in the molt condition modifier.
     #[serde(default = "default_molt_reserve_weight")]
     pub molt_reserve_weight: f64,
+    /// Minimum blended molt-condition score that should emit a
+    /// `PoorCondition` diagnostic on molt failure.
+    #[serde(default = "default_molt_failure_poor_condition_threshold")]
+    pub molt_failure_poor_condition_threshold: f64,
+    /// Minimum instability index that should emit a
+    /// `ChemistryInstability` diagnostic on molt failure/stress events.
+    #[serde(default = "default_molt_failure_instability_threshold")]
+    pub molt_failure_instability_threshold: f64,
     /// Base inter-molt period for juveniles (days). Shorter than adults.
     #[serde(default = "default_juvenile_molt_interval_days")]
     pub juvenile_molt_interval_days: f64,
@@ -722,6 +742,11 @@ impl Default for ShrimpRuntimeParams {
                 default_subadult_maturation_condition_threshold(),
             base_molt_interval_days: default_base_molt_interval_days(),
             failed_molt_mortality_scale: default_failed_molt_mortality_scale(),
+            failed_molt_accum_increase_per_failed_stage:
+                default_failed_molt_accum_increase_per_failed_stage(),
+            failed_molt_accum_recovery_per_successful_stage:
+                default_failed_molt_accum_recovery_per_successful_stage(),
+            failed_molt_stress_blend: default_failed_molt_stress_blend(),
             sub_adult_sensitivity: default_sub_adult_sensitivity(),
             base_clutch_size: default_base_clutch_size(),
             min_clutch_condition: default_min_clutch_condition(),
@@ -731,6 +756,10 @@ impl Default for ShrimpRuntimeParams {
             molt_reserve_factor_floor: default_molt_reserve_factor_floor(),
             molt_condition_weight: default_molt_condition_weight(),
             molt_reserve_weight: default_molt_reserve_weight(),
+            molt_failure_poor_condition_threshold:
+                default_molt_failure_poor_condition_threshold(),
+            molt_failure_instability_threshold:
+                default_molt_failure_instability_threshold(),
             juvenile_molt_interval_days: default_juvenile_molt_interval_days(),
             sub_adult_molt_interval_days: default_sub_adult_molt_interval_days(),
             molt_success_threshold: default_molt_success_threshold(),
@@ -803,6 +832,18 @@ fn default_failed_molt_mortality_scale() -> f64 {
     0.15
 }
 
+fn default_failed_molt_accum_increase_per_failed_stage() -> f64 {
+    0.3
+}
+
+fn default_failed_molt_accum_recovery_per_successful_stage() -> f64 {
+    0.35
+}
+
+fn default_failed_molt_stress_blend() -> f64 {
+    0.5
+}
+
 fn default_sub_adult_sensitivity() -> f64 {
     1.2
 }
@@ -837,6 +878,14 @@ fn default_molt_condition_weight() -> f64 {
 
 fn default_molt_reserve_weight() -> f64 {
     0.25
+}
+
+fn default_molt_failure_poor_condition_threshold() -> f64 {
+    0.65
+}
+
+fn default_molt_failure_instability_threshold() -> f64 {
+    0.3
 }
 
 fn default_juvenile_molt_interval_days() -> f64 {

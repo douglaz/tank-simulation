@@ -25,6 +25,7 @@ struct FailedMoltDiagnostics {
     reserve_limited: bool,
     min_reserve_per_shrimp_g: f64,
     reserve_target_g: f64,
+    min_success_score: f64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -584,6 +585,7 @@ fn molt_cycle(state: &mut TankState) {
         reserve_limited: false,
         min_reserve_per_shrimp_g: f64::INFINITY,
         reserve_target_g: 0.0,
+        min_success_score: 1.0,
     };
 
     for (
@@ -618,7 +620,10 @@ fn molt_cycle(state: &mut TankState) {
                 successful_stage_count += 1;
             } else {
                 failed_stage_count += 1;
-                failed_diagnostics.poor_condition_involved |= condition_factor < 0.65;
+                failed_diagnostics.min_success_score =
+                    failed_diagnostics.min_success_score.min(success_score);
+                failed_diagnostics.poor_condition_involved |=
+                    condition_factor < params.molt_failure_poor_condition_threshold;
                 failed_diagnostics.min_condition_index =
                     failed_diagnostics.min_condition_index.min(condition_index);
                 if condition_breakdown.reserve_factor < 1.0 - f64::EPSILON
@@ -645,12 +650,15 @@ fn molt_cycle(state: &mut TankState) {
     if any_resolved {
         if failed_stage_count > 0 {
             state.animal.last_molt_success = false;
-            state.animal.failed_molt_accum =
-                (state.animal.failed_molt_accum + 0.3 * f64::from(failed_stage_count)).min(1.0);
+            state.animal.failed_molt_accum = (state.animal.failed_molt_accum
+                + params.failed_molt_accum_increase_per_failed_stage
+                    * f64::from(failed_stage_count))
+            .min(1.0);
         } else {
             state.animal.last_molt_success = true;
             state.animal.failed_molt_accum = (state.animal.failed_molt_accum
-                - 0.35 * f64::from(successful_stage_count))
+                - params.failed_molt_accum_recovery_per_successful_stage
+                    * f64::from(successful_stage_count))
             .max(0.0);
         }
     }
@@ -671,9 +679,10 @@ fn molt_cycle(state: &mut TankState) {
     // Derive molt_stress_index from failed_molt_accum and current factors.
     // This grounds the existing index in explicit state rather than independent
     // integration. The update_molt_stress call has already set a baseline; we
-    // intentionally blend in failed_molt_accum here as a separate stress path
-    // even though mortality also reads failed_molt_accum directly below.
-    let accum_stress = state.animal.failed_molt_accum * 0.5;
+    // intentionally keep a second configurable path from failed_molt_accum into
+    // stress even though mortality also reads failed_molt_accum directly.
+    // `failed_molt_stress_blend` makes that coupling inspectable in preset data.
+    let accum_stress = state.animal.failed_molt_accum * params.failed_molt_stress_blend;
     state.animal.molt_stress_index =
         (state.animal.molt_stress_index + accum_stress).clamp(0.0, 1.0);
 }
@@ -1308,6 +1317,8 @@ fn emit_molt_failure(
     let params = &state.shrimp_params;
     let mut causes = Vec::new();
     let mut details = Vec::new();
+    let gh_ratio = gh_d / params.gh_min_d.max(0.01);
+    let critical_gh_failure = gh_ratio < params.critical_molt_gh_ratio;
 
     if gh_d < params.gh_min_d {
         causes.push(EventCause::LowMinerals);
@@ -1334,11 +1345,11 @@ fn emit_molt_failure(
             mg_mg_per_l, params.mg_min_mg_per_l
         ));
     }
-    if state.stability_tracker.instability_index > 0.3 {
+    if state.stability_tracker.instability_index > params.molt_failure_instability_threshold {
         causes.push(EventCause::ChemistryInstability);
         details.push(format!(
-            "instability {:.2}",
-            state.stability_tracker.instability_index
+            "instability {:.2}>{:.2}",
+            state.stability_tracker.instability_index, params.molt_failure_instability_threshold
         ));
     }
     if let Some((cause, detail)) = temperature_penalty_detail(state.water.temperature_c, params) {
@@ -1355,16 +1366,23 @@ fn emit_molt_failure(
     if failed_diagnostics.poor_condition_involved {
         causes.push(EventCause::PoorCondition);
         details.push(format!(
-            "condition {:.2}",
-            failed_diagnostics.min_condition_index
+            "condition {:.2}<{:.2}",
+            failed_diagnostics.min_condition_index, params.molt_failure_poor_condition_threshold
+        ));
+    }
+    if critical_gh_failure {
+        details.push(format!(
+            "critical GH ratio {:.2}<{:.2}",
+            gh_ratio, params.critical_molt_gh_ratio
+        ));
+    } else {
+        details.push(format!(
+            "score {:.2}<{:.2}",
+            failed_diagnostics.min_success_score, params.molt_success_threshold
         ));
     }
     if causes.is_empty() {
-        causes.push(EventCause::PoorCondition);
-        details.push(format!(
-            "condition {:.2}",
-            failed_diagnostics.min_condition_index
-        ));
+        causes.push(EventCause::MarginalFailure);
     }
 
     crate::systems::events::emit_once_per_day_pub(
@@ -1398,7 +1416,8 @@ fn emit_molt_stress_warning(state: &mut TankState) {
     } else if gh_d > state.shrimp_params.gh_max_d {
         causes.push(EventCause::HighMinerals);
     }
-    if state.stability_tracker.instability_index > 0.3 {
+    if state.stability_tracker.instability_index > state.shrimp_params.molt_failure_instability_threshold
+    {
         causes.push(EventCause::ChemistryInstability);
     }
     if let Some((cause, _)) =

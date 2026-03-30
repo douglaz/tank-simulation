@@ -90,6 +90,13 @@ fn shrimp_runtime_default_param_value(name: &str) -> Option<f64> {
         }
         "base_molt_interval_days" => Some(defaults.base_molt_interval_days),
         "failed_molt_mortality_scale" => Some(defaults.failed_molt_mortality_scale),
+        "failed_molt_accum_increase_per_failed_stage" => {
+            Some(defaults.failed_molt_accum_increase_per_failed_stage)
+        }
+        "failed_molt_accum_recovery_per_successful_stage" => {
+            Some(defaults.failed_molt_accum_recovery_per_successful_stage)
+        }
+        "failed_molt_stress_blend" => Some(defaults.failed_molt_stress_blend),
         "sub_adult_sensitivity" => Some(defaults.sub_adult_sensitivity),
         "base_clutch_size" => Some(f64::from(defaults.base_clutch_size)),
         "min_clutch_condition" => Some(defaults.min_clutch_condition),
@@ -99,6 +106,12 @@ fn shrimp_runtime_default_param_value(name: &str) -> Option<f64> {
         "molt_reserve_factor_floor" => Some(defaults.molt_reserve_factor_floor),
         "molt_condition_weight" => Some(defaults.molt_condition_weight),
         "molt_reserve_weight" => Some(defaults.molt_reserve_weight),
+        "molt_failure_poor_condition_threshold" => {
+            Some(defaults.molt_failure_poor_condition_threshold)
+        }
+        "molt_failure_instability_threshold" => {
+            Some(defaults.molt_failure_instability_threshold)
+        }
         "juvenile_molt_interval_days" => Some(defaults.juvenile_molt_interval_days),
         "sub_adult_molt_interval_days" => Some(defaults.sub_adult_molt_interval_days),
         "molt_success_threshold" => Some(defaults.molt_success_threshold),
@@ -475,6 +488,12 @@ pub struct ShrimpPreset {
     #[serde(default)]
     pub failed_molt_mortality_scale: Option<f64>,
     #[serde(default)]
+    pub failed_molt_accum_increase_per_failed_stage: Option<f64>,
+    #[serde(default)]
+    pub failed_molt_accum_recovery_per_successful_stage: Option<f64>,
+    #[serde(default)]
+    pub failed_molt_stress_blend: Option<f64>,
+    #[serde(default)]
     pub sub_adult_sensitivity: Option<f64>,
     #[serde(default)]
     pub base_clutch_size: Option<u32>,
@@ -492,6 +511,10 @@ pub struct ShrimpPreset {
     pub molt_condition_weight: Option<f64>,
     #[serde(default)]
     pub molt_reserve_weight: Option<f64>,
+    #[serde(default)]
+    pub molt_failure_poor_condition_threshold: Option<f64>,
+    #[serde(default)]
+    pub molt_failure_instability_threshold: Option<f64>,
     #[serde(default)]
     pub juvenile_molt_interval_days: Option<f64>,
     #[serde(default)]
@@ -625,6 +648,15 @@ impl ShrimpPreset {
                 "failed_molt_mortality_scale",
                 self.failed_molt_mortality_scale,
             ),
+            (
+                "failed_molt_accum_increase_per_failed_stage",
+                self.failed_molt_accum_increase_per_failed_stage,
+            ),
+            (
+                "failed_molt_accum_recovery_per_successful_stage",
+                self.failed_molt_accum_recovery_per_successful_stage,
+            ),
+            ("failed_molt_stress_blend", self.failed_molt_stress_blend),
             ("sub_adult_sensitivity", self.sub_adult_sensitivity),
             ("min_clutch_condition", self.min_clutch_condition),
             ("ca_min_mg_per_l", self.ca_min_mg_per_l),
@@ -633,6 +665,14 @@ impl ShrimpPreset {
             ("molt_reserve_factor_floor", self.molt_reserve_factor_floor),
             ("molt_condition_weight", self.molt_condition_weight),
             ("molt_reserve_weight", self.molt_reserve_weight),
+            (
+                "molt_failure_poor_condition_threshold",
+                self.molt_failure_poor_condition_threshold,
+            ),
+            (
+                "molt_failure_instability_threshold",
+                self.molt_failure_instability_threshold,
+            ),
             (
                 "juvenile_molt_interval_days",
                 self.juvenile_molt_interval_days,
@@ -701,6 +741,18 @@ impl ShrimpPreset {
             ("molt_reserve_factor_floor", self.molt_reserve_factor_floor),
             ("molt_condition_weight", self.molt_condition_weight),
             ("molt_reserve_weight", self.molt_reserve_weight),
+            (
+                "failed_molt_stress_blend",
+                self.failed_molt_stress_blend,
+            ),
+            (
+                "molt_failure_poor_condition_threshold",
+                self.molt_failure_poor_condition_threshold,
+            ),
+            (
+                "molt_failure_instability_threshold",
+                self.molt_failure_instability_threshold,
+            ),
             ("molt_success_threshold", self.molt_success_threshold),
             ("critical_molt_gh_ratio", self.critical_molt_gh_ratio),
         ] {
@@ -790,6 +842,15 @@ impl ParamMetaPreset for ShrimpPreset {
             "failed_molt_mortality_scale" => self
                 .failed_molt_mortality_scale
                 .or_else(|| shrimp_runtime_default_param_value(name)),
+            "failed_molt_accum_increase_per_failed_stage" => self
+                .failed_molt_accum_increase_per_failed_stage
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "failed_molt_accum_recovery_per_successful_stage" => self
+                .failed_molt_accum_recovery_per_successful_stage
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "failed_molt_stress_blend" => self
+                .failed_molt_stress_blend
+                .or_else(|| shrimp_runtime_default_param_value(name)),
             "sub_adult_sensitivity" => self
                 .sub_adult_sensitivity
                 .or_else(|| shrimp_runtime_default_param_value(name)),
@@ -817,6 +878,12 @@ impl ParamMetaPreset for ShrimpPreset {
                 .or_else(|| shrimp_runtime_default_param_value(name)),
             "molt_reserve_weight" => self
                 .molt_reserve_weight
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_failure_poor_condition_threshold" => self
+                .molt_failure_poor_condition_threshold
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_failure_instability_threshold" => self
+                .molt_failure_instability_threshold
                 .or_else(|| shrimp_runtime_default_param_value(name)),
             "juvenile_molt_interval_days" => self
                 .juvenile_molt_interval_days
@@ -858,6 +925,9 @@ impl ParamMetaPreset for ShrimpPreset {
                 | "subadult_maturation_condition_threshold"
                 | "base_molt_interval_days"
                 | "failed_molt_mortality_scale"
+                | "failed_molt_accum_increase_per_failed_stage"
+                | "failed_molt_accum_recovery_per_successful_stage"
+                | "failed_molt_stress_blend"
                 | "sub_adult_sensitivity"
                 | "base_clutch_size"
                 | "min_clutch_condition"
@@ -867,6 +937,8 @@ impl ParamMetaPreset for ShrimpPreset {
                 | "molt_reserve_factor_floor"
                 | "molt_condition_weight"
                 | "molt_reserve_weight"
+                | "molt_failure_poor_condition_threshold"
+                | "molt_failure_instability_threshold"
                 | "juvenile_molt_interval_days"
                 | "sub_adult_molt_interval_days"
                 | "molt_success_threshold"
