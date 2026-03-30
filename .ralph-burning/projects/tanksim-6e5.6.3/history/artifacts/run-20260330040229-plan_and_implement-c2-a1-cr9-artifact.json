@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330040229-plan_and_implement-c2-a1-cr9-artifact",
+  "payload_id": "run-20260330040229-plan_and_implement-c2-a1-cr9",
+  "stage_id": "plan_and_implement",
+  "created_at": "2026-03-30T10:31:13.382305275Z",
+  "content": "# Plan and Implement\n\n## Change Summary\n\nDocumented the intentional shrimp molt-stress pressure blend as sensitivity coefficients in `update_molt_stress` instead of a normalized partition, extended structured tracing to emit `animal.molt_readiness` and `animal.failed_molt_accum` alongside existing molt stress, and added a daily-shrimp trace regression that exercises a forced failed molt so the multi-day cascade state is observable. I also synchronized nitrification alkalinity defaults across `ProcessParams::default()`, the `tank_data` preset default function, the shipped `process/default.toml`, and scenario materialization by sourcing the preset-side default from `NITRIFICATION_ALK_MEQ_PER_MG_N` and adding data/scenario regressions that lock the constant alignment down.\n\n## Steps\n\n1. [Completed] Inspected the pending amendment paths in shrimp stress blending, tracing, and process preset defaults to confirm which gaps still existed on the current branch.\n2. [Completed] Updated shrimp tracing and diagnostics by documenting the oversubscribed pressure blend design and exposing `molt_readiness` plus `failed_molt_accum` in the traced pool set.\n3. [Completed] Synchronized the nitrification alkalinity constant across runtime defaults, preset parsing, shipped process data, and scenario materialization, then added regression coverage for the preset/runtime contract.\n4. [Completed] Ran formatting plus targeted and full-suite validation across `tank_core`, `tank_data`, and `tank_scenarios` to verify the pending amendments end to end.\n\n## Validation Evidence\n\n- cargo fmt --all\n- cargo test -p tank_core --test tracing -- --nocapture\n- cargo test -p tank_core --test nitrification_alkalinity -- --nocapture\n- cargo test -p tank_data -- --nocapture\n- cargo test -p tank_scenarios -- --nocapture\n- cargo test -p tank_core -- --nocapture\n\n## Outstanding Risks\n\nNone identified.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 9
+}

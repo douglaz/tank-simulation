@@ -1,0 +1,127 @@
+{
+  "rollback_id": "176d680c-58f0-4722-ad7b-ae4f7d7b033b",
+  "created_at": "2026-03-30T04:40:57.270165235Z",
+  "stage_id": "final_review",
+  "cycle": 3,
+  "git_sha": "f18ded06c359744e1d040844fb9d0b662c64fb25",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260330025921",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 3,
+        "attempt": 1,
+        "completion_round": 3
+      },
+      "started_at": "2026-03-30T02:59:21.332845002Z",
+      "prompt_hash_at_cycle_start": "61ba540bfc3391be",
+      "prompt_hash_at_stage_start": "61ba540bfc3391be",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 2
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T03:34:35.102011530Z",
+        "completed_at": null
+      },
+      {
+        "cycle": 3,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T04:15:55.854412696Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 3,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-2-da64408d",
+          "source_stage": "final_review",
+          "source_cycle": 3,
+          "source_completion_round": 2,
+          "body": "In `molt_cycle` (shrimp.rs ~lines 496-506), when multiple stages resolve on the same tick with different outcomes (some fail, some succeed), `last_molt_success` is unconditionally set to `false` by the failure branch but the `failed_molt_accum` accumulator net-decreases by 0.05 (increases 0.3 from failure, then decreases 0.35 from success). This creates an inconsistency: `last_molt_success` is read downstream as a sub-adult maturation gate (line 849), so a juvenile molt failure on the same tick as an adult molt success will block sub-adult maturation despite the accumulator showing improvement. Fix: either resolve per-stage outcomes independently (track `last_molt_success` per stage, use the sub-adult's own result for its maturation gate), or ensure the accumulator and boolean agree (e.g., only apply the success decrement to the accumulator when `!any_failed`).",
+          "created_at": "2026-03-30T04:40:57.126982468Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "85c265f1a71ec0f007cd8397873ac6402ca9e4d191f66a69c7e459436374fcf8"
+        },
+        {
+          "amendment_id": "fr-2-c7322f22",
+          "source_stage": "final_review",
+          "source_cycle": 3,
+          "source_completion_round": 2,
+          "body": "In `estimate_substrate_microfauna_o2_demand_mg_per_s` (substrate.rs line 188), the detritus daily consumption fraction `0.01` is a magic constant not backed by any `process_params` field: `substrate_detritus_consumed_g = fine_detritus_g_total * 0.01 * population_index * substrate_fraction`. Unlike the periphyton consumption fraction which reads from `process_params.microfauna_periphyton_consumption`, this value is hardcoded and cannot be tuned via configuration. Extract it to a named constant with a documentation comment explaining the value's provenance, or add it to `ProcessParams` alongside the periphyton consumption parameter.",
+          "created_at": "2026-03-30T04:40:57.126986455Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "a46534546e5795e6c900fa77429b4c25b217f5db71f015875dea15dac6d1f115"
+        },
+        {
+          "amendment_id": "fr-2-61c597e4",
+          "source_stage": "final_review",
+          "source_cycle": 3,
+          "source_completion_round": 2,
+          "body": "Legacy timer migration now runs on brand-new states, not just old saves. `StageCohort` still defaults `molt_timer_days` to `0.0` and `AnimalState::default()` still seeds `inter_molt_timer_days` to `14.0` (`crates/tank_core/src/types/biology.rs:105-114`, `crates/tank_core/src/types/biology.rs:594-617`). On the first daily tick, the migration branch in `molt_cycle` copies that legacy timer into every stage timer whenever they are all zero (`crates/tank_core/src/systems/shrimp.rs:409-419`). That means a fresh juvenile cohort starts effectively 14 days into a 14-day cycle and can molt immediately, while adults start halfway through their 28-day cycle. The new per-stage cadence therefore does not actually start cleanly for fresh simulations.",
+          "created_at": "2026-03-30T04:40:57.126990633Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "2f16c996433ce6eef19da6a43eee27f152110206dc6093f721130a96c9226a33"
+        },
+        {
+          "amendment_id": "fr-2-1595155b",
+          "source_stage": "final_review",
+          "source_cycle": 3,
+          "source_completion_round": 2,
+          "body": "The per-stage molt loop undercounts failure pressure whenever multiple stages resolve on the same day. Default intervals are 14/21/28 days (`crates/tank_core/src/systems/shrimp.rs:433-438`), so overlaps are guaranteed at days 42 and 84, but the accumulator logic only tracks `any_failed`/`any_succeeded` booleans (`crates/tank_core/src/systems/shrimp.rs:440-442`, `crates/tank_core/src/systems/shrimp.rs:467-472`, `crates/tank_core/src/systems/shrimp.rs:495-506`). Two or three failed stages still add only one `+0.3`, and a mixed day (one failure plus one success) actually lowers `failed_molt_accum` because both branches run. That makes mortality pressure weakest exactly on the days when more of the population is molting.",
+          "created_at": "2026-03-30T04:40:57.126994370Z",
+          "batch_sequence": 4,
+          "source": "workflow_stage",
+          "dedup_key": "4bafbcea6f62f3c848c50c6b271ab2d0f1678d234846fa0ae0688cc758a15ad9"
+        },
+        {
+          "amendment_id": "fr-2-0b9a822f",
+          "source_stage": "final_review",
+          "source_cycle": 3,
+          "source_completion_round": 2,
+          "body": "The new shrimp preset knobs added in `crates/tank_data/data/shrimp/neocaridina_davidi.toml:23-27` are currently dead configuration. `ShrimpPreset` does not declare `ca_min_mg_per_l`, `mg_min_mg_per_l`, `juvenile_molt_interval_days`, `sub_adult_molt_interval_days`, or `molt_success_threshold` (`crates/tank_data/src/presets.rs:430-472`), its metadata helpers do not recognize those names (`crates/tank_data/src/presets.rs:658-733`), and `shrimp_preset_to_params` never copies them into `ShrimpRuntimeParams` (`crates/tank_scenarios/src/lib.rs:746-799`). Because TOML deserialization here ignores unknown keys, the file still loads but silently drops all five values.",
+          "created_at": "2026-03-30T04:40:57.126997285Z",
+          "batch_sequence": 5,
+          "source": "workflow_stage",
+          "dedup_key": "39ee29fd5dec355f480fc84bae9db0ebb456438e5433062f872ec8e135c52f93"
+        }
+      ],
+      "processed_count": 3
+    },
+    "status_summary": "running: final review restart round 3 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-30T04:21:17.895963714Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      },
+      "final_review_arbiter": {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      }
+    }
+  }
+}

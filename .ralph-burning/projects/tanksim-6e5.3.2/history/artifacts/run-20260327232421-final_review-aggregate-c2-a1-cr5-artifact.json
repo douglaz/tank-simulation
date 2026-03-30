@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260327232421-final_review-aggregate-c2-a1-cr5-artifact",
+  "payload_id": "run-20260327232421-final_review-aggregate-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T02:36:26.117360220Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 1 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 3\n**Final Review Restarts:** 5/20\n\n## Accepted\n\n- `fr-5-847e2a07`\n\n## Rejected\n\n- `fr-5-c3828380`\n- `fr-5-d1fd0cd7`\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-5-847e2a07`\n\n`crates/tank_core/src/save.rs:324-331` makes the schema-3 to schema-4 migration a no-op, so every legacy save loads with `animal.reserve_g = 0`. That would be safe only if reserve were optional, but it is now the sole funding source for retained biomass and for both hatching and juvenile maturation (`crates/tank_core/src/systems/shrimp.rs:252-260`, `crates/tank_core/src/systems/shrimp.rs:469-475`, `crates/tank_core/src/systems/shrimp.rs:555-562`, `crates/tank_core/src/systems/shrimp.rs:650-656`). A valid v3 colony with near-hatch egg cohorts or ready-to-mature juveniles will therefore stall or fail those transitions immediately after upgrade until later feeding rebuilds reserve, so the resumed simulation diverges from the pre-upgrade state even though loading succeeds. `crates/tank_core/tests/save_load.rs:274-320` currently codifies that zero-reserve migration, so this compatibility regression would persist unnoticed.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 5
+}

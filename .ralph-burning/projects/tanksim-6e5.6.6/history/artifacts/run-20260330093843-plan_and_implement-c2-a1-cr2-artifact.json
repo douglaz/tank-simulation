@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330093843-plan_and_implement-c2-a1-cr2-artifact",
+  "payload_id": "run-20260330093843-plan_and_implement-c2-a1-cr2",
+  "stage_id": "plan_and_implement",
+  "created_at": "2026-03-30T10:46:18.496427018Z",
+  "content": "# Plan and Implement\n\n## Change Summary\n\nUpdated the shrimp chemistry-stress scenario probe so it actually exercises chemistry-driven molt resolution within the 21-day window: the fixture now seeds adults at the end of an intermolt cycle, and `run_probe_chemistry_stress_with_suffix` again enforces a directional assertion that low-GH + high-NO2 conditions must produce either a `MoltFailure` event or lingering `failed_molt_accum`. This restores alignment between the scenario’s husbandry story and its executable checks while preserving the existing mortality, condition-decline, and tracing diagnostics.\n\n## Steps\n\n1. [Completed] Inspect the shrimp chemistry-stress scenario and confirm why the directional molt-failure assertion had been lost relative to the doc-commented husbandry story.\n2. [Completed] Patch the chemistry-stress fixture to force an imminent adult molt window and restore a directional assertion requiring `MoltFailure` evidence or failed-molt accumulation under low-GH + high-NO2 stress.\n3. [Completed] Run targeted and full shrimp scenario probe tests to verify the amended scenario still passes and now reports explicit molt-failure evidence in the chemistry-stress path.\n\n## Validation Evidence\n\n- `cargo test -p tank_harness --test e2e_shrimp_scenario_probes chemistry_stress -- --nocapture` passed; the probe now reports `molt_failures=1` and `failed_molt_accum=0.300` for the low-GH + high-NO2 scenario.\n- `cargo test -p tank_harness --test e2e_shrimp_scenario_probes all_shrimp_probes_summary -- --nocapture` passed; the summary report shows all 5 shrimp probes passing, including chemistry stress with explicit molt-failure output.\n- `cargo test -p tank_harness --test e2e_shrimp_scenario_probes -- --nocapture` passed; all 6 tests in the shrimp probe suite succeeded after the amendment.\n\n## Outstanding Risks\n\n- The chemistry-stress probe now depends on seeded adult molt timing to surface the intended failure mode inside a 21-day envelope; major future molt-interval retunes may require fixture adjustment.\n- The worktree still contains unrelated pre-existing modifications outside this change scope (`.claude/worktrees/tanksim-6e5.4.7`, `.ralph-burning/`), which were left untouched.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

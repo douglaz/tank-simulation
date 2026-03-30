@@ -1,0 +1,54 @@
+{
+  "payload_id": "run-20260330014558-final_review-vote-1-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T04:37:38.809370536Z",
+  "payload": {
+    "summary": "Accept all seven amendments. The first four identify real consistency and modeling issues in the shared substrate/microfauna logic, and the last three are correctness defects in the stage-based shrimp molt changes.",
+    "votes": [
+      {
+        "amendment_id": "fr-2-0142f03c",
+        "decision": "accept",
+        "rationale": "`substrate.rs` and `microfauna.rs` are encoding the same respiration stoichiometry for the same biological process. Keeping separate literals is an avoidable maintainability risk because any later tweak would silently desynchronize estimated substrate O2 demand from actual microfauna respiration routing."
+      },
+      {
+        "amendment_id": "fr-2-0571fa0c",
+        "decision": "accept",
+        "rationale": "The substrate O2-demand estimator and the daily microfauna step both depend on the same 1% detritus-consumption assumption. Duplicating that magic number creates a real drift hazard and would make the estimator inconsistent with realized behavior."
+      },
+      {
+        "amendment_id": "fr-2-6ea35aba",
+        "decision": "accept",
+        "rationale": "The per-habitat accessibility table is duplicated across two code paths that are supposed to describe the same microfauna access pattern. If those weights diverge, periphyton removal and substrate respiration estimates stop matching, so sharing the logic is the safer design."
+      },
+      {
+        "amendment_id": "fr-2-54222a0f",
+        "decision": "accept",
+        "rationale": "`effective_substrate_porosity` currently ignores every non-top layer when computing the diffusion coefficient, even though penetration depth is calculated across the full stacked bed. That is a real modeling simplification that should either be documented explicitly or handled with layer-aware porosity instead of silently treating the entire bed as the top layer."
+      },
+      {
+        "amendment_id": "fr-2-9ceac44a",
+        "decision": "accept",
+        "rationale": "This is a correctness issue. The 0.3 floors on GH, Ca, and Mg mean severe mineral deficiency still yields a nontrivial `mineral_factor`, and the current scoring formula can let otherwise healthy cohorts clear the default 0.55 success threshold. That undermines the intended low-mineral molt failure behavior."
+      },
+      {
+        "amendment_id": "fr-2-37123d6e",
+        "decision": "accept",
+        "rationale": "The new per-stage resolution still writes outcomes into one shared success/failure state. On mixed-result days, a success can partially erase the failure penalty, and a failure in one stage can block unrelated sub-adult maturation through the global `last_molt_success` flag. That is inconsistent with stage-local molt handling."
+      },
+      {
+        "amendment_id": "fr-2-7560ca22",
+        "decision": "accept",
+        "rationale": "The migration heuristic cannot distinguish legacy saves from ordinary default-initialized state: `inter_molt_timer_days` defaults to 14.0 while all stage timers default to 0.0. As a result, fresh stage populations can be seeded mid-cycle and become molt-ready earlier than intended, which is a real initialization bug."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

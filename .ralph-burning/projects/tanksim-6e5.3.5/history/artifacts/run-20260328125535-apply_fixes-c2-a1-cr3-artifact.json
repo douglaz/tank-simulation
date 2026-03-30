@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328125535-apply_fixes-c2-a1-cr3-artifact",
+  "payload_id": "run-20260328125535-apply_fixes-c2-a1-cr3",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-28T14:07:41.501851444Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNo additional fixes were required in this Apply Fixes stage. I reviewed the latest review output, confirmed both pending amendments from the prior round were already applied correctly, and made no further code or test changes.\n\n## Steps\n\n0. [Completed] Reviewed the latest validation output for any actionable follow-up items after the trim/export, migration, and TUI amendments.\n1. [Completed] Confirmed the review outcome was approved and that the implementation already satisfied the acceptance criteria with the latest fixes in place.\n2. [Skipped] Skipped further edits and reruns because no additional fixes were requested by the latest review.\n\n## Validation Evidence\n\n- No new validation was required in this stage because the latest review outcome was `approved` with no follow-up amendments.\n- Prior authoritative validation remains green: `cargo test -p tank_core` passed for the full package suite, including trim/export, budget tracking, and save migration coverage.\n- Prior targeted validation remains green: `cargo test -p tank_tui` passed, and `cargo test -p tank_core --test save_load` passed including `legacy_schema_v4_saves_preserve_trim_plants_as_leave_cuttings`.\n\n## Outstanding Risks\n\nNone identified.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

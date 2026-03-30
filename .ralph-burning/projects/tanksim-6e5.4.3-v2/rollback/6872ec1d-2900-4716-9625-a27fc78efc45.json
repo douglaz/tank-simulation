@@ -1,0 +1,92 @@
+{
+  "rollback_id": "6872ec1d-2900-4716-9625-a27fc78efc45",
+  "created_at": "2026-03-28T15:28:48.136002190Z",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "git_sha": "ba9de59b029ce12b012bb4b2ee5a1dd6cb19b1bc",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260328132625",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 1,
+        "attempt": 1,
+        "completion_round": 6
+      },
+      "started_at": "2026-03-28T13:26:25.386753572Z",
+      "prompt_hash_at_cycle_start": "0bee02f77dd8aaf9",
+      "prompt_hash_at_stage_start": "0bee02f77dd8aaf9",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 5
+    },
+    "status": "running",
+    "cycle_history": [],
+    "completion_rounds": 6,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-5-98d4fd2c",
+          "source_stage": "final_review",
+          "source_cycle": 1,
+          "source_completion_round": 5,
+          "body": "In `compute_co2_kla` (chemistry.rs:55-58), the Euler stability cap is baked into the function (`k_la_o2.min(1.0) * 0.91`), while the O2 path caps K_LA at the *usage site* (dissolved_oxygen.rs:94). This asymmetry means `compute_co2_kla` always returns a stability-capped value, making it unsuitable if a caller ever needs the true physical CO2 K_LA (e.g., for diagnostic display or reporting). Consider either: (a) renaming `compute_co2_kla` to `compute_co2_kla_capped` to signal the cap is embedded, or (b) refactoring both O2 and CO2 paths to cap at the same level (either always at definition or always at usage). This is not a correctness bug today since the only caller is the Euler step, but it's a maintainability trap for the next contributor.",
+          "created_at": "2026-03-28T15:28:48.053031804Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "d1198166d8a7f35c3bb3a94f4fb3447ac3f120e99ba893755ffc956310cb83ca"
+        },
+        {
+          "amendment_id": "fr-5-24b63d9b",
+          "source_stage": "final_review",
+          "source_cycle": 1,
+          "source_completion_round": 5,
+          "body": "Reset `spawn_progress_accum` when the adult population or eligible spawner count drops to zero. The new accumulator is persisted in `crates/tank_core/src/types/biology.rs:128-131`, and `spawning()` both consumes it at `crates/tank_core/src/systems/shrimp.rs:443-444` and returns early at `crates/tank_core/src/systems/shrimp.rs:425-435` without clearing it. That means a later, unrelated colony can inherit fractional spawn progress from a deleted one. I reproduced this by stepping a 10-adult colony at `base_spawn_rate=0.35`, then resetting to a clean 2-adult colony: with the reused carry the new colony produced 1 berried female on day 1, while a clean 2-adult colony produced 0. Clear the accumulator whenever spawning continuity is broken.",
+          "created_at": "2026-03-28T15:28:48.053037505Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "9ce8186a4c6c928f9f1c28bb1d01c883759c53d37e38f66546813949b40f436c"
+        },
+        {
+          "amendment_id": "fr-5-a50e6e2d",
+          "source_stage": "final_review",
+          "source_cycle": 1,
+          "source_completion_round": 5,
+          "body": "Reset `hatch_success_carry` whenever all berried females / egg cohorts are cleared. The accumulator is also persisted in `crates/tank_core/src/types/biology.rs:128-131`, but `egg_development()` reuses it at `crates/tank_core/src/systems/shrimp.rs:517-520` and can return with no cohorts at `crates/tank_core/src/systems/shrimp.rs:465-475` without zeroing it; `clamp_berried_to_adults()` at `crates/tank_core/src/types/biology.rs:546-553` can also delete cohorts without touching the carry. That lets a brand-new clutch inherit old fractional hatch credit. I reproduced this with `hatch_success_base=0.3`: after one large cohort left a positive carry, a later single-cohort state hatched 2 juveniles immediately, while the same clean single-cohort state hatched 0. Clear the carry whenever the hatch process loses continuity.",
+          "created_at": "2026-03-28T15:28:48.053042404Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "98173c06640337c635d656bf0e104a168d76cdc458780318601274cee637a6da"
+        }
+      ],
+      "processed_count": 5
+    },
+    "status_summary": "running: final review restart round 6 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T15:07:50.450612713Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      },
+      "final_review_arbiter": {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      }
+    }
+  }
+}

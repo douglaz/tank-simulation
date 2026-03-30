@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330074452-apply_fixes-c2-a1-cr1-artifact",
+  "payload_id": "run-20260330074452-apply_fixes-c2-a1-cr1",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-30T08:44:09.062597504Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nTightened the reproduction remediation coverage in `crates/tank_core/tests/reproduction_factors.rs`: the instability regression now drives a real 3°C+ thermal swing and asserts 2-3 days of lingering suppression, the former existence-only parameter check now mutates temperature/density/chemistry/instability knobs and proves they change readiness or egg dropping, and the 2000-hour stable vs neglected scenarios now use explicit maintenance actions plus hard requirements for chemistry/stability degradation and stalled population growth. Validation also confirmed the shared instability tracker and save/load paths still behave under the updated coverage.\n\n## Steps\n\n1. [Completed] Reviewed the reproduction runtime and existing remediation gaps around egg-drop tuning, instability persistence, and weak scenario assertions.\n2. [Completed] Strengthened the instability and parameterization tests so they exercise real swing behavior and prove runtime knobs change outcomes instead of only checking field presence.\n3. [Completed] Hardened the long-horizon stable and neglected reproduction scenarios with explicit maintenance inputs, source-water setup, and stricter chemistry/stability/population assertions.\n4. [Completed] Ran targeted regression coverage for reproduction factors, shared instability behavior, and save/load compatibility.\n\n## Validation Evidence\n\n- `cargo test -p tank_core --test reproduction_factors -- --nocapture` passed with 13/13 tests.\n- `cargo test -p tank_core --test end_to_end sad_rapid_water_changes_cause_instability -- --nocapture` passed.\n- `cargo test -p tank_core save_load -- --nocapture` passed, including the 6 tests in `tests/save_load.rs` matched by the filter.\n\n## Outstanding Risks\n\n- I did not run the full `cargo test -p tank_core` or full workspace suite; validation was targeted at reproduction, stability, and save/load regressions.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

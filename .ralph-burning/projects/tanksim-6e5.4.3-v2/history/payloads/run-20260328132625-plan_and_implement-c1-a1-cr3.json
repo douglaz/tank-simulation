@@ -1,0 +1,60 @@
+{
+  "payload_id": "run-20260328132625-plan_and_implement-c1-a1-cr3",
+  "stage_id": "plan_and_implement",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T14:05:39.301817035Z",
+  "payload": {
+    "data": {
+      "change_summary": "Fixed pre-existing test failure in concentration_helpers.rs::canonical_helpers_use_net_water_volume. The test's expected_gh_d() helper used rounded GH conversion coefficients (2.497, 4.118) that did not match the library's molar-mass-based computation (100.0869/40.078 = 2.49726..., 100.0869/24.305 = 4.11752...). With a 1e-9 tolerance, the ~3e-4 rounding gap caused the assertion to fail. Updated the test helper to use the same molar-mass formula as the library code. No changes to library code — only the test expectation was corrected.",
+      "outstanding_risks": [],
+      "steps": [
+        {
+          "description": "Reproduced the test failure: canonical_helpers_use_net_water_volume panicked with expected 3.9517 vs got 3.9520",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Diagnosed root cause: test helper expected_gh_d() used rounded coefficients (2.497, 4.118) while library uses precise molar mass ratios (100.0869/40.078, 100.0869/24.305), causing ~3e-4 discrepancy against 1e-9 tolerance",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Updated expected_gh_d() in concentration_helpers.rs to use the same molar-mass-based formula as the library (CaCO3=100.0869, Ca=40.078, Mg=24.305 g/mol)",
+          "order": 3,
+          "status": "completed"
+        },
+        {
+          "description": "Ran cargo test --test concentration_helpers: 10/10 passed including the previously failing test",
+          "order": 4,
+          "status": "completed"
+        },
+        {
+          "description": "Ran all CO2-related test suites (co2_exchange 12/12, chemistry 21/21, dissolved_oxygen 5/5): no regressions",
+          "order": 5,
+          "status": "completed"
+        },
+        {
+          "description": "Ran cargo fmt --check -p tank_core: clean",
+          "order": 6,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "cargo test --test concentration_helpers: 10 passed, 0 failed — canonical_helpers_use_net_water_volume now passes",
+        "cargo test --test co2_exchange: 12 passed, 0 failed",
+        "cargo test --test chemistry: 21 passed, 0 failed",
+        "cargo test --test dissolved_oxygen: 5 passed, 0 failed",
+        "cargo fmt --check -p tank_core: clean, exit 0"
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 3
+}

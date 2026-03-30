@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328125529-final_review-planner-positions-c2-a1-cr2-artifact",
+  "payload_id": "run-20260328125529-final_review-planner-positions-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T14:18:24.652702436Z",
+  "content": "# Final Review Planner Positions\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccept the backward-compatibility and UI-labeling amendments. Reject the test-fix and non-finite migration amendments because the cited defects are not present in the current code path and the proposed changes would either weaken coverage or add redundant checks.\n\n## Votes\n\n- `fr-2-e223ad05`: Reject\n  The cited failure is not supported by the current code: `expected_gh_d` already uses the full molar-mass literals, not rounded shortcut factors, and the targeted test passes. Widening the tolerance would only weaken regression coverage, and importing private production constants into the test would reduce the test's independence without fixing an actual defect.\n- `fr-2-58a15061`: Reject\n  This migration operates on `serde_json::Value`, and legacy save files are parsed through `serde_json`, which does not admit NaN or infinity as JSON numbers. `Value::as_f64()` here is already the effective type gate, so an extra `is_finite()` check on the dissolved fields does not close a real input-validation gap.\n- `fr-2-6889af6d`: Accept\n  This is a real compatibility gap. The TUI deserializes API snapshots directly into `TankSnapshot`, and the struct now requires the renamed field names. A newer client talking to an older server that only emits legacy names will fail to deserialize unless aliases or a compatibility DTO are added.\n- `fr-2-eaad5f11`: Accept\n  The overview screen is still presenting estimated 7-ion TDS/conductivity values with labels that read like definitive measurements. Renaming them to explicit estimate labels improves user-facing correctness and aligns the overview with the chemistry screen and the underlying field semantics.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

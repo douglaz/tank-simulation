@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330083637-final_review-vote-1-c2-a1-cr4-artifact",
+  "payload_id": "run-20260330083637-final_review-vote-1-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T11:19:53.433786444Z",
+  "content": "# Final Review Votes\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccept only the equipment-scaling probe amendment. The shrimp diagnostic amendment describes an intentional worst-case summary rather than an inconsistent diagnostic, and the other three amendments are stale against the current repository state.\n\n## Votes\n\n- `fr-4-8001ff1d`: Reject\n  `poor_condition_involved` is only a boolean that says at least one failed molt stage crossed the poor-condition threshold. The emitted detail uses the minimum recorded condition factor/index/reserve tuple across failed stages, which remains internally consistent: if the boolean is true, that minimum necessarily comes from a threshold-violating stage as well. The message reports the worst observed poor-condition evidence, not the first stage that flipped the flag, so this is not a correctness defect.\n- `fr-4-fa502cd0`: Accept\n  The equipment-scaling probe compares 1× and 2× TAN, DO, and temperature directly, but both final envelopes use the same absolute `plant_biomass_g(1.0, 400.0)` bound. Plant startup mass is footprint-scaled, and the 2× geometry has 4× footprint, so reusing the same absolute ceiling makes the larger run materially less strict and does not really verify the stated proportional plant-scaling behavior. Scaling the plant envelope or comparing biomass density would make the probe match its own acceptance intent.\n- `fr-4-5e81fa2c`: Reject\n  This does not match the current tree. `crates/tank_harness/tests/e2e_habitat_geometry_probes.rs` is present and implements the five requested habitat/geometry probes, including biofilter scaling, light-depth, habitat fouling, substrate redox, equipment scaling, habitat-specific debug output, and an all-probes summary runner. As written, the amendment is stale.\n- `fr-4-46c961d8`: Reject\n  This is also stale. `crates/tank_core/tests/nitrification_alkalinity.rs` is tracked in git in the reviewed repository state, so the described failure mode of tests passing locally from an untracked file does not apply to the patch as it exists now.\n- `fr-4-1f9e983d`: Reject\n  The cited `nitrogen_cycle.total_n_nitrified_mg` field is not present in the current implementation. The code now exposes separate `tan_oxidized_mg` and `nitrate_produced_mg_n` outputs, with comments explicitly noting that TAN oxidation can lead nitrate production when nitrite accumulates. That split removes the inconsistency described by the amendment.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

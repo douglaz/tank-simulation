@@ -1,0 +1,34 @@
+{
+  "payload_id": "run-20260330040229-final_review-vote-1-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T07:28:31.484947592Z",
+  "payload": {
+    "summary": "Reject the claimed GH divide-by-zero and wrong-feature amendments; accept the alkalinity budget unit-mismatch issue as a real public-surface and diagnostics defect.",
+    "votes": [
+      {
+        "amendment_id": "fr-4-6dd70b19",
+        "decision": "reject",
+        "rationale": "`gh_min_d` is allowed to be `0.0`, but the cited unguarded division is behind `gh_d < gh_min_d`. In this code, `gh_d()` is derived from Ca/Mg totals and clamped to `>= 0.0`, so when `gh_min_d == 0.0` that branch is not reachable on valid states and no divide-by-zero occurs. Adding `.max(0.01)` would be harmless hardening, but this amendment does not establish a real reachable correctness bug."
+      },
+      {
+        "amendment_id": "fr-4-f6356ad9",
+        "decision": "reject",
+        "rationale": "The bead `tanksim-6e5.4.7` is explicitly about nitrification-driven alkalinity depletion, carbonate-solver verification, budget/tracing visibility, and preparing the denitrification return path. The patch changes in `nitrogen_cycle`, `engine`, `process`, budget helpers, and the new `nitrification_alkalinity` tests align with those deliverables, so the claim that it is implementing the wrong feature is incorrect."
+      },
+      {
+        "amendment_id": "fr-4-5977fa01",
+        "decision": "accept",
+        "rationale": "This is a real API and diagnostics defect. The patch routes alkalinity values in meq through `ElementBudget { in_mg, out_mg }` and `SystemElementDelta { in_mg, out_mg, net_mg }`, so the public/debug surface now mixes units under mg-named fields. The helper output remains inconsistent as well: alkalinity paths still print per-system values as `mg` in `assert_budget_balanced` and `assert_per_tick_balanced`. Comments noting the exception do not remove the ambiguity for downstream consumers."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

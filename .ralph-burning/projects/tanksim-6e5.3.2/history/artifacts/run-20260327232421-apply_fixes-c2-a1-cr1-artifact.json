@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327232421-apply_fixes-c2-a1-cr1-artifact",
+  "payload_id": "run-20260327232421-apply_fixes-c2-a1-cr1",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-27T23:53:24.274716910Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nAdded shrimp-routing invariant enforcement in `crates/tank_core/src/invariants.rs` for `animal.reserve_g`, the shrimp assimilation/respiration/excretion/growth fractions, and `shrimp_o2_per_mg_c_respired`; made `Engine::step_hours` reject invalid state before the first simulated hour; aligned `crates/tank_core/src/systems/shrimp.rs`, `docs/ROUTING.md`, and `docs/scientific_inventory.md` with the phase-1 TAN+DOC dissolved-excretion contract; and added regression tests in `crates/tank_core/tests/save_load.rs` and `crates/tank_core/tests/validation.rs` for malformed v4 saves and invalid shrimp process params.\n\n## Steps\n\n1. [Completed] Enforced shrimp routing parameter bounds/sum rules plus non-negative `animal.reserve_g` in invariant checks.\n2. [Completed] Validated engine state before hourly simulation begins so malformed saves or direct `TankState` construction fail before any shrimp routing runs.\n3. [Completed] Updated routing/scientific docs and added regression tests for malformed v4 saves plus invalid shrimp runtime parameters.\n\n## Validation Evidence\n\n- `cargo test -p tank_core --test save_load --test validation --test shrimp_feeding_pathway` passed.\n- `cargo test -p tank_core` was run; all exercised suites passed except `crates/tank_core/tests/shrimp_population.rs::hatch_produces_juveniles`, which still fails outside the edited paths.\n- `cargo fmt --all` was run after the code/test edits.\n\n## Outstanding Risks\n\n- `cargo test -p tank_core` still reports an unrelated failure in `crates/tank_core/tests/shrimp_population.rs::hatch_produces_juveniles`, so the full suite is not green from this workspace state.\n- The worktree already contains unrelated changes in `crates/tank_core/tests/overfeeding_effects.rs` and an untracked `.ralph-burning/` directory, which I left untouched.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

@@ -1,0 +1,137 @@
+{
+  "payload_id": "run-20260330074452-final_review-aggregate-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:07:06.335814944Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-4-2d9371fc",
+      "fr-4-3662d749",
+      "fr-4-09646071"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-4-8dc1f3dd",
+        "normalized_body": "In `shrimp.rs:412`, the dissolved-oxygen factor in `update_condition()` uses a hardcoded reference of `6.0` mg/L (`let do_factor = (do_mg_l / 6.0).clamp(0.0, 1.0)`), while the egg-development hatch-success path at line 889 uses the parameterized `params.egg_oxygen_reference_mg_l` (defaulting to 6.0 from TOML). These describe the same biological concept (DO reference for shrimp health) but can silently diverge if the TOML parameter is retuned. Replace the hardcoded `6.0` on line 412 with `params.egg_oxygen_reference_mg_l` (or a corresponding field on `ShrimpRuntimeParams` accessible from condition update context) so both paths stay in sync.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-5e14a754",
+        "normalized_body": "The egg-failure diagnostic thresholds in `shrimp.rs:966-984` are all hardcoded magic numbers (0.6 for oxygen/minerals/stability/TAN/NO2, 0.5 for temperature). These do not derive from the parameterized thresholds in `ShrimpRuntimeParams` that control actual suppression (e.g., `tan_repro_threshold_mg_n_per_l`, `no2_repro_threshold_mg_n_per_l`). If species parameters are retuned, the diagnostic EventCauses will fire at the old thresholds, misattributing or missing failure causes. Derive these diagnostic thresholds from the same parameters that drive the actual factor computations, or at minimum make them named constants with documentation linking them to the corresponding factor curves.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-68de6649",
+        "normalized_body": "The `egg_dropping()` function at `shrimp.rs:813-822` uses a per-egg `state.rng.next_f64()` loop for stochastic egg loss, while all other reproductive transitions (spawning at line 745 and hatching at line 932) use the deterministic `deterministic_transfer_count()` carry function. This makes egg dropping the sole source of non-deterministic variance in the reproduction pipeline. Refactor egg dropping to use `deterministic_transfer_count()` (with its own carry accumulator on `AnimalState`) for consistency, or document the intentional design choice with a comment explaining why stochastic behavior is specifically desired for egg dropping but not for other transitions.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-2d9371fc",
+        "normalized_body": "In `test_mature_stable_tank_breeds_well()` at `reproduction_factors.rs:1353-1357`, the test counts `ShrimpBerried` events as 'reproductive cycles' (`berried_events >= 3`). The acceptance criteria specify 'at least three reproductive cycles observed,' which implies complete spawn→incubation→hatch→juvenile cycles. A spawning event that is followed by egg dropping or hatch failure does not constitute a complete cycle. The test should additionally verify that `ShrimpHatched` events (or equivalent) also reach at least 3 to confirm complete cycle completion, or track juveniles-produced events across the 2000-hour window.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-3662d749",
+        "normalized_body": "Unify the alkalinity stoichiometry source across runtime defaults and preset/scenario loading. `ProcessParams::default()` now uses `NITRIFICATION_ALK_MEQ_PER_MG_N` at `/home/master/p/tank-simulation/.claude/worktrees/tanksim-6e5.4.7/crates/tank_core/src/types/process.rs:338`, but the preset-side defaults still hard-code `0.1428` at `/home/master/p/tank-simulation/.claude/worktrees/tanksim-6e5.4.7/crates/tank_data/src/presets.rs:1018` and the shipped process preset still serializes `0.1428` at `/home/master/p/tank-simulation/.claude/worktrees/tanksim-6e5.4.7/crates/tank_data/data/process/default.toml:54`. Because scenarios copy the preset value verbatim at `/home/master/p/tank-simulation/.claude/worktrees/tanksim-6e5.4.7/crates/tank_scenarios/src/lib.rs:391-392`, the same tank now consumes different alkalinity depending on whether it was built via `TankState::new()` or via the shipped preset path.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-09646071",
+        "normalized_body": "Fix the new nitrogen-cycle trace output so the nitrogen quantity matches the alkalinity quantity it is emitted next to. The trace now emits `nitrogen_cycle.total_n_nitrified_mg` and `nitrogen_cycle.alk_consumed_meq` together at `/home/master/p/tank-simulation/.claude/worktrees/tanksim-6e5.4.7/crates/tank_core/src/engine.rs:229-238`, but `total_mg_n_nitrified` is computed as `nob_step + comammox_step` at `/home/master/p/tank-simulation/.claude/worktrees/tanksim-6e5.4.7/crates/tank_core/src/systems/nitrogen_cycle.rs:343-346` while alkalinity consumption is computed from `aob_alk_cost + comammox_alk_cost` at `/home/master/p/tank-simulation/.claude/worktrees/tanksim-6e5.4.7/crates/tank_core/src/systems/nitrogen_cycle.rs:366-384`. In any tick where AOB produces nitrite faster than NOB clears it, the trace can report positive alkalinity consumption alongside zero or underreported `total_n_nitrified_mg`, which makes the new diagnostics scientifically misleading.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-4-2d9371fc",
+        "normalized_body": "In `test_mature_stable_tank_breeds_well()` at `reproduction_factors.rs:1353-1357`, the test counts `ShrimpBerried` events as 'reproductive cycles' (`berried_events >= 3`). The acceptance criteria specify 'at least three reproductive cycles observed,' which implies complete spawn→incubation→hatch→juvenile cycles. A spawning event that is followed by egg dropping or hatch failure does not constitute a complete cycle. The test should additionally verify that `ShrimpHatched` events (or equivalent) also reach at least 3 to confirm complete cycle completion, or track juveniles-produced events across the 2000-hour window.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-3662d749",
+        "normalized_body": "Unify the alkalinity stoichiometry source across runtime defaults and preset/scenario loading. `ProcessParams::default()` now uses `NITRIFICATION_ALK_MEQ_PER_MG_N` at `/home/master/p/tank-simulation/.claude/worktrees/tanksim-6e5.4.7/crates/tank_core/src/types/process.rs:338`, but the preset-side defaults still hard-code `0.1428` at `/home/master/p/tank-simulation/.claude/worktrees/tanksim-6e5.4.7/crates/tank_data/src/presets.rs:1018` and the shipped process preset still serializes `0.1428` at `/home/master/p/tank-simulation/.claude/worktrees/tanksim-6e5.4.7/crates/tank_data/data/process/default.toml:54`. Because scenarios copy the preset value verbatim at `/home/master/p/tank-simulation/.claude/worktrees/tanksim-6e5.4.7/crates/tank_scenarios/src/lib.rs:391-392`, the same tank now consumes different alkalinity depending on whether it was built via `TankState::new()` or via the shipped preset path.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-09646071",
+        "normalized_body": "Fix the new nitrogen-cycle trace output so the nitrogen quantity matches the alkalinity quantity it is emitted next to. The trace now emits `nitrogen_cycle.total_n_nitrified_mg` and `nitrogen_cycle.alk_consumed_meq` together at `/home/master/p/tank-simulation/.claude/worktrees/tanksim-6e5.4.7/crates/tank_core/src/engine.rs:229-238`, but `total_mg_n_nitrified` is computed as `nob_step + comammox_step` at `/home/master/p/tank-simulation/.claude/worktrees/tanksim-6e5.4.7/crates/tank_core/src/systems/nitrogen_cycle.rs:343-346` while alkalinity consumption is computed from `aob_alk_cost + comammox_alk_cost` at `/home/master/p/tank-simulation/.claude/worktrees/tanksim-6e5.4.7/crates/tank_core/src/systems/nitrogen_cycle.rs:366-384`. In any tick where AOB produces nitrite faster than NOB clears it, the trace can report positive alkalinity consumption alongside zero or underreported `total_n_nitrified_mg`, which makes the new diagnostics scientifically misleading.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 4,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-4-8dc1f3dd",
+      "fr-4-5e14a754",
+      "fr-4-68de6649"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 3 amendment(s); restart required.",
+    "total_proposed_amendments": 6,
+    "total_reviewers": 2,
+    "unique_amendment_count": 6
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 4
+}

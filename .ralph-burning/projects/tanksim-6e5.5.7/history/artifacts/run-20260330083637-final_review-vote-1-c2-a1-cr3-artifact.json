@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330083637-final_review-vote-1-c2-a1-cr3-artifact",
+  "payload_id": "run-20260330083637-final_review-vote-1-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T10:53:23.832483962Z",
+  "content": "# Final Review Votes\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccept the two amendments that correct real inaccuracies in probe documentation/diagnostics, and reject the two amendments that claim the habitat/geometry coverage or per-habitat diagnostics are missing, because those pieces are already present in the code under review.\n\n## Votes\n\n- `fr-3-dd96264b`: Accept\n  `run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix` uses `SMALL_MEDIA_CM2 = 500.0` and `LARGE_MEDIA_CM2 = 4000.0`, so the failure text saying \"2x media\" is objectively wrong for the configured scenario. Misstated diagnostics are a maintainability/debugging defect and should be corrected.\n- `fr-3-703dc756`: Accept\n  The substrate redox probe documentation currently frames the comparison as being about substrate geometry and root-zone effects, but the inert arm also enables aeration at higher intensity while the planted arm does not. The comment should acknowledge that asymmetry and explain why it makes the control conservative; that is a real documentation accuracy fix.\n- `fr-3-b63c4158`: Reject\n  This amendment does not match the code under review. The repository already contains `crates/tank_harness/tests/e2e_habitat_geometry_probes.rs` with scenario-level probes for biofilter scaling, light depth, habitat fouling, substrate redox, and equipment scaling, plus the `all_habitat_geometry_probes_summary` runner. The claim that the bead's required habitat/geometry coverage is absent is therefore incorrect.\n- `fr-3-49996a37`: Reject\n  The conclusion is incorrect because the habitat/geometry harness already provides habitat-specific debug output. `format_habitat_debug` and `dump_habitat_debug` emit per-habitat colonizable area, exposure modifiers, and habitat-specific biomass, and they are invoked from each probe in `crates/tank_harness/tests/e2e_habitat_geometry_probes.rs`. Aggregate diagnostics in `engine.rs` or `budget_helpers.rs` do not mean the required per-habitat failure output is missing.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

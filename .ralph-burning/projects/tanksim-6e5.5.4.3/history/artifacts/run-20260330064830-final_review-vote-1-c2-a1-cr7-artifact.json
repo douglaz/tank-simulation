@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330064830-final_review-vote-1-c2-a1-cr7-artifact",
+  "payload_id": "run-20260330064830-final_review-vote-1-c2-a1-cr7-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T10:58:47.723533349Z",
+  "content": "# Final Review Votes\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccept the numeric hardening and registry-consistency amendments; reject the blocking amendment because the reviewed code already implements and tests the root-zone oxygenation behavior it claims is missing.\n\n## Votes\n\n- `fr-7-dd6f9b61`: Accept\n  The formula is mathematically bounded, but `effective_penetration_cm` is returned directly and written into layer state before later accessors clamp it. Because `base + (total - base)` can exceed `total_depth_cm` by a few ULPs, adding `.min(total_depth_cm)` is a cheap, correct way to preserve the invariant explicitly.\n- `fr-7-80ce85a0`: Accept\n  The inconsistency is real: `substrate_oxygenation_breakdown()` recomputes a registry, while `step_substrate_zones()` consumes `state.habitat_registry`. Since `TankState` is publicly mutable and callers can leave the cache stale, the two public paths can disagree on the same state; that needs either a documented precondition or a unified registry source.\n- `fr-7-c178d602`: Reject\n  This blocking claim does not match the code under review. The substrate system already contains rooted-only active biomass handling, a saturating root-oxygenation bonus, and planted-versus-unplanted penetration behavior, and dedicated integration/unit tests cover the 500-hour divergence, rooted-only contribution, and biomass-saturation behavior.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 7
+}

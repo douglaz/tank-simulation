@@ -1,0 +1,53 @@
+{
+  "payload_id": "run-20260330074452-plan_and_implement-c2-a1-cr3",
+  "stage_id": "plan_and_implement",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T09:59:45.839498689Z",
+  "payload": {
+    "data": {
+      "change_summary": "Completed the remaining reproduction and probe amendments end to end. Shrimp reproduction now uses named runtime/species parameters for egg-drop cap, egg-development oxygen reference, reproductive-readiness smoothing, and full-clutch condition threshold; those knobs are wired through `ShrimpRuntimeParams`, invariants, shrimp preset parsing/default lookup, scenario loading, and `neocaridina_davidi.toml`. I also normalized daily instability to use the dominant swing instead of additive saturation, extended reproduction regressions to prove the new knobs change behavior and that the species preset exposes them as named parameters, and tightened the habitat geometry probes so the biofilter case now fails if the larger filter finishes with worse NO2 when no full reduced-N clearance occurs, while the redox case now verifies sustained late/final suboxic volume and a stronger final denitrifier-maturity floor using a planted arm that retains suboxic pore volume and an explicitly oxic inert control.",
+      "outstanding_risks": [
+        "Validation was targeted rather than workspace-wide; I did not rerun the full `tank_core`/`tank_harness`/workspace test suites beyond the focused binaries listed below.",
+        "The working tree still has unrelated local changes outside this deliverable (`.claude/worktrees/tanksim-6e5.4.7`, `crates/tank_harness/tests/e2e_shrimp_scenario_probes.rs`, and untracked `.ralph-burning/`), which I left untouched."
+      ],
+      "steps": [
+        {
+          "description": "Inspected the shrimp runtime, preset-loading path, invariants, and habitat-probe assertions to map each pending amendment to the concrete code and test surfaces that still needed work.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Patched shrimp reproduction/stability so the remaining hardcoded tuning constants are named parameters, preset-backed and invariant-checked, and adjusted the instability tracker to avoid additive over-saturation from mixed daily swings.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Extended reproduction coverage for preset-backed parameter observability plus behavior changes from the new egg-drop, oxygen, smoothing, and clutch-size knobs, then strengthened the biofilter and substrate-redox habitat probes so their stricter assertions validate the intended ecological behavior.",
+          "order": 3,
+          "status": "completed"
+        },
+        {
+          "description": "Ran formatting, targeted tank_core regressions, save/load and invariant checks, and the full habitat-geometry probe suite to verify the amended behavior and the stronger probe expectations.",
+          "order": 4,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo fmt --all` completed successfully.",
+        "`cargo test -p tank_core --test reproduction_factors -- --nocapture` passed with 16/16 tests, including the new preset-backed parameter observability and extracted-knob behavior coverage.",
+        "`cargo test -p tank_core --test validation step_hours_rejects_invalid_molt_mineral_parameters_before_simulation -- --nocapture` passed, covering the new shrimp invariant checks.",
+        "`cargo test -p tank_core --test save_load malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected -- --nocapture` passed, confirming malformed saves with the new shrimp parameters are rejected.",
+        "`cargo test -p tank_harness --test e2e_habitat_geometry_probes -- --nocapture` passed with 6/6 tests; the biofilter summary now reports lower final TAN and no-worse NO2 for the larger filter when neither arm fully clears reduced nitrogen, and the redox summary now reports sustained planted suboxic volume (`5042 -> 5746 cm³`) with planted denitrifier activity `0.10 -> 0.67` versus inert `0.10 -> 0.05`."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

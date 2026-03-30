@@ -1,0 +1,110 @@
+{
+  "rollback_id": "4a7662b1-5498-4012-ba69-09e4c9f41c81",
+  "created_at": "2026-03-30T10:20:28.240188314Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "3fc94994ccb8a6be8238c99ee977029e1fd49bb8",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260330083637",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 3
+      },
+      "started_at": "2026-03-30T08:36:37.153046220Z",
+      "prompt_hash_at_cycle_start": "41159049fac54b1e",
+      "prompt_hash_at_stage_start": "41159049fac54b1e",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 2
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T09:07:10.536272059Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 3,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-2-553aead6",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "Thermal suppression probe removed the `warm_elevated_molt_stress` assertion (that warm tank should have higher molt stress than cool tank). Test output reveals the REASON: the cool tank finishes with molt_stress=1.000 while warm has 0.351 — the relationship is inverted. This likely indicates a model-level issue (e.g., cool tank's aggressive breeding drives molt stress higher than heat does) that is being papered over by deleting the assertion rather than investigated. At minimum, add a comment explaining WHY the molt stress check was removed, documenting the observed inversion so future maintainers understand it's a known model behavior, not an oversight.",
+          "created_at": "2026-03-30T10:20:28.139486795Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "2937978a3ad687ad0e681b6b418ddd52b2c4968f7bdbda12ef378667976273ff"
+        },
+        {
+          "amendment_id": "fr-2-6e9f307b",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "Redox probe `redox_nitrate_drawdown` check (line 1273: `snap_planted.nitrate_mg_n_per_l < snap_inert.nitrate_mg_n_per_l * 0.5`) can pass vacuously if inert nitrate is very low. Both arms start at 20 mg N/L nitrate; if non-denitrification consumption (plant uptake, assimilatory pathways) draws inert nitrate low, the 0.5× threshold becomes meaningless. Add a floor: e.g., require `snap_inert.nitrate_mg_n_per_l > 1.0` before the comparison, or assert that planted N₂ export exceeds a meaningful absolute minimum (which the `redox_n2_export` check partially covers but against inert, not against zero).",
+          "created_at": "2026-03-30T10:20:28.139491494Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "d6810664371738063246c89741cacd5292d0ac93b0b34804a18551dc817593df"
+        },
+        {
+          "amendment_id": "fr-2-90a58efd",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "The successful breeding probe doc comment (line 90-97) states 'Total population should grow' but the assertion (line 150-151) only checks `total_shrimp_count >= initial_count` (maintained, not grew). Test output confirms initial=10, final=10, so population exactly maintained. The doc comment and the run_probe summary variable `maintained` are inconsistent with the narrative. Either strengthen the assertion to require actual growth, or update the doc to say 'population should be maintained through successful breeding cycles'.",
+          "created_at": "2026-03-30T10:20:28.139494800Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "e7c40a839fdde29330aa02c39819c7ed342dafcabe4e4ebaec78b3a7e5b7c70c"
+        },
+        {
+          "amendment_id": "fr-2-e05696ff",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "Fouling probe's `fouling_ratio_shift` check (line 952-963) is guarded by `if ratio_hl > 1e-9 && ratio_ll > 1e-9` and simply not recorded if the condition fails. If filter decomposer biomass is always near zero (ratio computation guard at line 917-925 already returns 0.0), the ratio shift check is silently omitted from the summary. Add at minimum a recorded-as-skipped entry or a precondition check that asserts both ratios are measurable before the main comparison.",
+          "created_at": "2026-03-30T10:20:28.139498026Z",
+          "batch_sequence": 4,
+          "source": "workflow_stage",
+          "dedup_key": "d276ae68c267656bc1d7678a3d4c77f33b65c10b3b67b5ce9cd0b5312611eff5"
+        }
+      ],
+      "processed_count": 3
+    },
+    "status_summary": "running: final review restart round 3 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-30T09:59:49.389634992Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

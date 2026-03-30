@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-10-183acb0a",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 10,
+  "body": "The NH3 stress threshold (0.02 mg/L) and response scale (2.0) in `step_hourly_shrimp_stress()` (shrimp.rs:123-124) are hardcoded: `if nh3_mg_l > 0.02 { state.animal.hourly_nh3_stress_accum += (nh3_mg_l - 0.02) * 2.0 / 24.0; }`. These feed into the stress_total that drives mortality, including molt-stress-linked mortality. Extract them as named parameters.",
+  "created_at": "2026-03-30T11:28:27.081323562Z",
+  "batch_sequence": 4,
+  "source": "workflow_stage",
+  "dedup_key": "13e6b25c71c75272fe052ddcf14bf8ca66c040f89193a3cef48a733eb2b1256b"
+}

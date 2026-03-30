@@ -1,0 +1,102 @@
+{
+  "payload_id": "run-20260330051540-final_review-aggregate-c3-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 3,
+  "attempt": 1,
+  "created_at": "2026-03-30T06:58:21.077860372Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-3-609a7743",
+      "fr-3-9bf708db"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-3-609a7743",
+        "normalized_body": "In `compute_effective_nitrite_hazard` (shrimp.rs:61-71), when `chloride_protection_factor` is exactly 0.0 and `nitrite_mg_l` is extremely small (subnormal) with a large `chloride_mg_l`, `cl_no2_ratio` overflows to infinity, `0.0 * inf = NaN`, producing `NaN` from the function. Add a fast-path `if chloride_protection_factor <= 0.0 || chloride_mg_l <= 0.0 { return nitrite_mg_l; }` before the ratio calculation, matching the documented behavior ('Returns raw nitrite when chloride is zero').",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-9bf708db",
+        "normalized_body": "The TankSnapshot struct (snapshot.rs:23-60) does not expose chloride concentration or effective nitrite hazard, meaning the TUI/API cannot display these values between event firings. Consider adding `chloride_mg_per_l` and optionally `effective_nitrite_hazard_mg_per_l` to TankSnapshot so salt-treatment monitoring is visible in the chemistry screen, not only through events and trace output.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-685b9673",
+        "normalized_body": "Blocking: the patch never implements chloride-aware nitrite hazard in the shrimp pathway. `crates/tank_core/src/systems/shrimp.rs:29-42` still increments `hourly_nitrite_stress_accum` from raw nitrite concentration alone, and `crates/tank_core/src/systems/shrimp.rs:274-315` still applies a chloride-blind `nitrite_factor` when updating condition. `crates/tank_core/src/types/biology.rs:205-257` also still lacks any species-level chloride protection parameter. The tracked changes instead add alkalinity/budget plumbing in `crates/tank_core/src/systems/nitrogen_cycle.rs:12-24` and `crates/tank_core/src/systems/nitrogen_cycle.rs:366-385`, so two tanks with identical NO2 but different Cl will still produce identical shrimp stress and mortality. That misses the bead's core deliverable and multiple acceptance criteria.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-4a3fdfe3",
+        "normalized_body": "Blocking: the committed diff also omits the required explainability and regression coverage for the chloride/nitrite bead. The only tracked test change is the formatting-only edit in `crates/tank_core/tests/plant_nutrient_normalization.rs:58-63`, so there is still no committed test for low-vs-high chloride mortality, species-parameterized protection, or the salt-treatment emergency scenario. Likewise the new trace work in `crates/tank_core/src/engine.rs:229-239` records nitrification/alkalinity notes rather than the required NO2, chloride, effective hazard, and stress contribution. As a result, the acceptance criteria around diagnostics and automated coverage are still unmet.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-3-609a7743",
+        "normalized_body": "In `compute_effective_nitrite_hazard` (shrimp.rs:61-71), when `chloride_protection_factor` is exactly 0.0 and `nitrite_mg_l` is extremely small (subnormal) with a large `chloride_mg_l`, `cl_no2_ratio` overflows to infinity, `0.0 * inf = NaN`, producing `NaN` from the function. Add a fast-path `if chloride_protection_factor <= 0.0 || chloride_mg_l <= 0.0 { return nitrite_mg_l; }` before the ratio calculation, matching the documented behavior ('Returns raw nitrite when chloride is zero').",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-9bf708db",
+        "normalized_body": "The TankSnapshot struct (snapshot.rs:23-60) does not expose chloride concentration or effective nitrite hazard, meaning the TUI/API cannot display these values between event firings. Consider adding `chloride_mg_per_l` and optionally `effective_nitrite_hazard_mg_per_l` to TankSnapshot so salt-treatment monitoring is visible in the chemistry screen, not only through events and trace output.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 3,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-3-685b9673",
+      "fr-3-4a3fdfe3"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 2 amendment(s); restart required.",
+    "total_proposed_amendments": 4,
+    "total_reviewers": 2,
+    "unique_amendment_count": 4
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 3
+}

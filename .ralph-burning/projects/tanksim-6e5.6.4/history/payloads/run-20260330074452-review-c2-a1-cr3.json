@@ -1,0 +1,42 @@
+{
+  "payload_id": "run-20260330074452-review-c2-a1-cr3",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T10:03:42.917052359Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All 16/16 reproduction_factors tests pass: temperature suppression, instability, condition, density (monotonic), TAN/NO2 (independent), egg-dropping, stressor compounding, parameter tunability (18 named params), extracted-knob behavior, 2000-hour stable breeding (3+ cycles), neglected-tank stall, snapshot suppression labels, density observability, immediate density suppression, mineral suppression.",
+        "All 6/6 habitat geometry probes pass, including the tightened biofilter and substrate redox probes.",
+        "cargo clippy -p tank_core -- -D warnings passes clean (no warnings).",
+        "cargo fmt --all --check passes clean.",
+        "Full committed test suite for tank_core passes: 95/95 lib tests, 41/41 integration tests across reproduction_factors, end_to_end, save_load, and validation bins.",
+        "Four previously hardcoded constants are now named parameters with full lifecycle: egg_drop_max_probability (0.6), egg_oxygen_reference_mg_l (6.0), reproductive_readiness_smoothing (0.1), full_clutch_condition_threshold (0.7) — each has a ShrimpRuntimeParams field, neocaridina_davidi.toml preset value, serde default, invariant check, and a behavioral test proving the knob changes outcomes.",
+        "Instability tracker normalized from additive sum (theoretical max 4.0) to dominant-swing max chain: `(temp/threshold).max(ph/threshold).max(gh/threshold).max(do/threshold).clamp(0,1)` with asymmetric rise/decay EMA smoothing. Each stressor's contribution is now predictable.",
+        "Biofilter probe (None, None) case now asserts `final_reduced_n_large < final_reduced_n_small AND snap_large.nitrite <= snap_small.nitrite` — no more silent pass when neither arm clears. Probe summary confirms: reduced-N 2.970→2.866, NO₂ 2.189→1.707.",
+        "Redox/denitrifier probe now requires `planted_final_activity > max(initial + 0.25, 0.35)` (stronger floor) plus `planted NO₃ < inert NO₃ * 0.5` (sustained drawdown). Probe summary confirms: activity 0.10→0.67 (well above 0.35 floor), suboxic volume sustained 5043→5746 cm³ for planted vs 191→0 cm³ for inert.",
+        "Snapshot suppression diagnostics use shared `reproductive_readiness_factors()` covering all 8 factors (temperature, condition, minerals, stability, molt_stress, density, tan, nitrite). Tests verify correct label attribution for temperature, molt_stress, tan, nitrite, and minerals scenarios.",
+        "Invariant checks for new parameters are comprehensive: egg_drop_max_probability unit interval, egg_oxygen_reference_mg_l positive, reproductive_readiness_smoothing unit interval, full_clutch_condition_threshold unit interval AND strictly > min_clutch_condition. Validation test bin confirms rejection of invalid values."
+      ],
+      "findings_or_gaps": [
+        "Two substrate root_oxygenation tests fail when uncommitted working-copy changes to substrate.rs are present: `root_oxygenation_uses_named_parameter` and `root_oxygenation_proportional_to_biomass_with_diminishing_returns`. These failures are NOT in the committed deliverable (verified by stash/pop test) but indicate the dirty working copy introduces regressions in an unrelated module.",
+        "The redox probe does not have an explicit 'final suboxic volume > 0' assertion as the amendment fr-2-94a00996 specifically requested. Instead it uses nitrate drawdown (planted NO₃ < inert NO₃ * 0.5) as a proxy for sustained denitrification. This is arguably a stronger end-to-end signal since it tests the functional outcome rather than just a physical precondition, and the probe summary confirms suboxic volume is in fact sustained (5043→5746 cm³). Minor gap — not blocking.",
+        "Uncommitted working-copy changes remain in 3 files (substrate.rs, e2e_habitat_geometry_probes.rs, e2e_shrimp_scenario_probes.rs). This was flagged in the prior review cycle and persists."
+      ],
+      "follow_up_or_amendments": [
+        "Revert or fix the uncommitted working-copy changes to substrate.rs, e2e_habitat_geometry_probes.rs, and e2e_shrimp_scenario_probes.rs. The committed deliverable is correct but the dirty working copy introduces 2 test failures in the substrate module and could cause confusion.",
+        "Consider adding an explicit final suboxic volume assertion to the redox probe (e.g., planted_final_suboxic_vol > 0) alongside the existing nitrate drawdown check, for defense-in-depth. Low priority since the drawdown check implicitly validates sustained denitrification."
+      ],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 3
+}
