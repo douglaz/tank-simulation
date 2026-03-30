@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327232421-final_review-vote-1-c2-a1-cr4-artifact",
+  "payload_id": "run-20260327232421-final_review-vote-1-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T02:02:03.420311120Z",
+  "content": "# Final Review Votes\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccept the amendments that address a real migration regression and ambiguous overfeeding semantics, and reject the ones that mainly add convenience surface or rely on a test gap that already appears to be covered.\n\n## Votes\n\n- `fr-4-6b4f7f03`: Reject\n  Omitting these fields from `TankSnapshot` may reduce convenience, but it does not by itself show a correctness, safety, or robustness defect if reserve changes are already exposed through the budget/diagnostic path referenced by the acceptance criteria. Adding `shrimp_reserve_g` or `shrimp_daily_food_consumed_g` would expand the snapshot/API surface, but it is not necessary to fix broken behavior, and a transient per-day consumption field is especially weak if it is reset within the daily simulation step.\n- `fr-4-d8db9c4a`: Accept\n  Computing full periphyton demand and full detritus demand independently allows total intake to exceed the configured per-shrimp grazing rate when both food pools are available. That is materially surprising given the parameter naming, changes downstream waste, oxygen demand, and bioload, and should either be explicitly documented as intentional opportunistic feeding or corrected so the configured rate is a true total cap.\n- `fr-4-1858fe11`: Reject\n  This amendment depends on the DO-limited fallback path being untested, but the available review context indicates there is already a targeted oxygen-limited respiration test covering the core behavior: oxygen flooring, reduced dissolved fluxes, and reserve retention of the shortfall. An additional conservation assertion could be useful as incremental coverage, but that is not a substantive defect warranting acceptance of this amendment as written.\n- `fr-4-ec3b52d2`: Accept\n  Letting schema-3 saves load with `reserve_g = 0` changes persisted state semantics after upgrade. Because hatching and juvenile maturation now require reserve, legacy saves with in-flight reproductive or maturation commitments can stall immediately after load despite previously serialized progress. That is a real save-compatibility regression, and migration should reconstruct or at least seed reserve so those commitments remain viable.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

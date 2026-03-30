@@ -1,0 +1,81 @@
+{
+  "rollback_id": "04ea9a51-dc17-4489-90e1-6ff5a851d61e",
+  "created_at": "2026-03-28T13:45:25.914368754Z",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "git_sha": "284ebbfc8c627383964bc37647c15d122f0420e8",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260328132625",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 1,
+        "attempt": 1,
+        "completion_round": 2
+      },
+      "started_at": "2026-03-28T13:26:25.386753572Z",
+      "prompt_hash_at_cycle_start": "0bee02f77dd8aaf9",
+      "prompt_hash_at_stage_start": "0bee02f77dd8aaf9",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 1
+    },
+    "status": "running",
+    "cycle_history": [],
+    "completion_rounds": 2,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-1-569dbe0f",
+          "source_stage": "final_review",
+          "source_cycle": 1,
+          "source_completion_round": 1,
+          "body": "In chemistry.rs:567, the CO2 K_LA is computed as `(k_la_o2 * KLA_CO2_TO_O2_RATIO).min(1.0)`. With default parameters at full aeration (intensity=1.0), k_la_o2 = 0.35 + 0.9 + 0.02 = 1.27. The CO2 K_LA becomes min(1.27 * 0.91, 1.0) = min(1.1557, 1.0) = 1.0. Meanwhile O2 uses min(1.27, 1.0) = 1.0 (dissolved_oxygen.rs:68). The effective CO2/O2 ratio becomes 1.0, not the physical 0.91. Fix: cap the O2 K_LA first, then apply the ratio: `let k_la_co2 = k_la_o2.min(1.0) * KLA_CO2_TO_O2_RATIO;` — since 0.91 < 1.0, the result naturally stays below 1.0 and preserves the diffusion coefficient ratio at all aeration levels.",
+          "created_at": "2026-03-28T13:45:25.841045384Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "456328bac9fd235d01947d03a3ab6da51ab55e1eda3fe6c0fafa8ab15fa725f6"
+        },
+        {
+          "amendment_id": "fr-1-a24ce504",
+          "source_stage": "final_review",
+          "source_cycle": 1,
+          "source_completion_round": 1,
+          "body": "The test `test_co2_kla_proportional_to_o2_kla` (co2_exchange.rs:473-499) does not exercise the actual CO2 K_LA code path in chemistry.rs. It calls `compute_o2_kla()` and manually multiplies by 0.91, then asserts the manual ratio equals 0.91 — a mathematical tautology. It would pass even if the chemistry code used a different ratio or had a bug in the cap. The test should either: (a) expose the CO2 K_LA computation as a testable function and call it, or (b) compare CO2 exchange deltas at different K_LA values to verify the 0.91 ratio holds through the actual code path. This gap is why amendment #1's capping bug is not caught by tests.",
+          "created_at": "2026-03-28T13:45:25.841050243Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "ccaf0cc4354b8905e29b60457fa3b996720a73dc9f53380735a8c953a1b3d220"
+        }
+      ],
+      "processed_count": 0
+    },
+    "status_summary": "running: final review restart round 2 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T13:34:31.151123128Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      },
+      "final_review_arbiter": {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      }
+    }
+  }
+}

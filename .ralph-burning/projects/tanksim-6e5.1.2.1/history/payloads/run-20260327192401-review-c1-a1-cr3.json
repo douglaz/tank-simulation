@@ -1,0 +1,41 @@
+{
+  "payload_id": "run-20260327192401-review-c1-a1-cr3",
+  "stage_id": "review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T21:03:40.627431965Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All 12 budget tracking tests pass: test_total_n_helper_sums_all_pools, test_total_c_helper_sums_all_pools, test_budget_component_labels_cover_all_element_bearing_fields, test_budget_path_rules_catch_convention_based_future_fields, test_closed_system_n_conservation, test_closed_system_c_conservation, test_trim_plants_preserves_n_and_c_when_routed_to_detritus, test_closed_system_shrimp_mortality_conserves_n_and_c, test_water_change_n_export_tracked, test_water_change_tracks_gross_n_import_and_export, test_dissolved_oxygen_stage_tracks_gross_in_and_out, test_budget_ledger_zero_cost_when_disabled",
+        "Full tank_core test suite passes: 133 tests across 21 test binaries, 0 failures",
+        "cargo clippy -p tank_core -- -D warnings passes with zero warnings",
+        "TrimPlants conservation fix verified: engine.rs:335-339 now routes trimmed plant biomass through plant_detrital_mass_g() (plant_growth.rs:397-403) which converts plant N/C to detrital gram-mass via (plant_nitrogen_mg + plant_carbon_mg) / 1000.0, preserving N and C across the plant→detritus transfer. The test_trim_plants_preserves_n_and_c_when_routed_to_detritus test confirms both in_mg and out_mg are positive with net_mg() ≈ 0 for both N and C.",
+        "Shrimp mortality conservation fix verified: shrimp.rs:468 calls route_dead_shrimp_to_detritus(state, adult_deaths, juv_deaths) BEFORE decrementing counts (line 470-477). The routing function (shrimp.rs:483-491) computes dead biomass using ADULT/JUVENILE_SHRIMP_BIOMASS_G constants and converts to detrital mass via live_biomass_detrital_mass_g(). The test_closed_system_shrimp_mortality_conserves_n_and_c test seeds high mortality (condition=0, molt_stress=1.0, base_mortality=0.5) over 72 ticks, confirms deaths occurred (adults < 5), and asserts N/C conservation within 1e-6.",
+        "Gross budget recording verified for default stages: maybe_record_stage (engine.rs:230-249) now uses BudgetDelta::from_snapshots (budget.rs:54-61) which calls gross_element_budget (budget.rs:428-446) to sum per-component gains/losses separately rather than netting to a single delta. This provides gross in/out visibility for all stages using the default recording path.",
+        "Explicit gross budget for water_change verified: apply_water_change_with_budget (water_change.rs:102-151) pre-computes separate nitrogen/carbon/oxygen export and import terms from the pre-change state, then applies the change, returning a BudgetDelta with separate in_mg and out_mg. The test_water_change_tracks_gross_n_import_and_export test uses a source with non-zero dissolved N and confirms both import and export are recorded correctly.",
+        "Explicit gross budget for dissolved_oxygen verified: step_dissolved_oxygen_with_budget (dissolved_oxygen.rs:17-26) delegates to apply_dissolved_oxygen_terms (dissolved_oxygen.rs:82-98) which decomposes the DO update into oxygen_in_mg (photosynthesis + reaeration inflow) and oxygen_out_mg (respiration + outgassing), with oxygen_out capped at available DO. The test_dissolved_oxygen_stage_tracks_gross_in_and_out test confirms both in_mg > 0 and out_mg > 0.",
+        "Convention-based path guard verified: is_nitrogen_budget_path/is_carbon_budget_path (budget_tracking.rs:192-198) match fields ending in _mg_n_total, _mg_c_total, biomass_g, particulate_organics_g_total, fine_detritus_g_total, or matching animal.adults_count/animal.juveniles_count. The test_budget_path_rules_catch_convention_based_future_fields test confirms that hypothetical future fields like 'water.future_pool_mg_n_total' and 'microbe.future_biomass_g' would be caught by the convention.",
+        "Zero-cost when disabled verified: maybe_record_stage_with_explicit_budget (engine.rs:251-271) passes tick.is_some() as the tracking flag, so process_action and step_dissolved_oxygen_with_budget only compute explicit budgets when tracking is enabled. The BudgetSnapshot::from_state computation is also gated on tick.as_ref() returning Some.",
+        "debug_assert at record_stage (budget.rs:141) validates that explicit deltas are consistent with before/after totals, catching implementation bugs in debug builds without runtime cost in release.",
+        "dissolved_feed_residue_g_total is properly maintained through water changes (water_change.rs:60) and explicitly excluded from budget totals with assertion in test (budget_tracking.rs:294-297)."
+      ],
+      "findings_or_gaps": [
+        "The active_budget_state used for closed-system conservation tests (budget_tracking.rs:56-83) still excludes shrimp (adults_count=0, juveniles_count=0). However, a separate dedicated test (test_closed_system_shrimp_mortality_conserves_n_and_c) now exercises shrimp mortality conservation with a seeded high-mortality scenario, closing the gap identified in the previous review.",
+        "The convention-based path guard catches fields matching *_mg_n_total, *_mg_c_total, *biomass_g, and shared detritus/animal patterns. A future element-bearing field with a non-standard suffix (e.g., water.some_nutrient_ppm) would still evade detection. This is acknowledged as a known limitation and is acceptable given Rust's lack of practical compile-time field introspection.",
+        "The gross_element_budget function (budget.rs:428-446) provides per-component gain/loss decomposition for stages using the default recording path, which is a meaningful improvement over the prior net-only approach. However, for stages where multiple transformations affect the same component within a single pass (e.g., nitrogen_cycle where DON can both increase from decay and decrease from mineralization), component-level netting within a stage still collapses some detail. The explicit-budget path for water_change and dissolved_oxygen addresses the most important bidirectional stages.",
+        "CleanFilter (engine.rs:347-368) reduces microbe biomass without routing to any pool. Per ROUTING.md lines 146 and 163, this is documented as an intentional maintenance export ('Removed fouling is treated as maintenance export'). The budget records the resulting decrease as a negative delta on the action:clean_filter stage, consistent with SiphonDetritus handling."
+      ],
+      "follow_up_or_amendments": [],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 3
+}

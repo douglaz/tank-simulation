@@ -1,0 +1,23 @@
+{
+  "payload_id": "run-20260327225238-final_review-reviewer-1-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T00:36:22.926637432Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "Make `crates/tank_core/tests/shrimp_population.rs:111-155` fully deterministic instead of relying on a lucky RNG draw. In the current setup, `hatch_success_base = 1.0` is still multiplied by condition, oxygen, temperature, stability, and mineral factors in `crates/tank_core/src/systems/shrimp.rs:420-447`, so the assertion only passes because seed `7100` happens to satisfy `rng.next_f64() < p_hatch`. Force `p_hatch` to 1.0 (or exercise a deterministic helper/path) so unrelated changes to RNG consumption or chemistry tuning do not randomly break this test.",
+        "rationale": "I reproduced the same scenario succeeding for only 56 out of 100 seeds. That means the rewritten test is still probabilistic, which is a significant robustness risk for CI and future refactors."
+      }
+    ],
+    "summary": "Found 1 significant test-robustness issue: the rewritten `hatch_produces_juveniles` case is still probabilistic rather than a deterministic regression check."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 5
+}

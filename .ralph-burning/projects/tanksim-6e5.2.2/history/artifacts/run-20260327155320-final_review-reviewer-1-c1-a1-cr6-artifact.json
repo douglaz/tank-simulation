@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327155320-final_review-reviewer-1-c1-a1-cr6-artifact",
+  "payload_id": "run-20260327155320-final_review-reviewer-1-c1-a1-cr6-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-27T19:05:47.476040354Z",
+  "content": "# Final Review Proposal\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nReviewed the task diff against the pre-task base, read the main implementation files end-to-end, and ran `cargo test` for the workspace. The test suite passes, but I found two correctness issues: legacy v2 save migration leaves serialized stability baselines on the old gross-volume basis, and plant growth now caches water-column nutrient concentrations across per-guild mutations.\n\n## Amendments\n\n1. In `crates/tank_core/src/save.rs:47-58` and `crates/tank_core/src/save.rs:99-101`, schema-v2 saves only reseed `stability_tracker` when the field is missing. That misses real v2 saves that already serialize `stability_tracker`: `migrate_schema_v2_to_v3()` rescales water totals from gross to net volume, but the stored `prev_gh_d` / `prev_do_mg_l` baselines remain on the old gross-volume basis. Because `update_stability_tracker()` now compares against net-volume helpers (`crates/tank_core/src/systems/shrimp.rs:86-113`), the first post-load daily update can register a false instability spike. Reseed or migrate the tracker for every v2 save, not just the ones missing the field.\n   Rationale: The migration currently leaves persisted stability baselines inconsistent with the migrated chemistry semantics for any legacy save that already contained a tracker.\n2. In `crates/tank_core/src/systems/plant_growth.rs:9-23`, the water-column concentrations are captured once before the plant loop and then reused at `crates/tank_core/src/systems/plant_growth.rs:59-69`, even though each iteration mutates the shared water pools via `remove_plant_nutrients()` at `crates/tank_core/src/systems/plant_growth.rs:93-134`. Later guilds therefore compute nutrient limitation and health from stale TAN/nitrate/phosphate values after earlier guilds have already depleted the water column. Recompute the water-column factors inside the loop (or after each guild’s removals) so guild-to-guild competition uses current chemistry.\n   Rationale: This refactor regressed per-guild nutrient competition and can overstate later-guild growth and health whenever earlier guilds draw down shared water-column nutrients during the same daily step.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 6
+}

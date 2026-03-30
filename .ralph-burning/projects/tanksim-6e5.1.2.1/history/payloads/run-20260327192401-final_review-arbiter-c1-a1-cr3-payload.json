@@ -1,0 +1,29 @@
+{
+  "payload_id": "run-20260327192401-final_review-arbiter-c1-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T21:30:22.216018169Z",
+  "payload": {
+    "rulings": [
+      {
+        "amendment_id": "fr-3-c9458760",
+        "decision": "reject",
+        "rationale": "SiphonDetritus is a documented export action per docs/ROUTING.md, which explicitly states 'Siphoned solids are exported waste, not recycled.' The snapshot-based budget tracking in maybe_record_stage_with_explicit_budget already captures the mass change: it takes a BudgetSnapshot before the action, another after, and when the action returns None it computes the delta from snapshots and records it under the 'action:siphon_detritus' stage label. Since particulate_organics_g_total and fine_detritus_g_total are budget components included in BudgetSnapshot, the outflow IS recorded in the ledger attributed to the correct action. The mass is not 'silently destroyed' — it is an intentional export with implicit tracking. Returning an explicit BudgetDelta would be a minor code clarity improvement but is not a conservation violation, since the snapshot fallback already serves this purpose. Reviewer 2's analysis correctly identifies that the documented export semantics and snapshot-based tracking together account for the removed mass."
+      },
+      {
+        "amendment_id": "fr-3-d068d62d",
+        "decision": "reject",
+        "rationale": "CleanFilter is a documented maintenance export per docs/ROUTING.md, which states 'Removed fouling is treated as maintenance export' and 'Filter biofilm is implicit in current state, so no new detritus pool is created during cleaning.' The amendment's primary suggestion — routing removed microbe biomass to fine_detritus_g_total following the shrimp mortality pattern — directly contradicts the documented export semantics. The alternative suggestion (explicit BudgetDelta) would be redundant: the snapshot-based tracking mechanism already captures the biomass reduction because all four microbe pools (decomposer, ammonia_oxidizer, nitrite_oxidizer, comammox) are budget components included in BudgetSnapshot. The before/after delta is recorded under the 'action:clean_filter' stage label, so the outflow is attributable to the maintenance action. This is the same class of documented export as SiphonDetritus — intentional removal from the system boundary, not an unexplained conservation violation. Reviewer 2 correctly distinguishes between in-tank routing failures (genuine conservation bugs) and boundary-crossing exports (documented design choices with implicit tracking)."
+      }
+    ],
+    "summary": "Both disputed amendments concern maintenance actions (SiphonDetritus and CleanFilter) that reduce mass pools without explicit BudgetDelta returns. The key evidence tipping the balance toward rejection is: (1) docs/ROUTING.md explicitly documents both as export actions — mass intentionally leaving the system boundary, not in-tank transfers; (2) the snapshot-based budget tracking in maybe_record_stage_with_explicit_budget automatically captures state changes by comparing before/after BudgetSnapshots, recording the outflow under the action's stage label even when the action returns None; (3) the affected pools (detritus and microbe biomass) are confirmed budget components included in BudgetSnapshot, so the mass change IS recorded. The amendments overstate the severity by characterizing these as conservation violations when they are documented boundary-crossing exports with implicit tracking. Returning explicit BudgetDeltas would be a minor code clarity improvement but is not corrective — the snapshot fallback already serves this purpose. Notably, the CleanFilter amendment's primary suggestion to route mass to fine_detritus directly contradicts ROUTING.md's documented export semantics."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 3
+}

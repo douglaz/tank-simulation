@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327232421-plan_and_implement-c2-a1-cr2-artifact",
+  "payload_id": "run-20260327232421-plan_and_implement-c2-a1-cr2",
+  "stage_id": "plan_and_implement",
+  "created_at": "2026-03-28T00:36:00.519242024Z",
+  "content": "# Plan and Implement\n\n## Change Summary\n\nAdded a direct unit regression for shrimp feeding on the routed organic-matter basis, moving the intake-basis assertion to a pre-reset code path so `daily_food_consumed_g` is checked against the same periphyton-to-organic-matter conversion used by the shrimp routing loop. Verified that the other pending amendments are present and passing in the current workspace state: pre-step invariant validation is read-only, `shrimp_assimilation_efficiency` rejects 0/1 boundary values, and shrimp routing coefficients are validated/materialized through process presets.\n\n## Steps\n\n1. [Completed] Inspected the shrimp routing path, invariant guard behavior, and process preset materialization against the pending amendment list to determine what still needed code changes versus verification.\n2. [Completed] Added unit-level coverage in `crates/tank_core/src/systems/shrimp.rs` for the routed intake-mass basis and removed the equivalent integration assertion that was observing `daily_food_consumed_g` after the daily reset.\n3. [Completed] Ran formatting and targeted/full test passes to confirm the shrimp routing, invariant validation, and preset wiring behavior in the current workspace state.\n\n## Validation Evidence\n\n- `cargo fmt --all` passed.\n- `cargo test -p tank_data` passed.\n- `cargo test -p tank_scenarios` passed.\n- `cargo test -p tank_core --lib shrimp_feeding_tracks_daily_food_on_routing_mass_basis` passed.\n- `cargo test -p tank_core --test validation --test shrimp_feeding_pathway` passed.\n- `cargo test -p tank_core` passed in the current workspace state.\n\n## Outstanding Risks\n\n- `crates/tank_core/tests/shrimp_population.rs` already had unrelated local edits in this workspace; I left them in place and did not reconcile or revert them.\n- The untracked `.ralph-burning/` directory is still present in the worktree and was left untouched.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

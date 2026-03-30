@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328125535-plan_and_implement-c2-a1-cr3-artifact",
+  "payload_id": "run-20260328125535-plan_and_implement-c2-a1-cr3",
+  "stage_id": "plan_and_implement",
+  "created_at": "2026-03-28T14:06:29.288101464Z",
+  "content": "# Plan and Implement\n\n## Change Summary\n\nAddressed both pending amendments. The TUI integer-count regression now selects `ActionKind::AddShrimp` by kind instead of relying on a brittle action index, and schema v4→v5 save migration now maps legacy `TrimPlants` queued actions to `TrimPlantsAndLeaveCuttings` so old saves preserve the original in-tank cuttings behavior. I also updated the migration comments and renamed the save-load regression to reflect the preserved semantics.\n\n## Steps\n\n0. [Completed] Inspected the pending amendments in the TUI action form tests and the schema v4→v5 save migration to confirm the exact failure modes and required behavior.\n1. [Completed] Updated `crates/tank_tui/src/screens/actions.rs` so the integer-count test navigates to `AddShrimp` by matching `ActionKind` rather than a hard-coded position in `ActionKind::ALL`.\n2. [Completed] Updated `crates/tank_core/src/save.rs` so legacy `TrimPlants` queued actions migrate to `TrimPlantsAndLeaveCuttings`, and revised the migration documentation to state that legacy closed-system semantics are preserved.\n3. [Completed] Updated `crates/tank_core/tests/save_load.rs` so the legacy schema v4 migration regression asserts `TrimPlantsAndLeaveCuttings` after load and uses a test name that reflects semantic preservation.\n4. [Completed] Ran formatting and validation across the touched packages to confirm both amendments and surrounding trim/save behavior remain green.\n\n## Validation Evidence\n\n- `cargo fmt --all` completed successfully.\n- `cargo test -p tank_tui` passed (3 tests).\n- `cargo test -p tank_core --test save_load` passed (21 tests), including `legacy_schema_v4_saves_preserve_trim_plants_as_leave_cuttings`.\n- `cargo test -p tank_core` passed for the full package suite, including trim/export, budget tracking, and save migration coverage.\n\n## Outstanding Risks\n\nNone identified.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

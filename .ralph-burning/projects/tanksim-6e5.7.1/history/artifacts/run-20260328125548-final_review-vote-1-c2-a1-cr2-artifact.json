@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328125548-final_review-vote-1-c2-a1-cr2-artifact",
+  "payload_id": "run-20260328125548-final_review-vote-1-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T14:14:14.841895952Z",
+  "content": "# Final Review Votes\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nFive amendments identify real correctness or maintainability issues in the current code. The TrimPlants migration amendment should be rejected because that mapping is already implemented and covered by an explicit regression test.\n\n## Votes\n\n- `fr-2-965c5a37`: Accept\n  `check_param_range` only uses ordered comparisons, so `NaN` bypasses the warning path entirely because both comparisons are false. Explicit non-finite handling plus a regression test is a sound hardening change; infinity already tends to warn today, but making all non-finite cases deliberate is clearer and safer.\n- `fr-2-0f26a053`: Accept\n  The codebase currently uses two different confidence schemas for closely related provenance concepts: preset-level provenance accepts arbitrary strings while per-parameter provenance is enum-validated, and shipped TOML files rely on that mismatch. Either unifying the type or explicitly documenting the intentional divergence would improve consistency and reduce future confusion.\n- `fr-2-b6ef0732`: Accept\n  An inverted `valid_range` is invalid metadata, and the current logic silently turns it into meaningless warnings for essentially every finite value. That should be surfaced as a descriptive validation failure or warning rather than allowed to degrade the range-checking signal.\n- `fr-2-fa8b3a06`: Reject\n  This defect is already fixed in the current tree. The schema 4 to 5 migration renames legacy `TrimPlants` actions to `TrimPlantsAndLeaveCuttings`, the migration comments describe that exact intent, and `legacy_schema_v4_saves_preserve_trim_plants_as_leave_cuttings` verifies the behavior.\n- `fr-2-e1a4e39a`: Accept\n  Several process parameters are stored in legacy total units but normalized by runtime systems before use, so feeding the raw stored values into provenance formatting and `valid_range` checks can produce scientifically wrong units and misleading diagnostics. Provenance output should reflect the effective runtime quantity, with field-aware handling where one stored value is normalized into multiple derived forms.\n- `fr-2-50ee4385`: Accept\n  These parameters are active parts of `ProcessParams`, but scenario materialization injects them as literals outside the preset schema, so they have no `param_meta` path and create a second source of truth. Bringing them onto a provenance-aware path is justified for correctness of documentation, consistency, and long-term maintainability.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

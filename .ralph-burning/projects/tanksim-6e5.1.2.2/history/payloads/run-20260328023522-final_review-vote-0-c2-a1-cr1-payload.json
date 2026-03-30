@@ -1,0 +1,59 @@
+{
+  "payload_id": "run-20260328023522-final_review-vote-0-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T03:10:50.431125434Z",
+  "payload": {
+    "summary": "Reviewed all eight amendments against the source code. Accept six that improve diagnostic robustness, documentation clarity, debuggability, and test coverage. Reject two: the dead-code amendment (already suppressed with #[allow(dead_code)]) and the tolerance comment amendment (already documented inline).",
+    "votes": [
+      {
+        "amendment_id": "fr-1-947a9f46",
+        "decision": "accept",
+        "rationale": "Confirmed all four partial_cmp().unwrap() sites in budget_helpers.rs. These are diagnostic helpers meant to surface budget imbalances — panicking with an opaque unwrap backtrace when NaN appears upstream defeats their purpose. unwrap_or(Ordering::Equal) lets the assertion path continue and emit the actual diagnostic message (element, tick, delta) rather than a confusing partial_cmp panic. Low-risk, high-value defensive improvement."
+      },
+      {
+        "amendment_id": "fr-1-15fa89b9",
+        "decision": "reject",
+        "rationale": "Verified that PoolSnapshot::events_since at tracing.rs:248 already carries #[allow(dead_code)], so there is no active compiler warning. The method computes event deltas between snapshots, which is a plausible future use (e.g., if tracing is expanded). Removing it is unnecessary churn, and inlining it into maybe_record_stage would change the tracing architecture without clear benefit. No action needed."
+      },
+      {
+        "amendment_id": "fr-1-53770879",
+        "decision": "accept",
+        "rationale": "The module-level docs describe the helpers but say nothing about the opt-in mechanism. The actual design is runtime Option<BudgetLedger> (no snapshot computation when None), not a compile-time feature gate. This distinction matters for users deciding whether to enable tracking in production builds. A one-sentence clarification in the module doc would prevent misinterpretation of the acceptance criterion and guide future maintainers."
+      },
+      {
+        "amendment_id": "fr-1-6d7f3ceb",
+        "decision": "reject",
+        "rationale": "Confirmed the test at budget_tracking.rs:1272-1273 already contains the comment 'Generous tolerance for floating-point accumulation over many hours with many interacting subsystems'. This explains the rationale. The 200-hour test exercises 200 hourly ticks with shrimp mortality, decomposition, and multiple subsystem interactions — drift grows superlinearly with tick count. Without evidence that observed drift is much smaller than 0.5 mg, tightening or demanding further justification is speculative. The existing comment is adequate."
+      },
+      {
+        "amendment_id": "fr-1-3d3b6612",
+        "decision": "accept",
+        "rationale": "Confirmed the .max(0.0) clamp at types/budget.rs:102. If dissolved_oxygen_mg_total goes negative due to an oxygen-system bug, the budget will silently show zero instead of surfacing the invalid state. A debug_assert! before the clamp catches this during development and testing (where budget tracking is most active) while leaving release behavior unchanged. This is a targeted, zero-cost-in-release safeguard."
+      },
+      {
+        "amendment_id": "fr-1-5c021677",
+        "decision": "accept",
+        "rationale": "Confirmed step_and_inspect uses early return via ? on engine.step_hours(hours) at line 184, and maybe_print_debug is only called on the success path at line 190. If stepping fails at tick N after ticks 0..N-1 succeeded, those ticks are recorded in the ledger but the TANK_BUDGET_DEBUG output is never emitted. Since the debug hook's primary purpose is diagnosing failures, this is a significant gap. Printing the partial ticks on the error path before propagating the error would make the tool useful in exactly the scenario it's designed for."
+      },
+      {
+        "amendment_id": "fr-1-80582d62",
+        "decision": "accept",
+        "rationale": "Confirmed water_change_50_percent_ro_like_halves_dissolved_totals (line 16) calls apply_water_change directly, bypassing the engine's action queue, profile lookup, and budget tracking integration. While the file's other tests (0%, 100%, temperature mixing, error cases) do exercise the engine path, none of them verify mass-balance conservation through the engine. The direct-call isolation is justified for precise ratio testing, but the amendment correctly identifies that at least one mass-balance assertion should also go through apply_action + step_hours to cover the integration wiring."
+      },
+      {
+        "amendment_id": "fr-1-2448ab6a",
+        "decision": "accept",
+        "rationale": "Confirmed that shrimp_feeding_pathway.rs:206-234 hand-rolls total_nitrogen/total_carbon before-after checks with manual tolerance comparisons — exactly the pattern that step_and_inspect + assert_n_conserved/assert_c_conserved was built to replace. Converting one of these tests demonstrates the helper API on a real multi-system scenario (shrimp feeding → decomposition → nutrient cycling) rather than only on synthetic closed-system tests. This fulfills the stated adoption criterion and serves as documentation-by-example for future test authors."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

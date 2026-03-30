@@ -1,0 +1,24 @@
+{
+  "payload_id": "run-20260328132625-final_review-planner-positions-c1-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T14:22:14.685080225Z",
+  "payload": {
+    "summary": "Evaluated amendment fr-3-95d007dd concerning gas-exchange scaling. The amendment correctly identifies a physical modeling error: gas exchange at the air-water interface depends on surface area, not water volume. The current code computes K_LA without the A/V term, then multiplies by volume, making total mass transfer proportional to volume instead of surface area. The test at co2_exchange.rs:215-285 locks in this incorrect behavior. The geometry module already has the needed surface_area_to_gross_volume_ratio() helper. Both O2 and CO2 paths are affected.",
+    "votes": [
+      {
+        "amendment_id": "fr-3-95d007dd",
+        "decision": "accept",
+        "rationale": "The amendment correctly identifies a physical modeling error. Gas exchange is a surface-area-driven process: total flux = kL × A × (C_eq - C). The current code's compute_o2_kla() returns a flat coefficient (no A/V term), yet the exchange formula multiplies by volume_l, making total mass transfer scale with volume instead of surface area. Two tanks sharing the same footprint but differing in fill height would incorrectly exchange different total CO2/O2 masses. The test at lines 215-285 asserts equal concentration change (volume-independent), but physically the shallower tank (higher A/V ratio) should equilibrate faster. The geometry.rs:66 helper surface_area_to_gross_volume_ratio() already exists and is the correct scaling factor to incorporate. Both O2 (dissolved_oxygen.rs:68) and CO2 (chemistry.rs:580) paths need the fix."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 3
+}

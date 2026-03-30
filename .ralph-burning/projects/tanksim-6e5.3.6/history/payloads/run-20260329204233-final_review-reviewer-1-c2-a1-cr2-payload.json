@@ -1,0 +1,31 @@
+{
+  "payload_id": "run-20260329204233-final_review-reviewer-1-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-29T21:57:25.357689515Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "Align the shipped default process preset with the new named stoichiometric constant. `ProcessParams::default()` now uses `NITRIFICATION_ALK_MEQ_PER_MG_N` in `crates/tank_core/src/types/process.rs:337-338`, but the runtime default preset loaded from `crates/tank_data/data/process/default.toml:52-54` still hard-codes `0.1428`, and scenario startup converts that preset into live params in `crates/tank_scenarios/src/lib.rs:346-349`. As written, two code paths that both claim to use the default process parameters will consume different alkalinity and can diverge in deterministic comparisons.",
+        "rationale": "This introduces a real behavior split between direct `ProcessParams::default()` users and preset-driven runs."
+      },
+      {
+        "body": "Rename or recompute the new `nitrogen_cycle.total_n_nitrified_mg` trace so it matches what is actually happening. The trace emission added in `crates/tank_core/src/engine.rs:232-238` logs `output.total_mg_n_nitrified`, but `crates/tank_core/src/systems/nitrogen_cycle.rs:343-346` only counts `nob_step + comammox`. If AOB oxidizes TAN to nitrite and NOB is limited, alkalinity and O2 are still consumed but the trace reports zero nitrification, which makes the new diagnostics misleading in partial-nitrification cases.",
+        "rationale": "The new diagnostic output can now contradict the actual alkalinity consumption it is supposed to help explain."
+      },
+      {
+        "body": "Fix alkalinity assertion messages to use `meq` consistently. `crates/tank_core/src/budget_helpers.rs:471-476` and `crates/tank_core/src/budget_helpers.rs:494-507` still hard-code `mg` in the per-system and per-stage lines, so a failing `Element::Alkalinity` assertion prints the wrong unit even though the headline/before-after lines were updated to `meq`.",
+        "rationale": "This is a diagnostics correctness issue: the failure output reports the wrong unit for the new element."
+      }
+    ],
+    "summary": "Reviewed the diff and the affected implementation files/tests end-to-end. I found 3 issues: one real behavior split between in-code defaults and preset-driven defaults, plus two diagnostics correctness problems in the new nitrification/alkalinity reporting."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}
