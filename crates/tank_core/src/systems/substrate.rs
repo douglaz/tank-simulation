@@ -798,4 +798,193 @@ mod tests {
 
         Ok(())
     }
+
+    // -- Root-zone oxygenation (ROL) tests --
+
+    fn make_rooted_plant(biomass_g: f64) -> crate::types::PlantGuildState {
+        crate::types::PlantGuildState {
+            guild: PlantGuild::RootFeedingRosette,
+            biomass_g,
+            health_index: 0.8,
+            crowding_index: 0.0,
+            habitat_index: 0.5,
+            water_column_uptake_bias: None,
+            substrate_uptake_bias: None,
+        }
+    }
+
+    fn make_floating_plant(biomass_g: f64) -> crate::types::PlantGuildState {
+        crate::types::PlantGuildState {
+            guild: PlantGuild::FastStem,
+            biomass_g,
+            health_index: 0.8,
+            crowding_index: 0.0,
+            habitat_index: 0.95,
+            water_column_uptake_bias: None,
+            substrate_uptake_bias: None,
+        }
+    }
+
+    #[test]
+    fn rooted_plants_increase_o2_penetration() -> Result<(), Box<dyn std::error::Error>> {
+        let mut unplanted = make_state();
+        unplanted.substrate_layers = vec![SubstrateLayerState {
+            kind: SubstrateKind::ActivePlanted,
+            depth_cm: 8.0,
+            porosity: SubstrateKind::ActivePlanted.default_porosity(),
+            ..SubstrateLayerState::default()
+        }];
+        unplanted.refresh_habitat_registry();
+        let volume_l = unplanted.water_volume_l();
+        unplanted.water.dissolved_oxygen_mg_total = 7.0 * volume_l;
+        unplanted.microbe.decomposer_biomass_g = 3.0;
+        unplanted.plant_guilds.clear();
+
+        let mut planted = unplanted.clone();
+        planted.plant_guilds = vec![make_rooted_plant(10.0)];
+        planted.refresh_habitat_registry();
+
+        step_substrate_zones(&mut unplanted);
+        step_substrate_zones(&mut planted);
+
+        let pen_unplanted = unplanted.substrate_o2_penetration_depth_cm();
+        let pen_planted = planted.substrate_o2_penetration_depth_cm();
+
+        assert!(
+            pen_planted > pen_unplanted,
+            "rooted plants should deepen O₂ penetration: planted={pen_planted:.4}, unplanted={pen_unplanted:.4}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn root_oxygenation_proportional_to_biomass_with_diminishing_returns(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut base = make_state();
+        base.substrate_layers = vec![SubstrateLayerState {
+            kind: SubstrateKind::ActivePlanted,
+            depth_cm: 8.0,
+            porosity: SubstrateKind::ActivePlanted.default_porosity(),
+            ..SubstrateLayerState::default()
+        }];
+        base.refresh_habitat_registry();
+        let volume_l = base.water_volume_l();
+        base.water.dissolved_oxygen_mg_total = 7.0 * volume_l;
+        base.microbe.decomposer_biomass_g = 3.0;
+
+        let mut low_biomass = base.clone();
+        low_biomass.plant_guilds = vec![make_rooted_plant(2.0)];
+        low_biomass.refresh_habitat_registry();
+
+        let mut high_biomass = base.clone();
+        high_biomass.plant_guilds = vec![make_rooted_plant(20.0)];
+        high_biomass.refresh_habitat_registry();
+
+        step_substrate_zones(&mut low_biomass);
+        step_substrate_zones(&mut high_biomass);
+
+        let pen_low = low_biomass.substrate_o2_penetration_depth_cm();
+        let pen_high = high_biomass.substrate_o2_penetration_depth_cm();
+
+        assert!(
+            pen_high > pen_low,
+            "more root biomass should deepen penetration: high={pen_high:.4}, low={pen_low:.4}"
+        );
+
+        // Diminishing returns: 10× more biomass should yield less than 10× bonus
+        let bonus_low = root_oxygenation_bonus_cm(&low_biomass);
+        let bonus_high = root_oxygenation_bonus_cm(&high_biomass);
+        let ratio = bonus_high / bonus_low;
+        let biomass_ratio = 20.0_f64 / 2.0;
+        assert!(
+            ratio < biomass_ratio,
+            "bonus should show diminishing returns: bonus_ratio={ratio:.2}, biomass_ratio={biomass_ratio:.1}"
+        );
+        // With sqrt model, ratio should be sqrt(10) ≈ 3.16 for 10× biomass
+        assert!(
+            (ratio - biomass_ratio.sqrt()).abs() < 0.01,
+            "bonus ratio should follow sqrt scaling: got {ratio:.4}, expected {:.4}",
+            biomass_ratio.sqrt()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn floating_plant_biomass_does_not_increase_penetration(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut base = make_state();
+        base.substrate_layers = vec![SubstrateLayerState {
+            kind: SubstrateKind::ActivePlanted,
+            depth_cm: 8.0,
+            porosity: SubstrateKind::ActivePlanted.default_porosity(),
+            ..SubstrateLayerState::default()
+        }];
+        base.refresh_habitat_registry();
+        let volume_l = base.water_volume_l();
+        base.water.dissolved_oxygen_mg_total = 7.0 * volume_l;
+        base.microbe.decomposer_biomass_g = 3.0;
+        base.plant_guilds.clear();
+
+        let mut with_floating = base.clone();
+        with_floating.plant_guilds = vec![make_floating_plant(20.0)];
+        with_floating.refresh_habitat_registry();
+
+        step_substrate_zones(&mut base);
+        step_substrate_zones(&mut with_floating);
+
+        let bonus = root_oxygenation_bonus_cm(&with_floating);
+        assert!(
+            bonus.abs() < f64::EPSILON,
+            "floating plants should produce zero ROL bonus: {bonus}"
+        );
+
+        // Penetration should be identical (floating plants add no ROL bonus,
+        // though they may add slight O₂ demand differences from habitat changes).
+        let pen_base = base.substrate_o2_penetration_depth_cm();
+        let pen_floating = with_floating.substrate_o2_penetration_depth_cm();
+        assert!(
+            (pen_base - pen_floating).abs() < 0.1,
+            "floating plants should not meaningfully change penetration: base={pen_base:.4}, floating={pen_floating:.4}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn zero_root_biomass_yields_zero_oxygenation_bonus() -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = make_state();
+        state.plant_guilds.clear();
+        let bonus = root_oxygenation_bonus_cm(&state);
+        assert!(
+            bonus.abs() < f64::EPSILON,
+            "zero root biomass should yield zero bonus: {bonus}"
+        );
+
+        // Also check with a rooted guild at zero biomass
+        state.plant_guilds = vec![make_rooted_plant(0.0)];
+        let bonus = root_oxygenation_bonus_cm(&state);
+        assert!(
+            bonus.abs() < f64::EPSILON,
+            "zero-biomass rooted guild should yield zero bonus: {bonus}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn root_oxygenation_uses_named_parameter() -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = make_state();
+        state.plant_guilds = vec![make_rooted_plant(10.0)];
+
+        let default_rate = state.process_params.rol_rate_cm_per_g;
+        let bonus_default = root_oxygenation_bonus_cm(&state);
+
+        state.process_params.rol_rate_cm_per_g = default_rate * 2.0;
+        let bonus_doubled = root_oxygenation_bonus_cm(&state);
+
+        assert!(
+            (bonus_doubled - bonus_default * 2.0).abs() < 1e-12,
+            "bonus should scale linearly with rol_rate_cm_per_g: doubled={bonus_doubled:.4}, expected={:.4}",
+            bonus_default * 2.0
+        );
+        Ok(())
+    }
 }

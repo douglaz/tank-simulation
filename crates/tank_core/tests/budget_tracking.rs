@@ -224,6 +224,8 @@ fn shrimp_reproduction_budget_state(seed: SimSeed) -> TankState {
     state.process_params.nob_vmax_mg_n_per_g_per_hour = 8.0;
     state.process_params.comammox_vmax_fraction = 0.8;
     state.process_params.periphyton_capacity_g_per_m2 = 30.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
     state
         .process_params
         .respiration_dic_rate_mg_c_per_g_per_hour = 0.0;
@@ -232,6 +234,10 @@ fn shrimp_reproduction_budget_state(seed: SimSeed) -> TankState {
         .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
     state.shrimp_params.base_spawn_rate = 1.0;
     state.shrimp_params.hatch_success_base = 1.0;
+    state.shrimp_params.failed_molt_mortality_scale = 0.0;
+    state.shrimp_params.juvenile_molt_interval_days = 200.0;
+    state.shrimp_params.sub_adult_molt_interval_days = 300.0;
+    state.shrimp_params.base_molt_interval_days = 365.0;
     state.reseed_stability_tracker();
     state
 }

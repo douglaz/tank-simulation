@@ -502,6 +502,7 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
         plant_temp_optimum_c: preset.plant_temp_optimum_c,
         plant_temp_sigma_c: preset.plant_temp_sigma_c,
         plant_crowding_biomass_g_per_m2: preset.plant_crowding_biomass_g_per_m2,
+        rol_rate_cm_per_g: defaults.rol_rate_cm_per_g,
 
         algae_max_growth_rate_per_day: preset.algae_max_growth_rate_per_day,
         periphyton_max_growth_rate_per_day: preset.periphyton_max_growth_rate_per_day,

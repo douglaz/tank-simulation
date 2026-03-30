@@ -395,13 +395,15 @@ impl Engine {
 
         // Step 11b: recompute substrate O₂ penetration depths from water-column
         // DO and biological demand (Bouldin steady-state model).
-        self.maybe_record_stage(
-            &mut ctx,
-            "system:substrate_zones",
-            |engine, _stage_trace| {
-                systems::substrate::step_substrate_zones(&mut engine.state);
-            },
-        );
+        self.maybe_record_stage(&mut ctx, "system:substrate_zones", |engine, stage_trace| {
+            let rol_bonus = systems::substrate::root_oxygenation_bonus_cm(&engine.state);
+            systems::substrate::step_substrate_zones(&mut engine.state);
+            stage_trace.metric("substrate.root_oxygenation_bonus_cm", rol_bonus);
+            stage_trace.metric(
+                "substrate.o2_penetration_depth_cm",
+                engine.state.substrate_o2_penetration_depth_cm(),
+            );
+        });
 
         // Step 12: hourly shrimp stress accumulation.
         self.maybe_record_stage(&mut ctx, "system:shrimp_stress", |engine, stage_trace| {

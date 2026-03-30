@@ -383,6 +383,14 @@ impl PoolSnapshot {
                 ("substrate.n_mg", substrate_n_mg),
                 ("substrate.p_mg", substrate_p_mg),
                 (
+                    "substrate.o2_penetration_depth_cm",
+                    state.substrate_o2_penetration_depth_cm(),
+                ),
+                (
+                    "substrate.root_oxygenation_bonus_cm",
+                    crate::systems::substrate::root_oxygenation_bonus_cm(state),
+                ),
+                (
                     "filter.maturity",
                     state.filter_state.biofilter_maturity_index,
                 ),
@@ -637,6 +645,8 @@ const TRACKED_POOL_NAMES: &[&str] = &[
     "detritus.feed_residue_g",
     "substrate.n_mg",
     "substrate.p_mg",
+    "substrate.o2_penetration_depth_cm",
+    "substrate.root_oxygenation_bonus_cm",
     "filter.maturity",
     "filter.clogging",
     "filter.seeded_biomass",
