@@ -244,6 +244,10 @@ pub struct ShrimpRuntimeParams {
     pub juvenile_sensitivity: f64,
     pub high_temp_repro_penalty_start_c: f64,
     pub high_temp_repro_penalty_full_c: f64,
+    /// Width of the cold-side reproduction ramp below `optimal_temp_min_c`
+    /// before the fixed minimum temperature factor is reached.
+    #[serde(default = "default_low_temp_repro_ramp_width_c")]
+    pub low_temp_repro_ramp_width_c: f64,
     /// Species/body-composition nitrogen content used for mortality routing and
     /// closed-system shrimp biomass accounting.
     ///
@@ -371,11 +375,13 @@ pub struct ShrimpRuntimeParams {
     #[serde(default = "default_molt_stress_decay_smoothing")]
     pub molt_stress_decay_smoothing: f64,
     /// Degrees GH above `gh_max_d` required to apply the full high-mineral
-    /// penalty in `molt_mineral_modifier`.
+    /// penalty in `molt_mineral_modifier` and the shared reproduction GH
+    /// penalty curve.
     #[serde(default = "default_molt_gh_excess_penalty_divisor")]
     pub molt_gh_excess_penalty_divisor: f64,
-    /// Floor applied to GH/Ca/Mg factors inside `molt_mineral_modifier` so
-    /// mineral shortfalls degrade molt success without forcing a hard zero.
+    /// Floor applied to GH/Ca/Mg factors inside `molt_mineral_modifier` and
+    /// the shared reproduction GH penalty curve so mineral shortfalls degrade
+    /// outcomes without forcing a hard zero.
     #[serde(default = "default_molt_mineral_factor_floor")]
     pub molt_mineral_factor_floor: f64,
     /// Base inter-molt period for juveniles (days). Shorter than adults.
@@ -414,9 +420,17 @@ pub struct ShrimpRuntimeParams {
     /// TAN concentration (mg N/L) above which reproduction is suppressed.
     #[serde(default = "default_tan_repro_threshold_mg_n_per_l")]
     pub tan_repro_threshold_mg_n_per_l: f64,
+    /// TAN concentration (mg N/L) at which the reproduction TAN curve reaches
+    /// its fixed minimum factor.
+    #[serde(default = "default_tan_repro_full_suppression_mg_n_per_l")]
+    pub tan_repro_full_suppression_mg_n_per_l: f64,
     /// NO2 concentration (mg N/L) above which reproduction is suppressed.
     #[serde(default = "default_no2_repro_threshold_mg_n_per_l")]
     pub no2_repro_threshold_mg_n_per_l: f64,
+    /// NO2 concentration (mg N/L) at which the reproduction nitrite curve
+    /// reaches its fixed minimum factor.
+    #[serde(default = "default_no2_repro_full_suppression_mg_n_per_l")]
+    pub no2_repro_full_suppression_mg_n_per_l: f64,
     /// Temperature swing (°C per day) that begins to trigger egg dropping
     /// in berried females.
     #[serde(default = "default_egg_drop_temp_swing_c")]
