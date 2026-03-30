@@ -27,6 +27,7 @@
 //! ```
 
 use std::fmt;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -64,6 +65,42 @@ impl fmt::Display for CheckStatus {
             Self::Pass => write!(f, "pass"),
             Self::Marginal => write!(f, "marginal"),
             Self::Fail => write!(f, "fail"),
+        }
+    }
+}
+
+/// Confidence tier for a validation scenario.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ValidationConfidence {
+    High,
+    Medium,
+    Low,
+}
+
+impl fmt::Display for ValidationConfidence {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::High => write!(f, "high"),
+            Self::Medium => write!(f, "medium"),
+            Self::Low => write!(f, "low"),
+        }
+    }
+}
+
+/// Scientific maturity marker for a validation scenario.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProvenanceStatus {
+    ValidatedDirectionally,
+    StillHeuristic,
+}
+
+impl fmt::Display for ProvenanceStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ValidatedDirectionally => write!(f, "validated directionally"),
+            Self::StillHeuristic => write!(f, "still heuristic"),
         }
     }
 }
@@ -108,6 +145,13 @@ pub struct CheckpointRow {
     pub artifact_path: Option<String>,
 }
 
+/// Labeled artifact link for a scenario report row.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScenarioArtifact {
+    pub label: String,
+    pub path: String,
+}
+
 // ---------------------------------------------------------------------------
 // ScenarioRow
 // ---------------------------------------------------------------------------
@@ -116,12 +160,34 @@ pub struct CheckpointRow {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScenarioRow {
     pub scenario_id: String,
+    pub scenario_name: String,
     pub seed: u64,
     pub parameter_variant: String,
+    pub domain: String,
+    pub confidence: ValidationConfidence,
+    pub provenance_status: ProvenanceStatus,
     pub status: CheckStatus,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub observed_summary: String,
     pub checkpoints: Vec<CheckpointRow>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub artifact_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifacts: Vec<ScenarioArtifact>,
+}
+
+/// Paths written by [`CalibrationReport::write_bundle`].
+#[derive(Debug, Clone)]
+pub struct CalibrationReportArtifacts {
+    pub report_json: PathBuf,
+    pub summary_txt: PathBuf,
+}
+
+/// Paths written by [`ComparisonReport::write_bundle`].
+#[derive(Debug, Clone)]
+pub struct ComparisonReportArtifacts {
+    pub comparison_json: PathBuf,
+    pub comparison_txt: PathBuf,
 }
 
 // ---------------------------------------------------------------------------
