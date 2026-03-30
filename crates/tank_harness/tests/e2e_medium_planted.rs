@@ -6,8 +6,8 @@
 use tank_core::{PlayerAction, SimSeed};
 use tank_harness::{Envelope, HarnessRun};
 use tank_scenarios::{
-    ScenarioGeometryOverrides, StartupHeaterPreset, StartupLightPreset, StartupOverrides,
-    StartupPlantSelection, StartupSubstratePreset,
+    StartupHeaterPreset, StartupLightPreset, StartupOverrides, StartupPlantSelection,
+    StartupSubstratePreset,
 };
 
 #[test]

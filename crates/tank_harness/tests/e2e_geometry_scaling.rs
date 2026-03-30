@@ -3,10 +3,11 @@
 //! Run stocked 500-hour comparisons so geometry-scaled hardware, plants, and
 //! startup bioload can be compared against intentionally mismatched equipment.
 //!
-//! Cycle-timeline and thermal parity still target 20%. Concentration metrics
-//! currently need a wider band because fixed substrate depth plus
-//! footprint-scaled habitat/plant defaults still create larger geometry-driven
-//! steady-state TAN/DO differences than the backlog target allows.
+//! These parity runs deliberately use an explicit proportional shrimp baseline
+//! derived from the authored 10-adult medium_planted startup count rather than
+//! the optional auto-stock density ramp. That keeps fair geometry comparisons
+//! focused on hardware and habitat scaling instead of conflating them with a
+//! size-dependent startup-density policy.
 
 use tank_core::{PlayerAction, SimSeed};
 use tank_harness::{Envelope, HarnessRun};
@@ -18,13 +19,9 @@ use tank_scenarios::{
 const STOCKED_DURATION_HOURS: u32 = 500;
 const FEED_GRAMS_PER_ADULT_PER_DAY: f64 = 0.001;
 const BASE_MEDIUM_GROSS_VOLUME_L: f64 = 57.6;
+const BASE_MEDIUM_STARTUP_ADULTS: f64 = 10.0;
 const CYCLE_TIMELINE_MATURITY_THRESHOLD: f64 = 0.04;
 const PARITY_TOLERANCE: f64 = 0.20;
-/// Peak TAN and DO swing still drift more than the ideal 20% under the current
-/// fixed-depth substrate plus footprint-scaled habitat model. Keep the wider
-/// band explicit so the harness still catches regressions without overstating
-/// what the model currently guarantees.
-const CONCENTRATION_PARITY_TOLERANCE: f64 = 0.65;
 
 #[derive(Debug, Clone, Copy)]
 struct HourlyObservation {
@@ -110,6 +107,12 @@ impl ScalingMetrics {
     }
 }
 
+fn proportional_startup_adult_count(size_scale: f64) -> u32 {
+    (BASE_MEDIUM_STARTUP_ADULTS * size_scale.powi(3))
+        .round()
+        .max(1.0) as u32
+}
+
 fn medium_planted_run(
     seed: u64,
     size_scale: f64,
@@ -128,7 +131,7 @@ fn medium_planted_run(
         filter_media_area_cm2,
         heater_preset: Some(StartupHeaterPreset::Celsius25),
         aeration_enabled: Some(true),
-        auto_stock_shrimp: true,
+        initial_adult_shrimp_count: Some(proportional_startup_adult_count(size_scale)),
         ..StartupOverrides::default()
     };
     Ok(
@@ -148,10 +151,15 @@ fn collect_stocked_metrics(
 
     let initial = run.snapshot();
     let gross_volume_l = BASE_MEDIUM_GROSS_VOLUME_L * size_scale.powi(3);
+    let expected_count = proportional_startup_adult_count(size_scale);
+    assert_eq!(
+        initial.adult_shrimp_count, expected_count,
+        "{label}: parity harness should use the explicit proportional startup count"
+    );
     let density = initial.adult_shrimp_count as f64 / initial.water_volume_l;
     assert!(
-        density >= 0.15 && density <= 0.26,
-        "{label}: stocked density should stay conservative at ~0.2 adults/L, got {density:.3} adults/L"
+        density >= 0.15 && density <= 0.22,
+        "{label}: proportional startup density should stay conservative at ~0.19 adults/L, got {density:.3} adults/L"
     );
 
     let mut observations = vec![HourlyObservation {
@@ -257,13 +265,13 @@ fn geometry_1x_vs_2x_stocked_metrics_stay_within_20_percent(
         "1x vs 2x peak TAN",
         metrics_1x.peak_tan_mg_n_per_l,
         metrics_2x.peak_tan_mg_n_per_l,
-        CONCENTRATION_PARITY_TOLERANCE,
+        PARITY_TOLERANCE,
     );
     assert_pair_within_fraction(
         "1x vs 2x DO range",
         metrics_1x.do_range_mg_l(),
         metrics_2x.do_range_mg_l(),
-        CONCENTRATION_PARITY_TOLERANCE,
+        PARITY_TOLERANCE,
     );
     assert_pair_within_fraction(
         "1x vs 2x final temperature",
@@ -325,16 +333,8 @@ fn nano_vs_standard_vs_large_stocked_runs_scale_within_20_percent(
         &cycle_hours,
         PARITY_TOLERANCE,
     );
-    assert_group_within_fraction(
-        "20L/60L/200L peak TAN",
-        &peak_tan,
-        CONCENTRATION_PARITY_TOLERANCE,
-    );
-    assert_group_within_fraction(
-        "20L/60L/200L DO range",
-        &do_ranges,
-        CONCENTRATION_PARITY_TOLERANCE,
-    );
+    assert_group_within_fraction("20L/60L/200L peak TAN", &peak_tan, PARITY_TOLERANCE);
+    assert_group_within_fraction("20L/60L/200L DO range", &do_ranges, PARITY_TOLERANCE);
 
     for metric in metrics {
         assert!(

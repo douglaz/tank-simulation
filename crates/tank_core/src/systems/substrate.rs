@@ -1,10 +1,12 @@
-use crate::types::{HabitatKind, PlantGuild, TankState};
+use crate::types::{algae_carbon_mg, detritus_carbon_mg, HabitatKind, PlantGuild, TankState};
 
 /// Free-water O₂ diffusion coefficient at 20 °C (cm²/s).
 ///
 /// Temperature dependence is approximated linearly: +1.5 %/°C above 20 °C.
 /// Source: Broecker & Peng, *Tracers in the Sea*, 1982.
 const D_O2_FREE_20C_CM2_PER_S: f64 = 2.0e-5;
+const MICROFAUNA_O2_PER_MG_C_RESPIRED: f64 = 2.67;
+const SECONDS_PER_DAY: f64 = 86_400.0;
 
 /// Minimum volumetric O₂ consumption rate (mg O₂ cm⁻³ s⁻¹) to avoid
 /// division-by-zero in the Bouldin penetration model. When biological
@@ -79,11 +81,13 @@ fn d_o2_free_cm2_per_s(temperature_c: f64) -> f64 {
 }
 
 /// Estimate the volumetric biological O₂ demand rate in the substrate
-/// (mg O₂ cm⁻³ s⁻¹) from decomposer activity and root respiration.
+/// (mg O₂ cm⁻³ s⁻¹) from decomposer activity, root respiration, and
+/// substrate-associated microfauna respiration.
 ///
 /// The demand is derived from:
 ///   1. Decomposer biomass × BOD rate × substrate habitat fraction
 ///   2. Root respiration from rooted plant biomass
+///   3. Microfauna respiration tied to substrate periphyton/detritus use
 ///
 /// The total demand is distributed over the bulk substrate volume.
 fn estimate_substrate_o2_demand_rate(state: &TankState) -> f64 {
@@ -121,21 +125,94 @@ fn estimate_substrate_o2_demand_rate(state: &TankState) -> f64 {
         .sum();
     let root_demand = rooted_biomass_g * bod_rate_per_s * 0.1;
 
-    (decomposer_demand + root_demand) / substrate_bulk_volume_cm3
+    let microfauna_demand = estimate_substrate_microfauna_o2_demand_mg_per_s(state);
+
+    (decomposer_demand + root_demand + microfauna_demand) / substrate_bulk_volume_cm3
 }
 
 fn effective_substrate_porosity(state: &TankState) -> f64 {
-    let total_depth_cm = state.substrate_depth_cm();
-    if total_depth_cm <= f64::EPSILON {
-        return 0.0;
-    }
-
     state
         .substrate_layers
         .iter()
-        .map(|layer| layer.depth_cm.max(0.0) * layer.resolved_porosity())
-        .sum::<f64>()
-        / total_depth_cm
+        .find(|layer| layer.depth_cm > f64::EPSILON)
+        .map(|layer| layer.resolved_porosity())
+        .unwrap_or(0.0)
+}
+
+fn estimate_substrate_microfauna_o2_demand_mg_per_s(state: &TankState) -> f64 {
+    let population_index = state.microfauna.population_index.clamp(0.0, 1.0);
+    if population_index <= f64::EPSILON {
+        return 0.0;
+    }
+
+    let substrate_surface_access = (0.6
+        + 0.4 * state.avg_substrate_index(|layer| layer.grazing_surface_index))
+    .clamp(0.0, 1.0);
+    let periphyton_consumption_fraction = state
+        .process_params
+        .microfauna_periphyton_consumption
+        .max(0.0)
+        * population_index;
+    let requested_periphyton_g =
+        state.algae.periphyton_biomass_g.max(0.0) * periphyton_consumption_fraction;
+
+    let (accessible_substrate_periphyton_g, total_accessible_periphyton_g) = state
+        .algae
+        .periphyton_by_habitat
+        .iter()
+        .fold((0.0, 0.0), |(substrate, total), (kind, biomass_g)| {
+            let accessibility = match kind {
+                HabitatKind::GlassHardscape => 1.0,
+                HabitatKind::SubstrateSurface => substrate_surface_access,
+                HabitatKind::PlantSurfaces => 0.7,
+                HabitatKind::FilterMedia => 0.15,
+                HabitatKind::SubstrateDeep => 0.0,
+            };
+            let accessible_biomass_g = biomass_g.max(0.0) * accessibility;
+            let substrate = if *kind == HabitatKind::SubstrateSurface {
+                substrate + accessible_biomass_g
+            } else {
+                substrate
+            };
+            (substrate, total + accessible_biomass_g)
+        });
+
+    let substrate_periphyton_consumed_g = if total_accessible_periphyton_g <= f64::EPSILON {
+        0.0
+    } else {
+        requested_periphyton_g.min(total_accessible_periphyton_g)
+            * accessible_substrate_periphyton_g
+            / total_accessible_periphyton_g
+    };
+
+    let substrate_detritus_consumed_g = state.detritus.fine_detritus_g_total.max(0.0)
+        * 0.01
+        * population_index
+        * substrate_habitat_area_fraction(state);
+
+    let consumed_c_mg = algae_carbon_mg(
+        substrate_periphyton_consumed_g,
+        state.process_params.feed_n_to_c_ratio,
+    ) + detritus_carbon_mg(
+        substrate_detritus_consumed_g,
+        state.process_params.feed_n_to_c_ratio,
+    );
+    if consumed_c_mg <= f64::EPSILON {
+        return 0.0;
+    }
+
+    let assimilated_c_mg = consumed_c_mg
+        * state
+            .process_params
+            .microfauna_assimilation_efficiency
+            .clamp(0.0, 1.0);
+    let respired_c_mg_per_day = assimilated_c_mg
+        * state
+            .process_params
+            .microfauna_respiration_fraction_of_assimilated
+            .clamp(0.0, 1.0);
+
+    respired_c_mg_per_day * MICROFAUNA_O2_PER_MG_C_RESPIRED / SECONDS_PER_DAY
 }
 
 /// Fraction of total colonizable area that belongs to substrate habitats.
@@ -164,6 +241,8 @@ fn substrate_habitat_area_fraction(state: &TankState) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use crate::{
         find_habitat, rng::SimSeed, HabitatKind, SubstrateKind, SubstrateLayerState, TankState,
     };
@@ -293,6 +372,61 @@ mod tests {
     }
 
     #[test]
+    fn surface_layer_porosity_limits_heterogeneous_stack_penetration(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut low_porosity_cap = make_state();
+        low_porosity_cap.substrate_layers = vec![
+            SubstrateLayerState {
+                kind: SubstrateKind::InertSand,
+                depth_cm: 2.0,
+                porosity: 0.25,
+                ..SubstrateLayerState::default()
+            },
+            SubstrateLayerState {
+                kind: SubstrateKind::CoarsePorous,
+                depth_cm: 2.0,
+                porosity: 0.55,
+                ..SubstrateLayerState::default()
+            },
+        ];
+        low_porosity_cap.refresh_habitat_registry();
+        let volume_l = low_porosity_cap.water_volume_l();
+        low_porosity_cap.water.dissolved_oxygen_mg_total = 4.0 * volume_l;
+        low_porosity_cap.microbe.decomposer_biomass_g = 2.0;
+        low_porosity_cap.plant_guilds.clear();
+        low_porosity_cap.microfauna.population_index = 0.0;
+        step_substrate_zones(&mut low_porosity_cap);
+
+        let mut high_porosity_cap = low_porosity_cap.clone();
+        high_porosity_cap.substrate_layers = vec![
+            SubstrateLayerState {
+                kind: SubstrateKind::CoarsePorous,
+                depth_cm: 2.0,
+                porosity: 0.55,
+                ..SubstrateLayerState::default()
+            },
+            SubstrateLayerState {
+                kind: SubstrateKind::InertSand,
+                depth_cm: 2.0,
+                porosity: 0.25,
+                ..SubstrateLayerState::default()
+            },
+        ];
+        high_porosity_cap.refresh_habitat_registry();
+        step_substrate_zones(&mut high_porosity_cap);
+
+        let low_cap_penetration = low_porosity_cap.substrate_o2_penetration_depth_cm();
+        let high_cap_penetration = high_porosity_cap.substrate_o2_penetration_depth_cm();
+
+        assert!(
+            low_cap_penetration < high_cap_penetration,
+            "a low-porosity surface cap should bottleneck diffusion: low_cap={low_cap_penetration:.4}, high_cap={high_cap_penetration:.4}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn penetration_depth_decreases_with_bioload() -> Result<(), Box<dyn std::error::Error>> {
         let mut state = make_state();
         // Use deeper substrate so penetration doesn't clamp at layer depth.
@@ -319,6 +453,46 @@ mod tests {
             low_load > high_load,
             "higher bioload should reduce penetration: low_load={low_load:.4}, high_load={high_load:.4}"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn microfauna_respiration_shallows_penetration() -> Result<(), Box<dyn std::error::Error>> {
+        let mut without_microfauna = make_state();
+        without_microfauna.substrate_layers = vec![SubstrateLayerState {
+            kind: SubstrateKind::CoarsePorous,
+            depth_cm: 5.0,
+            porosity: SubstrateKind::CoarsePorous.default_porosity(),
+            ..SubstrateLayerState::default()
+        }];
+        without_microfauna.refresh_habitat_registry();
+        let volume_l = without_microfauna.water_volume_l();
+        without_microfauna.water.dissolved_oxygen_mg_total = 7.0 * volume_l;
+        without_microfauna.microbe.decomposer_biomass_g = 0.0;
+        without_microfauna.plant_guilds.clear();
+        without_microfauna.detritus.fine_detritus_g_total = 3.0;
+        without_microfauna.algae.periphyton_by_habitat = BTreeMap::from([
+            (HabitatKind::SubstrateSurface, 10.0),
+            (HabitatKind::GlassHardscape, 0.0),
+            (HabitatKind::PlantSurfaces, 0.0),
+            (HabitatKind::FilterMedia, 0.0),
+        ]);
+        without_microfauna.algae.sync_periphyton_total();
+        without_microfauna.microfauna.population_index = 0.0;
+        step_substrate_zones(&mut without_microfauna);
+
+        let mut with_microfauna = without_microfauna.clone();
+        with_microfauna.microfauna.population_index = 1.0;
+        step_substrate_zones(&mut with_microfauna);
+
+        let no_microfauna_penetration = without_microfauna.substrate_o2_penetration_depth_cm();
+        let high_microfauna_penetration = with_microfauna.substrate_o2_penetration_depth_cm();
+
+        assert!(
+            high_microfauna_penetration < no_microfauna_penetration,
+            "substrate microfauna respiration should shallow penetration: no_microfauna={no_microfauna_penetration:.4}, high_microfauna={high_microfauna_penetration:.4}"
+        );
+
         Ok(())
     }
 
