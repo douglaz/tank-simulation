@@ -96,21 +96,24 @@ pub fn substrate_oxygenation_breakdown(state: &TankState) -> SubstrateOxygenatio
     );
     let active_root_biomass_g = root_oxygenation_active_biomass_g(state);
     let rol_rate_cm_per_g = state.process_params.rol_rate_cm_per_g.max(0.0);
-    let root_oxygenation_bonus_cm =
-        if active_root_biomass_g <= f64::EPSILON || rol_rate_cm_per_g <= f64::EPSILON {
-            0.0
-        } else {
-            // Preserve the low-biomass cm/g slope while saturating smoothly against
-            // the finite substrate depth so extreme biomass cannot create absurd
-            // penetration.
-            total_depth_cm
-                * (1.0
-                    - (-(active_root_biomass_g * rol_rate_cm_per_g)
-                        / total_depth_cm.max(f64::MIN_POSITIVE))
-                    .exp())
-        };
-    let effective_penetration_cm =
-        (base_penetration_cm + root_oxygenation_bonus_cm).clamp(0.0, total_depth_cm);
+    let remaining_depth_cm = (total_depth_cm - base_penetration_cm).max(0.0);
+    let root_oxygenation_bonus_cm = if active_root_biomass_g <= f64::EPSILON
+        || rol_rate_cm_per_g <= f64::EPSILON
+        || remaining_depth_cm <= f64::EPSILON
+    {
+        0.0
+    } else {
+        // Preserve the low-biomass cm/g slope while saturating smoothly against
+        // the remaining available substrate depth so extreme biomass cannot
+        // create absurd penetration or report phantom bonus beyond a fully
+        // oxic bed.
+        remaining_depth_cm
+            * (1.0
+                - (-(active_root_biomass_g * rol_rate_cm_per_g)
+                    / remaining_depth_cm.max(f64::MIN_POSITIVE))
+                .exp())
+    };
+    let effective_penetration_cm = base_penetration_cm + root_oxygenation_bonus_cm;
 
     SubstrateOxygenationBreakdown {
         base_penetration_cm,
@@ -126,8 +129,8 @@ pub fn substrate_oxygenation_breakdown(state: &TankState) -> SubstrateOxygenatio
 /// through their roots into the substrate, creating micro-oxic zones. Only
 /// substrate-active rooted guild biomass contributes; floating or epiphytic
 /// guilds do not. The low-biomass slope is linear in `rol_rate_cm_per_g`,
-/// while an exponential cap keeps the bonus bounded by the finite substrate
-/// depth.
+/// while an exponential cap keeps the bonus bounded by the remaining substrate
+/// depth below the diffusive oxic front.
 pub fn root_oxygenation_bonus_cm(state: &TankState) -> f64 {
     substrate_oxygenation_breakdown(state).root_oxygenation_bonus_cm
 }
@@ -975,8 +978,19 @@ mod tests {
     #[test]
     fn root_oxygenation_proportional_to_biomass_with_diminishing_returns(
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // Test the bonus function directly (isolated from O₂ demand effects)
         let mut state = make_state();
+        state.substrate_layers = vec![SubstrateLayerState {
+            kind: SubstrateKind::ActivePlanted,
+            depth_cm: 8.0,
+            porosity: SubstrateKind::ActivePlanted.default_porosity(),
+            ..SubstrateLayerState::default()
+        }];
+        state.refresh_habitat_registry();
+        let volume_l = state.water_volume_l();
+        state.water.dissolved_oxygen_mg_total = 7.0 * volume_l;
+        state.microbe.decomposer_biomass_g = 10.0;
+        state.microfauna.population_index = 0.0;
+
         state.plant_guilds = vec![make_rooted_plant(2.0)];
         let bonus_low = root_oxygenation_bonus_cm(&state);
         let active_low = root_oxygenation_active_biomass_g(&state);
@@ -1187,6 +1201,17 @@ mod tests {
     #[test]
     fn root_oxygenation_uses_named_parameter() -> Result<(), Box<dyn std::error::Error>> {
         let mut state = make_state();
+        state.substrate_layers = vec![SubstrateLayerState {
+            kind: SubstrateKind::ActivePlanted,
+            depth_cm: 8.0,
+            porosity: SubstrateKind::ActivePlanted.default_porosity(),
+            ..SubstrateLayerState::default()
+        }];
+        state.refresh_habitat_registry();
+        let volume_l = state.water_volume_l();
+        state.water.dissolved_oxygen_mg_total = 7.0 * volume_l;
+        state.microbe.decomposer_biomass_g = 10.0;
+        state.microfauna.population_index = 0.0;
         state.plant_guilds = vec![make_rooted_plant(0.1)];
 
         let default_rate = state.process_params.rol_rate_cm_per_g;
@@ -1204,6 +1229,45 @@ mod tests {
             (1.8..=2.2).contains(&ratio),
             "low-biomass bonus should scale approximately linearly with rol_rate_cm_per_g: ratio={ratio:.4}"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn fully_oxic_bed_reports_zero_root_oxygenation_bonus() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let mut state = make_state();
+        state.substrate_layers = vec![SubstrateLayerState {
+            kind: SubstrateKind::CoarsePorous,
+            depth_cm: 6.0,
+            porosity: SubstrateKind::CoarsePorous.default_porosity(),
+            ..SubstrateLayerState::default()
+        }];
+        state.refresh_habitat_registry();
+        let volume_l = state.water_volume_l();
+        state.water.dissolved_oxygen_mg_total = 8.0 * volume_l;
+        state.microbe.decomposer_biomass_g = 0.0;
+        state.microfauna.population_index = 0.0;
+        state.plant_guilds = vec![make_rooted_plant(20.0)];
+
+        let breakdown = substrate_oxygenation_breakdown(&state);
+        let total_depth = state.substrate_depth_cm();
+
+        assert!(
+            (breakdown.base_penetration_cm - total_depth).abs() < 1e-12,
+            "low-demand substrate should already be fully oxic before ROL: base={:.6}, depth={total_depth:.6}",
+            breakdown.base_penetration_cm
+        );
+        assert!(
+            breakdown.root_oxygenation_bonus_cm.abs() < 1e-12,
+            "once the diffusive front already spans the full bed, ROL should report zero remaining-depth bonus: {}",
+            breakdown.root_oxygenation_bonus_cm
+        );
+        assert!(
+            (breakdown.effective_penetration_cm - total_depth).abs() < 1e-12,
+            "effective penetration should remain at the full bed depth: effective={:.6}, depth={total_depth:.6}",
+            breakdown.effective_penetration_cm
+        );
+
         Ok(())
     }
 

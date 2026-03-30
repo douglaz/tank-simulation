@@ -13,6 +13,14 @@
 //! modifiers) is dumped via a structured debug helper for diagnosis.
 //!
 //! Set `TANK_E2E_VERBOSE=1` for full trace dumps even on success.
+//!
+//! Default file runs execute the aggregate summary once:
+//! `cargo test --test e2e_habitat_geometry_probes -- --nocapture`
+//!
+//! Individual probe entrypoints are `#[ignore]` so the summary runner does not
+//! double the wall-clock cost in default CI runs. Run a single probe explicitly
+//! with `-- --ignored`, for example:
+//! `cargo test --test e2e_habitat_geometry_probes probe_substrate_redox_denitrification -- --ignored --nocapture`
 
 use tank_core::{
     systems::{
@@ -256,7 +264,10 @@ fn probe_artifact_label(base: &str, suffix: Option<&str>) -> String {
 ///   clears the pulse inside the horizon, it still ends with lower reduced-N
 ///   plus more nitrifier biomass from post-seeding growth
 /// - Both tanks remain within basic stability envelopes
+// Individual probes stay ignored by default because the summary runner below
+// already executes each multi-day scenario once in ordinary `cargo test` runs.
 #[test]
+#[ignore = "run explicitly with -- --ignored when iterating on a single habitat probe"]
 fn probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<(), Box<dyn std::error::Error>> {
     require_probe_pass(run_probe_biofilter_scaling_bigger_media_faster_cycling())
 }
@@ -524,13 +535,12 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix(
             (None, None) => record_check(
                 &mut runs,
                 "biofilter_no_clearance_fallback",
-                snap_large.tan_mg_n_per_l < snap_small.tan_mg_n_per_l
+                final_reduced_n_large < final_reduced_n_small
                     && snap_large.nitrite_mg_n_per_l <= snap_small.nitrite_mg_n_per_l,
                 format!(
-                    "if neither filter clears TAN+NO₂ inside the horizon, the larger media pack should still finish with lower TAN and no worse NO₂: \
-                     TAN small={:.4} large={:.4}, NO₂ small={:.4} large={:.4}",
-                    snap_small.tan_mg_n_per_l,
-                    snap_large.tan_mg_n_per_l,
+                    "if neither filter clears TAN+NO₂ inside the horizon, the larger media pack should still finish with lower total reduced N and no worse NO₂: \
+                     reduced-N small={final_reduced_n_small:.4} large={final_reduced_n_large:.4}, \
+                     NO₂ small={:.4} large={:.4}",
                     snap_small.nitrite_mg_n_per_l,
                     snap_large.nitrite_mg_n_per_l,
                 ),
@@ -590,6 +600,7 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix(
 /// - Substrate-surface habitat light exposure is lower in the deep tank
 /// - Both tanks remain within basic stability envelopes
 #[test]
+#[ignore = "run explicitly with -- --ignored when iterating on a single habitat probe"]
 fn probe_light_depth_shallow_vs_deep_growth() -> Result<(), Box<dyn std::error::Error>> {
     require_probe_pass(run_probe_light_depth_shallow_vs_deep_growth())
 }
@@ -804,6 +815,7 @@ fn run_probe_light_depth_shallow_vs_deep_growth_with_suffix(
 /// - The ratio of glass periphyton to filter decomposer changes with
 ///   conditions (not a fixed proportion)
 #[test]
+#[ignore = "run explicitly with -- --ignored when iterating on a single habitat probe"]
 fn probe_habitat_fouling_glass_vs_filter() -> Result<(), Box<dyn std::error::Error>> {
     require_probe_pass(run_probe_habitat_fouling_glass_vs_filter())
 }
@@ -1000,6 +1012,7 @@ fn run_probe_habitat_fouling_glass_vs_filter_with_suffix(
 /// - Inert substrate keeps far less suboxic volume, so it cannot match the
 ///   planted arm's denitrification outcome
 #[test]
+#[ignore = "run explicitly with -- --ignored when iterating on a single habitat probe"]
 fn probe_substrate_redox_denitrification() -> Result<(), Box<dyn std::error::Error>> {
     require_probe_pass(run_probe_substrate_redox_denitrification())
 }
@@ -1314,6 +1327,7 @@ fn run_probe_substrate_redox_denitrification_with_suffix(
 /// - Temperature equilibrium is comparable
 /// - Both runs remain within stability envelopes
 #[test]
+#[ignore = "run explicitly with -- --ignored when iterating on a single habitat probe"]
 fn probe_equipment_scaling_1x_vs_2x() -> Result<(), Box<dyn std::error::Error>> {
     require_probe_pass(run_probe_equipment_scaling_1x_vs_2x())
 }
