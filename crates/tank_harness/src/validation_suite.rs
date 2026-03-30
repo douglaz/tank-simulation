@@ -13,16 +13,112 @@
 //!
 //! Exit codes: 0 = all pass, non-zero = envelope violation.
 
+use std::error::Error;
+
 use tank_core::{
     systems::chemistry::resolve_carbonate_state, systems::light::is_light_on, Engine, EventKind,
     JsonLinesSink, PlantGuild, PlayerAction, ProcessParams, SimSeed, SimTracer, SimulationEngine,
     SourceWaterProfile, TankGeometry, TankSnapshot, TankState, TraceSink, Verbosity, WaterState,
 };
-use tank_harness::{Envelope, HarnessRun};
 use tank_scenarios::{
     ScenarioGeometryOverrides, StartupHeaterPreset, StartupLightPreset, StartupOverrides,
     StartupPlantSelection, StartupSubstratePreset,
 };
+
+use crate::calibration::{
+    classify_field_f64, CalibrationReport, CalibrationRun, CheckStatus, CheckpointRow, FieldCheck,
+    ProvenanceStatus, ScenarioArtifact, ScenarioRow, ValidationConfidence,
+};
+use crate::{Envelope, HarnessRun};
+
+/// Static metadata for a shipped validation scenario.
+#[derive(Debug, Clone, Copy)]
+pub struct ValidationScenarioDefinition {
+    pub id: &'static str,
+    pub title: &'static str,
+    pub domain: &'static str,
+    pub confidence: ValidationConfidence,
+    pub provenance_status: ProvenanceStatus,
+    pub seed: SimSeed,
+}
+
+const VALIDATION_SCENARIOS: [ValidationScenarioDefinition; 8] = [
+    ValidationScenarioDefinition {
+        id: "vs01_cycling_timeline",
+        title: "Fishless cycling timeline",
+        domain: "Chemistry / Microbiology",
+        confidence: ValidationConfidence::High,
+        provenance_status: ProvenanceStatus::ValidatedDirectionally,
+        seed: SimSeed(7301),
+    },
+    ValidationScenarioDefinition {
+        id: "vs02_aeration_effects",
+        title: "Aeration effects (DO + pH)",
+        domain: "Physics / Chemistry",
+        confidence: ValidationConfidence::High,
+        provenance_status: ProvenanceStatus::ValidatedDirectionally,
+        seed: SimSeed(7302),
+    },
+    ValidationScenarioDefinition {
+        id: "vs03_day_night_ph_swing",
+        title: "Day/night pH swing",
+        domain: "Chemistry / Plant biology",
+        confidence: ValidationConfidence::High,
+        provenance_status: ProvenanceStatus::ValidatedDirectionally,
+        seed: SimSeed(7303),
+    },
+    ValidationScenarioDefinition {
+        id: "vs04_source_water_differentiation",
+        title: "Source-water differentiation",
+        domain: "Chemistry",
+        confidence: ValidationConfidence::High,
+        provenance_status: ProvenanceStatus::ValidatedDirectionally,
+        seed: SimSeed(7304),
+    },
+    ValidationScenarioDefinition {
+        id: "vs05_shrimp_breeding_thermal_window",
+        title: "Shrimp breeding thermal window",
+        domain: "Animal behavior",
+        confidence: ValidationConfidence::High,
+        provenance_status: ProvenanceStatus::ValidatedDirectionally,
+        seed: SimSeed(7305),
+    },
+    ValidationScenarioDefinition {
+        id: "vs06_algae_plant_competition",
+        title: "Algae-plant competition",
+        domain: "Ecology",
+        confidence: ValidationConfidence::Medium,
+        provenance_status: ProvenanceStatus::StillHeuristic,
+        seed: SimSeed(7306),
+    },
+    ValidationScenarioDefinition {
+        id: "vs07_nitrate_removal_denitrification",
+        title: "Nitrate removal (denitrification)",
+        domain: "Microbiology / Chemistry",
+        confidence: ValidationConfidence::Medium,
+        provenance_status: ProvenanceStatus::StillHeuristic,
+        seed: SimSeed(7307),
+    },
+    ValidationScenarioDefinition {
+        id: "vs08_stocking_density_crash",
+        title: "Stocking density crash",
+        domain: "Toxicology / Husbandry",
+        confidence: ValidationConfidence::High,
+        provenance_status: ProvenanceStatus::ValidatedDirectionally,
+        seed: SimSeed(7308),
+    },
+];
+
+pub fn validation_scenarios() -> &'static [ValidationScenarioDefinition] {
+    &VALIDATION_SCENARIOS
+}
+
+fn scenario_definition(id: &str) -> &'static ValidationScenarioDefinition {
+    validation_scenarios()
+        .iter()
+        .find(|definition| definition.id == id)
+        .unwrap_or_else(|| panic!("unknown validation scenario id '{id}'"))
+}
 
 // ---------------------------------------------------------------------------
 // Probe result tracking
@@ -106,7 +202,7 @@ fn finish_probe(name: &'static str, observed: String, runs: Vec<HarnessRun>) -> 
     }
 }
 
-fn require_probe_pass<E>(result: Result<ProbeResult, E>) -> Result<(), Box<dyn std::error::Error>>
+fn require_probe_pass<E>(result: Result<ProbeResult, E>) -> Result<(), Box<dyn Error>>
 where
     E: std::fmt::Display,
 {
@@ -125,6 +221,96 @@ fn panic_message(panic: Box<dyn std::any::Any + Send>) -> String {
         .unwrap_or_else(|| "unknown panic".to_string())
 }
 
+fn annotate_row(
+    definition: &ValidationScenarioDefinition,
+    mut row: ScenarioRow,
+    observed_summary: impl Into<String>,
+) -> ScenarioRow {
+    row.scenario_id = definition.id.to_string();
+    row.scenario_name = definition.title.to_string();
+    row.domain = definition.domain.to_string();
+    row.confidence = definition.confidence;
+    row.provenance_status = definition.provenance_status;
+    row.observed_summary = observed_summary.into();
+    if row.artifacts.is_empty() {
+        if let Some(path) = row.artifact_path.clone() {
+            row.artifacts.push(ScenarioArtifact {
+                label: "scenario".to_string(),
+                path,
+            });
+        }
+    } else if row.artifact_path.is_none() {
+        row.artifact_path = row.artifacts.first().map(|artifact| artifact.path.clone());
+    }
+    row
+}
+
+fn fail_field(field: impl Into<String>, detail: impl Into<String>) -> FieldCheck {
+    FieldCheck {
+        field: field.into(),
+        observed: None,
+        envelope_min: None,
+        envelope_max: None,
+        status: CheckStatus::Fail,
+        detail: Some(detail.into()),
+    }
+}
+
+fn finalize_custom_row(
+    definition: &ValidationScenarioDefinition,
+    parameter_variant: &str,
+    label: &str,
+    day: u32,
+    hour: u8,
+    fields: Vec<FieldCheck>,
+    observed_summary: String,
+    mut runs: Vec<(&str, HarnessRun)>,
+) -> ScenarioRow {
+    let mut checkpoint = CheckpointRow::from_fields(label, day, hour, fields, None);
+    let failing_details: Vec<String> = checkpoint
+        .fields
+        .iter()
+        .filter(|field| field.status == CheckStatus::Fail)
+        .filter_map(|field| field.detail.clone())
+        .collect();
+
+    let mut artifacts = Vec::new();
+    let persist_artifacts = checkpoint.status != CheckStatus::Pass;
+    for (artifact_label, run) in &mut runs {
+        if !failing_details.is_empty() {
+            for detail in &failing_details {
+                run.record_failure(label, detail.clone());
+            }
+        }
+        if persist_artifacts {
+            let path = run.persist_artifacts();
+            artifacts.push(ScenarioArtifact {
+                label: (*artifact_label).to_string(),
+                path: path.display().to_string(),
+            });
+        }
+    }
+
+    checkpoint.artifact_path = artifacts.first().map(|artifact| artifact.path.clone());
+
+    for (_, run) in runs {
+        let _ = run.finish();
+    }
+
+    ScenarioRow::from_checkpoints(
+        definition.id,
+        definition.title,
+        definition.seed.0,
+        parameter_variant,
+        definition.domain,
+        definition.confidence,
+        definition.provenance_status,
+        vec![checkpoint],
+        observed_summary,
+        artifacts,
+    )
+}
+
 // ---------------------------------------------------------------------------
 // VS-01: Fishless cycling timeline
 // ---------------------------------------------------------------------------
@@ -137,12 +323,11 @@ fn panic_message(panic: Box<dyn std::any::Any + Send>) -> String {
 /// dosing for 8 weeks. The classic N succession should produce: TAN peak
 /// (weeks 1-3), nitrite peak (weeks 2-5), clearing of both by weeks 6-8,
 /// and steady NO₃⁻ accumulation.
-#[test]
-fn vs01_cycling_timeline() -> Result<(), Box<dyn std::error::Error>> {
+pub fn vs01_cycling_timeline() -> Result<(), Box<dyn Error>> {
     require_probe_pass(run_vs01_cycling_timeline())
 }
 
-fn run_vs01_cycling_timeline() -> Result<ProbeResult, Box<dyn std::error::Error>> {
+fn run_vs01_cycling_timeline() -> Result<ProbeResult, Box<dyn Error>> {
     let overrides = StartupOverrides {
         geometry: ScenarioGeometryOverrides {
             size_scale: 2.0,
@@ -266,8 +451,7 @@ fn run_vs01_cycling_timeline() -> Result<ProbeResult, Box<dyn std::error::Error>
 /// Two identical tanks with moderate bioload. One has aeration, one does not.
 /// After 24 hours the aerated tank should have higher DO (O₂ transfer) and
 /// higher pH (CO₂ stripping).
-#[test]
-fn vs02_aeration_effects() -> Result<(), Box<dyn std::error::Error>> {
+pub fn vs02_aeration_effects() -> Result<(), Box<dyn Error>> {
     require_probe_pass(run_vs02_aeration_effects())
 }
 
@@ -373,8 +557,7 @@ fn run_vs02_aeration_effects() -> Result<ProbeResult, tank_core::SimError> {
 /// Photosynthesis during lit hours draws down CO₂ (raises pH); respiration
 /// at night releases CO₂ (lowers pH). The swing should remain detectable
 /// across consecutive day/night cycles after day 1 settling.
-#[test]
-fn vs03_day_night_ph_swing() -> Result<(), Box<dyn std::error::Error>> {
+pub fn vs03_day_night_ph_swing() -> Result<(), Box<dyn Error>> {
     require_probe_pass(run_vs03_day_night_ph_swing())
 }
 
@@ -536,8 +719,7 @@ fn run_vs03_day_night_ph_swing() -> Result<ProbeResult, tank_core::SimError> {
 ///
 /// Two biology-free equilibrium tanks: hard shrimp water (KH ~8) vs RO-like
 /// water (KH ~0.1). The pH gap should be >= 1.0 unit.
-#[test]
-fn vs04_source_water_differentiation() -> Result<(), Box<dyn std::error::Error>> {
+pub fn vs04_source_water_differentiation() -> Result<(), Box<dyn Error>> {
     require_probe_pass(run_vs04_source_water_differentiation())
 }
 
@@ -642,8 +824,7 @@ fn run_vs04_source_water_differentiation() -> Result<ProbeResult, tank_core::Sim
 ///
 /// Cool arm (25°C): population grows, ≥2 complete repro cycles, juveniles present.
 /// Warm arm (31°C): reproductive readiness depressed, fewer juveniles than cool.
-#[test]
-fn vs05_shrimp_breeding_thermal_window() -> Result<(), Box<dyn std::error::Error>> {
+pub fn vs05_shrimp_breeding_thermal_window() -> Result<(), Box<dyn Error>> {
     require_probe_pass(run_vs05_shrimp_breeding())
 }
 
@@ -842,8 +1023,7 @@ fn run_vs05_shrimp_breeding() -> Result<ProbeResult, Box<dyn std::error::Error>>
 /// A tank with moderate initial plant biomass, high light, very low dissolved
 /// N and P, no fertilization, no shrimp. Algae nuisance should rise while
 /// plant biomass declines.
-#[test]
-fn vs06_algae_plant_competition() -> Result<(), Box<dyn std::error::Error>> {
+pub fn vs06_algae_plant_competition() -> Result<(), Box<dyn Error>> {
     require_probe_pass(run_vs06_algae_plant_competition())
 }
 
@@ -976,8 +1156,7 @@ fn run_vs06_algae_plant_competition() -> Result<ProbeResult, tank_core::SimError
 /// the same fast-stem biomass, feeding, and low-nitrate buffered water-change
 /// source. After a long-horizon run the planted-substrate tank should finish
 /// with lower NO₃ and measurable cumulative N₂ export.
-#[test]
-fn vs07_nitrate_removal_denitrification() -> Result<(), Box<dyn std::error::Error>> {
+pub fn vs07_nitrate_removal_denitrification() -> Result<(), Box<dyn Error>> {
     require_probe_pass(run_vs07_nitrate_removal())
 }
 
@@ -1216,8 +1395,7 @@ fn run_vs07_nitrate_removal() -> Result<ProbeResult, Box<dyn std::error::Error>>
 ///
 /// A 30L tank with 20 shrimp (heavily overcrowded), 0.5 g/day feeding,
 /// no water changes. TAN and NO₂ spike; shrimp die from toxicity.
-#[test]
-fn vs08_stocking_density_crash() -> Result<(), Box<dyn std::error::Error>> {
+pub fn vs08_stocking_density_crash() -> Result<(), Box<dyn Error>> {
     require_probe_pass(run_vs08_stocking_density_crash())
 }
 
@@ -1367,8 +1545,7 @@ fn run_vs08_stocking_density_crash() -> Result<ProbeResult, Box<dyn std::error::
 
 type ProbeFn = Box<dyn Fn() -> Result<ProbeResult, Box<dyn std::error::Error>>>;
 
-#[test]
-fn validation_suite_summary() {
+pub fn validation_suite_summary() {
     let probes: Vec<(&str, ProbeFn)> = vec![
         (
             "VS-01 Cycling timeline",
