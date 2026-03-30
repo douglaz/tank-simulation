@@ -31,8 +31,8 @@ use tank_core::{
     systems::chemistry::{
         bicarbonate_mg_total_from_mmol_per_l, validate_source_water_carbonate_profile,
     },
-    Engine, PlayerAction, ProcessParams, SimSeed, SimulationEngine, SourceWaterProfile,
-    TankGeometry, TankSnapshot, TankState, WaterState,
+    EventKind, PlayerAction, ProcessParams, SimSeed, SimTracer, SimulationEngine,
+    SourceWaterProfile, TankGeometry, TankState, Verbosity, WaterState,
 };
 use tank_harness::{Envelope, HarnessRun};
 
@@ -49,6 +49,83 @@ struct ProbeResult {
     failure_detail: String,
 }
 
+fn require_probe_pass<E>(result: Result<ProbeResult, E>) -> Result<(), Box<dyn std::error::Error>>
+where
+    E: std::fmt::Display,
+{
+    match result {
+        Ok(probe) if probe.passed => Ok(()),
+        Ok(probe) => Err(format!("{} failed:\n{}", probe.name, probe.failure_detail).into()),
+        Err(err) => Err(err.to_string().into()),
+    }
+}
+
+fn finish_probe(name: &'static str, observed: String, runs: Vec<HarnessRun>) -> ProbeResult {
+    let mut finish_errors = Vec::new();
+    for run in runs {
+        if let Err(err) = run.finish() {
+            finish_errors.push(err);
+        }
+    }
+
+    let failure_detail = finish_errors.join("\n");
+    ProbeResult {
+        name,
+        passed: failure_detail.is_empty(),
+        observed,
+        failure_detail,
+    }
+}
+
+fn panic_message(panic: Box<dyn std::any::Any + Send>) -> String {
+    panic
+        .downcast_ref::<String>()
+        .cloned()
+        .or_else(|| panic.downcast_ref::<&str>().map(|msg| (*msg).to_string()))
+        .unwrap_or_else(|| "unknown panic".to_string())
+}
+
+fn probe_artifact_label(base: &str, suffix: Option<&str>) -> String {
+    match suffix {
+        Some(suffix) => format!("{base}_{suffix}"),
+        None => base.to_string(),
+    }
+}
+
+fn record_failure_all(runs: &mut [&mut HarnessRun], label: &str, message: String) {
+    for run in runs.iter_mut() {
+        run.record_failure(label, message.clone());
+    }
+}
+
+fn enable_probe_instrumentation(run: &mut HarnessRun) {
+    run.engine_mut().enable_budget_tracking();
+    run.engine_mut().enable_tracing(SimTracer::new(Verbosity::Trace));
+}
+
+fn load_source_profile(id: &str) -> SourceWaterProfile {
+    let preset = tank_data::load_source_water(id)
+        .unwrap_or_else(|e| panic!("failed to load source water preset '{id}': {e}"));
+    SourceWaterProfile {
+        temperature_c: preset.temperature_c,
+        ammonia_mg_n_per_l: preset.ammonia_mg_n_per_l,
+        nitrite_mg_n_per_l: preset.nitrite_mg_n_per_l,
+        nitrate_mg_n_per_l: preset.nitrate_mg_n_per_l,
+        phosphate_mg_p_per_l: preset.phosphate_mg_p_per_l,
+        dic_mg_c_per_l: preset.dic_mg_c_per_l,
+        doc_mg_c_per_l: preset.doc_mg_c_per_l,
+        don_mg_n_per_l: preset.don_mg_n_per_l,
+        alkalinity_meq_per_l: preset.alkalinity_meq_per_l,
+        calcium_mg_per_l: preset.calcium_mg_per_l,
+        magnesium_mg_per_l: preset.magnesium_mg_per_l,
+        sodium_mg_per_l: preset.sodium_mg_per_l,
+        potassium_mg_per_l: preset.potassium_mg_per_l,
+        bicarbonate_mg_per_l: preset.bicarbonate_mg_per_l,
+        chloride_mg_per_l: preset.chloride_mg_per_l,
+        sulfate_mg_per_l: preset.sulfate_mg_per_l,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Debug helpers — dump shrimp state on failure
 // ---------------------------------------------------------------------------
@@ -57,27 +134,37 @@ struct ProbeResult {
 ///
 /// Dumps counts, condition, reserve, molt status, and key chemistry
 /// (GH, pH, NO₂, Cl) in a compact format for assertion messages.
-fn shrimp_diag(snap: &TankSnapshot) -> String {
+fn shrimp_diag(state: &TankState) -> String {
+    let chemistry = state.concentrations();
     format!(
-        "shrimp={} (adult={}, sub_adult={}, juv={}, berried={}), \
-         cond={:.3}, molt_stress={:.3}, readiness={:.3}, \
-         repro_suppression={}, \
+        "shrimp={} (adult={} cond={:.3} reserve={:.3}, sub_adult={} cond={:.3} reserve={:.3}, \
+         juv={} cond={:.3} reserve={:.3}, berried={}), \
+         cond={:.3}, molt_stress={:.3}, molt_ready={:.3}, failed_molt_accum={:.3}, \
+         last_molt_success={}, readiness={:.3}, \
          pH={:.2}, GH={:.1}, NO2={:.4}, Cl={:.2}, DO={:.2}, temp={:.1}C",
-        snap.total_shrimp_count,
-        snap.adult_shrimp_count,
-        snap.sub_adult_count,
-        snap.juveniles_count,
-        snap.berried_females_count,
-        snap.shrimp_condition_index,
-        snap.shrimp_molt_stress_index,
-        snap.shrimp_reproductive_readiness,
-        snap.repro_dominant_suppression,
-        snap.ph,
-        snap.gh_d,
-        snap.nitrite_mg_n_per_l,
-        snap.chloride_mg_per_l,
-        snap.do_mg_l,
-        snap.water_temp_c,
+        state.animal.total_count(),
+        state.animal.adult.count,
+        state.animal.adult.condition_index,
+        state.animal.adult.reserve_g,
+        state.animal.sub_adult.count,
+        state.animal.sub_adult.condition_index,
+        state.animal.sub_adult.reserve_g,
+        state.animal.juvenile.count,
+        state.animal.juvenile.condition_index,
+        state.animal.juvenile.reserve_g,
+        state.animal.berried_females_count,
+        state.animal.population_condition_index(),
+        state.animal.molt_stress_index,
+        state.animal.molt_readiness,
+        state.animal.failed_molt_accum,
+        state.animal.last_molt_success,
+        state.animal.reproductive_readiness_index,
+        state.water.ph,
+        chemistry.gh_d(),
+        chemistry.nitrite_mg_n_per_l(),
+        chemistry.chloride_mg_per_l(),
+        chemistry.do_mg_per_l(),
+        state.water.temperature_c,
     )
 }
 
@@ -97,172 +184,143 @@ fn shrimp_diag(snap: &TankSnapshot) -> String {
 /// eggs hatch, and juveniles appear. Total population should grow.
 #[test]
 fn probe_successful_breeding() -> Result<(), Box<dyn std::error::Error>> {
-    let state = breeding_success_state(SimSeed(6600));
-
-    let mut run = HarnessRun::from_state(SimSeed(6600), "breeding_success", state)
-        .with_artifact_label("shrimp_successful_breeding");
-    run.enable_instrumentation();
-
-    let initial_snap = run.snapshot();
-    let initial_count = initial_snap.total_shrimp_count;
-
-    // Track berried-female appearances across distinct time windows to detect
-    // at least 2 reproductive cycles.
-    let mut berried_windows: Vec<bool> = Vec::new();
-    let window_hours = 200u32; // ~8-day windows across the run
-    let total_hours: u32 = 1200;
-    let num_windows = total_hours / window_hours;
-
-    for window_idx in 0..num_windows {
-        let mut saw_berried_in_window = false;
-        for _ in 0..(window_hours / 24) {
-            run.apply_action(PlayerAction::Feed { grams: 0.15 })?;
-            run.step_hours(24)?;
-
-            let snap = run.snapshot();
-            if snap.berried_females_count > 0 {
-                saw_berried_in_window = true;
-            }
-        }
-        // Advance remaining hours in the window beyond full days
-        let remaining = window_hours % 24;
-        if remaining > 0 {
-            run.step_hours(remaining)?;
-        }
-        berried_windows.push(saw_berried_in_window);
-
-        // Periodic envelope: chemistry should stay safe throughout
-        run.assert_envelope(
-            &format!("window_{}", window_idx + 1),
-            &Envelope::default()
-                .ph(5.5, 8.5)
-                .temperature_c(22.0, 28.0)
-                .do_min(2.0),
-        );
-    }
-
-    let final_snap = run.snapshot();
-    let final_count = final_snap.total_shrimp_count;
-
-    // At least 2 windows should have observed berried females (= 2 reproductive cycles)
-    let berried_cycle_count = berried_windows.iter().filter(|&&b| b).count();
-
-    run.assert_snapshot("population_maintained", |snap| {
-        if snap.total_shrimp_count < initial_count {
-            Err(format!(
-                "population should be maintained through breeding: initial={initial_count}, final={}. {}",
-                snap.total_shrimp_count,
-                shrimp_diag(snap),
-            ))
-        } else {
-            Ok(())
-        }
-    });
-
-    run.assert_snapshot("reproductive_cycles", |snap| {
-        if berried_cycle_count < 2 {
-            Err(format!(
-                "expected at least 2 reproductive cycles (berried-female windows), \
-                 observed {berried_cycle_count} out of {num_windows} windows. {}",
-                shrimp_diag(snap),
-            ))
-        } else {
-            Ok(())
-        }
-    });
-
-    // Juveniles should be present by the end (evidence of successful hatching)
-    run.assert_snapshot("juveniles_present", |snap| {
-        if snap.juveniles_count == 0 && snap.sub_adult_count == 0 {
-            Err(format!(
-                "expected juveniles or sub-adults from hatching, got neither. {}",
-                shrimp_diag(snap),
-            ))
-        } else {
-            Ok(())
-        }
-    });
-
-    eprintln!(
-        "probe_successful_breeding: initial={initial_count}, final={final_count}, \
-         berried_windows={berried_cycle_count}/{num_windows}. {}",
-        shrimp_diag(&final_snap),
-    );
-
-    run.finish().map_err(|e| e.into())
+    require_probe_pass(run_probe_successful_breeding())
 }
 
 fn run_probe_successful_breeding() -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_successful_breeding_with_suffix(None)
+}
+
+fn run_probe_successful_breeding_summary() -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_successful_breeding_with_suffix(Some("summary"))
+}
+
+fn run_probe_successful_breeding_with_suffix(
+    artifact_suffix: Option<&str>,
+) -> Result<ProbeResult, Box<dyn std::error::Error>> {
     let state = breeding_success_state(SimSeed(6600));
-    let mut engine = Engine::from_parts(state, vec![]);
+    let mut run = HarnessRun::from_state(SimSeed(6600), "breeding_success", state)
+        .with_artifact_label(probe_artifact_label(
+            "shrimp_successful_breeding",
+            artifact_suffix,
+        ));
+    enable_probe_instrumentation(&mut run);
+    run.checkpoint("initial");
 
-    let initial_count = engine.snapshot().total_shrimp_count;
-    let mut berried_windows: Vec<bool> = Vec::new();
-    let window_hours = 200u32;
-    let total_hours = 1200u32;
-    let num_windows = total_hours / window_hours;
+    let initial_count = run.engine().full_state().animal.total_count();
+    let total_days = 60u32;
+    let window_days = 10u32;
+    let num_windows = total_days / window_days;
+    let mut berried_windows = Vec::new();
+    let mut saw_berried_in_window = false;
+    let mut peak_tan = 0.0_f64;
+    let mut peak_no2 = 0.0_f64;
+    let mut peak_instability = 0.0_f64;
 
-    for _ in 0..num_windows {
-        let mut saw_berried = false;
-        for _ in 0..(window_hours / 24) {
-            engine.apply_action(PlayerAction::Feed { grams: 0.15 })?;
-            engine.step_hours(24)?;
-            if engine.snapshot().berried_females_count > 0 {
-                saw_berried = true;
-            }
+    for day in 1..=total_days {
+        run.apply_action(PlayerAction::Feed { grams: 0.05 })?;
+        run.step_hours(24)?;
+
+        if day % 5 == 0 {
+            run.apply_action(PlayerAction::WaterChangePercent {
+                percent: 20.0,
+                source_profile_id: "hard_shrimp".to_string(),
+            })?;
+            run.step_hours(1)?;
         }
-        let remaining = window_hours % 24;
-        if remaining > 0 {
-            engine.step_hours(remaining)?;
+
+        let snap = run.snapshot();
+        let state = run.engine().full_state();
+        saw_berried_in_window |= snap.berried_females_count > 0;
+        peak_tan = peak_tan.max(snap.tan_mg_n_per_l);
+        peak_no2 = peak_no2.max(snap.nitrite_mg_n_per_l);
+        peak_instability = peak_instability.max(state.stability_tracker.instability_index);
+
+        if day % window_days == 0 {
+            berried_windows.push(saw_berried_in_window);
+            saw_berried_in_window = false;
+            run.assert_envelope(
+                &format!("window_{}", day / window_days),
+                &Envelope::default()
+                    .ph(6.8, 8.6)
+                    .temperature_c(23.0, 26.5)
+                    .tan_mg_n_per_l(0.0, 0.6)
+                    .nitrite_mg_n_per_l(0.0, 0.6)
+                    .do_min(7.0),
+            );
         }
-        berried_windows.push(saw_berried);
     }
 
-    let snap = engine.snapshot();
-    let berried_cycle_count = berried_windows.iter().filter(|&&b| b).count();
-    let maintained = snap.total_shrimp_count >= initial_count;
-    let enough_cycles = berried_cycle_count >= 2;
-    let has_offspring = snap.juveniles_count > 0 || snap.sub_adult_count > 0;
-    let passed = maintained && enough_cycles && has_offspring;
+    let final_snap = run.snapshot();
+    let final_state = run.engine().full_state().clone();
+    let final_count = final_snap.total_shrimp_count;
+    let berried_cycle_count = berried_windows.iter().filter(|&&seen| seen).count();
 
+    if final_count <= initial_count {
+        run.record_failure(
+            "population_growth",
+            format!(
+                "healthy breeding scenario should end with net growth: initial={initial_count}, final={final_count}. {}",
+                shrimp_diag(&final_state),
+            ),
+        );
+    }
+
+    if berried_cycle_count < 2 {
+        run.record_failure(
+            "reproductive_cycles",
+            format!(
+                "expected at least 2 berried windows across {num_windows} windows, observed {berried_cycle_count}. {}",
+                shrimp_diag(&final_state),
+            ),
+        );
+    }
+
+    if final_snap.juveniles_count == 0 && final_snap.sub_adult_count == 0 {
+        run.record_failure(
+            "offspring_present",
+            format!(
+                "expected juveniles or sub-adults by the end of the healthy breeding run. {}",
+                shrimp_diag(&final_state),
+            ),
+        );
+    }
+
+    if peak_tan >= 0.6 || peak_no2 >= 0.6 || peak_instability >= 0.35 {
+        run.record_failure(
+            "stable_conditions",
+            format!(
+                "healthy breeding fixture should stay chemically stable: peak_tan={peak_tan:.3}, \
+                 peak_no2={peak_no2:.3}, peak_instability={peak_instability:.3}. {}",
+                shrimp_diag(&final_state),
+            ),
+        );
+    }
+
+    run.checkpoint("final");
     let observed = format!(
-        "initial={initial_count}, final={}, cycles={berried_cycle_count}/{num_windows}, juv={}, sub={}",
-        snap.total_shrimp_count, snap.juveniles_count, snap.sub_adult_count,
+        "initial={initial_count}, final={final_count}, cycles={berried_cycle_count}/{num_windows}, \
+         juv={}, sub={}, peak_tan={peak_tan:.3}, peak_no2={peak_no2:.3}, peak_instability={peak_instability:.3}",
+        final_snap.juveniles_count, final_snap.sub_adult_count,
     );
-    let failure_detail = if passed {
-        String::new()
-    } else {
-        let mut detail = Vec::new();
-        if !maintained {
-            detail.push(format!(
-                "population declined (initial={initial_count}, final={})",
-                snap.total_shrimp_count
-            ));
-        }
-        if !enough_cycles {
-            detail.push(format!(
-                "only {berried_cycle_count} reproductive cycles (need >= 2)"
-            ));
-        }
-        if !has_offspring {
-            detail.push("no juveniles or sub-adults present".to_string());
-        }
-        format!("{} | {}", detail.join("; "), shrimp_diag(&snap))
-    };
 
-    Ok(ProbeResult {
-        name: "successful_breeding",
-        passed,
+    eprintln!(
+        "probe_successful_breeding: {observed}. {}",
+        shrimp_diag(&final_state),
+    );
+
+    Ok(finish_probe(
+        "successful_breeding",
         observed,
-        failure_detail,
-    })
+        vec![run],
+    ))
 }
 
 /// Build a well-maintained planted tank optimised for breeding success.
 ///
 /// Mortality is disabled so the probe isolates reproductive mechanics.
 /// Strong nitrification prevents nitrite buildup; abundant periphyton and
-/// good minerals support condition and molting.
+/// weekly remineralized water changes keep chemistry and minerals stable.
 fn breeding_success_state(seed: SimSeed) -> TankState {
     let geometry = TankGeometry {
         length_cm: 80.0,
@@ -285,18 +343,26 @@ fn breeding_success_state(seed: SimSeed) -> TankState {
     state.water.magnesium_mg_total = 10.0 * vol;
     state.water.alkalinity_meq_total = 12.0 * vol;
     state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * vol;
+    state.water.dissolved_organic_carbon_mg_c_total = 5.0;
+    state.water.dissolved_organic_nitrogen_mg_n_total = 0.8;
     state.water.dissolved_oxygen_mg_total = 8.0 * vol;
     state.water.bicarbonate_mg_total = 400.0 * vol;
+    state.water.ammonia_total_mg_n_total = 0.0;
+    state.water.nitrite_mg_n_total = 0.0;
+    state.water.nitrate_mg_n_total = 5.0 * vol;
 
     // Abundant periphyton so food is never limiting
-    state.algae.set_periphyton_total(30.0);
+    state.algae.set_periphyton_total(120.0);
 
     // Very strong nitrification to keep ammonia/nitrite near zero
     state.microbe.set_decomposer_total(0.3);
-    state.microbe.ammonia_oxidizer_biomass_g = 2.0;
-    state.microbe.nitrite_oxidizer_biomass_g = 3.0;
-    state.microbe.comammox_biomass_g = 1.0;
+    state.microbe.ammonia_oxidizer_biomass_g = 10.0;
+    state.microbe.nitrite_oxidizer_biomass_g = 10.0;
+    state.microbe.comammox_biomass_g = 2.0;
     state.filter_state.biofilter_maturity_index = 1.0;
+    state
+        .source_water_catalog
+        .insert("hard_shrimp".to_string(), load_source_profile("hard_shrimp"));
 
     state.hardware.aeration.enabled = true;
     state.hardware.aeration.intensity = 1.0;
@@ -305,27 +371,34 @@ fn breeding_success_state(seed: SimSeed) -> TankState {
     state.hardware.light.photoperiod_hours = 10.0;
 
     state.animal.adult.count = 10;
-    state.animal.adult.condition_index = 0.8;
-    state.animal.molt_stress_index = 0.1;
-    state.animal.reproductive_readiness_index = 0.8;
-    state.animal.adult.reserve_g = 5.0;
+    state.animal.set_population_condition_index(0.85);
+    state.animal.molt_stress_index = 0.0;
+    state.animal.reproductive_readiness_index = 0.85;
+    state.animal.adult.reserve_g = 10.0;
+    state.animal.last_molt_success = true;
 
     state.process_params = ProcessParams::default();
-    state.process_params.aob_vmax_mg_n_per_g_per_hour = 10.0;
-    state.process_params.nob_vmax_mg_n_per_g_per_hour = 20.0;
+    state.process_params.aob_vmax_mg_n_per_g_per_hour = 30.0;
+    state.process_params.nob_vmax_mg_n_per_g_per_hour = 30.0;
     state.process_params.periphyton_capacity_g_per_m2 = 200.0;
     // Disable mortality to isolate reproductive mechanics
     state.process_params.shrimp_base_mortality_per_day = 0.0;
     state.process_params.shrimp_stress_mortality_scale = 0.0;
 
-    state.shrimp_params.base_spawn_rate = 0.08;
-    state.shrimp_params.hatch_success_base = 1.0;
+    state.shrimp_params.base_spawn_rate = 0.15;
+    state.shrimp_params.hatch_success_base = 0.9;
     state.shrimp_params.egg_duration_days = 14;
+    state.shrimp_params.failed_molt_mortality_scale = 0.0;
     state
         .shrimp_params
-        .apply_legacy_total_maturation_days(120.0);
+        .apply_legacy_total_maturation_days(40.0);
 
     state.reseed_stability_tracker();
+    state.stability_tracker.prev_temp_c = state.water.temperature_c;
+    state.stability_tracker.prev_gh_d = state.gh_d();
+    state.stability_tracker.prev_do_mg_l = state.do_mg_per_l();
+    state.stability_tracker.prev_ph = state.water.ph;
+    state.stability_tracker.instability_index = 0.0;
     state
 }
 
@@ -344,76 +417,7 @@ fn breeding_success_state(seed: SimSeed) -> TankState {
 /// suppresses spawning.
 #[test]
 fn probe_thermal_suppression() -> Result<(), Box<dyn std::error::Error>> {
-    let cool_state = thermal_scenario_state(SimSeed(6601), 25.0);
-    let warm_state = thermal_scenario_state(SimSeed(6601), 31.0);
-
-    let mut cool_run = HarnessRun::from_state(SimSeed(6601), "thermal_cool", cool_state)
-        .with_artifact_label("shrimp_thermal_cool");
-    let mut warm_run = HarnessRun::from_state(SimSeed(6601), "thermal_warm", warm_state)
-        .with_artifact_label("shrimp_thermal_warm");
-    cool_run.enable_instrumentation();
-    warm_run.enable_instrumentation();
-
-    // Run both for 60 days with identical care
-    for _ in 0..60 {
-        cool_run.apply_action(PlayerAction::Feed { grams: 0.1 })?;
-        warm_run.apply_action(PlayerAction::Feed { grams: 0.1 })?;
-        cool_run.step_hours(24)?;
-        warm_run.step_hours(24)?;
-    }
-
-    let cool_snap = cool_run.snapshot();
-    let warm_snap = warm_run.snapshot();
-
-    // Warm tank should have lower reproductive readiness
-    cool_run.assert_snapshot("warm_readiness_suppressed", |_| {
-        if warm_snap.shrimp_reproductive_readiness >= cool_snap.shrimp_reproductive_readiness {
-            Err(format!(
-                "warm tank readiness ({:.3}) should be lower than cool tank ({:.3}). \
-                 Cool: {} | Warm: {}",
-                warm_snap.shrimp_reproductive_readiness,
-                cool_snap.shrimp_reproductive_readiness,
-                shrimp_diag(&cool_snap),
-                shrimp_diag(&warm_snap),
-            ))
-        } else {
-            Ok(())
-        }
-    });
-
-    // Warm tank should have worse reproductive outcomes (fewer juveniles or
-    // lower readiness when both have zero juveniles)
-    cool_run.assert_snapshot("warm_worse_outcomes", |_| {
-        let warm_worse = if cool_snap.juveniles_count > 0 || warm_snap.juveniles_count > 0 {
-            warm_snap.juveniles_count < cool_snap.juveniles_count
-        } else {
-            warm_snap.shrimp_reproductive_readiness <= cool_snap.shrimp_reproductive_readiness
-        };
-        if !warm_worse {
-            Err(format!(
-                "warm tank should have worse reproductive outcomes. \
-                 Cool juv={}, Warm juv={}, Cool readiness={:.3}, Warm readiness={:.3}",
-                cool_snap.juveniles_count,
-                warm_snap.juveniles_count,
-                cool_snap.shrimp_reproductive_readiness,
-                warm_snap.shrimp_reproductive_readiness,
-            ))
-        } else {
-            Ok(())
-        }
-    });
-
-    eprintln!(
-        "probe_thermal_suppression: Cool: {} | Warm: {}",
-        shrimp_diag(&cool_snap),
-        shrimp_diag(&warm_snap),
-    );
-
-    let cool_result = cool_run.finish();
-    let warm_result = warm_run.finish();
-    cool_result.map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
-    warm_result.map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
-    Ok(())
+    require_probe_pass(run_probe_thermal_suppression())
 }
 
 /// Build a stocked shrimp tank at the given ambient temperature, isolating
@@ -485,62 +489,129 @@ fn thermal_scenario_state(seed: SimSeed, ambient_temp_c: f64) -> TankState {
 }
 
 fn run_probe_thermal_suppression() -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_thermal_suppression_with_suffix(None)
+}
+
+fn run_probe_thermal_suppression_summary() -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_thermal_suppression_with_suffix(Some("summary"))
+}
+
+fn run_probe_thermal_suppression_with_suffix(
+    artifact_suffix: Option<&str>,
+) -> Result<ProbeResult, Box<dyn std::error::Error>> {
     let cool_state = thermal_scenario_state(SimSeed(6601), 25.0);
     let warm_state = thermal_scenario_state(SimSeed(6601), 31.0);
 
-    let mut cool_engine = Engine::from_parts(cool_state, vec![]);
-    let mut warm_engine = Engine::from_parts(warm_state, vec![]);
+    let mut cool_run = HarnessRun::from_state(SimSeed(6601), "thermal_cool", cool_state)
+        .with_artifact_label(probe_artifact_label("shrimp_thermal_cool", artifact_suffix));
+    let mut warm_run = HarnessRun::from_state(SimSeed(6601), "thermal_warm", warm_state)
+        .with_artifact_label(probe_artifact_label("shrimp_thermal_warm", artifact_suffix));
+    enable_probe_instrumentation(&mut cool_run);
+    enable_probe_instrumentation(&mut warm_run);
+    cool_run.checkpoint("initial");
+    warm_run.checkpoint("initial");
 
-    for _ in 0..60 {
-        cool_engine.apply_action(PlayerAction::Feed { grams: 0.1 })?;
-        warm_engine.apply_action(PlayerAction::Feed { grams: 0.1 })?;
-        cool_engine.step_hours(24)?;
-        warm_engine.step_hours(24)?;
+    for day in 1..=60 {
+        cool_run.apply_action(PlayerAction::Feed { grams: 0.1 })?;
+        warm_run.apply_action(PlayerAction::Feed { grams: 0.1 })?;
+        cool_run.step_hours(24)?;
+        warm_run.step_hours(24)?;
+
+        if day % 15 == 0 {
+            cool_run.checkpoint(&format!("day_{day}"));
+            warm_run.checkpoint(&format!("day_{day}"));
+        }
     }
 
-    let cool_snap = cool_engine.snapshot();
-    let warm_snap = warm_engine.snapshot();
+    let cool_snap = cool_run.snapshot();
+    let warm_snap = warm_run.snapshot();
+    let cool_state = cool_run.engine().full_state().clone();
+    let warm_state = warm_run.engine().full_state().clone();
+    let cool_egg_drops = cool_state
+        .event_log
+        .iter()
+        .filter(|event| event.kind == EventKind::EggDropping)
+        .count();
+    let warm_egg_drops = warm_state
+        .event_log
+        .iter()
+        .filter(|event| event.kind == EventKind::EggDropping)
+        .count();
+    let mut runs = [&mut cool_run, &mut warm_run];
 
-    let readiness_suppressed =
-        warm_snap.shrimp_reproductive_readiness < cool_snap.shrimp_reproductive_readiness;
-    let worse_outcomes = if cool_snap.juveniles_count > 0 || warm_snap.juveniles_count > 0 {
+    if warm_snap.shrimp_reproductive_readiness >= cool_snap.shrimp_reproductive_readiness {
+        record_failure_all(
+            &mut runs,
+            "warm_readiness_suppressed",
+            format!(
+                "warm tank readiness ({:.3}) should be lower than cool tank ({:.3}). \
+                 Cool: {} | Warm: {}",
+                warm_snap.shrimp_reproductive_readiness,
+                cool_snap.shrimp_reproductive_readiness,
+                shrimp_diag(&cool_state),
+                shrimp_diag(&warm_state),
+            ),
+        );
+    }
+
+    let warm_worse = if cool_snap.juveniles_count > 0 || warm_snap.juveniles_count > 0 {
         warm_snap.juveniles_count < cool_snap.juveniles_count
     } else {
         warm_snap.shrimp_reproductive_readiness <= cool_snap.shrimp_reproductive_readiness
     };
+    if !warm_worse {
+        record_failure_all(
+            &mut runs,
+            "warm_worse_outcomes",
+            format!(
+                "warm tank should have worse reproductive outcomes. \
+                 Cool juv={}, Warm juv={}, Cool readiness={:.3}, Warm readiness={:.3}. \
+                 Cool: {} | Warm: {}",
+                cool_snap.juveniles_count,
+                warm_snap.juveniles_count,
+                cool_snap.shrimp_reproductive_readiness,
+                warm_snap.shrimp_reproductive_readiness,
+                shrimp_diag(&cool_state),
+                shrimp_diag(&warm_state),
+            ),
+        );
+    }
 
-    let passed = readiness_suppressed && worse_outcomes;
+    if warm_egg_drops <= cool_egg_drops {
+        record_failure_all(
+            &mut runs,
+            "warm_egg_dropping",
+            format!(
+                "heat-stressed tank should show more egg dropping events: cool={cool_egg_drops}, warm={warm_egg_drops}. \
+                 Cool: {} | Warm: {}",
+                shrimp_diag(&cool_state),
+                shrimp_diag(&warm_state),
+            ),
+        );
+    }
+
+    cool_run.checkpoint("final");
+    warm_run.checkpoint("final");
     let observed = format!(
-        "cool_readiness={:.3}, warm_readiness={:.3}, cool_juv={}, warm_juv={}",
+        "cool_readiness={:.3}, warm_readiness={:.3}, cool_juv={}, warm_juv={}, \
+         cool_egg_drops={cool_egg_drops}, warm_egg_drops={warm_egg_drops}",
         cool_snap.shrimp_reproductive_readiness,
         warm_snap.shrimp_reproductive_readiness,
         cool_snap.juveniles_count,
         warm_snap.juveniles_count,
     );
-    let failure_detail = if passed {
-        String::new()
-    } else {
-        let mut issues = Vec::new();
-        if !readiness_suppressed {
-            issues.push("readiness not suppressed at 31C");
-        }
-        if !worse_outcomes {
-            issues.push("warm tank did not have worse reproductive outcomes");
-        }
-        format!(
-            "{} | Cool: {} | Warm: {}",
-            issues.join("; "),
-            shrimp_diag(&cool_snap),
-            shrimp_diag(&warm_snap)
-        )
-    };
 
-    Ok(ProbeResult {
-        name: "thermal_suppression",
-        passed,
+    eprintln!(
+        "probe_thermal_suppression: {observed}. Cool: {} | Warm: {}",
+        shrimp_diag(&cool_state),
+        shrimp_diag(&warm_state),
+    );
+
+    Ok(finish_probe(
+        "thermal_suppression",
         observed,
-        failure_detail,
-    })
+        vec![cool_run, warm_run],
+    ))
 }
 
 // ---------------------------------------------------------------------------
