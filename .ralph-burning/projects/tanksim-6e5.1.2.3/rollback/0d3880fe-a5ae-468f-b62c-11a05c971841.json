@@ -1,0 +1,77 @@
+{
+  "rollback_id": "0d3880fe-a5ae-468f-b62c-11a05c971841",
+  "created_at": "2026-03-28T01:02:11.315303557Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "b1537ca318d524046ab7aab5ed77cc748cedd1c4",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260327225238",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 7
+      },
+      "started_at": "2026-03-27T22:52:38.589241101Z",
+      "prompt_hash_at_cycle_start": "992e6d169e5d9d21",
+      "prompt_hash_at_stage_start": "992e6d169e5d9d21",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 6
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-27T23:44:38.470498089Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 7,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-6-e15be02d",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 6,
+          "body": "`crates/tank_core/src/save.rs:172-184` and `crates/tank_core/src/save.rs:350-361` currently treat “the `stability_tracker` field exists” as “the tracker baselines are valid.” That breaks real schema-2 saves created before tracker seeding was added: those payloads can serialize the `StabilityTracker::default()` sentinel values, and the load path preserves them unchanged instead of repairing them. After migration, `prev_temp_c`/`prev_ph`/`prev_gh_d`/`prev_do_mg_l` can still be out of sync with the migrated water state, so the first daily stability update reports a fake swing. In a repro with a schema-2 save taken immediately after tank creation, the file loads with `instability_index == 0` but jumps to `0.3` after the next 24-hour step solely from stale tracker baselines. Please detect/reseed this legacy-default tracker case (while still preserving valid historical trackers) and add a regression test for a v2 payload where the tracker is present but uninitialized.",
+          "created_at": "2026-03-28T01:02:11.259749646Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "f8133193db9de629fdf57d4bca063851748519f7ef4e6e9b3c08f451a596c8bb"
+        }
+      ],
+      "processed_count": 11
+    },
+    "status_summary": "running: final review restart round 7 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T00:47:20.615371349Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

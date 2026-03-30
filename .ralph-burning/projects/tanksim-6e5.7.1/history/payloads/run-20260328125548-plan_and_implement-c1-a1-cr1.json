@@ -1,0 +1,66 @@
+{
+  "payload_id": "run-20260328125548-plan_and_implement-c1-a1-cr1",
+  "stage_id": "plan_and_implement",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T13:09:29.735787587Z",
+  "payload": {
+    "data": {
+      "change_summary": "Added parameter provenance schema and loader support. Created `ConfidenceLevel` enum (literature/expert/heuristic/placeholder) and `ParamMeta` struct (unit, source, confidence, valid_range, notes) in `tank_core::types::provenance`. Added `param_meta: BTreeMap<String, ParamMeta>` to `ProcessParamsPreset` with serde-default for backward compatibility. Existing TOML files without provenance still load unchanged. Valid_range checking returns `Vec<RangeWarning>` (warnings, not errors) via `check_ranges()`. Developer-facing `format_param()` and `Display` impls render provenance for docs/debug (e.g. \"aob_k_tan_mg: 0.5 mg N/L [literature, EPA 2013]\"). All 6 acceptance-criteria tests plus 8 core unit tests pass.",
+      "outstanding_risks": [
+        "Clippy could not be verified due to pre-existing compilation errors on master branch (AnimalState struct redesign in commit 3ef1754 left engine.rs and systems/shrimp.rs with stale field references). Provenance code is isolated in types/provenance.rs and follows existing patterns, so clippy risk is low.",
+        "A background daemon/hook is actively syncing in-progress changes from parallel tasks into the working tree, which can cause intermittent compilation failures when those partial changes interact with the committed codebase.",
+        "The param_value() lookup method on ProcessParamsPreset uses a manual match-arm pattern. If new parameters are added to the preset struct, param_value() must be updated in lockstep. A macro or code generation could reduce this risk in the future.",
+        "Provenance metadata is currently only supported on ProcessParamsPreset. Other preset types (SourceWaterPreset, ShrimpPreset, etc.) still use the preset-level Provenance struct. Per-parameter metadata can be added to those types later using the same pattern."
+      ],
+      "steps": [
+        {
+          "description": "Created `crates/tank_core/src/types/provenance.rs` with ConfidenceLevel enum (4 variants, serde lowercase), ParamMeta struct (all optional fields: unit, source, confidence, valid_range, notes), RangeWarning struct, check_param_range/check_all_ranges/format_param helpers, and Display impls for all types. Includes 8 unit tests.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Registered provenance module in `crates/tank_core/src/types/mod.rs` and added public re-exports: ConfidenceLevel, ParamMeta, RangeWarning, check_all_ranges, check_param_range, format_param.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Added `param_meta: BTreeMap<String, ParamMeta>` field to ProcessParamsPreset in `crates/tank_data/src/presets.rs` with `#[serde(default, skip_serializing_if)]` for backward compatibility. Added `param_value()` method (name-to-value lookup) and `check_ranges()` method (returns Vec<RangeWarning> for out-of-range values).",
+          "order": 3,
+          "status": "completed"
+        },
+        {
+          "description": "Updated `crates/tank_data/src/lib.rs` to re-export core provenance types (ConfidenceLevel, ParamMeta, RangeWarning, check_all_ranges, check_param_range, format_param) for consumer convenience.",
+          "order": 4,
+          "status": "completed"
+        },
+        {
+          "description": "Wrote all 6 acceptance-criteria tests in tank_data::presets::tests: test_provenance_schema_roundtrip (full TOML roundtrip), test_provenance_optional_fields (just value+unit), test_confidence_levels_enum (valid levels parse, unknown fails), test_valid_range_enforcement (out-of-range produces warning not error), test_backward_compatible_loading (legacy files load with empty param_meta), test_provenance_display (format_param output).",
+          "order": 5,
+          "status": "completed"
+        },
+        {
+          "description": "Verified all 20 tests pass (8 provenance core + 12 tank_data including 6 new acceptance tests). Formatting verified clean via rustfmt --check on all provenance files. Clippy could not run due to pre-existing AnimalState struct mismatch on master (engine.rs/shrimp.rs reference old field names after biology.rs redesign in commit 3ef1754).",
+          "order": 6,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "cargo test -p tank_data --lib: 12/12 tests pass including all 6 acceptance-criteria tests (test_provenance_schema_roundtrip, test_provenance_optional_fields, test_confidence_levels_enum, test_valid_range_enforcement, test_backward_compatible_loading, test_provenance_display)",
+        "cargo test -p tank_core --lib provenance: 8/8 provenance unit tests pass (confidence_level_roundtrip, confidence_level_rejects_unknown, param_meta_display_full, param_meta_display_empty, range_check_in_range, range_check_out_of_range, range_check_no_range, format_param)",
+        "rustfmt --check passes on all provenance files (provenance.rs, presets.rs, lib.rs)",
+        "Backward compatibility verified: default.toml loads with empty param_meta, minimal TOML with no provenance/param_meta loads successfully",
+        "ConfidenceLevel enum rejects unknown values at deserialization time (e.g. 'medium' → toml parse error)",
+        "valid_range enforcement produces RangeWarning (not error): aob_k_tan_mg=10.0 with range [0.1,5.0] → warning; validate() still passes"
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

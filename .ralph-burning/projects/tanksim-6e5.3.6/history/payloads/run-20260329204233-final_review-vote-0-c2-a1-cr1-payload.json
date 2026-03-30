@@ -1,0 +1,44 @@
+{
+  "payload_id": "run-20260329204233-final_review-vote-0-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-29T21:36:40.319970572Z",
+  "payload": {
+    "summary": "Verified all five amendments against the current codebase. Three are valid and address real gaps (grazing assert_or_dump consistency, grazing e2e pathway assertions, water-change nitrite omission). Two are rejected because their premises don't match the actual code: the nitrogen cycle trace already emits tan_oxidized_mg (AOB+comammox) correctly paired with alkalinity_consumed_meq, and alkalinity is not part of the Element budget system at all—it uses a separate meq-aware BudgetMetric pathway, so the mg-formatting concern in budget_helpers.rs is inapplicable.",
+    "votes": [
+      {
+        "amendment_id": "fr-1-d5896362",
+        "decision": "accept",
+        "rationale": "Verified: the grazing test (closed_system_grazing_conserves_n_and_c) uses three bare assert!() calls at lines 257-271 for pathway verification, while all other five tests in the same file use assert_or_dump(). This is a real inconsistency—a grazing pathway failure will not dump the trace to /tmp/tank_conservation_traces/grazing.jsonl, violating the debugging contract. Straightforward fix with clear value."
+      },
+      {
+        "amendment_id": "fr-1-0ed6fb15",
+        "decision": "accept",
+        "rationale": "Verified: run_grazing() (lines 375-390) only checks net conservation deltas for N and C, with zero pathway-verification assertions (no ensure() or ensure_trace_delta() calls). All other five scenario runners have extensive pathway assertions. This means run_grazing() would pass even if the grazing pathway were silently broken and nutrients happened to conserve by accident. Adding minimum pathway checks (periphyton decreased, TAN increased, fine detritus increased) matches the unit test expectations and closes a real coverage gap."
+      },
+      {
+        "amendment_id": "fr-1-bd5aaa0c",
+        "decision": "accept",
+        "rationale": "Verified: both test files calculate expected_n_import as (ammonia + nitrate + don) × exchanged_l, while the engine's apply_water_change_with_budget (water_change.rs:124-128) calculates nitrogen_in_mg as (ammonia + nitrite + nitrate + don) × exchanged_l. The discrepancy is masked because SourceWaterProfile::zero() sets nitrite_mg_n_per_l to 0.0. Adding nitrite to the test formula is the correct fix—it matches the engine's actual accounting and prevents silent breakage if the fixture evolves to include non-zero nitrite."
+      },
+      {
+        "amendment_id": "fr-1-026ed985",
+        "decision": "reject",
+        "rationale": "The amendment's premise doesn't match the actual code. The amendment claims engine.rs emits 'nitrogen_cycle.total_n_nitrified_mg' (NOB+comammox) beside alk_consumed_meq (AOB+comammox), creating a mismatch. In reality, the code at engine.rs:239-255 emits three separate metrics: (1) 'nitrogen_cycle.tan_oxidized_mg' = aob_step + comammox_step, (2) 'nitrogen_cycle.nitrate_produced_mg_n' = nob_step + comammox_step, and (3) 'nitrogen_cycle.alkalinity_consumed_meq' = aob_alk + comammox_alk. The tan_oxidized_mg metric IS correctly paired with alkalinity_consumed_meq (both track the TAN-oxidation leg), and the code comments at nitrogen_cycle.rs:406-408 explicitly document this design. The issue described in the amendment has already been addressed."
+      },
+      {
+        "amendment_id": "fr-1-bcb79444",
+        "decision": "reject",
+        "rationale": "The amendment's premise is factually incorrect. Alkalinity is NOT part of the Element enum (which only has Nitrogen, Carbon, Oxygen per budget_helpers.rs:423-426) and never flows through the assert_budget_balanced() or assert_per_tick_balanced() functions in budget_helpers.rs. Alkalinity uses a completely separate BudgetMetric system (budget.rs comment at line 140 explicitly states it is 'not part of the conserved N/C/O element ledger'). The meq-aware formatting already happens in engine.rs where alkalinity is tracked with explicit meq metric names. Since 'element == Element::Alkalinity' would be a compile error, the described scenario—mg-formatted alkalinity failure messages—cannot occur."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

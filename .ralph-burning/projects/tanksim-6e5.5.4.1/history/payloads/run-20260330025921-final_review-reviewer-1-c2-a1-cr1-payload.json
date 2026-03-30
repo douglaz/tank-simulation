@@ -1,0 +1,31 @@
+{
+  "payload_id": "run-20260330025921-final_review-reviewer-1-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T03:59:13.987738817Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "`crates/tank_harness/tests/e2e_geometry_scaling.rs:20,167-177,224-239` re-tightens concentration parity back to 20%, but the current loading change does not actually get the model back inside that bound. `cargo test -p tank_harness --test e2e_geometry_scaling -- --nocapture` now fails in both `geometry_1x_vs_2x_stocked_metrics_stay_within_20_percent` and `nano_vs_standard_vs_large_stocked_runs_scale_within_20_percent`; the reported peak-TAN deltas are about 49.6% and 61.0%, so the submitted workspace is red again.",
+        "rationale": "This is a blocking regression: the current diff makes the targeted harness suite fail."
+      },
+      {
+        "body": "`crates/tank_core/src/systems/substrate.rs:81-124` does not include microfauna in `estimate_substrate_o2_demand_rate()`. The new redox boundary is therefore unaffected by `MicrofaunaState`, even though the bead defines substrate O2 demand as coming from decomposers, roots, and microfauna. In detritivore-heavy tanks this will overestimate `o2_penetration_depth_cm` and understate the suboxic volume that downstream denitrification/root-zone work consumes.",
+        "rationale": "The canonical oxic/suboxic boundary is missing one of the required biological demand terms, so the model is systematically biased under microfauna load."
+      },
+      {
+        "body": "`crates/tank_core/src/systems/substrate.rs:127-139` computes `D_eff` from a depth-weighted average porosity across the entire stacked bed. For heterogeneous substrates, that lets deep high-porosity layers make the surface diffusion path look easier than it is. A thin low-porosity cap over coarse lower media will therefore produce an oxic boundary that is too deep, even though oxygen has to traverse the cap first.",
+        "rationale": "This is a scientific-core correctness gap for the multi-layer substrate stacks the shared-boundary API now supports."
+      }
+    ],
+    "summary": "Reviewed the current workspace diff and the oxic/suboxic substrate implementation end-to-end across `substrate.rs`, `state.rs`, `habitat.rs`, and save/load paths. `cargo test -p tank_core substrate -- --nocapture` passed, but `cargo test -p tank_harness --test e2e_geometry_scaling -- --nocapture` currently fails, and I found two additional correctness gaps in the substrate penetration model."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

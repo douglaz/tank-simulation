@@ -1,0 +1,39 @@
+{
+  "payload_id": "run-20260329191454-final_review-vote-0-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-29T20:37:37.944355700Z",
+  "payload": {
+    "summary": "Verified all four amendments against the current codebase. The stale alk_budget (fr-3-bc178401) and duplicated constant (fr-3-67cf9ba0) are real issues confirmed by code inspection. The other two amendments (fr-3-d552d797, fr-3-145af1bf) reference code that no longer matches reality — NitrogenCycleOutput already separates tan_oxidized_mg from nitrate_produced_mg_n, and already exposes both alkalinity_consumed_meq and alkalinity_produced_meq with a net_alkalinity_delta_meq() helper.",
+    "votes": [
+      {
+        "amendment_id": "fr-3-bc178401",
+        "decision": "accept",
+        "rationale": "Confirmed by reading nitrogen_cycle.rs:296-297 vs 352. After AOB, `alk_budget` is properly updated with `alk_budget = (alk_budget - aob_alk_cost).max(0.0)`. After comammox, only a local `let remaining_alk_budget` is computed — `alk_budget` itself is never reassigned. While this has no effect on current behavior (NOB doesn't consult alkalinity, and the final commit at line 432 uses explicit `aob_alk_cost + comammox_alk_cost`), it breaks the running-budget invariant established by the AOB section. Any future alkalinity-consuming step inserted between comammox and the final commit would silently read the stale, inflated budget. Adding `alk_budget = remaining_alk_budget.max(0.0);` is a trivial, zero-risk fix that preserves the invariant."
+      },
+      {
+        "amendment_id": "fr-3-67cf9ba0",
+        "decision": "accept",
+        "rationale": "Confirmed: `MG_N_PER_MEQ_AMMONIA = 14.007` is defined identically in both microfauna.rs:9 and shrimp.rs:9. The related constants `NITRIFICATION_ALK_MEQ_PER_MG_N` (2.0/14.007) and `DENITRIFICATION_ALK_MEQ_PER_MG_N` (1.0/14.007) already live in types/process.rs:13,23. All three derive from nitrogen's atomic mass of 14.007 and govern alkalinity stoichiometry. Centralizing MG_N_PER_MEQ_AMMONIA alongside the other two eliminates a silent divergence risk if one copy is updated without the other."
+      },
+      {
+        "amendment_id": "fr-3-d552d797",
+        "decision": "reject",
+        "rationale": "The amendment claims engine.rs emits `nitrogen_cycle.total_n_nitrified_mg` set to `nob_step + comammox_step`. This does not match the current code. NitrogenCycleOutput (lines 19-24) exposes `tan_oxidized_mg` (AOB + comammox, i.e., the TAN-oxidation basis driving alkalinity) and `nitrate_produced_mg_n` (NOB + comammox) as separate fields. Engine.rs:247-251 logs both `nitrogen_cycle.tan_oxidized_mg` and `nitrogen_cycle.nitrate_produced_mg_n`. In a partial-nitrification tick (AOB active, NOB absent), `tan_oxidized_mg` correctly reports the nitrogen basis for alkalinity consumption, and `nitrate_produced_mg_n` correctly shows zero nitrate production. The alleged mismatch has been resolved."
+      },
+      {
+        "amendment_id": "fr-3-145af1bf",
+        "decision": "reject",
+        "rationale": "The amendment claims NitrogenCycleOutput only exposes `alkalinity_consumed_meq`. This is factually incorrect in the current code. NitrogenCycleOutput (lines 30-35) already has `alkalinity_produced_meq` as a first-class field, with a doc comment explicitly noting it is 'reserved for the future denitrification return path.' The struct also provides `net_alkalinity_delta_meq()` (line 46-48). Engine.rs:252-259 already logs both consumed and produced alkalinity separately. The bookkeeping surface is already two-sided and ready for denitrification."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 3
+}

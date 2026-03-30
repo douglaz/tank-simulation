@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330025921-final_review-planner-positions-c2-a1-cr1-artifact",
+  "payload_id": "run-20260330025921-final_review-planner-positions-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T04:02:08.076084995Z",
+  "content": "# Final Review Planner Positions\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccept the substantive substrate-model defects: microfauna is missing from the local O2-demand estimate, and heterogeneous-layer porosity is homogenized in a way that can overstate diffusion. Reject the speculative accessor micro-optimization and the stale red-test claim, which does not reproduce in the current workspace.\n\n## Votes\n\n- `fr-1-9df569ce`: Accept\n  `effective_substrate_porosity()` reduces a layered bed to a depth-weighted arithmetic mean before squaring it into `D_eff`. For diffusion through stacked media, that lets deep coarse layers offset a restrictive fine cap in a way the transport path does not support, so a low-porosity top layer can indeed make the computed oxic boundary too deep. The exact remedy may vary, but the defect is real.\n- `fr-1-a9320302`: Reject\n  The repeated computation is real but minor: each accessor does a small scan over the substrate layers, and there is no demonstrated hot-path caller where this is a material cost. The proposed removal or warning does not address a correctness or robustness issue, and even the zone-geometry accessors still recompute the same boundary per call.\n- `fr-1-57228e15`: Reject\n  I ran `cargo test -p tank_harness --test e2e_geometry_scaling -- --nocapture` in the current workspace and all three tests passed. Because the cited failure does not reproduce here, this amendment does not describe a present defect.\n- `fr-1-b43b8059`: Accept\n  `estimate_substrate_o2_demand_rate()` only includes decomposer and root demand, even though the bead explicitly defines substrate O2 demand as coming from decomposers, roots, and microfauna. `MicrofaunaState` can still affect penetration indirectly via water-column DO, but the local substrate-demand term is missing a required contributor, so detritivore-heavy substrate activity is underrepresented and penetration depth will be biased too deep.\n- `fr-1-0c12a58f`: Accept\n  This identifies the same underlying modeling problem as `fr-1-9df569ce`: using a full-depth weighted-average porosity for `D_eff` makes a heterogeneous stack look more diffusive than the shallowest restrictive layer actually allows. That is a real error for layered substrates and can overestimate `o2_penetration_depth_cm`.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

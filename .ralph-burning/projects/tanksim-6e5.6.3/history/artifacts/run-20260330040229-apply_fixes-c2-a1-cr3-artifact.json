@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330040229-apply_fixes-c2-a1-cr3-artifact",
+  "payload_id": "run-20260330040229-apply_fixes-c2-a1-cr3",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-30T06:18:00.594846365Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nRevalidated the review-flagged shrimp reproduction budget path and found that the reported hatch-accounting leak does not reproduce on the current branch, so this apply-fixes pass did not require additional code edits. The closed-system reproduction budget regression, the dedicated molt/mineral suite, and the downstream `tank_data` and `tank_scenarios` suites all pass; the only remaining broader-suite failure is the unrelated pre-existing `thermal_reproduction_penalty` test.\n\n## Steps\n\n1. [Completed] Inspected the review-flagged shrimp reproduction budget path and reran the closed-system budget regressions to verify whether the reported hatching-accounting leak still reproduced on the current branch.\n2. [Completed] Revalidated the molt/mineral coverage and downstream package suites against the current branch; all targeted regressions passed without requiring further code edits.\n3. [Completed] Ran a broader `tank_core` sweep to capture remaining suite state and confirmed that the only outstanding failure is the pre-existing unrelated `thermal_reproduction_penalty` regression.\n\n## Validation Evidence\n\n- `cargo test -p tank_core --test budget_tracking -- --nocapture`\n- `cargo test -p tank_core test_closed_system_shrimp_reproduction_conserves_n_and_c -- --nocapture`\n- `cargo test -p tank_core --test molt_mineral_budget -- --nocapture`\n- `cargo test -p tank_core --test thermal_reproduction_penalty -- --nocapture`\n- `cargo test -p tank_core`\n- `cargo test -p tank_data`\n- `cargo test -p tank_scenarios`\n\n## Outstanding Risks\n\n- `cargo test -p tank_core` still fails in `crates/tank_core/tests/thermal_reproduction_penalty.rs`; that regression appears unrelated to this molt/mineral task and was not changed in this pass.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

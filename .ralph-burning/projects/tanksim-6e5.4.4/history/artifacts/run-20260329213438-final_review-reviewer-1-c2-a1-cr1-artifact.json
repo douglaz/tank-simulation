@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260329213438-final_review-reviewer-1-c2-a1-cr1-artifact",
+  "payload_id": "run-20260329213438-final_review-reviewer-1-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-29T22:37:39.200315402Z",
+  "content": "# Final Review Proposal\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nReviewed the diff plus the touched implementation files and ran targeted `tank_core` tests. The alkalinity-budget/tracing changes themselves look coherent, but the patch is materially misaligned with the requested bead: it focuses on nitrification alkalinity depletion and its tests, while the plant/algae day-night DIC and pH behavior in the prompt remains unimplemented and untested.\n\n## Amendments\n\n1. Implement the actual plant/algae DIC coupling required by tanksim-6e5.4.4. `crates/tank_core/src/systems/dissolved_oxygen.rs:100-105` still adds photosynthetic O2, but `crates/tank_core/src/types/process.rs:304-305` still leave `respiration_dic_rate_mg_c_per_g_per_hour` and `photosynthesis_dic_rate_mg_c_per_g_per_hour` at `0.0`, and `crates/tank_core/src/systems/chemistry.rs:559-567` still derives DIC changes only from those generic rates. As a result, planted tanks can still produce O2 without consuming DIC/CO2, so the required daytime pH rise / nighttime pH drop behavior is still disabled.\n   Rationale: This is the bead’s core deliverable. The current patch mainly adds nitrification alkalinity accounting, but it does not enable the requested day-night photosynthesis/respiration pathway or the required O2↔DIC stoichiometry.\n2. Add tests for the requested photoperiod behavior instead of only nitrification acidification. The new suite in `crates/tank_core/tests/nitrification_alkalinity.rs:36-43`, `crates/tank_core/tests/nitrification_alkalinity.rs:106-139`, and `crates/tank_core/tests/nitrification_alkalinity.rs:146-197` explicitly removes plants/algae and only checks monotonic pH decline plus soft-vs-hard-water buffering. None of the acceptance-criterion cases are present: no heavily planted 12h/12h run, no lights-always-off control, and no assertion that end-of-light pH exceeds end-of-dark pH.\n   Rationale: The current tests can all pass even if tanksim-6e5.4.4 is still broken, because they validate a different mechanism than the one this bead is supposed to introduce.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

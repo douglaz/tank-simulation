@@ -1,0 +1,27 @@
+{
+  "payload_id": "run-20260327225238-final_review-reviewer-0-c1-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T23:04:04.522463588Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "In `crates/tank_api/src/handlers/save.rs:23-24`, `post_load` accepts `Json<Value>`, serializes it to a String with `serde_json::to_string`, then `SaveFile::from_json` immediately parses that String back into a `Value`. This is a redundant round-trip (Value → String → Value). Add a `SaveFile::from_value(value: Value)` method that contains the migration/deserialization logic, and have `from_json` call it after the initial parse. Then `post_load` can call `from_value` directly, avoiding the unnecessary serialization step.",
+        "rationale": "The double serialization is wasteful on every API load request. More importantly, if `SaveFile::from_value` is the canonical entry point, both the file-based and API-based load paths share the same code without a pointless intermediary. This is a small correctness-adjacent concern: the extra round-trip could theoretically alter floating-point representation (serde_json normalizes floats differently in to_string vs to_value), though in practice this is unlikely to cause issues."
+      },
+      {
+        "body": "The `SimError::SchemaVersionMismatch { expected, actual }` variant in `crates/tank_core/src/types/actions.rs:72-73` is now dead code — no code path constructs it after the migration to `SchemaVersionTooNew` / `SchemaVersionTooOld`. It should be removed to prevent future contributors from accidentally using the wrong error variant.",
+        "rationale": "Dead public enum variants create confusion about which error to use. A future contributor adding migration logic might reach for `SchemaVersionMismatch` instead of the correct `TooNew`/`TooOld` variants, producing a less informative error message. Since this is a public enum, clippy won't flag it automatically."
+      }
+    ],
+    "summary": "The save-schema versioning and migration scaffolding is well-designed and correctly implemented. Key strengths: (1) Raw JSON (`serde_json::Value`) based migrations decouple migration logic from the current Rust struct shape, (2) compile-time assertion enforces that MIGRATIONS.len() == SCHEMA_VERSION - MIN_SUPPORTED_SCHEMA, catching mismatches at build time, (3) the migration contract is clearly documented for future contributors, (4) comprehensive test coverage for migration, future-version rejection, too-old rejection, and stability tracker reseeding. The `migrate_v2_to_v3` function correctly replicates the volume computation from `TankGeometry` and rescales the same 16 dissolved-total fields as `WaterState::rescale_totals_for_volume`. The API handler was properly updated to route through the migration path. Two minor issues found: an unnecessary Value→String→Value round-trip in the API handler, and a dead `SchemaVersionMismatch` error variant."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

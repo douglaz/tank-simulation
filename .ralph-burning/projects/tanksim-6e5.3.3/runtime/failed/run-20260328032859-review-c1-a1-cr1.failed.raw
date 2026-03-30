@@ -1,0 +1,245 @@
+=== stdout ===
+=== stderr ===
+OpenAI Codex v0.117.0 (research preview)
+--------
+workdir: /home/master/p/tank-simulation
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019d3287-5d64-7cb1-ac7c-5c9c43adc01c
+--------
+user
+Contract: review
+Role: Reviewer
+
+# Stage Execution Prompt
+
+You are the Reviewer. Your objective for this Review stage is to review the completed work for correctness, regressions, and completeness.
+
+## Original Project Prompt
+
+○ tanksim-6e5.3.3 · Implement microfauna matter routing and recycling   [● P1 · OPEN]
+Owner: master · Type: task
+Created: 2026-03-26 · Updated: 2026-03-27
+Labels: ecology, mass-balance, microfauna, phase-1, scientific-core
+
+Context:
+- Microfauna currently consume periphyton/detritus in a way that also deletes matter from the system (microfauna.rs:45-55). Periphyton consumed at line 48 and detritus at line 52-53 are subtracted from their pools but never returned as waste.
+- Even if the microfauna model remains abstract, it still needs explicit routing to waste, biomass, and respiration-like demand.
+
+Deliverable:
+- Refactor microfauna feeding to follow the same closed-loop conventions defined in C1.
+- Keep the abstraction lightweight while ensuring it does not silently erase load from the tank.
+- Ensure the new loop interacts correctly with detritus and nutrient recycling.
+- Reuse the routing pattern established in C2 (assimilation/feces/excretion/respiration fractions).
+
+Likely touch points:
+- crates/tank_core/src/systems/microfauna.rs (lines 45-55)
+- any shared helper code created for C2
+- crates/tank_core/src/types/process.rs (microfauna parameters at lines 119-123)
+
+## Acceptance Criteria
+
+Acceptance Criteria:
+- microfauna consumption no longer acts as a hidden sink
+- routing is consistent with the shrimp conventions where appropriate
+- a unit test runs a closed-system tick with active microfauna and asserts total N and total C are conserved within tolerance (same pattern as C2d conservation test)
+- a second test verifies that microfauna consumption produces the expected TAN increase and DO decrease proportional to ingestion rate
+
+Dependencies:
+  -> tanksim-6e5.3.2 (blocks) - Implement shrimp ingestion → assimilation → excretion → feces → respiration loop
+  -> tanksim-6e5.3.1 (blocks) - Define closed-loop matter-routing conventions for consumers and maintenance actions
+  -> tanksim-6e5.2.2 (blocks) - Implement canonical concentration and compartment helper APIs
+  -> tanksim-6e5.3 (parent-child) - Phase 1B — mass conservation and husbandry action semantics
+
+Dependents:
+  <- tanksim-6e5.3.4 (blocks) - Audit feeding, detritus, DOC, and mineralization bookkeeping end to end
+
+Comments:
+  [2026-03-26 13:46 UTC] backlog-planner: Rationale:
+- The microfauna model can stay simple, but it cannot keep breaking the nutrient loop if the simulator is supposed to teach ecosystem behavior.
+- Reuse conventions and helpers from the shrimp work (C2) instead of inventing a second bookkeeping language.
+- The goal is ecological credibility, not species-by-species realism.
+- Microfauna consume less total mass than shrimp but their consumption still matters for the budget because they process periphyton and fine detritus continuously.
+
+Implementation note:
+- The microfauna system uses a population_index (0-1 scale) rather than discrete counts. Routing fractions should be proportional to consumption amount, just like shrimp.
+- Microfauna excretion products go to the same pools as shrimp excretion: TAN for N waste, DIC for respired C, fine detritus for feces.
+
+## Prior Stage Outputs This Cycle
+
+### Plan and Implement (`plan_and_implement`)
+- Payload ID: `run-20260328032859-plan_and_implement-c1-a1-cr1`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "Refactored microfauna feeding to follow the closed-loop consumer routing contract (docs/ROUTING.md). Previously, microfauna consumed periphyton and detritus and routed all material directly to dissolved organics (DON/DOC), skipping fecal, respiration, and excretion pathways. Now microfauna use the same routing template as shrimp: ingested material splits into feces (→ fine_detritus), excretion (N→TAN, C→DOC), respiration (C→DIC, O2 demand with O2-limited scaling), and retained (→ microfauna.reserve_g). Added 4 new routing parameters to ProcessParams, a reserve_g field to MicrofaunaState, updated N/C budget component arrays (17→18, 14→15), and wrote 8 tests covering conservation, TAN/DO fluxes, and proportionality.",
+    "outstanding_risks": [
+      "microfauna.reserve_g grows without bound since there is no decay/death drain for microfauna reserve — acceptable in Phase 1 per ROUTING.md ('their retained share may stay approximate until a later biomass-backed model exists') but should be addressed when a biomass-backed microfauna model is implemented",
+      "The new reserve_g field uses serde(default) for backward compatibility with existing save files; however the save_load migration tests should be verified if save schema version checking is strict — current tests pass so this appears safe",
+      "Microfauna routing parameters use the same default values as shrimp (0.50/0.70/0.10/0.20) which is a reasonable starting point but may warrant tuning for ecological accuracy in later phases"
+    ],
+    "steps": [
+      {
+        "description": "Added microfauna routing parameters to ProcessParams (microfauna_assimilation_efficiency, microfauna_respiration_fraction_of_assimilated, microfauna_excretion_fraction_of_assimilated, microfauna_growth_fraction_of_assimilated) with serde defaults and default functions matching shrimp Phase-1 values (0.50, 0.70, 0.10, 0.20).",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Added reserve_g field to MicrofaunaState in biology.rs as the explicit 'retained' destination required by the routing contract. Field is serde-defaulted to 0.0 and included in the Default impl.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Updated nitrogen_budget_components (17→18) and carbon_budget_components (14→15) in budget.rs to include microfauna.reserve_g. Updated the BudgetSnapshot struct array sizes to match.",
+        "order": 3,
+        "status": "completed"
+      },
+      {
+        "description": "Rewrote microfauna.rs: replaced route_algae_loss_to_dissolved_organics and route_detritus_loss_to_dissolved_organics with a proper route_consumed_food function implementing the consumer routing contract. Feces→fine_detritus, excretion N→TAN + alkalinity, excretion C→DOC, respiration C→DIC with O2-limited scaling, respiration N→TAN + alkalinity, retained→microfauna.reserve_g. Added O2_PER_MG_C_RESPIRED and MG_N_PER_MEQ_AMMONIA constants.",
+        "order": 4,
+        "status": "completed"
+      },
+      {
+        "description": "Updated budget_tracking.rs: added microfauna.reserve_g to is_shared_budget_path discovery rules and to manual total_n/total_c sum tests.",
+        "order": 5,
+        "status": "completed"
+      },
+      {
+        "description": "Created microfauna_routing.rs test file with 8 tests: fraction validity, closed-system N conservation (7-day run via step_and_inspect), closed-system C conservation (7-day run), single-step N+C conservation, TAN increase from feeding, DO decrease from feeding, proportionality of TAN/DO to population_index, and DIC/feces/reserve generation.",
+        "order": 6,
+        "status": "completed"
+      },
+      {
+        "description": "Ran cargo test (all 270+ tests pass), cargo clippy (clean), cargo fmt --check (clean).",
+        "order": 7,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "All 8 microfauna_routing tests pass: fraction sums valid, closed-system N conservation (0.01 mg tolerance over 168 hours), closed-system C conservation (0.01 mg tolerance over 168 hours), single-step N+C conservation (1e-6 tolerance), TAN increase, DO decrease, proportional TAN/DO scaling, DIC/feces/reserve generation",
+      "All 22 budget_tracking tests pass including test_budget_component_labels_cover_all_element_bearing_fields (structural coverage test now discovers microfauna.reserve_g), test_total_n_helper_sums_all_pools, test_total_c_helper_sums_all_pools, test_closed_system_n_conservation, test_closed_system_c_conservation",
+      "All 8 shrimp_feeding_pathway tests continue to pass (no regressions in shrimp routing)",
+      "All 13 shrimp_population tests pass including microfauna_suppression_under_heavy_grazing",
+      "cargo clippy produces zero warnings, cargo fmt --check passes"
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+## Authoritative JSON Schema
+
+The JSON schema below is authoritative. Return only JSON that conforms exactly to it.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ReviewOutcome": {
+      "enum": [
+        "approved",
+        "conditionally_approved",
+        "request_changes",
+        "rejected"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload for validation/review stages.\n\nRequires an explicit outcome/decision enum plus evidence, findings or gaps, and follow-up or amendment data when the outcome is not cleanly approved.",
+  "properties": {
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "findings_or_gaps": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "follow_up_or_amendments": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "outcome": {
+      "$ref": "#/definitions/ReviewOutcome"
+    }
+  },
+  "required": [
+    "evidence",
+    "findings_or_gaps",
+    "follow_up_or_amendments",
+    "outcome"
+  ],
+  "title": "ValidationPayload",
+  "type": "object"
+}
+```
+
+--- Context JSON ---
+{
+  "attempt": 1,
+  "completion_round": 1,
+  "cycle": 1
+}
+
+Return ONLY valid JSON matching the following schema:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ReviewOutcome": {
+      "enum": [
+        "approved",
+        "conditionally_approved",
+        "request_changes",
+        "rejected"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload for validation/review stages.\n\nRequires an explicit outcome/decision enum plus evidence, findings or gaps, and follow-up or amendment data when the outcome is not cleanly approved.",
+  "properties": {
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "findings_or_gaps": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "follow_up_or_amendments": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "outcome": {
+      "$ref": "#/definitions/ReviewOutcome"
+    }
+  },
+  "required": [
+    "evidence",
+    "findings_or_gaps",
+    "follow_up_or_amendments",
+    "outcome"
+  ],
+  "title": "ValidationPayload",
+  "type": "object"
+}
+
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 4:47 AM.
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 4:47 AM.

@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260329191454-final_review-aggregate-c2-a1-cr1-artifact",
+  "payload_id": "run-20260329191454-final_review-aggregate-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-29T19:52:23.293847944Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 2 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 4\n**Final Review Restarts:** 1/20\n\n## Accepted\n\n- `fr-1-6a5fe401`\n- `fr-1-9ac12929`\n\n## Rejected\n\n- `fr-1-c283b14f`\n- `fr-1-beff8673`\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-1-6a5fe401`\n\nIn nitrogen_cycle.rs, after the comammox step (around line 350), `alk_budget` is not decremented by `comammox_alk_cost`, while `do_budget` IS always decremented after each step. Since nothing reads `alk_budget` after comammox this is harmless today, but if a future step (e.g. denitrification) needs the running alkalinity budget for rate-limiting, the stale value would silently over-allocate. Add `alk_budget = (alk_budget - comammox_alk_cost).max(0.0);` after line 350 to match the DO budget pattern and prevent a latent accounting bug.\n\n### `fr-1-9ac12929`\n\nIn engine.rs, `StageTrace::metric()` unconditionally allocates `BudgetMetric` (including a heap `String` for the label) even when neither budget tracking nor tracing is enabled. For the nitrogen_cycle stage alone this is 5 allocations per tick, silently dropped if no budget ledger exists. Guard the allocation: either check `ctx.budget.is_some()` before calling `metric()`, or make `metric()` a no-op when a `budget_active` flag is false — similar to how `note()` already guards on `self.enabled`.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 1
+}

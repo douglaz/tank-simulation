@@ -1,0 +1,59 @@
+{
+  "payload_id": "run-20260328032854-docs_plan-c1-a1-cr1",
+  "stage_id": "docs_plan",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T03:31:56.622999521Z",
+  "payload": {
+    "data": {
+      "assumptions_or_open_questions": [
+        "Sub-adult stage: the current model has only adults and juveniles. Adding a sub-adult stage requires deciding whether sub-adults can reproduce (likely no) and how maturation_accum splits across two transitions (juvenile→sub-adult, sub-adult→adult). The design note must propose concrete transition criteria.",
+        "Per-stage vs single-pool condition: currently condition_index, molt_stress_index, and reproductive_readiness_index are single scalars for the whole population. Should each stage cohort carry its own condition/reserve, or is a population-wide average acceptable for the stage-structured model? The backlog recommends 'aggregate metrics per stage' — the design note should specify which indices are per-stage and which remain global.",
+        "Reserve partitioning: reserve_g is currently a single pool. With three life stages, should reserve be split per-stage (so juveniles don't fund adult reproduction)? This affects the routing contract in ROUTING.md.",
+        "Molt interval as explicit state: the current model has molt_stress_index but no explicit inter-molt timer or last-molt-success flag. Adding these as state fields requires deciding the molt cycle period (species-dependent, ~4-6 weeks for Neocaridina) and whether failed molts accumulate or reset.",
+        "Backward compatibility: existing save files have the flat AnimalState. The design note should specify a migration strategy (runtime upgrade on deserialization with serde defaults, similar to egg_cohorts migration).",
+        "What remains intentionally omitted: sex ratio, individual tracking, size-within-stage variation, predation, disease. The bead explicitly asks for these omission notes.",
+        "Clutch size variability: currently fixed at 25 juveniles_per_clutch. Should the design note propose condition-dependent clutch size, or defer that to implementation?"
+      ],
+      "problem_framing": "The current AnimalState in biology.rs tracks shrimp as a flat struct with adults_count, juveniles_count, berried_females_count, three condition indices, egg cohorts, stress accumulators, and a reserve pool. The bead requests a design note that restructures this into an explicit stage-structured cohort model with reserve/condition, life stages (juvenile, sub-adult, adult), molt state, and reproduction state — while maintaining the population-level (not individual-based) abstraction. The documentation ecosystem already has prescriptive contracts (ROUTING.md, UNITS.md, carbonate_state_contract.md) and a descriptive inventory (scientific_inventory.md). The new design note must follow the same pattern: prescriptive contract that downstream implementation beads (especially F2/tanksim-6e5.6.2) can code against without reworking the model. The main documentation deliverable is a new docs/shrimp_state_contract.md plus updates to scientific_inventory.md to flag the upcoming state redesign.",
+      "proposed_work": [
+        {
+          "details": "Write the primary deliverable: a prescriptive contract document following the same structure as carbonate_state_contract.md. Sections: (1) Chosen state model — stage-structured cohort with three stages (juvenile, sub-adult, adult) plus berried-adult subset; (2) Reserve and condition — per-stage reserve_g, per-stage condition_index, population-wide food intake converted to per-stage allocation; (3) Life stages — stage definitions, transition criteria (days + condition thresholds), maturation accumulators per transition; (4) Molt state — inter-molt interval timer, molt readiness derived from GH/condition/reserve, last_molt_success boolean, failed-molt penalty accumulator; (5) Reproduction — egg-carrying state (berried females as subset of adults), clutch size (base + condition modifier), incubation progress via EggCohort, hatch success factors; (6) Population vs individual boundary — explicit statement that this is a stage-structured population model (Leslie/Lefkovitch matrix family), no individual tracking, aggregate metrics per stage; (7) Intentional omissions — sex ratio (implicit 50:50), individual identity, size-within-stage, predation, disease, genetic variation; (8) Extension points — hooks for future habitat-aware grazing, mineral budget for molting, toxicity modifiers; (9) Migration strategy — serde default-based runtime upgrade from flat AnimalState; (10) Downstream bead map — which implementation beads consume this contract.",
+          "order": 0,
+          "summary": "Create docs/shrimp_state_contract.md — the prescriptive design note"
+        },
+        {
+          "details": "Update section 1.3 rows for AnimalState fields (lines 63-67) to note the planned redesign. Add a forward-reference to shrimp_state_contract.md. Mark current flat fields (condition_index, molt_stress_index, etc.) as 'phase-1 simplification; see shrimp_state_contract.md for approved stage-structured replacement'. This keeps the inventory accurate about current state while pointing implementers to the design contract.",
+          "order": 1,
+          "summary": "Update docs/scientific_inventory.md biology section"
+        },
+        {
+          "details": "In ROUTING.md, add a note in the consumer routing template section that the shrimp consumer will split reserve allocation per life stage per the shrimp state contract. In scientific_specs.md or aquarium_sim_review_vnext.md, update the shrimp life-history realism bullet to reference the new contract. These are small pointer additions, not structural rewrites.",
+          "order": 2,
+          "summary": "Add cross-references from ROUTING.md and scientific_specs.md"
+        },
+        {
+          "details": "Read crates/tank_core/tests/shrimp_population.rs and crates/tank_core/tests/thermal_reproduction_penalty.rs to confirm the design note's state model is compatible with existing test assertions. Note in the design document which tests will need updating when the state model is implemented (the inventory already flags this at line 265). This is a read-only verification step — no test changes.",
+          "order": 3,
+          "summary": "Verify design note against existing test contracts"
+        }
+      ],
+      "readiness": {
+        "ready": true,
+        "risks": [
+          "The per-stage reserve split decision (single pool vs per-stage) has routing implications. If the design note chooses per-stage reserves, the ROUTING.md consumer template will need a more substantial update than a simple cross-reference. Mitigation: the design note should clearly state whether per-stage reserve is phase-1 or deferred.",
+          "The sub-adult stage is not present in any existing code or test. The design note must be specific enough about sub-adult behavior that F2 implementers don't need to re-derive the contract, but flexible enough that tuning parameters can change. Mitigation: specify the structure and transition rules, but make thresholds configurable via ShrimpRuntimeParams.",
+          "Existing save-file migration: the design note proposes serde-default migration, but if the struct shape changes dramatically (e.g., nested per-stage substruct), simple defaults may not suffice. Mitigation: the design note should specify the exact new struct layout so migration feasibility is clear before implementation begins."
+        ]
+      }
+    },
+    "family": "Planning"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

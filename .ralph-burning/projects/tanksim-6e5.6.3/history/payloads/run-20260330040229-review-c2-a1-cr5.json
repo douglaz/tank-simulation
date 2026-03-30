@@ -1,0 +1,39 @@
+{
+  "payload_id": "run-20260330040229-review-c2-a1-cr5",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T07:42:59.417178660Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All 14 molt_mineral_budget tests pass: GH monotonicity, Ca/Mg contribution, condition/reserve impact, failed molt mortality, very low GH deaths, named parameters (2 tests), critical GH ratio, stage-varied frequency, high-GH diagnostics, reserve shortfall diagnostics, cold molt diagnostics, mixed-stage molt behavior, 1000-hour soft-vs-hard integration",
+        "All molt thresholds are named parameters on ShrimpRuntimeParams with preset support (neocaridina_davidi.toml) and invariant validation (invariants.rs:318-472): gh_min_d, gh_max_d, ca_min_mg_per_l, mg_min_mg_per_l, molt_success_threshold, critical_molt_gh_ratio, juvenile_molt_interval_days, sub_adult_molt_interval_days, base_molt_interval_days, failed_molt_mortality_scale, molt_reserve_fraction, molt_condition_weight, molt_reserve_weight, molt_reserve_factor_floor",
+        "molt_success_probability formula correctly implemented as mineral_modifier(GH,Ca,Mg) × condition_modifier(reserve,condition) × instability_factor × thermal_factor with critical_gh_deficit hard-fail override (shrimp.rs:517,599-601)",
+        "emit_molt_failure (shrimp.rs:1176-1256) covers all seven diagnostic cause codes: LowMinerals, HighMinerals, LowTemperature, HighTemperature, Starvation, PoorCondition, ChemistryInstability — with detail strings containing exact parameter values",
+        "Invariant validation is comprehensive: check_non_negative for GH params, check_positive for Ca/Mg minimums, check_unit_interval for thresholds/weights, check_strictly_increasing for GH range and molt interval ordering, check_sum_close_to_one for condition+reserve weights",
+        "BudgetMetricUnit correctly tags alkalinity as MilliEquivalents (not mg) with legacy label inference, roundtrip serialization tests, and integration test verification in nitrification_alkalinity.rs:349-469",
+        "cargo clippy clean (zero warnings), cargo fmt --check clean",
+        "tank_data: 32/32 pass, tank_scenarios: 5/5 pass, tank_core molt_mineral_budget: 14/14 pass",
+        "ShrimpPreset → ShrimpRuntimeParams conversion (tank_scenarios/src/lib.rs:753-840) handles all 13 optional molt parameter overrides"
+      ],
+      "findings_or_gaps": [
+        "REGRESSION: test_denitrification_reduces_nitrate_accumulation fails with assertion 'Planted setup should begin with a suboxic substrate zone'. The uncommitted diff shows this bead changed o2_penetration_depth_cm from 8.0 to 3.0 in the denitrification test's long_horizon_denitrification_state fixture (denitrification.rs:91). This parameter reduction altered substrate conditions enough to prevent suboxic zone formation, breaking the test. Prior review rounds incorrectly classified this as 'pre-existing' or 'unrelated', but git diff confirms the change is in uncommitted work from this bead (tanksim-6e5.6.3).",
+        "molt_mineral_modifier (shrimp.rs:1405) and update_molt_stress (shrimp.rs:451) divide by params.gh_min_d without the .max(0.01) guard used by sister functions gh_mineral_factor (line 1355) and critical_gh_deficit (line 517). The invariant allows gh_min_d == 0.0 (check_non_negative). While the division path is unreachable when gh_min_d == 0 due to gh_d being nonneg, the inconsistency with guarded sister functions is a defensive programming gap that should be harmonized."
+      ],
+      "follow_up_or_amendments": [
+        "Fix the denitrification test regression: either restore o2_penetration_depth_cm to 8.0 in long_horizon_denitrification_state or adjust the test's suboxic zone assertion to match the new 3.0 cm penetration depth. The substrate ROL model changes from this bead altered effective penetration, so the fixture needs to be recalibrated to still produce a suboxic zone for the denitrification assertions to hold.",
+        "Harmonize gh_min_d division guards: add .max(0.01) to the two unguarded division sites in molt_mineral_modifier (shrimp.rs:1405) and update_molt_stress (shrimp.rs:451) to match the defensive pattern already used in gh_mineral_factor and critical_gh_deficit. Alternatively, change the invariant from check_non_negative to check_positive for gh_min_d."
+      ],
+      "outcome": "conditionally_approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 5
+}

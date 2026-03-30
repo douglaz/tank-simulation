@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330010446-apply_fixes-c2-a1-cr1-artifact",
+  "payload_id": "run-20260330010446-apply_fixes-c2-a1-cr1",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-30T01:29:54.694785254Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNormalized periphyton and decomposer habitat maps on every `refresh_habitat_registry` call so legacy/changed states are redistributed onto currently valid habitats instead of retaining biomass on removed filter/plant/substrate habitats; also stopped treating `SubstrateDeep` as a valid periphyton target. Reworked decomposer decay bookkeeping so DOC/DON routing is based on the biomass actually removed from habitat pools, including the zero-DO uneven-pool fallback. Replaced proportional shrimp/microfauna periphyton removal with habitat-accessibility-weighted grazing that favors exposed glass/substrate surfaces over filter media, and expanded habitat biomass regressions to cover habitat removal, weighted grazing, and zero-DO decay conservation.\n\n## Steps\n\n1. [Completed] Inspected the reported habitat-pool refresh, decomposer decay, and grazing code paths to confirm how biomass maps, decay routing, and grazing were currently behaving.\n2. [Completed] Patched habitat-pool normalization in state/biology, added accessibility-weighted periphyton removal for shrimp and microfauna, and made decomposer decay route only the biomass actually removed from habitat pools.\n3. [Completed] Expanded habitat biomass regressions for removed habitats, weighted grazing, and zero-DO decay conservation, then ran targeted validation across habitat, save/load, shrimp, and microfauna tests.\n\n## Validation Evidence\n\n- `cargo test -p tank_core --test habitat_biomass_pools` passed (13 tests).\n- `cargo test -p tank_core --test shrimp_feeding_pathway --test microfauna_routing --test save_load` passed.\n- `cargo test -p tank_core shrimp_feeding_` passed the affected shrimp unit tests.\n- `cargo test -p tank_core update_condition_treats_full_accessible_ration_as_satiated` passed.\n\n## Outstanding Risks\n\n- Validation covered targeted `tank_core` tests only; the full workspace test suite was not run.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}
