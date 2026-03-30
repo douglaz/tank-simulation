@@ -1397,6 +1397,8 @@ fn run_probe_substrate_redox_denitrification_with_suffix(
 /// - Per-liter TAN, DO concentrations stay within a tolerance band
 ///   between 1× and 2× geometry runs
 /// - Temperature equilibrium is comparable
+/// - Final plant biomass scales with footprint so the larger tank keeps a
+///   similar planted density instead of only passing a looser absolute cap
 /// - Both runs remain within stability envelopes
 #[test]
 #[ignore = "run explicitly with -- --ignored when iterating on a single habitat probe"]
@@ -1451,9 +1453,12 @@ fn run_probe_equipment_scaling_1x_vs_2x_with_suffix(
     let adults_2x = run_2x.snapshot().adult_shrimp_count;
     let vol_1x = run_1x.snapshot().water_volume_l;
     let vol_2x = run_2x.snapshot().water_volume_l;
+    let footprint_1x = run_1x.engine().full_state().geometry.footprint_area_cm2();
+    let footprint_2x = run_2x.engine().full_state().geometry.footprint_area_cm2();
+    let plant_footprint_scale = footprint_2x / footprint_1x.max(f64::MIN_POSITIVE);
     eprintln!(
-        "1× setup: {} adults, {:.1} L; 2× setup: {} adults, {:.1} L",
-        adults_1x, vol_1x, adults_2x, vol_2x
+        "1× setup: {} adults, {:.1} L, {:.0} cm² footprint; 2× setup: {} adults, {:.1} L, {:.0} cm² footprint",
+        adults_1x, vol_1x, footprint_1x, adults_2x, vol_2x, footprint_2x
     );
 
     let mut peak_tan_1x = 0.0_f64;
@@ -1498,6 +1503,13 @@ fn run_probe_equipment_scaling_1x_vs_2x_with_suffix(
 
     let do_range_1x = max_do_1x - min_do_1x;
     let do_range_2x = max_do_2x - min_do_2x;
+    let plant_areal_density_1x =
+        snap_1x.total_plant_biomass_g / footprint_1x.max(f64::MIN_POSITIVE);
+    let plant_areal_density_2x =
+        snap_2x.total_plant_biomass_g / footprint_2x.max(f64::MIN_POSITIVE);
+    let plant_areal_density_g_m2_1x = plant_areal_density_1x * 10_000.0;
+    let plant_areal_density_g_m2_2x = plant_areal_density_2x * 10_000.0;
+    let base_plant_biomass_bounds = (1.0, 400.0);
     {
         let mut runs = [&mut run_1x, &mut run_2x];
         record_within_fraction(
@@ -1521,6 +1533,13 @@ fn run_probe_equipment_scaling_1x_vs_2x_with_suffix(
             snap_2x.water_temp_c,
             0.20,
         );
+        record_within_fraction(
+            &mut runs,
+            "plant biomass vs footprint scaling",
+            snap_1x.total_plant_biomass_g * plant_footprint_scale,
+            snap_2x.total_plant_biomass_g,
+            concentration_tolerance,
+        );
     }
 
     // Both should stay within envelopes
@@ -1532,7 +1551,7 @@ fn run_probe_equipment_scaling_1x_vs_2x_with_suffix(
             .tan_mg_n_per_l(0.0, 8.0)
             .nitrite_mg_n_per_l(0.0, 5.0)
             .biofilter_maturity(0.03, 1.0)
-            .plant_biomass_g(1.0, 400.0),
+            .plant_biomass_g(base_plant_biomass_bounds.0, base_plant_biomass_bounds.1),
     );
     run_2x.assert_envelope(
         "scale_2x_final",
@@ -1542,15 +1561,23 @@ fn run_probe_equipment_scaling_1x_vs_2x_with_suffix(
             .tan_mg_n_per_l(0.0, 8.0)
             .nitrite_mg_n_per_l(0.0, 5.0)
             .biofilter_maturity(0.03, 1.0)
-            .plant_biomass_g(1.0, 400.0),
+            .plant_biomass_g(
+                base_plant_biomass_bounds.0 * plant_footprint_scale,
+                base_plant_biomass_bounds.1 * plant_footprint_scale,
+            ),
     );
 
     Ok(finish_probe(
         "equipment_scaling",
         format!(
             "peak TAN {peak_tan_1x:.4}/{peak_tan_2x:.4}, DO range {do_range_1x:.4}/{do_range_2x:.4}, \
-             final temp {}/{} C",
-            snap_1x.water_temp_c, snap_2x.water_temp_c
+             final temp {}/{} C, plant biomass {:.2}/{:.2} g, plant areal density {:.1}/{:.1} g/m²",
+            snap_1x.water_temp_c,
+            snap_2x.water_temp_c,
+            snap_1x.total_plant_biomass_g,
+            snap_2x.total_plant_biomass_g,
+            plant_areal_density_g_m2_1x,
+            plant_areal_density_g_m2_2x,
         ),
         vec![run_1x, run_2x],
     ))
