@@ -157,25 +157,25 @@ is a well-documented phenomenon in planted aquaria.
 
 ### Expected qualitative outcome
 
-A 30 L tank with 25 g total plant biomass, 12h/12h photoperiod, moderate
-DIC buffering, and no mechanical aeration:
+A high-productivity planted tank with 30 g total plant biomass, 12h/12h
+photoperiod, moderate buffering, and no mechanical aeration:
 
 1. End-of-light pH exceeds end-of-dark pH every cycle.
 2. pH swing amplitude (max light pH − min dark pH) is 0.2–1.0 units.
-3. Swing is larger in low-KH water (less buffering).
 
 ### Confidence: **high**
 
 The photosynthesis/respiration CO₂ flux is a direct consequence of plant
-metabolism and the carbonate equilibrium. The 0.2–1.0 range encompasses
-lightly to heavily planted tanks in typical hobby conditions.
+metabolism and the carbonate equilibrium. The 0.2–1.0 range covers
+heavily planted tanks with strong biological turnover but still plausible
+buffering.
 
 ### Envelope bounds
 
 | Metric | Bound | Justification |
 |--------|-------|---------------|
-| Light pH > dark pH | every cycle from day 2 onward | photosynthetic CO₂ draw is obligate |
-| Swing amplitude | 0.1 – 2.0 units | 0.1 lower bound is conservative for 25 g in 30 L; 2.0 upper bound allows extreme soft water |
+| Light pH > dark pH | every sampled cycle from day 2 onward | photosynthetic CO₂ draw is obligate |
+| Swing amplitude | 0.2 – 1.0 units | planted-tank literature envelope for pronounced but still plausible diurnal chemistry |
 
 ### Test cross-reference
 
@@ -363,38 +363,40 @@ denitrification cannot occur.
 
 ### Expected qualitative outcome
 
-Two 60 L tanks with identical bioload and feeding (0.1 g/day, 56 days),
-weekly 20% water changes:
+Two planted 60 L tanks with identical fast-stem biomass, feeding
+(0.1 g/day, 120 days), and weekly 15% water changes from a buffered
+low-nitrate source:
 
-1. **Planted + deep substrate**: active substrate with coarse porous layer;
-   mature denitrifier community (activity index > 0). Shows measurable
-   cumulative N₂ export and lower final NO₃⁻.
-2. **Bare-bottom**: no substrate, no denitrification pathway. All
-   nitrification end-product accumulates as NO₃⁻.
-3. Planted-substrate NO₃⁻ < bare-bottom NO₃⁻ at end of run.
-4. Planted-substrate cumulative N₂ export > 0.
+1. **Planted + deep substrate**: a deep active bed plus mature benthic
+   decomposer load supports denitrification and measurable cumulative N₂
+   export.
+2. **Bare-bottom**: no substrate, no denitrification pathway. The same
+   feeding and plant load leave more dissolved nitrate in the water column.
+3. Planted-substrate final NO₃⁻ is lower than the bare-bottom control.
+4. Planted-substrate cumulative N₂ export is measurable while bare-bottom
+   export stays negligible.
 
 ### Confidence: **medium**
 
 The denitrification pathway direction is well-established in aquatic
 ecology. The magnitude of NO₃⁻ reduction in a small aquarium substrate
-is less certain — hobby tanks often have thin substrates with limited
-suboxic volume. The model's `denitrification_pore_water_mixing_factor`
-and `denitrification_maturation_days` carry `heuristic` confidence.
+is less certain, so this scenario deliberately uses a mature deep bed and
+low-nitrate refill water to isolate the direction of effect. The model's
+`denitrification_pore_water_mixing_factor` and substrate-demand terms
+still carry `heuristic` confidence.
 
 ### Envelope bounds
 
-The planted arm's NO₃⁻ may not be lower than the bare arm in absolute
-terms, because plants contribute additional organic matter that decomposes
-to TAN → NO₃⁻. The core validation is therefore on N₂ export (gas
-pathway) rather than steady-state NO₃⁻ concentration.
-
-The scenario pre-seeds the denitrifier activity index at 0.8 (simulating
-an established tank past the 60-day maturation ramp) and uses deep
-substrate with reduced porosity (0.35) to maximize suboxic pore volume.
+The executable scenario keeps the fast-stem plant load identical between
+arms and uses a refill source with zero nitrate so the remaining nitrate
+gap can be attributed to substrate denitrification rather than incoming
+water chemistry. The planted arm starts with a pre-seeded denitrifier
+activity index of 1.0 and a deep low-porosity bed to create suboxic pore
+volume.
 
 | Metric | Planted+substrate | Bare-bottom | Validation |
 |--------|-------------------|-------------|------------|
+| Final NO₃⁻ (mg N/L) | lower than bare-bottom | higher than planted | steady-state nitrate direction |
 | Cumulative N₂ export (mg N) | > 1.0 | ≤ 0.1 | planted has active denitrification |
 | Denitrifier activity index | > 0.1 | 0.0 | community is established |
 

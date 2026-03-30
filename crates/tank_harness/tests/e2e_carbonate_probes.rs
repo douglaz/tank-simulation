@@ -444,8 +444,9 @@ fn probe_2_aeration_driven_co2_stripping() -> Result<(), Box<dyn std::error::Err
 // Probe 3: Day/night pH drift
 // ===========================================================================
 
-/// Planted tank with 12h/12h photoperiod and no gas exchange, run for 48 hours.
-/// Light-on pH should be higher than light-off pH, with a swing >= 0.1 units.
+/// Planted tank with 12h/12h photoperiod and no gas exchange, run for 72 hours.
+/// Light-on pH should be higher than light-off pH across multiple cycles, with
+/// a swing in the 0.2-1.0 unit planted-tank envelope.
 ///
 /// **Chemistry**: Photosynthesis during lit hours consumes CO2 (DIC), shifting
 /// the carbonate equilibrium toward higher pH:
@@ -456,20 +457,19 @@ fn probe_2_aeration_driven_co2_stripping() -> Result<(), Box<dyn std::error::Err
 /// and photoperiod length.
 ///
 /// **Tolerances**:
-/// - End-of-light pH > end-of-dark pH (qualitative direction each cycle)
-/// - Swing (max light pH - min dark pH) >= 0.1: justified by 25g total plant
-///   biomass in a 30L tank with moderate DIC buffering
+/// - End-of-light pH > end-of-dark pH for each sampled cycle from day 2 onward
+/// - Swing (max light pH - min dark pH) in [0.2, 1.0]
 fn run_probe_day_night_ph_drift() -> Result<ProbeResult, tank_core::SimError> {
     let mut state = TankState::new(SimSeed(9_003));
     let volume_l = state.water_volume_l();
 
-    // Well-planted tank for clear day/night signal.
-    state.plant_guilds[0].biomass_g = 15.0;
-    state.plant_guilds[1].biomass_g = 10.0;
+    // Heavily planted, high-productivity tank for a clear day/night signal.
+    state.plant_guilds[0].biomass_g = 18.0;
+    state.plant_guilds[1].biomass_g = 12.0;
     state.algae.set_periphyton_total(2.0);
     state.algae.suspended_biomass_g = 0.5;
 
-    // Moderate DIC and alkalinity for stable pH range.
+    // Moderate DIC and alkalinity preserve a realistic planted-tank regime.
     state.water.dissolved_inorganic_carbon_mg_c_total = 20.0 * volume_l;
     state.water.alkalinity_meq_total = 1.5 * volume_l;
     state.water.temperature_c = 25.0;
@@ -480,7 +480,14 @@ fn run_probe_day_night_ph_drift() -> Result<ProbeResult, tank_core::SimError> {
     state.hardware.light.intensity_index = 1.0;
 
     // Some animal biomass for respiration.
-    state.animal.adult.count = 10;
+    state.animal.adult.count = 12;
+
+    // High-light planted-tank chemistry: scale the explicit DIC/O2 rates while
+    // preserving the simulator's stoichiometric carbon/oxygen pairings.
+    state.process_params.background_bod_mg_o2_per_g_biomass_per_hour = 0.08;
+    state.process_params.respiration_dic_rate_mg_c_per_g_per_hour = 0.03;
+    state.process_params.plant_photosynthesis_o2_mg_per_g_per_hour = 0.4;
+    state.process_params.photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.15;
 
     // Zero K_LA to isolate biological DIC effects from atmospheric exchange.
     state.process_params.reaeration_kla_base = 0.0;
@@ -504,9 +511,8 @@ fn run_probe_day_night_ph_drift() -> Result<ProbeResult, tank_core::SimError> {
     let mut ph_end_of_light = Vec::new();
     let mut ph_end_of_dark = Vec::new();
 
-    // Run 48h, collect pH at light/dark transitions from day 2 onward
-    // to allow transient settling on day 1.
-    for _ in 0..48 {
+    // Run 72h so the post-settling window spans at least two full cycles.
+    for _ in 0..72 {
         engine.step_hours(1)?;
         let s = engine.full_state();
         if s.environment.day >= 2 {
@@ -538,7 +544,7 @@ fn run_probe_day_night_ph_drift() -> Result<ProbeResult, tank_core::SimError> {
 
     let mut failures = Vec::new();
 
-    if ph_end_of_light.is_empty() || ph_end_of_dark.is_empty() {
+    if ph_end_of_light.len() < 2 || ph_end_of_dark.len() < 2 {
         failures.push("insufficient light/dark transition samples captured".to_string());
     } else {
         // Each end-of-light pH should exceed its corresponding end-of-dark pH.
@@ -554,8 +560,11 @@ fn run_probe_day_night_ph_drift() -> Result<ProbeResult, tank_core::SimError> {
                 ));
             }
         }
-        if swing < 0.1 {
-            failures.push(format!("swing {swing:.3} < 0.1 minimum"));
+        if swing < 0.2 {
+            failures.push(format!("swing {swing:.3} < 0.2 minimum"));
+        }
+        if swing > 1.0 {
+            failures.push(format!("swing {swing:.3} > 1.0 maximum"));
         }
     }
 
@@ -575,8 +584,9 @@ fn run_probe_day_night_ph_drift() -> Result<ProbeResult, tank_core::SimError> {
 }
 
 /// Probe 3: In a planted tank with 12h/12h photoperiod, light-on pH should
-/// exceed light-off pH with a swing >= 0.1 units, driven by photosynthetic
-/// CO2 consumption during lit hours and respiratory CO2 release at night.
+/// exceed light-off pH over multiple post-settling cycles with a swing in the
+/// 0.2-1.0 unit planted-tank envelope, driven by photosynthetic CO2
+/// consumption during lit hours and respiratory CO2 release at night.
 #[test]
 fn probe_3_day_night_ph_drift() -> Result<(), Box<dyn std::error::Error>> {
     let r = run_probe_day_night_ph_drift()?;
