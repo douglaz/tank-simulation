@@ -805,6 +805,9 @@ fn shrimp_preset_to_params(
     if let Some(value) = shrimp_preset.sub_adult_sensitivity {
         params.sub_adult_sensitivity = value;
     }
+    if let Some(value) = shrimp_preset.low_temp_repro_ramp_width_c {
+        params.low_temp_repro_ramp_width_c = value;
+    }
     if let Some(value) = shrimp_preset.base_clutch_size {
         params.base_clutch_size = value;
     }
@@ -901,8 +904,14 @@ fn shrimp_preset_to_params(
     if let Some(value) = shrimp_preset.tan_repro_threshold_mg_n_per_l {
         params.tan_repro_threshold_mg_n_per_l = value;
     }
+    if let Some(value) = shrimp_preset.tan_repro_full_suppression_mg_n_per_l {
+        params.tan_repro_full_suppression_mg_n_per_l = value;
+    }
     if let Some(value) = shrimp_preset.no2_repro_threshold_mg_n_per_l {
         params.no2_repro_threshold_mg_n_per_l = value;
+    }
+    if let Some(value) = shrimp_preset.no2_repro_full_suppression_mg_n_per_l {
+        params.no2_repro_full_suppression_mg_n_per_l = value;
     }
     if let Some(value) = shrimp_preset.egg_drop_temp_swing_c {
         params.egg_drop_temp_swing_c = value;
@@ -1423,6 +1432,7 @@ mod tests {
         preset.failed_molt_accum_recovery_per_successful_stage = Some(0.41);
         preset.failed_molt_stress_blend = Some(0.33);
         preset.sub_adult_sensitivity = Some(1.9);
+        preset.low_temp_repro_ramp_width_c = Some(2.5);
         preset.base_clutch_size = Some(17);
         preset.min_clutch_condition = Some(0.44);
         preset.ca_min_mg_per_l = Some(18.0);
@@ -1447,6 +1457,10 @@ mod tests {
         preset.sub_adult_molt_interval_days = Some(17.0);
         preset.molt_success_threshold = Some(0.61);
         preset.critical_molt_gh_ratio = Some(0.22);
+        preset.tan_repro_threshold_mg_n_per_l = Some(0.8);
+        preset.tan_repro_full_suppression_mg_n_per_l = Some(1.7);
+        preset.no2_repro_threshold_mg_n_per_l = Some(0.3);
+        preset.no2_repro_full_suppression_mg_n_per_l = Some(0.9);
 
         let params = shrimp_preset_to_params(&preset, 40.0);
         assert_eq!(params.body_nitrogen_mg_per_g_wet_mass, 31.0);
@@ -1461,6 +1475,7 @@ mod tests {
         assert_eq!(params.failed_molt_accum_recovery_per_successful_stage, 0.41);
         assert_eq!(params.failed_molt_stress_blend, 0.33);
         assert_eq!(params.sub_adult_sensitivity, 1.9);
+        assert_eq!(params.low_temp_repro_ramp_width_c, 2.5);
         assert_eq!(params.base_clutch_size, 17);
         assert_eq!(params.min_clutch_condition, 0.44);
         assert_eq!(params.ca_min_mg_per_l, 18.0);
@@ -1485,6 +1500,10 @@ mod tests {
         assert_eq!(params.sub_adult_molt_interval_days, 17.0);
         assert_eq!(params.molt_success_threshold, 0.61);
         assert_eq!(params.critical_molt_gh_ratio, 0.22);
+        assert_eq!(params.tan_repro_threshold_mg_n_per_l, 0.8);
+        assert_eq!(params.tan_repro_full_suppression_mg_n_per_l, 1.7);
+        assert_eq!(params.no2_repro_threshold_mg_n_per_l, 0.3);
+        assert_eq!(params.no2_repro_full_suppression_mg_n_per_l, 0.9);
 
         preset.juvenile_to_subadult_days = Some(15.0);
         preset.subadult_to_adult_days = Some(9.0);

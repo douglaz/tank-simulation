@@ -1191,6 +1191,9 @@ impl ParamMetaPreset for ShrimpPreset {
             "juvenile_sensitivity" => Some(self.juvenile_sensitivity),
             "high_temp_repro_penalty_start_c" => Some(self.high_temp_repro_penalty_start_c),
             "high_temp_repro_penalty_full_c" => Some(self.high_temp_repro_penalty_full_c),
+            "low_temp_repro_ramp_width_c" => self
+                .low_temp_repro_ramp_width_c
+                .or_else(|| shrimp_runtime_default_param_value(name)),
             "body_nitrogen_mg_per_g_wet_mass" => self
                 .body_nitrogen_mg_per_g_wet_mass
                 .or_else(|| shrimp_runtime_default_param_value(name)),
@@ -1324,8 +1327,14 @@ impl ParamMetaPreset for ShrimpPreset {
             "tan_repro_threshold_mg_n_per_l" => self
                 .tan_repro_threshold_mg_n_per_l
                 .or_else(|| shrimp_runtime_default_param_value(name)),
+            "tan_repro_full_suppression_mg_n_per_l" => self
+                .tan_repro_full_suppression_mg_n_per_l
+                .or_else(|| shrimp_runtime_default_param_value(name)),
             "no2_repro_threshold_mg_n_per_l" => self
                 .no2_repro_threshold_mg_n_per_l
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "no2_repro_full_suppression_mg_n_per_l" => self
+                .no2_repro_full_suppression_mg_n_per_l
                 .or_else(|| shrimp_runtime_default_param_value(name)),
             "egg_drop_temp_swing_c" => self
                 .egg_drop_temp_swing_c
@@ -1380,6 +1389,7 @@ impl ParamMetaPreset for ShrimpPreset {
                 | "juvenile_sensitivity"
                 | "high_temp_repro_penalty_start_c"
                 | "high_temp_repro_penalty_full_c"
+                | "low_temp_repro_ramp_width_c"
                 | "body_nitrogen_mg_per_g_wet_mass"
                 | "body_carbon_mg_per_g_wet_mass"
                 | "juvenile_to_subadult_days"
@@ -1424,7 +1434,9 @@ impl ParamMetaPreset for ShrimpPreset {
                 | "density_repro_threshold_per_l"
                 | "density_repro_half_suppression_per_l"
                 | "tan_repro_threshold_mg_n_per_l"
+                | "tan_repro_full_suppression_mg_n_per_l"
                 | "no2_repro_threshold_mg_n_per_l"
+                | "no2_repro_full_suppression_mg_n_per_l"
                 | "egg_drop_temp_swing_c"
                 | "egg_drop_instability_threshold"
                 | "egg_drop_max_probability"
