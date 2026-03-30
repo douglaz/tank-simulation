@@ -473,11 +473,11 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
         comammox_growth_yield: preset.comammox_growth_yield,
         comammox_decay_rate_per_hour: preset.comammox_decay_rate_per_hour,
 
-        denitrification_vmax_mg_n_per_l_per_hour: defaults.denitrification_vmax_mg_n_per_l_per_hour,
-        denitrification_k_no3_mg_n_per_l: defaults.denitrification_k_no3_mg_n_per_l,
-        denitrification_k_doc_mg_c_per_l: defaults.denitrification_k_doc_mg_c_per_l,
-        denitrification_pore_water_mixing_factor: defaults.denitrification_pore_water_mixing_factor,
-        denitrification_activity_maturation_days: defaults.denitrification_activity_maturation_days,
+        denitrification_vmax_mg_n_per_l_per_hour: preset.denitrification_vmax_mg_n_per_l_per_hour,
+        denitrification_k_no3_mg_n_per_l: preset.denitrification_k_no3_mg_n_per_l,
+        denitrification_k_doc_mg_c_per_l: preset.denitrification_k_doc_mg_c_per_l,
+        denitrification_pore_water_mixing_factor: preset.denitrification_pore_water_mixing_factor,
+        denitrification_activity_maturation_days: preset.denitrification_activity_maturation_days,
 
         nitrifier_base_density_g_per_cm2: defaults.nitrifier_base_density_g_per_cm2,
 
@@ -1414,6 +1414,25 @@ mod tests {
                 < 1e-12,
             "scenario-mapped process params should match runtime defaults for alkalinity consumption"
         );
+    }
+
+    #[test]
+    fn process_preset_mapping_carries_denitrification_fields() {
+        let mut preset =
+            tank_data::load_process_params("default").expect("default process preset should load");
+        preset.denitrification_vmax_mg_n_per_l_per_hour = 0.23;
+        preset.denitrification_k_no3_mg_n_per_l = 1.7;
+        preset.denitrification_k_doc_mg_c_per_l = 4.2;
+        preset.denitrification_pore_water_mixing_factor = 0.61;
+        preset.denitrification_activity_maturation_days = 47.0;
+
+        let params = process_preset_to_params(&preset);
+
+        assert_eq!(params.denitrification_vmax_mg_n_per_l_per_hour, 0.23);
+        assert_eq!(params.denitrification_k_no3_mg_n_per_l, 1.7);
+        assert_eq!(params.denitrification_k_doc_mg_c_per_l, 4.2);
+        assert_eq!(params.denitrification_pore_water_mixing_factor, 0.61);
+        assert_eq!(params.denitrification_activity_maturation_days, 47.0);
     }
 
     #[test]

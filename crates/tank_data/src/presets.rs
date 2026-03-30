@@ -1524,6 +1524,18 @@ pub struct ProcessParamsPreset {
     #[serde(default = "default_comammox_decay_rate")]
     pub comammox_decay_rate_per_hour: f64,
 
+    // Denitrification kinetics
+    #[serde(default = "default_denitrification_vmax")]
+    pub denitrification_vmax_mg_n_per_l_per_hour: f64,
+    #[serde(default = "default_denitrification_k_no3")]
+    pub denitrification_k_no3_mg_n_per_l: f64,
+    #[serde(default = "default_denitrification_k_doc")]
+    pub denitrification_k_doc_mg_c_per_l: f64,
+    #[serde(default = "default_denitrification_pore_water_mixing_factor")]
+    pub denitrification_pore_water_mixing_factor: f64,
+    #[serde(default = "default_denitrification_activity_maturation_days")]
+    pub denitrification_activity_maturation_days: f64,
+
     // Root-zone oxygenation (radial oxygen loss)
     #[serde(default = "default_rol_rate_cm_per_g")]
     pub rol_rate_cm_per_g: f64,
@@ -1735,6 +1747,21 @@ fn default_comammox_growth_yield() -> f64 {
 }
 fn default_comammox_decay_rate() -> f64 {
     0.004
+}
+fn default_denitrification_vmax() -> f64 {
+    0.1
+}
+fn default_denitrification_k_no3() -> f64 {
+    2.0
+}
+fn default_denitrification_k_doc() -> f64 {
+    5.0
+}
+fn default_denitrification_pore_water_mixing_factor() -> f64 {
+    0.5
+}
+fn default_denitrification_activity_maturation_days() -> f64 {
+    60.0
 }
 fn default_rol_rate_cm_per_g() -> f64 {
     0.15
@@ -2139,6 +2166,17 @@ impl ParamMetaPreset for ProcessParamsPreset {
             "comammox_k_do_mg_per_l" => Some(self.comammox_k_do_mg_per_l),
             "comammox_growth_yield" => Some(self.comammox_growth_yield),
             "comammox_decay_rate_per_hour" => Some(self.comammox_decay_rate_per_hour),
+            "denitrification_vmax_mg_n_per_l_per_hour" => {
+                Some(self.denitrification_vmax_mg_n_per_l_per_hour)
+            }
+            "denitrification_k_no3_mg_n_per_l" => Some(self.denitrification_k_no3_mg_n_per_l),
+            "denitrification_k_doc_mg_c_per_l" => Some(self.denitrification_k_doc_mg_c_per_l),
+            "denitrification_pore_water_mixing_factor" => {
+                Some(self.denitrification_pore_water_mixing_factor)
+            }
+            "denitrification_activity_maturation_days" => {
+                Some(self.denitrification_activity_maturation_days)
+            }
             "rol_rate_cm_per_g" => Some(self.rol_rate_cm_per_g),
             "o2_per_mg_n_nitrified" => Some(self.o2_per_mg_n_nitrified),
             "alkalinity_meq_per_mg_n_nitrified" => Some(self.alkalinity_meq_per_mg_n_nitrified),
@@ -2301,6 +2339,26 @@ impl ProcessParamsPreset {
             (
                 "comammox_decay_rate_per_hour",
                 self.comammox_decay_rate_per_hour,
+            ),
+            (
+                "denitrification_vmax_mg_n_per_l_per_hour",
+                self.denitrification_vmax_mg_n_per_l_per_hour,
+            ),
+            (
+                "denitrification_k_no3_mg_n_per_l",
+                self.denitrification_k_no3_mg_n_per_l,
+            ),
+            (
+                "denitrification_k_doc_mg_c_per_l",
+                self.denitrification_k_doc_mg_c_per_l,
+            ),
+            (
+                "denitrification_pore_water_mixing_factor",
+                self.denitrification_pore_water_mixing_factor,
+            ),
+            (
+                "denitrification_activity_maturation_days",
+                self.denitrification_activity_maturation_days,
             ),
             ("rol_rate_cm_per_g", self.rol_rate_cm_per_g),
             ("o2_per_mg_n_nitrified", self.o2_per_mg_n_nitrified),
@@ -3639,6 +3697,64 @@ valid_range = [20.0, 40.0]
             assert_eq!(meta.confidence, Some(ConfidenceLevel::Heuristic));
             assert!(meta.source.is_some(), "source should be documented");
             assert!(meta.notes.is_some(), "notes should be documented");
+        }
+    }
+
+    #[test]
+    fn shipped_process_priority_metadata_covers_denitrification_fields() {
+        let preset = default_process_preset();
+
+        preset
+            .validate()
+            .expect("shipped process preset should validate");
+
+        for name in [
+            "denitrification_vmax_mg_n_per_l_per_hour",
+            "denitrification_k_no3_mg_n_per_l",
+            "denitrification_k_doc_mg_c_per_l",
+        ] {
+            let meta = preset
+                .param_meta
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} metadata should exist"));
+            assert_eq!(meta.confidence, Some(ConfidenceLevel::Literature));
+            assert!(meta.source.is_some(), "{name} should document a source");
+        }
+
+        assert_eq!(
+            preset
+                .param_meta
+                .get("denitrification_pore_water_mixing_factor")
+                .and_then(|meta| meta.confidence),
+            Some(ConfidenceLevel::Heuristic)
+        );
+        assert_eq!(
+            preset
+                .param_meta
+                .get("denitrification_activity_maturation_days")
+                .and_then(|meta| meta.confidence),
+            Some(ConfidenceLevel::Expert)
+        );
+    }
+
+    #[test]
+    fn shipped_shrimp_priority_metadata_covers_repro_suppression_curve_endpoints() {
+        let preset = shrimp_preset(include_str!("../data/shrimp/neocaridina_davidi.toml"));
+
+        preset
+            .validate()
+            .expect("shipped shrimp preset should validate");
+
+        for name in [
+            "tan_repro_full_suppression_mg_n_per_l",
+            "no2_repro_full_suppression_mg_n_per_l",
+        ] {
+            let meta = preset
+                .param_meta
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} metadata should exist"));
+            assert_eq!(meta.confidence, Some(ConfidenceLevel::Heuristic));
+            assert!(meta.notes.is_some(), "{name} should explain the derivation");
         }
     }
 }

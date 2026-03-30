@@ -196,15 +196,6 @@ carbonate work (Phase 2+) may shift individual parameters."""
 # ── Per-parameter provenance metadata ────────────────────────────────
 # Priority parameters annotated per tanksim-6e5.7.2.
 # Confidence levels: literature | expert | heuristic | placeholder
-#
-# NOTE: Denitrification parameters (denitrification_vmax_mg_n_per_l_per_hour,
-# denitrification_k_no3_mg_n_per_l, denitrification_k_doc_mg_c_per_l,
-# denitrification_pore_water_mixing_factor, denitrification_activity_maturation_days)
-# are present in this TOML but not yet carried by ProcessParamsPreset — the
-# runtime reads them from code defaults in tank_core::types::process. Their
-# provenance will be recorded here once the preset struct is extended.
-# TODO(tanksim-6e5.7.2): extend ProcessParamsPreset to carry denitrification
-# fields so param_meta can be attached.
 
 # ── AOB half-saturation constants ────────────────────────────────────
 [param_meta.aob_k_tan_mg_n_per_l]
@@ -263,6 +254,57 @@ valid_range = [0.3, 1.0]
 notes = """\
 Less well-characterized than AOB/NOB DO Ks. 0.6 is an intermediate estimate \
 between AOB and NOB values, reflecting comammox's Nitrospira lineage."""
+
+# ── Denitrification kinetics ─────────────────────────────────────────
+[param_meta.denitrification_vmax_mg_n_per_l_per_hour]
+unit = "mg N/L/h"
+source = "Freshwater sediment denitrification reviews; aquarium substrate calibration"
+confidence = "literature"
+valid_range = [0.01, 0.5]
+notes = """\
+Maximum nitrate-reduction capacity in fully mature suboxic pore water. 0.1 is \
+a conservative mid-range literature anchor; it describes local pore-water \
+capacity rather than whole-tank nitrate removal."""
+
+[param_meta.denitrification_k_no3_mg_n_per_l]
+unit = "mg N/L"
+source = "Freshwater denitrifier Monod fits; wastewater denitrification kinetics texts"
+confidence = "literature"
+valid_range = [0.5, 5.0]
+notes = """\
+Nitrate half-saturation for denitrifying biofilms. 2.0 is a middle-of-the-pack \
+value that avoids unrealistically nitrate-unlimited denitrification at trace \
+NO₃ while staying within freshwater sediment ranges."""
+
+[param_meta.denitrification_k_doc_mg_c_per_l]
+unit = "mg C/L"
+source = "Heterotrophic denitrification kinetics reviews; Rittmann & McCarty 2001"
+confidence = "literature"
+valid_range = [1.0, 10.0]
+notes = """\
+DOC half-saturation for denitrifiers. 5.0 assumes mixed aquarium DOC quality \
+instead of easily-metabolized acetate; lower values would imply much more \
+aggressive nitrate removal from refractory carbon."""
+
+[param_meta.denitrification_pore_water_mixing_factor]
+unit = "fraction"
+source = "Heuristic pore-water coupling term for aquarium substrates"
+confidence = "heuristic"
+valid_range = [0.3, 0.7]
+notes = """\
+Fraction of water-column NO₃ and DOC assumed to reach suboxic pore water. This \
+is a geometry-and-flow proxy rather than a directly measured constant, so the \
+value should be treated as a tunable heuristic."""
+
+[param_meta.denitrification_activity_maturation_days]
+unit = "days"
+source = "Expert-curated from aquarium biofilm establishment timelines"
+confidence = "expert"
+valid_range = [30.0, 90.0]
+notes = """\
+Community-maturation time for denitrifiers after substrate setup. 60 days makes \
+denitrification lag behind nitrification in new tanks while still reaching a \
+meaningful steady-state within the Phase 5 scenario horizon."""
 
 # ── Decomposer half-saturation constants ─────────────────────────────
 [param_meta.decomposer_k_doc_mg_c_per_l]

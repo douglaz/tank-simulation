@@ -217,6 +217,16 @@ TAN concentration where reproduction suppression begins. 1.0 mg N/L is \
 conservative; EPA chronic ammonia criterion for aquatic life is ~1.9 mg TAN/L \
 at pH 7, but invertebrates may be more sensitive."""
 
+[param_meta.tan_repro_full_suppression_mg_n_per_l]
+unit = "mg N/L"
+source = "Derived from tan_repro_threshold_mg_n_per_l and the legacy decline span"
+confidence = "heuristic"
+valid_range = [1.5, 4.0]
+notes = """\
+TAN concentration where the reproduction penalty reaches 100%. 3.0 preserves \
+the legacy `excess / (threshold * 2.0)` decline span after the 1.0 mg N/L \
+suppression onset; this is a curve-shape choice, not a direct toxicity datum."""
+
 [param_meta.no2_repro_threshold_mg_n_per_l]
 unit = "mg N/L"
 source = "Tomasso 1994; Jensen 2003; freshwater invertebrate nitrite reviews"
@@ -226,3 +236,13 @@ notes = """\
 NO₂⁻ concentration where reproduction suppression begins. 0.5 mg N/L is a \
 precautionary threshold. Freshwater crustaceans are generally more nitrite-\
 sensitive than fish; exact Neocaridina dose-response is not well-characterized."""
+
+[param_meta.no2_repro_full_suppression_mg_n_per_l]
+unit = "mg N/L"
+source = "Derived from no2_repro_threshold_mg_n_per_l and the legacy decline span"
+confidence = "heuristic"
+valid_range = [0.75, 2.0]
+notes = """\
+NO₂⁻ concentration where the reproduction penalty reaches 100%. 1.5 mg N/L \
+keeps the same legacy decline span used before the threshold correction; treat \
+it as a model-curve endpoint rather than a literature-backed toxicology limit."""
