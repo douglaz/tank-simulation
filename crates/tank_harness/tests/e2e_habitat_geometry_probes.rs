@@ -278,8 +278,7 @@ fn probe_artifact_label(base: &str, suffix: Option<&str>) -> String {
 #[test]
 #[ignore = "run explicitly with -- --ignored when iterating on a single habitat probe"]
 fn probe_biofilter_scaling_bigger_media_higher_capacity_lower_reduced_n(
-) -> Result<(), Box<dyn std::error::Error>> 
-{
+) -> Result<(), Box<dyn std::error::Error>> {
     require_probe_pass(run_probe_biofilter_scaling_bigger_media_higher_capacity_lower_reduced_n())
 }
 
@@ -1573,13 +1572,14 @@ fn run_probe_equipment_scaling_1x_vs_2x_with_suffix(
         "equipment_scaling",
         format!(
             "peak TAN {peak_tan_1x:.4}/{peak_tan_2x:.4}, DO range {do_range_1x:.4}/{do_range_2x:.4}, \
-             final temp {}/{} C, plant biomass {:.2}/{:.2} g, plant areal density {:.1}/{:.1} g/m²",
-            snap_1x.water_temp_c,
-            snap_2x.water_temp_c,
-            snap_1x.total_plant_biomass_g,
-            snap_2x.total_plant_biomass_g,
-            plant_areal_density_g_m2_1x,
-            plant_areal_density_g_m2_2x,
+             final temp {temp_1x:.2}/{temp_2x:.2} C, plant biomass {plant_1x:.2}/{plant_2x:.2} g, \
+             plant areal density {density_1x:.1}/{density_2x:.1} g/m²",
+            temp_1x = snap_1x.water_temp_c,
+            temp_2x = snap_2x.water_temp_c,
+            plant_1x = snap_1x.total_plant_biomass_g,
+            plant_2x = snap_2x.total_plant_biomass_g,
+            density_1x = plant_areal_density_g_m2_1x,
+            density_2x = plant_areal_density_g_m2_2x,
         ),
         vec![run_1x, run_2x],
     ))
