@@ -596,6 +596,21 @@ impl HarnessRun {
         }
     }
 
+    /// Record a custom failure against the run at the current simulation time.
+    ///
+    /// Use this for multi-run or stateful assertions that are not naturally
+    /// expressed against a single snapshot. [`finish`] will still emit the
+    /// standard artifact bundle before returning an error.
+    pub fn record_failure(&mut self, label: &str, message: impl Into<String>) {
+        let state = self.engine.full_state();
+        self.failures.push(AssertionFailure {
+            checkpoint_label: label.to_owned(),
+            day: state.environment.day,
+            hour: state.environment.hour_of_day,
+            message: message.into(),
+        });
+    }
+
     /// Return the current list of assertion failures.
     pub fn failures(&self) -> &[AssertionFailure] {
         &self.failures
@@ -875,5 +890,24 @@ mod tests {
         assert!(labeled
             .artifact_dir()
             .ends_with("medium_planted_do_night_cycle_seed8004"));
+    }
+
+    #[test]
+    fn recorded_failures_surface_in_finish_output() {
+        let state = TankState::new(SimSeed(8_005));
+        let mut run = HarnessRun::from_state(SimSeed(8_005), "medium_planted", state)
+            .with_artifact_label("recorded_failure");
+        let artifact_dir = run.artifact_dir();
+        let _ = std::fs::remove_dir_all(&artifact_dir);
+
+        run.record_failure("capacity_check", "expected higher nitrifier capacity");
+
+        let err = run.finish().expect_err("recorded failure should fail finish");
+        assert!(err.contains("capacity_check"));
+        assert!(err.contains("expected higher nitrifier capacity"));
+        assert!(artifact_dir.join("metadata.json").exists());
+        assert!(artifact_dir.join("assertion_summary.txt").exists());
+
+        let _ = std::fs::remove_dir_all(artifact_dir);
     }
 }
