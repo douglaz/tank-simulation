@@ -340,6 +340,10 @@ pub fn nitrogen_budget_components(state: &TankState) -> [BudgetComponent; 20] {
             label: "detritus.fine_detritus_g_total",
             amount_mg: detritus_nitrogen_mg(state.detritus.fine_detritus_g_total, n_to_c_ratio),
         },
+        BudgetComponent {
+            label: "cumulative_n2_export_mg_n",
+            amount_mg: state.cumulative_n2_export_mg_n,
+        },
     ]
 }
 

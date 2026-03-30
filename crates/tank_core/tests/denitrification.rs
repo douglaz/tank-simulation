@@ -261,7 +261,7 @@ fn test_denitrification_tracked_as_export() -> Result<(), Box<dyn std::error::Er
     let export_before = state.cumulative_n2_export_mg_n;
     let n_total_before = total_nitrogen_mg(&state);
 
-    let output = step_nitrogen_cycle(&mut state);
+    let _output = step_nitrogen_cycle(&mut state);
 
     let export_after = state.cumulative_n2_export_mg_n;
     let n_total_after = total_nitrogen_mg(&state);
@@ -273,14 +273,16 @@ fn test_denitrification_tracked_as_export() -> Result<(), Box<dyn std::error::Er
         "N₂ export should be measurable: {n_exported}"
     );
 
-    // The N decrease in total pools should closely match the N₂ export.
+    // cumulative_n2_export_mg_n is now a tracked budget component, so
+    // total_nitrogen_mg includes the export counter. The total should be
+    // conserved (decrease ≈ 0) while the export counter rises.
     assert!(
-        (n_decrease - n_exported).abs() < n_exported * 0.15 + 1e-6,
-        "Total N decrease ({n_decrease}) should closely match N₂ export ({n_exported})"
+        n_decrease.abs() < 1e-6,
+        "Total N (including export counter) should be conserved: decrease={n_decrease}"
     );
 
     // Verify via engine with budget tracking that the metric appears.
-    let mut state2 = denitrifying_state(SimSeed(47));
+    let state2 = denitrifying_state(SimSeed(47));
     let mut engine = Engine::from_parts(state2, vec![]);
     engine.enable_budget_tracking();
 
@@ -288,7 +290,9 @@ fn test_denitrification_tracked_as_export() -> Result<(), Box<dyn std::error::Er
     // the suboxic zone via O₂ recalculation.
     engine.step_hours(1)?;
 
-    let ledger = engine.budget_ledger().expect("Budget ledger should be enabled");
+    let ledger = engine
+        .budget_ledger()
+        .expect("Budget ledger should be enabled");
     assert!(
         !ledger.ticks.is_empty(),
         "Budget ledger should have tick records"
@@ -359,8 +363,7 @@ fn test_denitrification_monod_concentration_based() -> Result<(), Box<dyn std::e
     let high_output = step_nitrogen_cycle(&mut high_no3);
 
     assert!(
-        high_output.denitrification_n2_export_mg_n
-            > low_output.denitrification_n2_export_mg_n,
+        high_output.denitrification_n2_export_mg_n > low_output.denitrification_n2_export_mg_n,
         "Higher NO₃ concentration should yield higher rate: \
          high={}, low={}",
         high_output.denitrification_n2_export_mg_n,
@@ -394,7 +397,10 @@ fn test_denitrification_stoichiometry() -> Result<(), Box<dyn std::error::Error>
     let output = step_nitrogen_cycle(&mut state);
 
     let n_denitrified = output.denitrification_n2_export_mg_n;
-    assert!(n_denitrified > 0.001, "Should have measurable denitrification");
+    assert!(
+        n_denitrified > 0.001,
+        "Should have measurable denitrification"
+    );
 
     let doc_consumed = output.denitrification_doc_consumed_mg_c;
 
@@ -436,8 +442,7 @@ fn test_denitrification_rate_scales_with_doc() -> Result<(), Box<dyn std::error:
     let high_output = step_nitrogen_cycle(&mut high_doc);
 
     assert!(
-        high_output.denitrification_n2_export_mg_n
-            > low_output.denitrification_n2_export_mg_n,
+        high_output.denitrification_n2_export_mg_n > low_output.denitrification_n2_export_mg_n,
         "Higher DOC should yield higher denitrification: high={}, low={}",
         high_output.denitrification_n2_export_mg_n,
         low_output.denitrification_n2_export_mg_n
@@ -477,6 +482,29 @@ fn test_denitrification_reduces_nitrate_accumulation() -> Result<(), Box<dyn std
         low_oxygen_tendency_index: 0.5,
         grazing_surface_index: 0.4,
     }];
+
+    // Significant rooted plant biomass to create substrate O₂ demand.
+    // Root respiration drives O₂ consumption in the substrate, maintaining
+    // a realistic suboxic zone even after the engine recalculates O₂
+    // penetration depth from the Bouldin model.
+    for plant in &mut base_state.plant_guilds {
+        if matches!(plant.guild, tank_core::PlantGuild::RootFeedingRosette) {
+            plant.biomass_g = 15.0;
+        }
+    }
+    // Substantial decomposer biomass in substrate to increase BOD
+    base_state.microbe.decomposer_biomass_g = 0.5;
+    *base_state
+        .microbe
+        .decomposer_by_habitat
+        .entry(tank_core::HabitatKind::SubstrateDeep)
+        .or_insert(0.0) = 0.25;
+    *base_state
+        .microbe
+        .decomposer_by_habitat
+        .entry(tank_core::HabitatKind::SubstrateSurface)
+        .or_insert(0.0) = 0.15;
+
     // Elevated TAN and established nitrifiers to produce NO₃
     base_state.water.ammonia_total_mg_n_total = 2.0 * vol;
     base_state.microbe.ammonia_oxidizer_biomass_g = 0.2;

@@ -348,7 +348,9 @@ fn normalize_budget_path(path: &str) -> String {
 }
 
 fn is_nitrogen_budget_path(path: &str) -> bool {
-    is_shared_budget_path(path) || path.ends_with("_mg_n_total")
+    is_shared_budget_path(path)
+        || path.ends_with("_mg_n_total")
+        || path == "cumulative_n2_export_mg_n"
 }
 
 fn is_carbon_budget_path(path: &str) -> bool {
