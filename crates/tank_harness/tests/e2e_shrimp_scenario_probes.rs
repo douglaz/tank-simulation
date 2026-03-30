@@ -27,11 +27,13 @@
 //!
 //! Exit codes: 0 = all pass, non-zero = envelope violation.
 
+use std::collections::BTreeSet;
+
 use tank_core::{
     systems::chemistry::{
         bicarbonate_mg_total_from_mmol_per_l, validate_source_water_carbonate_profile,
     },
-    EventKind, PlayerAction, ProcessParams, SimSeed, SimTracer, SimulationEngine,
+    EggCohort, EventKind, PlayerAction, ProcessParams, SimSeed, SimTracer, SimulationEngine,
     SourceWaterProfile, TankGeometry, TankState, Verbosity, WaterState,
 };
 use tank_harness::{Envelope, HarnessRun};
@@ -180,7 +182,7 @@ fn shrimp_diag(state: &TankState) -> String {
 /// (Ca 40 mg/L, Mg 10 mg/L, GH ~8) support successful molts. Temperature
 /// is a stable 25 °C with strong nitrification and abundant periphyton.
 /// Mortality is isolated out so the test focuses purely on reproductive
-/// mechanics. Over 1 200 simulated hours (~50 days) the colony should
+/// mechanics. Over 1 400 simulated hours (~60 days) the colony should
 /// produce at least 2 complete reproductive cycles: adults become berried,
 /// eggs hatch, and juveniles appear. Total population should grow.
 #[test]
@@ -211,8 +213,6 @@ fn run_probe_successful_breeding_with_suffix(
     let total_days = 60u32;
     let window_days = 10u32;
     let num_windows = total_days / window_days;
-    let mut berried_windows = Vec::new();
-    let mut saw_berried_in_window = false;
     let mut peak_tan = 0.0_f64;
     let mut peak_no2 = 0.0_f64;
     let mut peak_instability = 0.0_f64;
@@ -231,14 +231,11 @@ fn run_probe_successful_breeding_with_suffix(
 
         let snap = run.snapshot();
         let state = run.engine().full_state();
-        saw_berried_in_window |= snap.berried_females_count > 0;
         peak_tan = peak_tan.max(snap.tan_mg_n_per_l);
         peak_no2 = peak_no2.max(snap.nitrite_mg_n_per_l);
         peak_instability = peak_instability.max(state.stability_tracker.instability_index);
 
         if day % window_days == 0 {
-            berried_windows.push(saw_berried_in_window);
-            saw_berried_in_window = false;
             run.assert_envelope(
                 &format!("window_{}", day / window_days),
                 &Envelope::default()
@@ -254,7 +251,19 @@ fn run_probe_successful_breeding_with_suffix(
     let final_snap = run.snapshot();
     let final_state = run.engine().full_state().clone();
     let final_count = final_snap.total_shrimp_count;
-    let berried_cycle_count = berried_windows.iter().filter(|&&seen| seen).count();
+    let berried_days: BTreeSet<u32> = final_state
+        .event_log
+        .iter()
+        .filter(|event| event.kind == EventKind::ShrimpBerried)
+        .map(|event| event.day)
+        .collect();
+    let hatch_days: BTreeSet<u32> = final_state
+        .event_log
+        .iter()
+        .filter(|event| event.kind == EventKind::ShrimpHatched)
+        .map(|event| event.day)
+        .collect();
+    let complete_cycle_count = berried_days.len().min(hatch_days.len());
 
     if final_count <= initial_count {
         run.record_failure(
@@ -266,11 +275,14 @@ fn run_probe_successful_breeding_with_suffix(
         );
     }
 
-    if berried_cycle_count < 2 {
+    if complete_cycle_count < 2 {
         run.record_failure(
             "reproductive_cycles",
             format!(
-                "expected at least 2 berried windows across {num_windows} windows, observed {berried_cycle_count}. {}",
+                "expected at least 2 complete berried->hatch cycles across {num_windows} windows, \
+                 observed {complete_cycle_count} (berried_days={}, hatch_days={}). {}",
+                berried_days.len(),
+                hatch_days.len(),
                 shrimp_diag(&final_state),
             ),
         );
@@ -299,9 +311,13 @@ fn run_probe_successful_breeding_with_suffix(
 
     run.checkpoint("final");
     let observed = format!(
-        "initial={initial_count}, final={final_count}, cycles={berried_cycle_count}/{num_windows}, \
-         juv={}, sub={}, peak_tan={peak_tan:.3}, peak_no2={peak_no2:.3}, peak_instability={peak_instability:.3}",
-        final_snap.juveniles_count, final_snap.sub_adult_count,
+        "initial={initial_count}, final={final_count}, cycles={complete_cycle_count}, \
+         berried_days={}, hatch_days={}, juv={}, sub={}, peak_tan={peak_tan:.3}, \
+         peak_no2={peak_no2:.3}, peak_instability={peak_instability:.3}",
+        berried_days.len(),
+        hatch_days.len(),
+        final_snap.juveniles_count,
+        final_snap.sub_adult_count,
     );
 
     eprintln!(
@@ -405,11 +421,13 @@ fn breeding_success_state(seed: SimSeed) -> TankState {
 ///
 /// **Husbandry story**: Two identical colonies start with 10 adults in
 /// well-maintained tanks. One tank is kept at a comfortable 25 °C, the other
-/// is pushed to 31 °C (above the species' optimal range). Over 60 days the
-/// warm tank should show: suppressed reproductive readiness, fewer or no
-/// berried females, and fewer juveniles compared to the cool tank. Heat
-/// stress accumulates hourly and feeds into molt stress, which in turn
-/// suppresses spawning.
+/// receives a heat spike from 25 °C to 31 °C and is then held there (above
+/// the species' optimal range). Both colonies start with active berried
+/// females so the hot arm must resolve an in-flight clutch under heat stress.
+/// Over 60 days the warm tank should show: suppressed reproductive readiness,
+/// egg dropping after the heat shock, and fewer juveniles compared to the
+/// cool tank. Chemistry should remain stable so temperature is the main
+/// driver of the divergence.
 ///
 /// Note: we intentionally do not assert that the final warm-tank
 /// `molt_stress` exceeds the cool tank. In the current calibrated model the
@@ -425,68 +443,30 @@ fn probe_thermal_suppression() -> Result<(), Box<dyn std::error::Error>> {
 /// Build a stocked shrimp tank at the given ambient temperature, isolating
 /// thermal effects from food limitation and ammonia stress.
 fn thermal_scenario_state(seed: SimSeed, ambient_temp_c: f64) -> TankState {
-    let geometry = TankGeometry {
-        length_cm: 80.0,
-        width_cm: 50.0,
-        height_cm: 55.0,
-        fill_height_cm: 50.0,
-        glass_thickness_mm: 5.0,
-        open_top: true,
-        lid_exchange_factor: 0.25,
-        hardscape_area_cm2: 0.0,
-    };
-    let mut state = TankState::new(seed);
-    state.geometry = geometry;
-    state.water = WaterState::default_for_volume_l(state.water_volume_l());
+    let mut state = breeding_success_state(seed);
     state.water.temperature_c = ambient_temp_c;
     state.environment.ambient_temp_c = ambient_temp_c;
+    state.animal.berried_females_count = 4;
+    state.animal.egg_cohorts = vec![EggCohort {
+        count: 4,
+        progress_days: 5.0,
+    }];
+    state.animal.sync_egg_progress_from_cohorts();
+    state.shrimp_params.base_spawn_rate = 0.12;
+    state.shrimp_params.hatch_success_base = 0.9;
+    state.shrimp_params.failed_molt_mortality_scale = 0.0;
+    state.shrimp_params.apply_legacy_total_maturation_days(40.0);
 
-    let vol = state.water_volume_l();
-    state.water.calcium_mg_total = 40.0 * vol;
-    state.water.magnesium_mg_total = 10.0 * vol;
-    state.water.alkalinity_meq_total = 12.0 * vol;
-    state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * vol;
-    state.water.dissolved_oxygen_mg_total = 8.0 * vol;
-    state.water.bicarbonate_mg_total = 400.0 * vol;
-
-    // Abundant periphyton so food is never limiting
-    state.algae.set_periphyton_total(30.0);
-
-    // Very strong nitrification
-    state.microbe.set_decomposer_total(0.3);
-    state.microbe.ammonia_oxidizer_biomass_g = 2.0;
-    state.microbe.nitrite_oxidizer_biomass_g = 1.5;
-    state.microbe.comammox_biomass_g = 0.5;
-    state.filter_state.biofilter_maturity_index = 1.0;
-
-    state.hardware.aeration.enabled = true;
-    state.hardware.aeration.intensity = 1.0;
-    state.hardware.light.enabled = true;
-    state.hardware.light.intensity_index = 0.7;
-    state.hardware.light.photoperiod_hours = 10.0;
-
-    state.animal.adult.count = 10;
-    state.animal.adult.condition_index = 0.8;
-    state.animal.molt_stress_index = 0.1;
-    state.animal.reproductive_readiness_index = 0.8;
-    state.animal.adult.reserve_g = 5.0;
-
-    state.process_params = ProcessParams::default();
-    state.process_params.aob_vmax_mg_n_per_g_per_hour = 10.0;
-    state.process_params.nob_vmax_mg_n_per_g_per_hour = 10.0;
-    state.process_params.periphyton_capacity_g_per_m2 = 200.0;
-    // Disable mortality to isolate reproductive effects
-    state.process_params.shrimp_base_mortality_per_day = 0.0;
-    state.process_params.shrimp_stress_mortality_scale = 0.0;
-
-    state.shrimp_params.base_spawn_rate = 0.08;
-    state.shrimp_params.hatch_success_base = 1.0;
-    state.shrimp_params.egg_duration_days = 14;
+    let mut source = load_source_profile("hard_shrimp");
+    source.temperature_c = ambient_temp_c;
     state
-        .shrimp_params
-        .apply_legacy_total_maturation_days(120.0);
+        .source_water_catalog
+        .insert("thermal_probe".to_string(), source);
 
     state.reseed_stability_tracker();
+    if ambient_temp_c > 30.0 {
+        state.stability_tracker.prev_temp_c = 25.0;
+    }
     state
 }
 
@@ -513,13 +493,45 @@ fn run_probe_thermal_suppression_with_suffix(
     cool_run.checkpoint("initial");
     warm_run.checkpoint("initial");
 
+    let window_days = 10u32;
     for day in 1..=60 {
-        cool_run.apply_action(PlayerAction::Feed { grams: 0.1 })?;
-        warm_run.apply_action(PlayerAction::Feed { grams: 0.1 })?;
+        cool_run.apply_action(PlayerAction::Feed { grams: 0.05 })?;
+        warm_run.apply_action(PlayerAction::Feed { grams: 0.05 })?;
         cool_run.step_hours(24)?;
         warm_run.step_hours(24)?;
 
-        if day % 15 == 0 {
+        if day % 5 == 0 {
+            cool_run.apply_action(PlayerAction::WaterChangePercent {
+                percent: 20.0,
+                source_profile_id: "thermal_probe".to_string(),
+            })?;
+            warm_run.apply_action(PlayerAction::WaterChangePercent {
+                percent: 20.0,
+                source_profile_id: "thermal_probe".to_string(),
+            })?;
+            cool_run.step_hours(1)?;
+            warm_run.step_hours(1)?;
+        }
+
+        if day % window_days == 0 {
+            cool_run.assert_envelope(
+                &format!("cool_window_{}", day / window_days),
+                &Envelope::default()
+                    .ph(6.8, 8.6)
+                    .temperature_c(23.0, 26.5)
+                    .tan_mg_n_per_l(0.0, 0.6)
+                    .nitrite_mg_n_per_l(0.0, 0.6)
+                    .do_min(7.0),
+            );
+            warm_run.assert_envelope(
+                &format!("warm_window_{}", day / window_days),
+                &Envelope::default()
+                    .ph(6.8, 8.6)
+                    .temperature_c(29.5, 32.5)
+                    .tan_mg_n_per_l(0.0, 0.6)
+                    .nitrite_mg_n_per_l(0.0, 0.6)
+                    .do_min(6.8),
+            );
             cool_run.checkpoint(&format!("day_{day}"));
             warm_run.checkpoint(&format!("day_{day}"));
         }
@@ -578,6 +590,34 @@ fn run_probe_thermal_suppression_with_suffix(
                 warm_snap.shrimp_reproductive_readiness,
                 shrimp_diag(&cool_state),
                 shrimp_diag(&warm_state),
+            ),
+        );
+    }
+
+    if warm_egg_drops == 0 || warm_egg_drops <= cool_egg_drops {
+        record_failure_all(
+            &mut runs,
+            "warm_egg_dropping",
+            format!(
+                "warm tank should drop eggs after the heat shock: cool_egg_drops={cool_egg_drops}, \
+                 warm_egg_drops={warm_egg_drops}. Cool: {} | Warm: {}",
+                shrimp_diag(&cool_state),
+                shrimp_diag(&warm_state),
+            ),
+        );
+    }
+
+    if cool_state.animal.population_condition_index() < 0.6
+        || cool_state.animal.molt_stress_index > 0.4
+        || cool_state.animal.failed_molt_accum > 0.25
+    {
+        record_failure_all(
+            &mut runs,
+            "cool_control_health",
+            format!(
+                "cool control should remain a healthy baseline instead of drifting into stress. \
+                 {}",
+                shrimp_diag(&cool_state),
             ),
         );
     }
