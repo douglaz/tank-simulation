@@ -192,3 +192,147 @@ Values sit within published literature ranges and produce qualitatively \
 correct cycling stories in the nano_cycle, medium_planted, and warm_room \
 scenarios. These are temporary Phase 1 envelopes; later habitat and \
 carbonate work (Phase 2+) may shift individual parameters."""
+
+# ── Per-parameter provenance metadata ────────────────────────────────
+# Priority parameters annotated per tanksim-6e5.7.2.
+# Confidence levels: literature | expert | heuristic | placeholder
+#
+# NOTE: Denitrification parameters (denitrification_vmax_mg_n_per_l_per_hour,
+# denitrification_k_no3_mg_n_per_l, denitrification_k_doc_mg_c_per_l,
+# denitrification_pore_water_mixing_factor, denitrification_activity_maturation_days)
+# are present in this TOML but not yet carried by ProcessParamsPreset — the
+# runtime reads them from code defaults in tank_core::types::process. Their
+# provenance will be recorded here once the preset struct is extended.
+# TODO(tanksim-6e5.7.2): extend ProcessParamsPreset to carry denitrification
+# fields so param_meta can be attached.
+
+# ── AOB half-saturation constants ────────────────────────────────────
+[param_meta.aob_k_tan_mg_n_per_l]
+unit = "mg N/L"
+source = "Prosser 1990; Rittmann & McCarty 2001; EPA ammonia criteria"
+confidence = "literature"
+valid_range = [0.5, 2.0]
+notes = """\
+Mixed-community AOB TAN Ks. Value 1.0 sits mid-range for Nitrosomonas spp. \
+in attached-growth biofilters. Pure-culture values as low as 0.3 exist but \
+mixed communities in aquarium biofilters operate higher."""
+
+[param_meta.aob_k_do_mg_per_l]
+unit = "mg O₂/L"
+source = "Rittmann & McCarty 2001; Henze et al. 2008 (ASM models)"
+confidence = "literature"
+valid_range = [0.3, 1.0]
+notes = "AOB DO half-saturation. 0.5 is a consensus value for activated sludge / biofilm AOB."
+
+# ── NOB half-saturation constants ────────────────────────────────────
+[param_meta.nob_k_nitrite_mg_n_per_l]
+unit = "mg N/L"
+source = "Blackburne et al. 2007; Henze et al. 2008"
+confidence = "literature"
+valid_range = [0.2, 1.0]
+notes = """\
+Nitrobacter/Nitrospira NO₂⁻ Ks. 0.5 is mid-range; Nitrospira-dominated \
+communities can be lower (~0.2). Value produces expected nitrite intermediate \
+peak during cycling."""
+
+[param_meta.nob_k_do_mg_per_l]
+unit = "mg O₂/L"
+source = "Rittmann & McCarty 2001; Blackburne et al. 2007"
+confidence = "literature"
+valid_range = [0.5, 1.5]
+notes = """\
+NOB are more DO-sensitive than AOB (nob_k_do >= aob_k_do). 0.8 produces the \
+classic DO-driven NOB suppression at low aeration."""
+
+# ── Comammox half-saturation constants ───────────────────────────────
+[param_meta.comammox_k_tan_mg_n_per_l]
+unit = "mg N/L"
+source = "Kits et al. 2017; Daims et al. 2015; Costa et al. 2006"
+confidence = "literature"
+valid_range = [0.05, 0.5]
+notes = """\
+Comammox Nitrospira have markedly lower TAN affinity (lower Ks) than canonical \
+AOB, enabling dominance at sub-ppm ammonia concentrations. 0.2 sits in the \
+upper range; kinetic enrichment studies suggest values as low as 0.05."""
+
+[param_meta.comammox_k_do_mg_per_l]
+unit = "mg O₂/L"
+source = "Kits et al. 2017; analogy with Nitrospira DO requirements"
+confidence = "heuristic"
+valid_range = [0.3, 1.0]
+notes = """\
+Less well-characterized than AOB/NOB DO Ks. 0.6 is an intermediate estimate \
+between AOB and NOB values, reflecting comammox's Nitrospira lineage."""
+
+# ── Decomposer half-saturation constants ─────────────────────────────
+[param_meta.decomposer_k_doc_mg_c_per_l]
+unit = "mg C/L"
+source = "Wetzel 2001; Boulton et al. 1998"
+confidence = "literature"
+valid_range = [1.0, 10.0]
+notes = """\
+Heterotrophic DOC Ks in freshwater biofilms. 3.0 is mid-range; actual value \
+depends heavily on DOC lability, which the model does not yet differentiate."""
+
+[param_meta.decomposer_k_do_mg_per_l]
+unit = "mg O₂/L"
+source = "Rittmann & McCarty 2001"
+confidence = "literature"
+valid_range = [0.3, 1.0]
+notes = "Aerobic heterotroph DO Ks. 0.5 is a standard activated-sludge value."
+
+# ── Stoichiometric constants ─────────────────────────────────────────
+[param_meta.o2_per_mg_n_nitrified]
+unit = "mg O₂ / mg N"
+source = "Stoichiometric derivation: NH₄⁺ + 2O₂ → NO₃⁻ + 2H⁺ + H₂O (64/14)"
+confidence = "literature"
+valid_range = [4.57, 4.57]
+notes = "Theoretical stoichiometric ratio. Fixed constant, not tunable."
+
+[param_meta.alkalinity_meq_per_mg_n_nitrified]
+unit = "meq / mg N"
+source = "Stoichiometric derivation: 2 meq alkalinity consumed per 14.007 mg N oxidized"
+confidence = "literature"
+valid_range = [0.1427, 0.1428]
+notes = "Theoretical stoichiometric ratio (2/14.007). Fixed constant."
+
+# ── Plant growth rate maxima ─────────────────────────────────────────
+[param_meta.plant_max_growth_rate_fast_stem_per_day]
+unit = "per day"
+source = "Calibrated against Hygrophila/Rotala growth observations; Kasselmann 2003"
+confidence = "heuristic"
+valid_range = [0.04, 0.15]
+notes = """\
+Fast-stem guild maximum daily growth rate. 0.08 is calibrated to produce \
+realistic stem elongation of ~2-4 cm/week under good conditions. Literature \
+values for Hygrophila polysperma range 0.05-0.12/day."""
+
+[param_meta.plant_max_growth_rate_root_rosette_per_day]
+unit = "per day"
+source = "Calibrated against Cryptocoryne/Echinodorus growth; Kasselmann 2003"
+confidence = "heuristic"
+valid_range = [0.02, 0.10]
+notes = """\
+Root-rosette guild maximum daily growth rate. 0.06 reflects slower leaf \
+production typical of rosette species. Substrate dependency dominates growth \
+limitation more than the rate ceiling."""
+
+# ── Algae/periphyton growth rate maxima ──────────────────────────────
+[param_meta.algae_max_growth_rate_per_day]
+unit = "per day"
+source = "Reynolds 2006; Eppley 1972 (temperature-growth relationship)"
+confidence = "literature"
+valid_range = [0.1, 0.5]
+notes = """\
+Planktonic algae max growth rate. 0.2/day is conservative for green algae at \
+25-27°C. Eppley curve predicts ~0.3-0.5 at these temperatures but aquarium \
+light/nutrient limitation keeps effective rates lower."""
+
+[param_meta.periphyton_max_growth_rate_per_day]
+unit = "per day"
+source = "Borchardt 1996; Stevenson et al. 1996"
+confidence = "heuristic"
+valid_range = [0.08, 0.30]
+notes = """\
+Periphyton (attached algae) max growth rate. 0.15 is set lower than planktonic \
+algae to reflect boundary-layer mass-transfer limitation on surfaces."""

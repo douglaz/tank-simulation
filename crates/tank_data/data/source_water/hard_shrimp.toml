@@ -28,3 +28,65 @@ carbonate preview into the pH 7.5-8.0 band while keeping this preset the most \
 strongly buffered option in the starter pack. Higher Ca/Mg supports shell and \
 exoskeleton formation. 8 mg N/L nitrate and 0.15 mg P/L phosphate reflect a \
 remineralized source that already carries a mild nutrient background."""
+
+# ── Per-parameter provenance metadata ────────────────────────────────
+# Carbonate chemistry and mineral parameters annotated per tanksim-6e5.7.2.
+
+[param_meta.dic_mg_c_per_l]
+unit = "mg C/L"
+source = "Derived from target KH ~8.0 and carbonate equilibrium at pH ~7.8"
+confidence = "heuristic"
+valid_range = [20.0, 50.0]
+notes = """\
+36 mg C/L DIC for hard shrimp water. Calculated from target alkalinity/KH \
+using carbonate equilibrium relationships. At pH ~7.8 most DIC is HCO₃⁻. \
+Real hard tap waters range 30-60 mg C/L DIC."""
+
+[param_meta.alkalinity_meq_per_l]
+unit = "meq/L"
+source = "Derived from target KH ~8.0 (1 KH ≈ 0.357 meq/L)"
+confidence = "heuristic"
+valid_range = [1.5, 5.0]
+notes = """\
+2.857 meq/L ≈ KH 8.0. Consistent with dic_mg_c_per_l and bicarbonate_mg_per_l \
+through carbonate equilibrium. Controls pH buffering capacity against \
+nitrification acid load."""
+
+[param_meta.calcium_mg_per_l]
+unit = "mg Ca/L"
+source = "Sulawesi-style shrimp water recipes; Marks 2008"
+confidence = "expert"
+valid_range = [30.0, 60.0]
+notes = """\
+42 mg/L Ca contributes ~5.3 GH degrees (Ca portion). Set to ensure molt success \
+for Neocaridina with margin above ca_min_mg_per_l (20 mg/L). Representative of \
+carbonate-rich tap water or Salty Shrimp GH/KH+ mixes."""
+
+[param_meta.magnesium_mg_per_l]
+unit = "mg Mg/L"
+source = "Sulawesi-style shrimp water recipes; Greenaway 1985"
+confidence = "expert"
+valid_range = [8.0, 25.0]
+notes = """\
+15 mg/L Mg contributes ~2.5 GH degrees (Mg portion). Above mg_min_mg_per_l \
+(5 mg/L) with margin. Ca:Mg ratio ~2.8:1 is within the 2:1 to 4:1 range \
+typical of freshwater crustacean-suitable water."""
+
+[param_meta.chloride_mg_per_l]
+unit = "mg Cl⁻/L"
+source = "Typical municipal tap water; USGS water quality surveys"
+confidence = "heuristic"
+valid_range = [5.0, 50.0]
+notes = """\
+20 mg/L Cl⁻. Relevant as the numerator of the Cl:NO₂ ratio that modulates \
+nitrite toxicity via chloride_protection_factor. At 20 mg/L Cl⁻ and 1 mg/L \
+NO₂⁻-N, the Cl:NO₂ weight ratio is ~20:1, providing substantial protection."""
+
+[param_meta.bicarbonate_mg_per_l]
+unit = "mg HCO₃⁻/L"
+source = "Derived from alkalinity_meq_per_l × 61.02 g/eq"
+confidence = "heuristic"
+valid_range = [90.0, 300.0]
+notes = """\
+174.3 mg/L HCO₃⁻ = 2.857 meq/L × 61.02. Must stay consistent with \
+alkalinity_meq_per_l and dic_mg_c_per_l through carbonate equilibrium."""

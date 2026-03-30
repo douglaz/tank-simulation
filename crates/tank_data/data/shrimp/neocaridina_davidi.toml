@@ -87,3 +87,141 @@ uptake sites; calibrated so Cl:NO2 > 10:1 yields < 20% of unprotected \
 nitrite hazard. Directionally supported by freshwater crustacean literature; \
 scalar is medium-confidence. \
 Unchanged in 6e5.2.6 retuning — no kinetic Ks values here."""
+
+# ── Per-parameter provenance metadata ────────────────────────────────
+# Priority parameters annotated per tanksim-6e5.7.2.
+# Confidence levels: literature | expert | heuristic | placeholder
+
+# ── Reproduction temperature curve ───────────────────────────────────
+[param_meta.high_temp_repro_penalty_start_c]
+unit = "°C"
+source = "Tropea et al. 2015; Weber & Traunspurger 2016; hobbyist consensus"
+confidence = "expert"
+valid_range = [26.0, 30.0]
+notes = """\
+Temperature at which Neocaridina reproduction begins declining. 28°C is a \
+widely-cited threshold in shrimp husbandry literature and hobbyist guides. \
+Peer-reviewed data on exact inflection points is sparse; most studies report \
+binary outcomes (breeds / does not breed) rather than graded curves."""
+
+[param_meta.high_temp_repro_penalty_full_c]
+unit = "°C"
+source = "Tropea et al. 2015; inference from thermal mortality studies"
+confidence = "heuristic"
+valid_range = [30.0, 35.0]
+notes = """\
+Temperature at which reproduction is fully suppressed. 33°C is near the \
+upper lethal limit for Neocaridina davidi. The exact reproduction-cessation \
+point is not well-documented; 33°C is set conservatively below the ~35°C \
+acute lethal threshold."""
+
+[param_meta.low_temp_repro_ramp_width_c]
+unit = "°C"
+source = "Calibration heuristic; no direct literature measurement"
+confidence = "placeholder"
+valid_range = [2.0, 8.0]
+notes = """\
+Width of the low-temperature ramp below optimal_temp_min_c where reproduction \
+gradually ramps up. 4.0°C means reproduction starts at 18°C (22-4) and reaches \
+full rate at 22°C. This is a tuning parameter without direct literature support; \
+Neocaridina are known to breed in the 18-22°C range at reduced rates."""
+
+# ── Molt mineral thresholds ──────────────────────────────────────────
+[param_meta.ca_min_mg_per_l]
+unit = "mg Ca/L"
+source = "Sharpe & Millar 2016 (crustacean mineralization); Marks 2008"
+confidence = "expert"
+valid_range = [10.0, 40.0]
+notes = """\
+Minimum calcium for successful molting. 20 mg/L (~50 ppm) is a widely-cited \
+threshold for freshwater dwarf shrimp. Literature on Neocaridina specifically \
+is limited; values are extrapolated from Caridina and Macrobrachium studies."""
+
+[param_meta.mg_min_mg_per_l]
+unit = "mg Mg/L"
+source = "Greenaway 1985; crustacean exoskeleton chemistry reviews"
+confidence = "expert"
+valid_range = [2.0, 10.0]
+notes = """\
+Minimum magnesium for successful molting. 5 mg/L is conservative; Mg is needed \
+for CaCO₃ crystal regulation in the exoskeleton. Less studied than Ca for \
+dwarf shrimp specifically."""
+
+[param_meta.molt_stress_mineral_gh_weight]
+unit = "dimensionless"
+source = "Model calibration for warm_room scenario shrimp mortality"
+confidence = "heuristic"
+valid_range = [0.2, 0.8]
+notes = """\
+Relative weight of GH adequacy in the mineral stress score. 0.5 makes GH \
+(general hardness, Ca+Mg) the dominant mineral signal. The 0.5/0.3/0.2 split \
+(GH/Ca/Mg) is a calibration choice, not literature-derived."""
+
+[param_meta.molt_stress_mineral_ca_weight]
+unit = "dimensionless"
+source = "Model calibration"
+confidence = "heuristic"
+valid_range = [0.1, 0.5]
+notes = "Ca sub-weight in mineral stress. See molt_stress_mineral_gh_weight notes."
+
+[param_meta.molt_stress_mineral_mg_weight]
+unit = "dimensionless"
+source = "Model calibration"
+confidence = "heuristic"
+valid_range = [0.1, 0.4]
+notes = "Mg sub-weight in mineral stress. See molt_stress_mineral_gh_weight notes."
+
+# ── Chloride-nitrite protection factor ───────────────────────────────
+[param_meta.chloride_protection_factor]
+unit = "dimensionless"
+source = "Lewis & Morris 1986; Tomasso 1994; freshwater crustacean Cl⁻/NO₂⁻ studies"
+confidence = "heuristic"
+valid_range = [0.2, 1.0]
+notes = """\
+Scalar modelling Cl⁻ competition with NO₂⁻ at gill uptake sites. Calibrated \
+so Cl:NO₂ > 10:1 yields < 20% of unprotected nitrite hazard. The mechanism \
+(competitive inhibition at branchial chloride cells) is well-established in \
+fish; quantitative transfer to Neocaridina is medium-confidence. Directionally \
+supported but species-specific dose-response data is lacking."""
+
+# ── Body stoichiometric constants ────────────────────────────────────
+[param_meta.body_nitrogen_mg_per_g_wet_mass]
+unit = "mg N / g wet mass"
+source = "Anger 2001 (crustacean elemental composition); general invertebrate stoichiometry"
+confidence = "literature"
+valid_range = [20.0, 35.0]
+notes = """\
+27.6 mg N/g wet mass. Derived from ~12% protein content × 16% N in protein, \
+adjusted for Neocaridina wet mass including exoskeleton water. Used for N \
+budget accounting when shrimp die. Not tunable — stoichiometric constant."""
+
+[param_meta.body_carbon_mg_per_g_wet_mass]
+unit = "mg C / g wet mass"
+source = "Anger 2001; general crustacean body composition"
+confidence = "literature"
+valid_range = [120.0, 220.0]
+notes = """\
+172.4 mg C/g wet mass. Derived from typical crustacean dry-weight carbon \
+content (~45% of dry mass) and ~40% dry:wet ratio. Used for C budget \
+accounting. Not tunable — stoichiometric constant."""
+
+# ── Reproduction toxicant thresholds ─────────────────────────────────
+[param_meta.tan_repro_threshold_mg_n_per_l]
+unit = "mg N/L"
+source = "EPA 2013 ammonia criteria; Romano & Zeng 2013"
+confidence = "expert"
+valid_range = [0.5, 2.0]
+notes = """\
+TAN concentration where reproduction suppression begins. 1.0 mg N/L is \
+conservative; EPA chronic ammonia criterion for aquatic life is ~1.9 mg TAN/L \
+at pH 7, but invertebrates may be more sensitive."""
+
+[param_meta.no2_repro_threshold_mg_n_per_l]
+unit = "mg N/L"
+source = "Tomasso 1994; Jensen 2003; freshwater invertebrate nitrite reviews"
+confidence = "expert"
+valid_range = [0.2, 1.0]
+notes = """\
+NO₂⁻ concentration where reproduction suppression begins. 0.5 mg N/L is a \
+precautionary threshold. Freshwater crustaceans are generally more nitrite-\
+sensitive than fish; exact Neocaridina dose-response is not well-characterized."""
