@@ -1317,8 +1317,9 @@ fn molt_condition_modifier(
 #[cfg(test)]
 mod tests {
     use super::{
-        refresh_carbonate_state, route_consumed_food, shrimp_feeding, shrimp_grazing_access_factor,
-        shrimp_target_food_route_g, step_daily_shrimp, update_condition, MG_N_PER_MEQ_AMMONIA,
+        compute_effective_nitrite_hazard, refresh_carbonate_state, route_consumed_food,
+        shrimp_feeding, shrimp_grazing_access_factor, shrimp_target_food_route_g,
+        step_daily_shrimp, step_hourly_shrimp_stress, update_condition, MG_N_PER_MEQ_AMMONIA,
     };
     use crate::{algae_detrital_mass_g, SimSeed, TankState, WaterState};
 
@@ -1558,6 +1559,178 @@ mod tests {
             actual.animal.adult.condition_index,
             expected.animal.adult.condition_index,
             1e-9,
+        );
+    }
+
+    // ── Chloride protection tests ──────────────────────────────────────────
+
+    #[test]
+    fn test_chloride_reduces_nitrite_hazard() {
+        let cpf = 0.5;
+        let no2 = 1.0;
+
+        let hazard_no_cl = compute_effective_nitrite_hazard(no2, 0.0, cpf);
+        assert_close(hazard_no_cl, 1.0, 1e-12);
+
+        let hazard_30_cl = compute_effective_nitrite_hazard(no2, 30.0, cpf);
+        assert!(
+            hazard_30_cl < hazard_no_cl,
+            "30 mg/L Cl should reduce hazard: {hazard_30_cl} >= {hazard_no_cl}"
+        );
+
+        // Verify monotonic decrease with increasing chloride
+        let mut prev_hazard = hazard_no_cl;
+        for cl in [5.0, 10.0, 20.0, 30.0, 50.0, 100.0] {
+            let h = compute_effective_nitrite_hazard(no2, cl, cpf);
+            assert!(
+                h < prev_hazard,
+                "hazard should decrease monotonically: Cl={cl}, h={h} >= prev={prev_hazard}"
+            );
+            prev_hazard = h;
+        }
+    }
+
+    #[test]
+    fn test_chloride_protection_ratio() {
+        let cpf = 0.5;
+        let no2 = 1.0;
+        let unprotected = compute_effective_nitrite_hazard(no2, 0.0, cpf);
+
+        // At Cl:NO2 > 10:1, effective hazard < 20% of unprotected
+        let cl_10_ratio = compute_effective_nitrite_hazard(no2, 10.0 * no2, cpf);
+        assert!(
+            cl_10_ratio < 0.20 * unprotected,
+            "Cl:NO2=10:1 should give <20% hazard: {cl_10_ratio} vs 20% of {unprotected}"
+        );
+
+        // Also check at higher ratios
+        let cl_20_ratio = compute_effective_nitrite_hazard(no2, 20.0 * no2, cpf);
+        assert!(
+            cl_20_ratio < cl_10_ratio,
+            "higher ratio should give less hazard"
+        );
+    }
+
+    #[test]
+    fn test_zero_nitrite_zero_hazard() {
+        let cpf = 0.5;
+        // Zero nitrite regardless of chloride level
+        assert_close(compute_effective_nitrite_hazard(0.0, 0.0, cpf), 0.0, 1e-15);
+        assert_close(compute_effective_nitrite_hazard(0.0, 50.0, cpf), 0.0, 1e-15);
+        assert_close(compute_effective_nitrite_hazard(0.0, 200.0, cpf), 0.0, 1e-15);
+    }
+
+    #[test]
+    fn test_protection_factor_is_species_parameter() {
+        // Verify that different chloride_protection_factor values produce
+        // different effective hazards, proving it's a configurable parameter.
+        let no2 = 2.0;
+        let cl = 20.0;
+        let h_low_cpf = compute_effective_nitrite_hazard(no2, cl, 0.2);
+        let h_high_cpf = compute_effective_nitrite_hazard(no2, cl, 0.8);
+        assert!(
+            h_high_cpf < h_low_cpf,
+            "higher cpf should give more protection: cpf=0.8 -> {h_high_cpf}, cpf=0.2 -> {h_low_cpf}"
+        );
+
+        // Also verify the parameter is a named field in ShrimpRuntimeParams
+        let params = crate::types::ShrimpRuntimeParams::default();
+        assert!(
+            params.chloride_protection_factor > 0.0,
+            "chloride_protection_factor should be a positive species parameter"
+        );
+    }
+
+    #[test]
+    fn test_stress_accounting_integrates_with_existing() {
+        // Chloride-modified nitrite stress feeds into hourly_nitrite_stress_accum,
+        // not a parallel stress system.
+        let mut state = TankState::new(SimSeed(20_001));
+        state.geometry.length_cm = 40.0;
+        state.geometry.width_cm = 30.0;
+        state.geometry.height_cm = 35.0;
+        state.geometry.fill_height_cm = 30.0;
+        state.water = WaterState::default_for_volume_l(state.water_volume_l());
+        state.water.temperature_c = 24.0;
+        state.environment.ambient_temp_c = 24.0;
+        state.animal.adult.count = 10;
+
+        let volume_l = state.water_volume_l();
+        state.water.dissolved_oxygen_mg_total = 8.0 * volume_l;
+
+        // High nitrite, zero chloride — should accumulate stress
+        state.water.nitrite_mg_n_total = 3.0 * volume_l;
+        state.water.chloride_mg_total = 0.0;
+
+        state.reseed_stability_tracker();
+        step_hourly_shrimp_stress(&mut state);
+
+        let stress_no_cl = state.animal.hourly_nitrite_stress_accum;
+        assert!(
+            stress_no_cl > 0.0,
+            "3 mg/L nitrite with no chloride should accumulate stress"
+        );
+
+        // Same nitrite, high chloride — should accumulate less stress
+        let mut state_cl = state.clone();
+        state_cl.animal.hourly_nitrite_stress_accum = 0.0;
+        state_cl.water.chloride_mg_total = 100.0 * volume_l;
+
+        step_hourly_shrimp_stress(&mut state_cl);
+
+        let stress_with_cl = state_cl.animal.hourly_nitrite_stress_accum;
+        assert!(
+            stress_with_cl < stress_no_cl,
+            "chloride should reduce nitrite stress: with_cl={stress_with_cl}, no_cl={stress_no_cl}"
+        );
+
+        // Stress goes through the same hourly_nitrite_stress_accum field
+        // (not a separate accumulator), confirming integration with existing path.
+    }
+
+    #[test]
+    fn test_high_nitrite_low_chloride_vs_high_chloride() {
+        // High nitrite + low chloride → more nitrite stress than high nitrite + high chloride
+        let mut low_cl = TankState::new(SimSeed(20_002));
+        low_cl.geometry.length_cm = 40.0;
+        low_cl.geometry.width_cm = 30.0;
+        low_cl.geometry.height_cm = 35.0;
+        low_cl.geometry.fill_height_cm = 30.0;
+        low_cl.water = WaterState::default_for_volume_l(low_cl.water_volume_l());
+        low_cl.water.temperature_c = 24.0;
+        low_cl.environment.ambient_temp_c = 24.0;
+        low_cl.animal.adult.count = 10;
+
+        let volume_l = low_cl.water_volume_l();
+        low_cl.water.dissolved_oxygen_mg_total = 8.0 * volume_l;
+        low_cl.water.nitrite_mg_n_total = 5.0 * volume_l; // 5 mg/L — severe
+        low_cl.water.chloride_mg_total = 0.0; // no protection
+
+        let mut high_cl = low_cl.clone();
+        high_cl.water.chloride_mg_total = 100.0 * volume_l; // 100 mg/L Cl
+
+        low_cl.reseed_stability_tracker();
+        high_cl.reseed_stability_tracker();
+
+        // Accumulate stress over 24 hours
+        for _ in 0..24 {
+            step_hourly_shrimp_stress(&mut low_cl);
+            step_hourly_shrimp_stress(&mut high_cl);
+        }
+
+        assert!(
+            low_cl.animal.hourly_nitrite_stress_accum
+                > high_cl.animal.hourly_nitrite_stress_accum,
+            "low chloride should produce more nitrite stress: low_cl={}, high_cl={}",
+            low_cl.animal.hourly_nitrite_stress_accum,
+            high_cl.animal.hourly_nitrite_stress_accum
+        );
+
+        // The low-chloride scenario should produce substantially more stress
+        assert!(
+            low_cl.animal.hourly_nitrite_stress_accum
+                > 3.0 * high_cl.animal.hourly_nitrite_stress_accum,
+            "at 100 mg/L Cl and cpf=0.5, protection should be substantial"
         );
     }
 }
