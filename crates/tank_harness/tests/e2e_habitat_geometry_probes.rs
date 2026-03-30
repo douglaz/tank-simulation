@@ -15,8 +15,12 @@
 //! Set `TANK_E2E_VERBOSE=1` for full trace dumps even on success.
 
 use tank_core::{
+    systems::{
+        chemistry::resolve_carbonate_state,
+        nitrogen_cycle::compute_biofilter_carrying_capacity,
+    },
     HabitatKind, PlayerAction, SimSeed, SimulationEngine, SubstrateKind, SubstrateLayerState,
-    TankSnapshot, TankState,
+    TankSnapshot, TankState, WaterState,
 };
 use tank_harness::{Envelope, HarnessRun};
 use tank_scenarios::{
@@ -145,6 +149,86 @@ fn format_snapshot_summary(label: &str, snap: &TankSnapshot) -> String {
     )
 }
 
+struct ProbeResult {
+    name: &'static str,
+    passed: bool,
+    observed: String,
+    failure_detail: String,
+}
+
+fn require_probe_pass(
+    result: Result<ProbeResult, String>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match result {
+        Ok(probe) if probe.passed => Ok(()),
+        Ok(probe) => Err(format!("{} failed:\n{}", probe.name, probe.failure_detail).into()),
+        Err(err) => Err(err.into()),
+    }
+}
+
+fn record_failure_all(runs: &mut [&mut HarnessRun], label: &str, message: String) {
+    for run in runs.iter_mut() {
+        run.record_failure(label, message.clone());
+    }
+}
+
+fn record_check(runs: &mut [&mut HarnessRun], label: &str, condition: bool, message: String) {
+    if !condition {
+        record_failure_all(runs, label, message);
+    }
+}
+
+fn record_within_fraction(
+    runs: &mut [&mut HarnessRun],
+    label: &str,
+    lhs: f64,
+    rhs: f64,
+    tolerance: f64,
+) {
+    let scale = lhs.abs().max(rhs.abs()).max(1e-9);
+    let fraction = (lhs - rhs).abs() / scale;
+    record_check(
+        runs,
+        label,
+        fraction <= tolerance,
+        format!(
+            "{label}: values should stay within {:.0}% \
+             (lhs={lhs:.4}, rhs={rhs:.4}, divergence={:.1}%)",
+            tolerance * 100.0,
+            fraction * 100.0
+        ),
+    );
+}
+
+fn finish_probe(
+    name: &'static str,
+    observed: String,
+    runs: Vec<HarnessRun>,
+) -> Result<ProbeResult, String> {
+    let mut finish_errors = Vec::new();
+    for run in runs {
+        if let Err(err) = run.finish() {
+            finish_errors.push(err);
+        }
+    }
+
+    let failure_detail = finish_errors.join("\n");
+    Ok(ProbeResult {
+        name,
+        passed: failure_detail.is_empty(),
+        observed,
+        failure_detail,
+    })
+}
+
+fn panic_message(panic: Box<dyn std::any::Any + Send>) -> String {
+    panic
+        .downcast_ref::<String>()
+        .cloned()
+        .or_else(|| panic.downcast_ref::<&str>().map(|msg| (*msg).to_string()))
+        .unwrap_or_else(|| "unknown panic".to_string())
+}
+
 // ---------------------------------------------------------------------------
 // 1. Biofilter scaling: bigger filter media → higher nitrifier capacity
 //    → faster cycling
@@ -161,121 +245,247 @@ fn format_snapshot_summary(label: &str, snap: &TankSnapshot) -> String {
 /// colonizable area, and the nitrifier population should respond accordingly.
 ///
 /// **What we validate:**
-/// - Tank with 2× media area has >1.5× filter-media colonizable area
-/// - Tank with 2× media area supports comparable or more nitrifier biomass
+/// - Tank with larger media has substantially more filter habitat area and
+///   higher nitrifier carrying capacity
+/// - Under the same ammonia challenge, the larger filter clears TAN faster
+///   and supports more nitrifier biomass
 /// - Both tanks remain within basic stability envelopes
 #[test]
 fn probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<(), Box<dyn std::error::Error>> {
-    let duration_hours: u32 = 500;
+    require_probe_pass(run_probe_biofilter_scaling_bigger_media_faster_cycling())
+}
 
-    let build_run =
-        |media_area: Option<f64>, label: &str| -> Result<HarnessRun, Box<dyn std::error::Error>> {
-            let overrides = StartupOverrides {
-                geometry: ScenarioGeometryOverrides {
-                    size_scale: 1.0,
-                    fill_ratio: 1.0,
-                },
-                source_water_profile_id: Some("moderate".to_string()),
-                substrate_preset: Some(StartupSubstratePreset::InertSand),
-                plant_selection: Some(StartupPlantSelection::FastStemOnly),
-                filter_enabled: Some(true),
-                filter_media_area_cm2: media_area,
-                light_preset: Some(StartupLightPreset::Hours10),
-                heater_preset: Some(StartupHeaterPreset::Celsius25),
-                aeration_enabled: Some(true),
-                initial_adult_shrimp_count: Some(10),
-                ..StartupOverrides::default()
-            };
-            Ok(
-                HarnessRun::with_overrides(SimSeed(42), "medium_planted", overrides)?
-                    .with_artifact_label(label),
-            )
+fn run_probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<ProbeResult, String> {
+    const SMALL_MEDIA_CM2: f64 = 500.0;
+    const LARGE_MEDIA_CM2: f64 = 4000.0;
+    const INITIAL_CAPACITY_FRACTION: f64 = 0.08;
+    const INITIAL_TAN_MG_N_PER_L: f64 = 6.0;
+    const DURATION_HOURS: u32 = 24 * 21;
+    const TAN_CLEARANCE_THRESHOLD: f64 = 0.5;
+
+    let build_state = |seed: SimSeed, media_area_cm2: f64| -> TankState {
+        let mut state = TankState::new(seed);
+        state.geometry.length_cm = 60.0;
+        state.geometry.width_cm = 30.0;
+        state.geometry.height_cm = 36.0;
+        state.geometry.fill_height_cm = 32.0;
+        let footprint_cm2 = state.geometry.footprint_area_cm2();
+        let substrate = SubstrateLayerState {
+            colonizable_area_cm2: SubstrateKind::InertSand
+                .derived_colonizable_area_cm2(footprint_cm2, 3.0),
+            ..SubstrateLayerState::default()
         };
+        state.substrate_layers = vec![substrate];
 
-    // Small filter: use auto-scaled default (no override)
-    let mut run_small = build_run(None, "biofilter_small")?;
+        let volume_l = state.water_volume_l();
+        state.water = WaterState::default_for_volume_l(volume_l);
+        state.water.temperature_c = 25.0;
+        state.environment.ambient_temp_c = 25.0;
+        state.water.ammonia_total_mg_n_total = INITIAL_TAN_MG_N_PER_L * volume_l;
+        state.water.dissolved_oxygen_mg_total = 8.5 * volume_l;
+        state.water.alkalinity_meq_total = 8.0 * volume_l;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 35.0 * volume_l;
+        resolve_carbonate_state(&mut state.water, volume_l);
+
+        state.hardware.filter.enabled = true;
+        state.hardware.filter.media_area_cm2 = media_area_cm2;
+        state.hardware.filter.flow_lph = 400.0;
+        state.hardware.filter.cleanliness_index = 1.0;
+        state.filter_state.clogging_index = 0.0;
+        state.filter_state.biofilter_maturity_index = INITIAL_CAPACITY_FRACTION;
+        state.hardware.aeration.enabled = true;
+        state.hardware.aeration.intensity = 0.5;
+        state.hardware.light.enabled = false;
+        state.plant_guilds.clear();
+        state.algae.set_periphyton_total(0.0);
+        state.algae.suspended_biomass_g = 0.0;
+        state.animal.adult.count = 0;
+        state.animal.sub_adult.count = 0;
+        state.animal.juvenile.count = 0;
+        state.refresh_habitat_registry();
+
+        let carrying_capacity_g = compute_biofilter_carrying_capacity(
+            &state.habitat_registry,
+            state.process_params.nitrifier_base_density_g_per_cm2,
+        );
+        let seeded_total_nitrifier_g = carrying_capacity_g * INITIAL_CAPACITY_FRACTION;
+        state.microbe.ammonia_oxidizer_biomass_g = seeded_total_nitrifier_g * 0.6;
+        state.microbe.nitrite_oxidizer_biomass_g = seeded_total_nitrifier_g * 0.3;
+        state.microbe.comammox_biomass_g = seeded_total_nitrifier_g * 0.1;
+        state.refresh_habitat_registry();
+        state
+    };
+
+    let mut run_small =
+        HarnessRun::from_state(SimSeed(42), "biofilter_capacity", build_state(SimSeed(42), SMALL_MEDIA_CM2))
+            .with_artifact_label("biofilter_small");
     run_small.enable_instrumentation();
-
-    // Large filter: 2× the auto-scaled default
-    let auto_media_area = run_small
-        .engine()
-        .full_state()
-        .hardware
-        .filter
-        .media_area_cm2;
-    let mut run_large = build_run(Some(auto_media_area * 2.0), "biofilter_large")?;
+    let mut run_large =
+        HarnessRun::from_state(SimSeed(42), "biofilter_capacity", build_state(SimSeed(42), LARGE_MEDIA_CM2))
+            .with_artifact_label("biofilter_large");
     run_large.enable_instrumentation();
 
-    for hour in 0..duration_hours {
-        if hour % 24 == 0 {
-            run_small.apply_action(PlayerAction::Feed { grams: 0.1 })?;
-            run_large.apply_action(PlayerAction::Feed { grams: 0.1 })?;
-        }
-        run_small.step_hours(1)?;
-        run_large.step_hours(1)?;
-    }
-
-    dump_habitat_debug("biofilter_small", run_small.engine().full_state());
-    dump_habitat_debug("biofilter_large", run_large.engine().full_state());
-    eprintln!(
-        "{}",
-        format_snapshot_summary("small_final", &run_small.snapshot())
-    );
-    eprintln!(
-        "{}",
-        format_snapshot_summary("large_final", &run_large.snapshot())
-    );
-
-    // Validate: the filter-media habitat should have more colonizable area
     let filter_area = |state: &TankState| {
         state
             .habitat_registry
             .iter()
-            .find(|h| h.kind == HabitatKind::FilterMedia)
-            .map(|h| h.colonizable_area_cm2)
+            .find(|habitat| habitat.kind == HabitatKind::FilterMedia)
+            .map(|habitat| habitat.colonizable_area_cm2)
             .unwrap_or(0.0)
     };
-    assert!(
-        filter_area(run_large.engine().full_state())
-            > filter_area(run_small.engine().full_state()) * 1.5,
-        "2× media should produce >1.5× filter habitat area"
-    );
-
-    // Validate: both filters establish viable nitrifier communities.
-    // With the same bioload, the larger filter has lower nitrifier density
-    // (nutrient-limited, not area-limited), so we check that both achieve
-    // non-trivial biomass rather than comparing directly.
     let nitrifier_biomass = |state: &TankState| {
         state.microbe.ammonia_oxidizer_biomass_g
             + state.microbe.nitrite_oxidizer_biomass_g
             + state.microbe.comammox_biomass_g
     };
-    let bio_small = nitrifier_biomass(run_small.engine().full_state());
-    let bio_large = nitrifier_biomass(run_large.engine().full_state());
-    let min_nitrifier_g = 0.02;
-    assert!(
-        bio_small > min_nitrifier_g && bio_large > min_nitrifier_g,
-        "Both filters should establish viable nitrifier communities (>{:.3}g): \
-         small={:.4}g, large={:.4}g",
-        min_nitrifier_g,
-        bio_small,
-        bio_large
+
+    let filter_area_small = filter_area(run_small.engine().full_state());
+    let filter_area_large = filter_area(run_large.engine().full_state());
+    let capacity_small = compute_biofilter_carrying_capacity(
+        &run_small.engine().full_state().habitat_registry,
+        run_small
+            .engine()
+            .full_state()
+            .process_params
+            .nitrifier_base_density_g_per_cm2,
+    );
+    let capacity_large = compute_biofilter_carrying_capacity(
+        &run_large.engine().full_state().habitat_registry,
+        run_large
+            .engine()
+            .full_state()
+            .process_params
+            .nitrifier_base_density_g_per_cm2,
     );
 
-    // Both should stay within basic envelopes
+    let mut tan_exposure_small = run_small.snapshot().tan_mg_n_per_l;
+    let mut tan_exposure_large = run_large.snapshot().tan_mg_n_per_l;
+    let mut tan_clearance_small = None;
+    let mut tan_clearance_large = None;
+
+    for hour in 0..DURATION_HOURS {
+        run_small.step_hours(1)?;
+        run_large.step_hours(1)?;
+
+        let snap_small = run_small.snapshot();
+        let snap_large = run_large.snapshot();
+        tan_exposure_small += snap_small.tan_mg_n_per_l;
+        tan_exposure_large += snap_large.tan_mg_n_per_l;
+
+        let clearance_hour = hour + 1;
+        if tan_clearance_small.is_none() && snap_small.tan_mg_n_per_l <= TAN_CLEARANCE_THRESHOLD {
+            tan_clearance_small = Some(clearance_hour);
+        }
+        if tan_clearance_large.is_none() && snap_large.tan_mg_n_per_l <= TAN_CLEARANCE_THRESHOLD {
+            tan_clearance_large = Some(clearance_hour);
+        }
+    }
+
+    let snap_small = run_small.snapshot();
+    let snap_large = run_large.snapshot();
+    let nitrifier_small = nitrifier_biomass(run_small.engine().full_state());
+    let nitrifier_large = nitrifier_biomass(run_large.engine().full_state());
+
+    dump_habitat_debug("biofilter_small", run_small.engine().full_state());
+    dump_habitat_debug("biofilter_large", run_large.engine().full_state());
+    eprintln!("{}", format_snapshot_summary("small_final", &snap_small));
+    eprintln!("{}", format_snapshot_summary("large_final", &snap_large));
+    eprintln!(
+        "Biofilter metrics: filter_area small={filter_area_small:.1} cm² large={filter_area_large:.1} cm²; \
+         capacity small={capacity_small:.4}g large={capacity_large:.4}g; \
+         TAN exposure small={tan_exposure_small:.2} large={tan_exposure_large:.2}; \
+         clearance small={tan_clearance_small:?}h large={tan_clearance_large:?}h"
+    );
+
+    {
+        let mut runs = [&mut run_small, &mut run_large];
+        record_check(
+            &mut runs,
+            "biofilter_filter_area",
+            filter_area_large > filter_area_small * 6.0,
+            format!(
+                "larger media should expand filter habitat area by >6x: \
+                 small={filter_area_small:.1} cm², large={filter_area_large:.1} cm²"
+            ),
+        );
+        record_check(
+            &mut runs,
+            "biofilter_capacity",
+            capacity_large > capacity_small * 1.4,
+            format!(
+                "larger media should materially increase nitrifier capacity: \
+                 small={capacity_small:.4} g, large={capacity_large:.4} g"
+            ),
+        );
+        record_check(
+            &mut runs,
+            "biofilter_tan_exposure",
+            tan_exposure_large < tan_exposure_small,
+            format!(
+                "larger filter should reduce TAN exposure under the same ammonia challenge: \
+                 small={tan_exposure_small:.2}, large={tan_exposure_large:.2}"
+            ),
+        );
+        record_check(
+            &mut runs,
+            "biofilter_nitrifier_biomass",
+            nitrifier_large > nitrifier_small,
+            format!(
+                "larger filter should support more nitrifier biomass by the end of the run: \
+                 small={nitrifier_small:.4} g, large={nitrifier_large:.4} g"
+            ),
+        );
+        match (tan_clearance_small, tan_clearance_large) {
+            (Some(small_hour), Some(large_hour)) => record_check(
+                &mut runs,
+                "biofilter_tan_clearance",
+                large_hour <= small_hour,
+                format!(
+                    "larger filter should clear TAN to <= {TAN_CLEARANCE_THRESHOLD:.1} mg N/L no later than the smaller filter: \
+                     small={small_hour}h, large={large_hour}h"
+                ),
+            ),
+            (None, Some(_)) => {}
+            (Some(small_hour), None) => record_failure_all(
+                &mut runs,
+                "biofilter_tan_clearance",
+                format!(
+                    "smaller filter cleared TAN by {small_hour}h but the larger filter never did"
+                ),
+            ),
+            (None, None) => record_failure_all(
+                &mut runs,
+                "biofilter_tan_clearance",
+                format!(
+                    "neither filter cleared TAN to <= {TAN_CLEARANCE_THRESHOLD:.1} mg N/L within {DURATION_HOURS}h"
+                ),
+            ),
+        }
+    }
+
     run_small.assert_envelope(
         "biofilter_small_final",
-        &Envelope::default().do_min(5.0).ph(5.5, 9.0),
+        &Envelope::default()
+            .do_min(5.0)
+            .ph(6.5, 9.0)
+            .tan_mg_n_per_l(0.0, 8.0),
     );
     run_large.assert_envelope(
         "biofilter_large_final",
-        &Envelope::default().do_min(5.0).ph(5.5, 9.0),
+        &Envelope::default()
+            .do_min(5.0)
+            .ph(6.5, 9.0)
+            .tan_mg_n_per_l(0.0, 8.0),
     );
 
-    run_small.finish()?;
-    run_large.finish()?;
-
-    Ok(())
+    finish_probe(
+        "biofilter_scaling",
+        format!(
+            "area {filter_area_small:.0}->{filter_area_large:.0} cm², capacity {capacity_small:.3}->{capacity_large:.3} g, \
+             TAN exposure {tan_exposure_small:.2}->{tan_exposure_large:.2}, clearance {tan_clearance_small:?}->{tan_clearance_large:?}"
+        ),
+        vec![run_small, run_large],
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -300,6 +510,10 @@ fn probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<(), Box<dyn s
 /// - Both tanks remain within basic stability envelopes
 #[test]
 fn probe_light_depth_shallow_vs_deep_growth() -> Result<(), Box<dyn std::error::Error>> {
+    require_probe_pass(run_probe_light_depth_shallow_vs_deep_growth())
+}
+
+fn run_probe_light_depth_shallow_vs_deep_growth() -> Result<ProbeResult, String> {
     // Build two tanks with SAME footprint but different fill heights.
     // Use from_state to control geometry directly without size_scale
     // (which would change footprint and starting biomass).
@@ -357,12 +571,6 @@ fn probe_light_depth_shallow_vs_deep_growth() -> Result<(), Box<dyn std::error::
         "Shallow water depth: {:.1} cm, Deep water depth: {:.1} cm",
         shallow_depth, deep_depth
     );
-    assert!(
-        deep_depth > shallow_depth * 2.0,
-        "Deep tank should have meaningfully more water depth: shallow={:.1}, deep={:.1}",
-        shallow_depth,
-        deep_depth
-    );
 
     // Verify habitat light exposure is lower in the deep tank
     let substrate_light = |state: &TankState| -> f64 {
@@ -373,11 +581,8 @@ fn probe_light_depth_shallow_vs_deep_growth() -> Result<(), Box<dyn std::error::
             .map(|h| h.light_exposure)
             .unwrap_or(0.0)
     };
-    assert!(
-        substrate_light(run_shallow.engine().full_state())
-            > substrate_light(run_deep.engine().full_state()),
-        "Shallow substrate should receive more light than deep substrate"
-    );
+    let substrate_light_shallow = substrate_light(run_shallow.engine().full_state());
+    let substrate_light_deep = substrate_light(run_deep.engine().full_state());
 
     // Record initial plant biomass (same for both — same footprint, same defaults)
     let initial_plant_shallow: f64 = run_shallow
@@ -412,13 +617,36 @@ fn probe_light_depth_shallow_vs_deep_growth() -> Result<(), Box<dyn std::error::
     // Validate: shallow tank should produce more plant biomass growth
     let growth_shallow = snap_shallow.total_plant_biomass_g - initial_plant_shallow;
     let growth_deep = snap_deep.total_plant_biomass_g - initial_plant_deep;
-    assert!(
-        growth_shallow > growth_deep,
-        "Shallow tank should have more plant growth (more light at canopy): \
-         shallow_growth={:.4}g, deep_growth={:.4}g",
-        growth_shallow,
-        growth_deep
-    );
+    {
+        let mut runs = [&mut run_shallow, &mut run_deep];
+        record_check(
+            &mut runs,
+            "light_depth_geometry",
+            deep_depth > shallow_depth * 2.0,
+            format!(
+                "deep tank should have meaningfully more water depth: \
+                 shallow={shallow_depth:.1} cm, deep={deep_depth:.1} cm"
+            ),
+        );
+        record_check(
+            &mut runs,
+            "light_depth_substrate_light",
+            substrate_light_shallow > substrate_light_deep,
+            format!(
+                "shallow substrate should receive more light than deep substrate: \
+                 shallow={substrate_light_shallow:.4}, deep={substrate_light_deep:.4}"
+            ),
+        );
+        record_check(
+            &mut runs,
+            "light_depth_growth",
+            growth_shallow > growth_deep,
+            format!(
+                "shallow tank should have more plant growth (more light at canopy): \
+                 shallow_growth={growth_shallow:.4} g, deep_growth={growth_deep:.4} g"
+            ),
+        );
+    }
 
     // Both stay within envelopes
     run_shallow.assert_envelope(
@@ -436,10 +664,14 @@ fn probe_light_depth_shallow_vs_deep_growth() -> Result<(), Box<dyn std::error::
             .temperature_c(20.0, 30.0),
     );
 
-    run_shallow.finish()?;
-    run_deep.finish()?;
-
-    Ok(())
+    finish_probe(
+        "light_depth",
+        format!(
+            "depth {shallow_depth:.1}->{deep_depth:.1} cm, substrate light {substrate_light_shallow:.4}->{substrate_light_deep:.4}, \
+             plant growth {growth_shallow:.4}->{growth_deep:.4} g"
+        ),
+        vec![run_shallow, run_deep],
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -468,6 +700,10 @@ fn probe_light_depth_shallow_vs_deep_growth() -> Result<(), Box<dyn std::error::
 ///   conditions (not a fixed proportion)
 #[test]
 fn probe_habitat_fouling_glass_vs_filter() -> Result<(), Box<dyn std::error::Error>> {
+    require_probe_pass(run_probe_habitat_fouling_glass_vs_filter())
+}
+
+fn run_probe_habitat_fouling_glass_vs_filter() -> Result<ProbeResult, String> {
     let build_run = |light_preset: StartupLightPreset,
                      feed_g: f64,
                      label: &str|
@@ -554,24 +790,6 @@ fn probe_habitat_fouling_glass_vs_filter() -> Result<(), Box<dyn std::error::Err
         hf_filter_dec
     );
 
-    // Validate: glass periphyton should be higher under high light than low light
-    assert!(
-        hl_glass_peri > ll_glass_peri,
-        "More light should produce more glass periphyton: \
-         high_light={:.6}g, low_light={:.6}g",
-        hl_glass_peri,
-        ll_glass_peri
-    );
-
-    // Validate: filter decomposer should be higher with heavy feed (more organics)
-    assert!(
-        hf_filter_dec > hl_filter_dec,
-        "More organic load should produce more filter decomposer biomass: \
-         heavy_feed={:.6}g, moderate_feed={:.6}g",
-        hf_filter_dec,
-        hl_filter_dec
-    );
-
     // Validate: the periphyton-to-decomposer ratio shifts with light conditions
     let ratio_hl = if hl_filter_dec > 1e-9 {
         hl_glass_peri / hl_filter_dec
@@ -583,16 +801,43 @@ fn probe_habitat_fouling_glass_vs_filter() -> Result<(), Box<dyn std::error::Err
     } else {
         0.0
     };
-    if ratio_hl > 1e-9 && ratio_ll > 1e-9 {
-        let ratio_change = (ratio_hl - ratio_ll).abs() / ratio_hl.max(ratio_ll);
-        assert!(
-            ratio_change > 0.05,
-            "Periphyton-to-decomposer ratio should shift with light conditions: \
-             high_light_ratio={:.4}, low_light_ratio={:.4}, change={:.2}%",
-            ratio_hl,
-            ratio_ll,
-            ratio_change * 100.0
+    let ratio_change = if ratio_hl > 1e-9 && ratio_ll > 1e-9 {
+        (ratio_hl - ratio_ll).abs() / ratio_hl.max(ratio_ll)
+    } else {
+        0.0
+    };
+    {
+        let mut runs = [&mut run_high_light, &mut run_low_light, &mut run_heavy_feed];
+        record_check(
+            &mut runs,
+            "fouling_glass_periphyton",
+            hl_glass_peri > ll_glass_peri,
+            format!(
+                "more light should produce more glass periphyton: \
+                 high_light={hl_glass_peri:.6} g, low_light={ll_glass_peri:.6} g"
+            ),
         );
+        record_check(
+            &mut runs,
+            "fouling_filter_decomposer",
+            hf_filter_dec > hl_filter_dec,
+            format!(
+                "more organic load should produce more filter decomposer biomass: \
+                 heavy_feed={hf_filter_dec:.6} g, moderate_feed={hl_filter_dec:.6} g"
+            ),
+        );
+        if ratio_hl > 1e-9 && ratio_ll > 1e-9 {
+            record_check(
+                &mut runs,
+                "fouling_ratio_shift",
+                ratio_change > 0.05,
+                format!(
+                    "periphyton-to-decomposer ratio should shift with light conditions: \
+                     high_light_ratio={ratio_hl:.4}, low_light_ratio={ratio_ll:.4}, change={:.2}%",
+                    ratio_change * 100.0
+                ),
+            );
+        }
     }
 
     for run in [&mut run_high_light, &mut run_low_light, &mut run_heavy_feed] {
@@ -602,11 +847,16 @@ fn probe_habitat_fouling_glass_vs_filter() -> Result<(), Box<dyn std::error::Err
         );
     }
 
-    run_high_light.finish()?;
-    run_low_light.finish()?;
-    run_heavy_feed.finish()?;
-
-    Ok(())
+    finish_probe(
+        "habitat_fouling",
+        format!(
+            "glass periphyton high={hl_glass_peri:.6} g low={ll_glass_peri:.6} g; \
+             filter decomposer moderate={hl_filter_dec:.6} g heavy={hf_filter_dec:.6} g; \
+             ratio shift={:.2}%",
+            ratio_change * 100.0
+        ),
+        vec![run_high_light, run_low_light, run_heavy_feed],
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -638,6 +888,10 @@ fn probe_habitat_fouling_glass_vs_filter() -> Result<(), Box<dyn std::error::Err
 /// - Denitrifier activity index matures over time in planted substrate
 #[test]
 fn probe_substrate_redox_denitrification() -> Result<(), Box<dyn std::error::Error>> {
+    require_probe_pass(run_probe_substrate_redox_denitrification())
+}
+
+fn run_probe_substrate_redox_denitrification() -> Result<ProbeResult, String> {
     // Build a state with thick planted substrate configured for active
     // denitrification. The Bouldin model recalculates O₂ penetration each
     // tick, so we must create conditions that naturally produce a shallow
@@ -811,12 +1065,6 @@ fn probe_substrate_redox_denitrification() -> Result<(), Box<dyn std::error::Err
         .engine()
         .full_state()
         .substrate_suboxic_pore_volume_cm3();
-    assert!(
-        suboxic_vol > 0.0,
-        "Planted substrate should have a suboxic zone after Bouldin computation: \
-         suboxic_pore_vol={:.2} cm³",
-        suboxic_vol
-    );
 
     // Run for 30 days (no feeding needed — DOC is pre-loaded as electron donor)
     for _day in 0..30 {
@@ -843,24 +1091,38 @@ fn probe_substrate_redox_denitrification() -> Result<(), Box<dyn std::error::Err
         planted_export, inert_export
     );
 
-    // Validate: planted substrate should export more N₂ than inert
-    assert!(
-        planted_export > inert_export,
-        "Planted substrate should export more N₂ than inert: \
-         planted={:.4}, inert={:.4}",
-        planted_export,
-        inert_export
-    );
-
     // Validate: denitrifier activity should remain high in planted substrate
     let planted_final_activity = state_planted.microbe.denitrifier_activity_index;
-    assert!(
-        planted_final_activity > 0.5,
-        "Denitrifier activity should remain high with active suboxic zone: \
-         initial={:.4}, final={:.4}",
-        planted_initial_activity,
-        planted_final_activity
-    );
+    {
+        let mut runs = [&mut run_planted, &mut run_inert];
+        record_check(
+            &mut runs,
+            "redox_suboxic_zone",
+            suboxic_vol > 0.0,
+            format!(
+                "planted substrate should have a suboxic zone after Bouldin computation: \
+                 suboxic_pore_vol={suboxic_vol:.2} cm³"
+            ),
+        );
+        record_check(
+            &mut runs,
+            "redox_n2_export",
+            planted_export > inert_export,
+            format!(
+                "planted substrate should export more N₂ than inert: \
+                 planted={planted_export:.4} mg N, inert={inert_export:.4} mg N"
+            ),
+        );
+        record_check(
+            &mut runs,
+            "redox_denitrifier_activity",
+            planted_final_activity > 0.5,
+            format!(
+                "denitrifier activity should remain high with active suboxic zone: \
+                 initial={planted_initial_activity:.4}, final={planted_final_activity:.4}"
+            ),
+        );
+    }
 
     // Envelopes (relaxed DO min — reaeration is disabled so DO stays low)
     run_planted.assert_envelope(
@@ -878,10 +1140,14 @@ fn probe_substrate_redox_denitrification() -> Result<(), Box<dyn std::error::Err
             .temperature_c(22.0, 28.0),
     );
 
-    run_planted.finish()?;
-    run_inert.finish()?;
-
-    Ok(())
+    finish_probe(
+        "substrate_redox",
+        format!(
+            "suboxic pore volume={suboxic_vol:.2} cm³, N₂ export planted={planted_export:.2} inert={inert_export:.2} mg N, \
+             activity {planted_initial_activity:.2}->{planted_final_activity:.2}"
+        ),
+        vec![run_planted, run_inert],
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -907,6 +1173,10 @@ fn probe_substrate_redox_denitrification() -> Result<(), Box<dyn std::error::Err
 /// - Both runs remain within stability envelopes
 #[test]
 fn probe_equipment_scaling_1x_vs_2x() -> Result<(), Box<dyn std::error::Error>> {
+    require_probe_pass(run_probe_equipment_scaling_1x_vs_2x())
+}
+
+fn run_probe_equipment_scaling_1x_vs_2x() -> Result<ProbeResult, String> {
     let duration_hours: u32 = 500;
     let feed_per_adult_per_day: f64 = 0.001;
     let base_adult_count: u32 = 10;
@@ -992,31 +1262,32 @@ fn probe_equipment_scaling_1x_vs_2x() -> Result<(), Box<dyn std::error::Error>> 
     eprintln!("{}", format_snapshot_summary("1x_final", &snap_1x));
     eprintln!("{}", format_snapshot_summary("2x_final", &snap_2x));
 
-    // Compare peak TAN concentrations
-    assert_within_fraction(
-        "peak TAN",
-        peak_tan_1x,
-        peak_tan_2x,
-        concentration_tolerance,
-    );
-
-    // Compare DO ranges
     let do_range_1x = max_do_1x - min_do_1x;
     let do_range_2x = max_do_2x - min_do_2x;
-    assert_within_fraction(
-        "DO range",
-        do_range_1x,
-        do_range_2x,
-        concentration_tolerance,
-    );
-
-    // Compare final temperature
-    assert_within_fraction(
-        "final temperature",
-        snap_1x.water_temp_c,
-        snap_2x.water_temp_c,
-        0.20,
-    );
+    {
+        let mut runs = [&mut run_1x, &mut run_2x];
+        record_within_fraction(
+            &mut runs,
+            "peak TAN",
+            peak_tan_1x,
+            peak_tan_2x,
+            concentration_tolerance,
+        );
+        record_within_fraction(
+            &mut runs,
+            "DO range",
+            do_range_1x,
+            do_range_2x,
+            concentration_tolerance,
+        );
+        record_within_fraction(
+            &mut runs,
+            "final temperature",
+            snap_1x.water_temp_c,
+            snap_2x.water_temp_c,
+            0.20,
+        );
+    }
 
     // Both should stay within envelopes
     run_1x.assert_envelope(
@@ -1040,10 +1311,15 @@ fn probe_equipment_scaling_1x_vs_2x() -> Result<(), Box<dyn std::error::Error>> 
             .plant_biomass_g(1.0, 400.0),
     );
 
-    run_1x.finish()?;
-    run_2x.finish()?;
-
-    Ok(())
+    finish_probe(
+        "equipment_scaling",
+        format!(
+            "peak TAN {peak_tan_1x:.4}/{peak_tan_2x:.4}, DO range {do_range_1x:.4}/{do_range_2x:.4}, \
+             final temp {}/{} C",
+            snap_1x.water_temp_c, snap_2x.water_temp_c
+        ),
+        vec![run_1x, run_2x],
+    )
 }
 
 // ---------------------------------------------------------------------------
