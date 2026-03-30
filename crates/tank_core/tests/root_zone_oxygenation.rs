@@ -34,21 +34,24 @@ fn make_rol_test_state(seed: SimSeed, rooted_biomass_g: f64) -> TankState {
     // Moderate DO: 6 mg/L
     state.water.dissolved_oxygen_mg_total = 6.0 * vol;
 
-    // High decomposer biomass so root respiration demand is negligible
-    // relative to total O₂ demand, ensuring the ROL bonus dominates.
+    // High decomposer biomass keeps the diffusive baseline shallow so the
+    // explicit ROL bonus dominates.
     state.microbe.decomposer_biomass_g = 20.0;
 
     // Nitrifiers for substrate-surface nitrification
-    state.microbe.ammonia_oxidizer_biomass_g = 0.2;
-    state.microbe.nitrite_oxidizer_biomass_g = 0.1;
-    state.microbe.comammox_biomass_g = 0.03;
+    state.microbe.ammonia_oxidizer_biomass_g = 0.05;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.025;
+    state.microbe.comammox_biomass_g = 0.01;
     state.microbe.denitrifier_activity_index = 0.8;
-    state.filter_state.biofilter_maturity_index = 0.7;
+    state.filter_state.biofilter_maturity_index = 1.0;
 
-    // Ammonia as nitrification substrate
-    state.water.ammonia_total_mg_n_total = 3.0 * vol;
-    state.water.dissolved_organic_carbon_mg_c_total = 8.0 * vol;
-    state.water.dissolved_organic_nitrogen_mg_n_total = 1.0 * vol;
+    // Ammonia plus a modest organic reservoir keep the long-horizon scenario
+    // active enough for nitrifier biomass to diverge.
+    state.water.ammonia_total_mg_n_total = 5.0 * vol;
+    state.water.dissolved_organic_carbon_mg_c_total = 12.0 * vol;
+    state.water.dissolved_organic_nitrogen_mg_n_total = 1.5 * vol;
+    state.detritus.particulate_organics_g_total = 1.5;
+    state.detritus.fine_detritus_g_total = 0.8;
 
     // Disable plant growth/respiration so biomass stays fixed
     state
@@ -131,17 +134,6 @@ fn planted_vs_unplanted_diverge_in_penetration_depth() -> Result<(), Box<dyn std
 
 #[test]
 fn planted_substrate_denitrification_interaction() -> Result<(), Box<dyn std::error::Error>> {
-    // The planted tank has deeper penetration from ROL, but root biomass also
-    // increases O₂ demand. The net effect on denitrification depends on whether
-    // the ROL bonus outweighs the extra demand. With 15g roots and default
-    // rol_rate of 0.15:
-    //   bonus = sqrt(15) * 0.15 ≈ 0.58 cm
-    //   root O₂ demand = 15 * bod_rate * 0.1 (small)
-    // The ROL bonus pushes the oxic front deeper, which can either expand or
-    // compress the suboxic zone depending on substrate depth. In an 8cm bed,
-    // a deeper oxic zone means a shallower suboxic zone, which should reduce
-    // denitrification capacity (since suboxic volume shrinks).
-
     let planted = make_rol_test_state(SimSeed(101), 15.0);
     let unplanted = make_rol_test_state(SimSeed(101), 0.0);
 
@@ -172,6 +164,31 @@ fn planted_substrate_denitrification_interaction() -> Result<(), Box<dyn std::er
     Ok(())
 }
 
+#[test]
+fn root_oxygenation_reduces_hourly_denitrification_when_it_shrinks_suboxic_volume(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut planted = make_rol_test_state(SimSeed(104), 15.0);
+    let mut unplanted = make_rol_test_state(SimSeed(104), 0.0);
+
+    let planted_output = tank_core::systems::nitrogen_cycle::step_nitrogen_cycle(&mut planted);
+    let unplanted_output = tank_core::systems::nitrogen_cycle::step_nitrogen_cycle(&mut unplanted);
+
+    assert!(
+        planted.substrate_suboxic_pore_volume_cm3() < unplanted.substrate_suboxic_pore_volume_cm3(),
+        "deeper rooted oxic zones should leave less suboxic pore volume: planted={}, unplanted={}",
+        planted.substrate_suboxic_pore_volume_cm3(),
+        unplanted.substrate_suboxic_pore_volume_cm3()
+    );
+    assert!(
+        planted_output.denitrification_n2_export_mg_n < unplanted_output.denitrification_n2_export_mg_n,
+        "smaller suboxic volume should reduce hourly denitrification export: planted={}, unplanted={}",
+        planted_output.denitrification_n2_export_mg_n,
+        unplanted_output.denitrification_n2_export_mg_n
+    );
+
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Integration: planted substrate nitrification differences
 // ---------------------------------------------------------------------------
@@ -183,6 +200,8 @@ fn planted_substrate_nitrification_surface_area() -> Result<(), Box<dyn std::err
 
     let mut engine_planted = Engine::from_parts(planted, vec![]);
     let mut engine_unplanted = Engine::from_parts(unplanted, vec![]);
+    engine_planted.enable_budget_tracking();
+    engine_unplanted.enable_budget_tracking();
 
     engine_planted.step_hours(500)?;
     engine_unplanted.step_hours(500)?;
@@ -216,6 +235,36 @@ fn planted_substrate_nitrification_surface_area() -> Result<(), Box<dyn std::err
         oxic_unplanted.volume_cm3
     );
 
+    let planted_nitrifiers = engine_planted
+        .full_state()
+        .microbe
+        .ammonia_oxidizer_biomass_g
+        + engine_planted
+            .full_state()
+            .microbe
+            .nitrite_oxidizer_biomass_g
+        + engine_planted.full_state().microbe.comammox_biomass_g;
+    let unplanted_nitrifiers = engine_unplanted
+        .full_state()
+        .microbe
+        .ammonia_oxidizer_biomass_g
+        + engine_unplanted
+            .full_state()
+            .microbe
+            .nitrite_oxidizer_biomass_g
+        + engine_unplanted.full_state().microbe.comammox_biomass_g;
+    assert!(
+        planted_nitrifiers > unplanted_nitrifiers,
+        "rooted oxygenation should support more nitrifier biomass over 500h: planted={planted_nitrifiers:.4}, unplanted={unplanted_nitrifiers:.4}"
+    );
+
+    let nitrate_planted = engine_planted.full_state().water.nitrate_mg_n_total;
+    let nitrate_unplanted = engine_unplanted.full_state().water.nitrate_mg_n_total;
+    assert!(
+        nitrate_planted > nitrate_unplanted,
+        "rooted oxygenation should leave more oxidized nitrogen in the water column over 500h: planted={nitrate_planted:.4}, unplanted={nitrate_unplanted:.4}"
+    );
+
     Ok(())
 }
 
@@ -229,7 +278,8 @@ fn tracing_exposes_root_oxygenation() -> Result<(), Box<dyn std::error::Error>> 
 
     let state = make_rol_test_state(SimSeed(103), 10.0);
     let mut engine = Engine::from_parts(state, vec![]);
-    engine.enable_tracing(SimTracer::new(Verbosity::Detail));
+    engine.enable_budget_tracking();
+    engine.enable_tracing(SimTracer::new(Verbosity::Trace));
 
     engine.step_hours(1)?;
 
@@ -239,27 +289,62 @@ fn tracing_exposes_root_oxygenation() -> Result<(), Box<dyn std::error::Error>> 
 
     let last_tick = ticks.last().unwrap();
 
-    // The substrate_zones stage should capture pool deltas that include
-    // the root oxygenation bonus pool.
     let substrate_stage = last_tick
         .system("system:substrate_zones")
         .expect("should have substrate_zones stage");
 
-    // The root_oxygenation_bonus_cm is tracked as a pool in the snapshot.
-    // With 10g rooted biomass and default rol_rate of 0.15:
-    //   bonus = sqrt(10) * 0.15 ≈ 0.474 cm
-    // Verify the pool exists in the deltas (it appears whenever the value
-    // changes between before/after snapshots for the substrate_zones stage).
-    //
-    // Alternatively, verify via the public accessor that the bonus is nonzero:
+    let breakdown =
+        tank_core::systems::substrate::substrate_oxygenation_breakdown(engine.full_state());
     let bonus = tank_core::systems::substrate::root_oxygenation_bonus_cm(engine.full_state());
     assert!(
         bonus > 0.0,
         "ROL bonus should be positive for 10g rooted plants: {bonus}",
     );
+    assert!(
+        breakdown.base_penetration_cm > 0.0,
+        "trace should correspond to a positive base penetration depth"
+    );
+    assert!(
+        substrate_stage
+            .notes
+            .iter()
+            .any(|note| note.starts_with("substrate.base_o2_penetration_depth_cm=")),
+        "trace notes should expose the base penetration separately"
+    );
+    assert!(
+        substrate_stage
+            .notes
+            .iter()
+            .any(|note| note.starts_with("substrate.root_oxygenation_bonus_cm=")),
+        "trace notes should expose the ROL bonus separately"
+    );
 
-    // Verify the stage was traced (it should have pool_deltas or at least exist)
     assert_eq!(substrate_stage.system, "system:substrate_zones");
+
+    let budget = engine
+        .budget_ledger()
+        .expect("budget tracking should be active");
+    let budget_entry = budget
+        .ticks
+        .last()
+        .and_then(|tick| {
+            tick.entries
+                .iter()
+                .find(|entry| entry.label == "system:substrate_zones")
+        })
+        .expect("budget should contain substrate stage");
+    assert!(
+        budget_entry
+            .metric("substrate.base_o2_penetration_depth_cm")
+            .is_some(),
+        "budget metrics should expose the base penetration"
+    );
+    assert!(
+        budget_entry
+            .metric("substrate.root_oxygenation_bonus_cm")
+            .is_some(),
+        "budget metrics should expose the ROL bonus"
+    );
 
     Ok(())
 }

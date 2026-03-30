@@ -97,6 +97,12 @@ denitrification_k_doc_mg_c_per_l = 5.0             # DOC Ks (mg C/L), literature
 denitrification_pore_water_mixing_factor = 0.5      # fraction of water-column conc. in pore water
 denitrification_activity_maturation_days = 60.0     # days for denitrifier community to mature
 
+# ── Root-zone oxygenation (radial oxygen loss) ──────────────────────
+# Low-biomass slope for the substrate O₂ bonus from substrate-active roots.
+# The core model applies this in a saturating depth cap:
+#   bonus = depth × (1 - exp(-(active_root_biomass × rol_rate) / depth))
+rol_rate_cm_per_g = 0.15
+
 # Stoichiometric constants
 o2_per_mg_n_nitrified = 4.57
 alkalinity_meq_per_mg_n_nitrified = 0.1428

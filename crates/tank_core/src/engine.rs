@@ -396,13 +396,40 @@ impl Engine {
         // Step 11b: recompute substrate O₂ penetration depths from water-column
         // DO and biological demand (Bouldin steady-state model).
         self.maybe_record_stage(&mut ctx, "system:substrate_zones", |engine, stage_trace| {
-            let rol_bonus = systems::substrate::root_oxygenation_bonus_cm(&engine.state);
+            let breakdown = systems::substrate::substrate_oxygenation_breakdown(&engine.state);
             systems::substrate::step_substrate_zones(&mut engine.state);
-            stage_trace.metric("substrate.root_oxygenation_bonus_cm", rol_bonus);
+            stage_trace.metric(
+                "substrate.base_o2_penetration_depth_cm",
+                breakdown.base_penetration_cm,
+            );
+            stage_trace.metric(
+                "substrate.root_oxygenation_active_biomass_g",
+                breakdown.active_root_biomass_g,
+            );
+            stage_trace.metric(
+                "substrate.root_oxygenation_bonus_cm",
+                breakdown.root_oxygenation_bonus_cm,
+            );
             stage_trace.metric(
                 "substrate.o2_penetration_depth_cm",
-                engine.state.substrate_o2_penetration_depth_cm(),
+                breakdown.effective_penetration_cm,
             );
+            stage_trace.note(format!(
+                "substrate.base_o2_penetration_depth_cm={:.6}",
+                breakdown.base_penetration_cm
+            ));
+            stage_trace.note(format!(
+                "substrate.root_oxygenation_active_biomass_g={:.6}",
+                breakdown.active_root_biomass_g
+            ));
+            stage_trace.note(format!(
+                "substrate.root_oxygenation_bonus_cm={:.6}",
+                breakdown.root_oxygenation_bonus_cm
+            ));
+            stage_trace.note(format!(
+                "substrate.o2_penetration_depth_cm={:.6}",
+                breakdown.effective_penetration_cm
+            ));
         });
 
         // Step 12: hourly shrimp stress accumulation.

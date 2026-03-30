@@ -2,7 +2,10 @@ use crate::systems::microfauna::{
     microfauna_periphyton_accessibility, MICROFAUNA_DETRITUS_DAILY_FRACTION,
     MICROFAUNA_O2_PER_MG_C_RESPIRED,
 };
-use crate::types::{algae_carbon_mg, detritus_carbon_mg, HabitatKind, PlantGuild, TankState};
+use crate::types::{
+    algae_carbon_mg, compute_habitat_registry, detritus_carbon_mg, find_habitat, HabitatKind,
+    PlantGuild, TankState,
+};
 
 /// Free-water O₂ diffusion coefficient at 20 °C (cm²/s).
 ///
@@ -16,6 +19,15 @@ const SECONDS_PER_DAY: f64 = 86_400.0;
 /// demand is below this floor the entire substrate is treated as oxic.
 const MIN_R_TOTAL_MG_PER_CM3_PER_S: f64 = 1e-12;
 
+/// Inspectable breakdown of the substrate O₂ penetration calculation.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SubstrateOxygenationBreakdown {
+    pub base_penetration_cm: f64,
+    pub root_oxygenation_bonus_cm: f64,
+    pub effective_penetration_cm: f64,
+    pub active_root_biomass_g: f64,
+}
+
 /// Update `o2_penetration_depth_cm` on every substrate layer from the
 /// Bouldin (1968) one-dimensional steady-state diffusion model:
 ///
@@ -26,63 +38,118 @@ const MIN_R_TOTAL_MG_PER_CM3_PER_S: f64 = 1e-12;
 ///   \[O₂\]_surface = water-column dissolved oxygen (mg cm⁻³)
 ///   R_total = biological O₂ demand per cm³ of bulk substrate (mg cm⁻³ s⁻¹)
 pub fn step_substrate_zones(state: &mut TankState) {
+    let total_depth_cm = state.substrate_depth_cm();
+    if state.water_volume_l() <= f64::EPSILON || total_depth_cm <= f64::EPSILON {
+        return;
+    }
+
+    let breakdown = substrate_oxygenation_breakdown(state);
+
+    tracing::debug!(
+        base_penetration_cm = breakdown.base_penetration_cm,
+        root_oxygenation_bonus_cm = breakdown.root_oxygenation_bonus_cm,
+        active_root_biomass_g = breakdown.active_root_biomass_g,
+        effective_penetration_cm = breakdown.effective_penetration_cm,
+        "substrate O₂ penetration: base {:.4} + ROL {:.4} = {:.4} cm (active roots {:.4} g)",
+        breakdown.base_penetration_cm,
+        breakdown.root_oxygenation_bonus_cm,
+        breakdown.effective_penetration_cm,
+        breakdown.active_root_biomass_g,
+    );
+
+    for layer in &mut state.substrate_layers {
+        layer.o2_penetration_depth_cm = breakdown.effective_penetration_cm;
+    }
+}
+
+/// Return the base diffusive depth, active rooted biomass, and saturated ROL bonus.
+pub fn substrate_oxygenation_breakdown(state: &TankState) -> SubstrateOxygenationBreakdown {
     let volume_l = state.water_volume_l();
     let total_depth_cm = state.substrate_depth_cm();
     if volume_l <= f64::EPSILON || total_depth_cm <= f64::EPSILON {
-        return;
+        return SubstrateOxygenationBreakdown {
+            base_penetration_cm: 0.0,
+            root_oxygenation_bonus_cm: 0.0,
+            effective_penetration_cm: 0.0,
+            active_root_biomass_g: 0.0,
+        };
     }
 
     let do_mg_per_cm3 = (state.water.dissolved_oxygen_mg_total / volume_l) / 1000.0;
     let temperature_c = state.water.temperature_c;
     let r_total = estimate_substrate_o2_demand_rate(state);
     let effective_porosity = effective_substrate_porosity(state);
-    let base_penetration = compute_o2_penetration_depth_cm(
+    let base_penetration_cm = compute_o2_penetration_depth_cm(
         effective_porosity,
         total_depth_cm,
         do_mg_per_cm3,
         temperature_c,
         r_total,
     );
+    let active_root_biomass_g = root_oxygenation_active_biomass_g(state);
+    let rol_rate_cm_per_g = state.process_params.rol_rate_cm_per_g.max(0.0);
+    let root_oxygenation_bonus_cm =
+        if active_root_biomass_g <= f64::EPSILON || rol_rate_cm_per_g <= f64::EPSILON {
+            0.0
+        } else {
+            // Preserve the low-biomass cm/g slope while saturating smoothly against
+            // the finite substrate depth so extreme biomass cannot create absurd
+            // penetration.
+            total_depth_cm
+                * (1.0
+                    - (-(active_root_biomass_g * rol_rate_cm_per_g)
+                        / total_depth_cm.max(f64::MIN_POSITIVE))
+                    .exp())
+        };
+    let effective_penetration_cm =
+        (base_penetration_cm + root_oxygenation_bonus_cm).clamp(0.0, total_depth_cm);
 
-    let root_oxygenation_bonus = root_oxygenation_bonus_cm(state);
-    let o2_penetration_depth_cm =
-        (base_penetration + root_oxygenation_bonus).clamp(0.0, total_depth_cm);
-
-    tracing::debug!(
-        base_penetration_cm = base_penetration,
-        root_oxygenation_bonus_cm = root_oxygenation_bonus,
-        effective_penetration_cm = o2_penetration_depth_cm,
-        "substrate O₂ penetration: base {base_penetration:.4} + ROL {root_oxygenation_bonus:.4} = {o2_penetration_depth_cm:.4} cm"
-    );
-
-    for layer in &mut state.substrate_layers {
-        layer.o2_penetration_depth_cm = o2_penetration_depth_cm;
+    SubstrateOxygenationBreakdown {
+        base_penetration_cm,
+        root_oxygenation_bonus_cm,
+        effective_penetration_cm,
+        active_root_biomass_g,
     }
 }
 
 /// Root-zone oxygenation bonus from radial oxygen loss (ROL).
 ///
 /// Rooted plants (RootFeedingRosette) transport O₂ from photosynthesis
-/// through their roots into the substrate, creating micro-oxic zones.
-/// The bonus uses a sqrt model for diminishing returns:
-///
-///   bonus = sqrt(root_biomass_g) × rol_rate_cm_per_g
-///
-/// Only rooted plant guilds contribute; floating or epiphytic plants do not.
+/// through their roots into the substrate, creating micro-oxic zones. Only
+/// substrate-active rooted guild biomass contributes; floating or epiphytic
+/// guilds do not. The low-biomass slope is linear in `rol_rate_cm_per_g`,
+/// while an exponential cap keeps the bonus bounded by the finite substrate
+/// depth.
 pub fn root_oxygenation_bonus_cm(state: &TankState) -> f64 {
-    let rooted_biomass_g: f64 = state
-        .plant_guilds
-        .iter()
-        .filter(|p| matches!(p.guild, PlantGuild::RootFeedingRosette))
-        .map(|p| p.biomass_g.max(0.0))
-        .sum();
+    substrate_oxygenation_breakdown(state).root_oxygenation_bonus_cm
+}
 
-    if rooted_biomass_g <= f64::EPSILON {
+/// Habitat-aware rooted biomass that actively reaches the substrate matrix.
+pub fn root_oxygenation_active_biomass_g(state: &TankState) -> f64 {
+    let registry = compute_habitat_registry(state);
+    let substrate_access = substrate_root_activity_factor(state, &registry);
+    if substrate_access <= f64::EPSILON {
         return 0.0;
     }
 
-    let rol_rate = state.process_params.rol_rate_cm_per_g;
-    rooted_biomass_g.sqrt() * rol_rate
+    state
+        .plant_guilds
+        .iter()
+        .filter(|plant| matches!(plant.guild, PlantGuild::RootFeedingRosette))
+        .map(|plant| {
+            let biomass_g = plant.biomass_g.max(0.0);
+            if biomass_g <= f64::EPSILON {
+                return 0.0;
+            }
+
+            let water_bias = plant.water_column_uptake_bias().max(0.0);
+            let substrate_bias = plant.substrate_uptake_bias().max(0.0);
+            let substrate_share =
+                substrate_bias / (water_bias + substrate_bias).max(f64::MIN_POSITIVE);
+
+            biomass_g * plant.habitat_index.clamp(0.0, 1.0) * substrate_share * substrate_access
+        })
+        .sum()
 }
 
 /// Bouldin penetration depth for the full stacked substrate bed.
@@ -120,13 +187,15 @@ fn d_o2_free_cm2_per_s(temperature_c: f64) -> f64 {
 }
 
 /// Estimate the volumetric biological O₂ demand rate in the substrate
-/// (mg O₂ cm⁻³ s⁻¹) from decomposer activity, root respiration, and
-/// substrate-associated microfauna respiration.
+/// (mg O₂ cm⁻³ s⁻¹) from decomposer activity and substrate-associated
+/// microfauna respiration.
 ///
 /// The demand is derived from:
 ///   1. Decomposer biomass × BOD rate × substrate habitat fraction
-///   2. Root respiration from rooted plant biomass
-///   3. Microfauna respiration tied to substrate periphyton/detritus use
+///   2. Microfauna respiration tied to substrate periphyton/detritus use
+///
+/// Root-zone plant oxygenation is modeled as a separate additive ROL bonus, so
+/// rooted biomass does not also alter the base diffusive penetration term.
 ///
 /// The total demand is distributed over the bulk substrate volume.
 fn estimate_substrate_o2_demand_rate(state: &TankState) -> f64 {
@@ -153,20 +222,9 @@ fn estimate_substrate_o2_demand_rate(state: &TankState) -> f64 {
     let decomposer_demand =
         state.microbe.decomposer_biomass_g * bod_rate_per_s * substrate_fraction;
 
-    // Root respiration: rooted plant biomass contributes O₂ demand in
-    // the substrate via root metabolism (roughly 10% of above-ground
-    // respiration rate as a first-pass proxy).
-    let rooted_biomass_g: f64 = state
-        .plant_guilds
-        .iter()
-        .filter(|p| matches!(p.guild, PlantGuild::RootFeedingRosette))
-        .map(|p| p.biomass_g)
-        .sum();
-    let root_demand = rooted_biomass_g * bod_rate_per_s * 0.1;
-
     let microfauna_demand = estimate_substrate_microfauna_o2_demand_mg_per_s(state);
 
-    (decomposer_demand + root_demand + microfauna_demand) / substrate_bulk_volume_cm3
+    (decomposer_demand + microfauna_demand) / substrate_bulk_volume_cm3
 }
 
 fn effective_substrate_porosity(state: &TankState) -> f64 {
@@ -276,12 +334,32 @@ fn substrate_habitat_area_fraction(state: &TankState) -> f64 {
     (substrate_area / total_area).clamp(0.0, 1.0)
 }
 
+fn substrate_root_activity_factor(
+    state: &TankState,
+    habitat_registry: &[crate::types::HabitatEntry],
+) -> f64 {
+    let footprint_area_cm2 = state.geometry.footprint_area_cm2().max(f64::MIN_POSITIVE);
+    let surface_area_cm2 = find_habitat(habitat_registry, HabitatKind::SubstrateSurface)
+        .map(|entry| entry.colonizable_area_cm2.max(0.0))
+        .unwrap_or(0.0);
+    let deep_area_cm2 = find_habitat(habitat_registry, HabitatKind::SubstrateDeep)
+        .map(|entry| entry.colonizable_area_cm2.max(0.0))
+        .unwrap_or(0.0);
+    let rootable_matrix_area_cm2 = (surface_area_cm2 - footprint_area_cm2).max(0.0) + deep_area_cm2;
+    if rootable_matrix_area_cm2 <= f64::EPSILON {
+        return 0.0;
+    }
+
+    (rootable_matrix_area_cm2 / (footprint_area_cm2 + rootable_matrix_area_cm2)).clamp(0.0, 1.0)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
 
     use crate::{
-        find_habitat, rng::SimSeed, HabitatKind, SubstrateKind, SubstrateLayerState, TankState,
+        compute_habitat_registry, find_habitat, rng::SimSeed, HabitatKind, SubstrateKind,
+        SubstrateLayerState, TankState,
     };
 
     use super::*;
@@ -385,9 +463,17 @@ mod tests {
     #[test]
     fn changing_porosity_changes_penetration() -> Result<(), Box<dyn std::error::Error>> {
         let mut state = make_state();
+        state.substrate_layers = vec![SubstrateLayerState {
+            kind: SubstrateKind::CoarsePorous,
+            depth_cm: 8.0,
+            porosity: 0.2,
+            ..SubstrateLayerState::default()
+        }];
+        state.refresh_habitat_registry();
         let volume_l = state.water_volume_l();
         state.water.dissolved_oxygen_mg_total = 6.0 * volume_l;
-        state.microbe.decomposer_biomass_g = 0.3;
+        state.microbe.decomposer_biomass_g = 1.5;
+        state.plant_guilds.clear();
 
         // Low porosity
         for layer in &mut state.substrate_layers {
@@ -811,9 +897,21 @@ mod tests {
             biomass_g,
             health_index: 0.8,
             crowding_index: 0.0,
-            habitat_index: 0.5,
+            habitat_index: 0.7,
             water_column_uptake_bias: None,
             substrate_uptake_bias: None,
+        }
+    }
+
+    fn make_rooted_plant_with_access(
+        biomass_g: f64,
+        habitat_index: f64,
+        substrate_uptake_bias: f64,
+    ) -> crate::types::PlantGuildState {
+        crate::types::PlantGuildState {
+            habitat_index,
+            substrate_uptake_bias: Some(substrate_uptake_bias),
+            ..make_rooted_plant(biomass_g)
         }
     }
 
@@ -841,7 +939,8 @@ mod tests {
         unplanted.refresh_habitat_registry();
         let volume_l = unplanted.water_volume_l();
         unplanted.water.dissolved_oxygen_mg_total = 7.0 * volume_l;
-        // High decomposer demand so root respiration is negligible
+        // High decomposer demand keeps the diffusive baseline shallow so the
+        // explicit ROL bonus is easy to observe.
         unplanted.microbe.decomposer_biomass_g = 10.0;
         unplanted.plant_guilds.clear();
         unplanted.microfauna.population_index = 0.0;
@@ -870,31 +969,33 @@ mod tests {
         let mut state = make_state();
         state.plant_guilds = vec![make_rooted_plant(2.0)];
         let bonus_low = root_oxygenation_bonus_cm(&state);
+        let active_low = root_oxygenation_active_biomass_g(&state);
+
+        state.plant_guilds = vec![make_rooted_plant(10.0)];
+        let bonus_mid = root_oxygenation_bonus_cm(&state);
 
         state.plant_guilds = vec![make_rooted_plant(20.0)];
         let bonus_high = root_oxygenation_bonus_cm(&state);
+        let active_high = root_oxygenation_active_biomass_g(&state);
 
+        assert!(
+            bonus_mid > bonus_low,
+            "more root biomass should yield larger bonus: mid={bonus_mid:.4}, low={bonus_low:.4}"
+        );
         assert!(
             bonus_high > bonus_low,
             "more root biomass should yield larger bonus: high={bonus_high:.4}, low={bonus_low:.4}"
         );
 
-        // Diminishing returns: 10× more biomass should yield less than 10× bonus
-        let ratio = bonus_high / bonus_low;
-        let biomass_ratio = 20.0_f64 / 2.0;
         assert!(
-            ratio < biomass_ratio,
-            "bonus should show diminishing returns: bonus_ratio={ratio:.2}, biomass_ratio={biomass_ratio:.1}"
-        );
-        // With sqrt model, ratio should be sqrt(10) ≈ 3.16 for 10× biomass
-        assert!(
-            (ratio - biomass_ratio.sqrt()).abs() < 0.01,
-            "bonus ratio should follow sqrt scaling: got {ratio:.4}, expected {:.4}",
-            biomass_ratio.sqrt()
+            bonus_high / active_high.max(f64::MIN_POSITIVE)
+                < bonus_low / active_low.max(f64::MIN_POSITIVE),
+            "bonus per gram of active root biomass should fall as biomass rises: low={:.4}, high={:.4}",
+            bonus_low / active_low.max(f64::MIN_POSITIVE),
+            bonus_high / active_high.max(f64::MIN_POSITIVE)
         );
 
-        // Also verify via effective penetration with high background demand
-        // so root respiration is negligible.
+        // Also verify via effective penetration with a shallow diffusive base.
         let mut base = make_state();
         base.substrate_layers = vec![SubstrateLayerState {
             kind: SubstrateKind::ActivePlanted,
@@ -930,6 +1031,91 @@ mod tests {
     }
 
     #[test]
+    fn zero_rol_rate_removes_rooted_oxygenation_effects() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let mut base = make_state();
+        base.substrate_layers = vec![SubstrateLayerState {
+            kind: SubstrateKind::ActivePlanted,
+            depth_cm: 8.0,
+            porosity: SubstrateKind::ActivePlanted.default_porosity(),
+            ..SubstrateLayerState::default()
+        }];
+        base.refresh_habitat_registry();
+        let volume_l = base.water_volume_l();
+        base.water.dissolved_oxygen_mg_total = 7.0 * volume_l;
+        base.microbe.decomposer_biomass_g = 10.0;
+        base.process_params.rol_rate_cm_per_g = 0.0;
+        base.microfauna.population_index = 0.0;
+
+        let mut unplanted = base.clone();
+        unplanted.plant_guilds.clear();
+
+        let mut rooted = base.clone();
+        rooted.plant_guilds = vec![make_rooted_plant(12.0)];
+
+        assert!(
+            root_oxygenation_bonus_cm(&rooted).abs() < 1e-12,
+            "zero rol rate should zero the rooted bonus"
+        );
+
+        step_substrate_zones(&mut unplanted);
+        step_substrate_zones(&mut rooted);
+
+        assert!(
+            (rooted.substrate_o2_penetration_depth_cm()
+                - unplanted.substrate_o2_penetration_depth_cm())
+            .abs()
+                < 1e-12,
+            "rol_rate_cm_per_g=0 should remove rooted oxygenation effects: rooted={}, unplanted={}",
+            rooted.substrate_o2_penetration_depth_cm(),
+            unplanted.substrate_o2_penetration_depth_cm(),
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn root_oxygenation_requires_rootable_substrate_habitats(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut no_substrate = make_state();
+        no_substrate.substrate_layers.clear();
+        no_substrate.plant_guilds = vec![make_rooted_plant_with_access(12.0, 1.0, 1.0)];
+
+        let registry = compute_habitat_registry(&no_substrate);
+        assert!(
+            find_habitat(&registry, HabitatKind::SubstrateSurface)
+                .expect("surface habitat")
+                .colonizable_area_cm2
+                .abs()
+                < 1e-12
+        );
+        assert!(
+            find_habitat(&registry, HabitatKind::SubstrateDeep)
+                .expect("deep habitat")
+                .colonizable_area_cm2
+                .abs()
+                < 1e-12
+        );
+        assert!(
+            root_oxygenation_active_biomass_g(&no_substrate).abs() < 1e-12,
+            "without rootable substrate habitats, rooted biomass should not count as active"
+        );
+        assert!(
+            root_oxygenation_bonus_cm(&no_substrate).abs() < 1e-12,
+            "without rootable substrate habitats, rooted plants should not oxygenate the bed"
+        );
+
+        let mut low_access = make_state();
+        low_access.plant_guilds = vec![make_rooted_plant_with_access(12.0, 0.0, 1.0)];
+        assert!(
+            root_oxygenation_active_biomass_g(&low_access).abs() < 1e-12,
+            "near-zero habitat access should zero the active rooted biomass"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn floating_plant_biomass_does_not_increase_penetration(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut base = make_state();
@@ -959,8 +1145,6 @@ mod tests {
             "floating plants should produce zero ROL bonus: {bonus}"
         );
 
-        // Penetration should be identical (floating plants add no ROL bonus,
-        // though they may add slight O₂ demand differences from habitat changes).
         let pen_base = base.substrate_o2_penetration_depth_cm();
         let pen_floating = with_floating.substrate_o2_penetration_depth_cm();
         assert!(
@@ -993,7 +1177,7 @@ mod tests {
     #[test]
     fn root_oxygenation_uses_named_parameter() -> Result<(), Box<dyn std::error::Error>> {
         let mut state = make_state();
-        state.plant_guilds = vec![make_rooted_plant(10.0)];
+        state.plant_guilds = vec![make_rooted_plant(0.1)];
 
         let default_rate = state.process_params.rol_rate_cm_per_g;
         let bonus_default = root_oxygenation_bonus_cm(&state);
@@ -1002,10 +1186,54 @@ mod tests {
         let bonus_doubled = root_oxygenation_bonus_cm(&state);
 
         assert!(
-            (bonus_doubled - bonus_default * 2.0).abs() < 1e-12,
-            "bonus should scale linearly with rol_rate_cm_per_g: doubled={bonus_doubled:.4}, expected={:.4}",
-            bonus_default * 2.0
+            bonus_doubled > bonus_default,
+            "higher rol_rate_cm_per_g should increase the bonus: default={bonus_default:.6}, doubled={bonus_doubled:.6}"
         );
+        let ratio = bonus_doubled / bonus_default.max(f64::MIN_POSITIVE);
+        assert!(
+            (1.8..=2.2).contains(&ratio),
+            "low-biomass bonus should scale approximately linearly with rol_rate_cm_per_g: ratio={ratio:.4}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn root_oxygenation_dynamic_tracks_biomass_growth_and_decline(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = make_state();
+        state.substrate_layers = vec![SubstrateLayerState {
+            kind: SubstrateKind::ActivePlanted,
+            depth_cm: 8.0,
+            porosity: SubstrateKind::ActivePlanted.default_porosity(),
+            ..SubstrateLayerState::default()
+        }];
+        state.refresh_habitat_registry();
+        let volume_l = state.water_volume_l();
+        state.water.dissolved_oxygen_mg_total = 7.0 * volume_l;
+        state.microbe.decomposer_biomass_g = 10.0;
+        state.microfauna.population_index = 0.0;
+
+        state.plant_guilds = vec![make_rooted_plant(2.0)];
+        step_substrate_zones(&mut state);
+        let initial_penetration = state.substrate_o2_penetration_depth_cm();
+
+        state.plant_guilds = vec![make_rooted_plant(12.0)];
+        step_substrate_zones(&mut state);
+        let grown_penetration = state.substrate_o2_penetration_depth_cm();
+
+        state.plant_guilds = vec![make_rooted_plant(3.0)];
+        step_substrate_zones(&mut state);
+        let trimmed_penetration = state.substrate_o2_penetration_depth_cm();
+
+        assert!(
+            grown_penetration > initial_penetration,
+            "more rooted biomass should deepen penetration as plants grow: initial={initial_penetration:.4}, grown={grown_penetration:.4}"
+        );
+        assert!(
+            trimmed_penetration < grown_penetration,
+            "reduced rooted biomass should shallow penetration after decline: grown={grown_penetration:.4}, trimmed={trimmed_penetration:.4}"
+        );
+
         Ok(())
     }
 }

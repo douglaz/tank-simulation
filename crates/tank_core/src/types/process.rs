@@ -174,10 +174,15 @@ pub struct ProcessParams {
     pub denitrification_activity_maturation_days: f64,
 
     // -- Root-zone oxygenation (radial oxygen loss) --
-    /// Marginal O₂ penetration depth bonus per gram of root biomass (cm/g).
-    /// Represents radial oxygen loss (ROL) from rooted plant roots into the
-    /// surrounding substrate.  The effective bonus is `sqrt(root_biomass_g) × rate`
-    /// to model diminishing returns at high biomass.
+    /// Low-biomass O₂ penetration slope per gram of substrate-active root
+    /// biomass (cm/g). Represents radial oxygen loss (ROL) from rooted plant
+    /// roots into the surrounding substrate.
+    ///
+    /// The substrate system applies this slope inside a saturating depth cap:
+    /// `bonus = depth * (1 - exp(-(active_root_biomass_g * rate) / depth))`.
+    /// That preserves a linear cm/g interpretation at low biomass while
+    /// preventing unrealistic penetration at extreme biomass.
+    ///
     /// Literature: ROL varies widely (0.01–0.5 cm/g depending on species);
     /// 0.15 cm/g is a moderate default for mixed planted-tank rosettes.
     #[serde(default = "crate::types::process::default_rol_rate_cm_per_g")]
@@ -529,8 +534,9 @@ pub(crate) fn default_denitrification_activity_maturation_days() -> f64 {
 
 // -- Root-zone oxygenation (radial oxygen loss) defaults --
 
-/// Default ROL rate: 0.15 cm per gram of root biomass.
-/// Applied as `sqrt(biomass) × rate` so high biomass saturates.
+/// Default ROL rate: 0.15 cm per gram of substrate-active root biomass at the
+/// low-biomass slope. The substrate system applies an exponential saturation
+/// against the finite bed depth.
 pub(crate) fn default_rol_rate_cm_per_g() -> f64 {
     0.15
 }

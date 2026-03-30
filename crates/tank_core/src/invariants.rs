@@ -273,6 +273,7 @@ fn validate_invariants_inner(state: &TankState) -> Result<(), SimError> {
         "process.denitrification_activity_maturation_days",
         pp.denitrification_activity_maturation_days,
     )?;
+    check_non_negative("process.rol_rate_cm_per_g", pp.rol_rate_cm_per_g)?;
     check_open_unit_interval(
         "process.shrimp_assimilation_efficiency",
         pp.shrimp_assimilation_efficiency,

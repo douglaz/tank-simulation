@@ -66,7 +66,6 @@ struct HabitatEnv {
     light_intensity: f64,
     avg_crowding: f64,
     avg_low_o2: f64,
-    root_zone_o2_boost: f64,
     /// Beer-Lambert: fraction of surface light reaching the substrate surface.
     substrate_light_fraction: f64,
     /// Beer-Lambert: mean fraction of surface light across the water column.
@@ -77,7 +76,7 @@ struct HabitatEnv {
 ///
 /// Colonizable areas are derived from geometry, hardware configuration, and
 /// plant biomass. Exposure modifiers respond to filter flow, aeration,
-/// clogging, light intensity, substrate properties, and rooted plant presence.
+/// clogging, light intensity, and substrate properties.
 pub fn compute_habitat_registry(state: &TankState) -> Vec<HabitatEntry> {
     let volume_l = state.water_volume_l().max(f64::EPSILON);
     let flow_lph = if state.hardware.filter.enabled {
@@ -85,11 +84,6 @@ pub fn compute_habitat_registry(state: &TankState) -> Vec<HabitatEntry> {
     } else {
         0.0
     };
-
-    let has_rooted_plants = state
-        .plant_guilds
-        .iter()
-        .any(|p| matches!(p.guild, PlantGuild::RootFeedingRosette) && p.biomass_g > 0.1);
 
     let k = state.extinction_coefficient();
     let h = state.water_depth_above_substrate_cm();
@@ -109,7 +103,6 @@ pub fn compute_habitat_registry(state: &TankState) -> Vec<HabitatEntry> {
         },
         avg_crowding: state.derived_plant_crowding_index(),
         avg_low_o2: state.avg_substrate_index(|l| l.low_oxygen_tendency_index),
-        root_zone_o2_boost: if has_rooted_plants { 0.1 } else { 0.0 },
         substrate_light_fraction: beer_lambert_at_depth(k, h),
         column_avg_light_fraction: column_average_attenuation_factor(k, h),
     };
@@ -210,9 +203,8 @@ fn compute_substrate_surface(state: &TankState, env: &HabitatEnv) -> (f64, f64, 
     };
 
     let flow = 0.05 + 0.2 * env.normalized_flow;
-    let oxygen = 0.3 + 0.15 * env.normalized_flow - 0.15 * env.avg_low_o2
-        + 0.1 * env.aeration_boost
-        + env.root_zone_o2_boost;
+    let oxygen =
+        0.3 + 0.15 * env.normalized_flow - 0.15 * env.avg_low_o2 + 0.1 * env.aeration_boost;
     let light =
         0.25 * env.light_intensity * env.substrate_light_fraction * (1.0 - 0.5 * env.avg_crowding);
 

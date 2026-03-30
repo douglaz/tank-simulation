@@ -395,7 +395,8 @@ fn light_intensity_affects_exposure() -> Result<(), Box<dyn std::error::Error>> 
 }
 
 #[test]
-fn rooted_plants_boost_substrate_surface_oxygen() -> Result<(), Box<dyn std::error::Error>> {
+fn rooted_plants_do_not_add_binary_substrate_surface_oxygen_bonus(
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut no_roots = default_state();
     no_roots.plant_guilds.clear();
     let no_reg = compute_habitat_registry(&no_roots);
@@ -415,8 +416,8 @@ fn rooted_plants_boost_substrate_surface_oxygen() -> Result<(), Box<dyn std::err
     let no_o2 = find(&no_reg, HabitatKind::SubstrateSurface).oxygen_exposure;
     let root_o2 = find(&root_reg, HabitatKind::SubstrateSurface).oxygen_exposure;
     assert!(
-        root_o2 > no_o2,
-        "rooted plants should boost SubstrateSurface O2: without={no_o2}, with={root_o2}"
+        (root_o2 - no_o2).abs() < 1e-9,
+        "rooted plants should not inject a fixed SubstrateSurface oxygen bonus outside the explicit ROL path: without={no_o2}, with={root_o2}"
     );
     Ok(())
 }
