@@ -19,26 +19,31 @@ use tank_data::{load_scenario, ScenarioPreset, ShrimpPreset};
 /// circulation in planted shrimp tanks.
 pub const FILTER_FLOW_TURNOVERS_PER_HOUR: f64 = 10.0;
 
-/// Filter biological media surface area: 200 cm² per liter of tank volume.
-/// Proportional to bioload capacity — a larger tank needs proportionally more
-/// biological filtration surface for equivalent nitrifier colonization per liter.
-pub const FILTER_MEDIA_CM2_PER_LITER: f64 = 200.0;
-
 /// Heater maximum wattage: 0.75 W per liter.
 /// Standard recommendation is 0.5–1.0 W/L depending on ambient-to-target delta;
 /// 0.75 balances heating speed against overshoot risk.
 pub const HEATER_WATTS_PER_LITER: f64 = 0.75;
 
-/// Initial plant biomass per guild: 6.0 g per 1000 cm² of substrate footprint.
-/// Within the "moderately planted" guideline of 5–15 g/1000 cm². Total initial
-/// plant mass equals this density × footprint / 1000 × number of guilds.
-pub const PLANT_BIOMASS_G_PER_1000_CM2_FOOTPRINT: f64 = 6.0;
+/// Initial plant biomass per guild: 3.0 g per 1000 cm² of substrate footprint.
+/// Conservative starter density — below the "moderately planted" guideline
+/// (5–15 g/1000 cm²) to preserve biofilter maturation dynamics during the
+/// cycling phase. Higher densities are reachable through natural plant growth.
+/// Total initial plant mass = density × footprint / 1000 × number of guilds.
+pub const PLANT_BIOMASS_G_PER_1000_CM2_FOOTPRINT: f64 = 3.0;
 
 /// Conservative startup shrimp density for auto-stocking mode: 0.2 adults per liter.
 /// Well below the mature colony range of 2–5/L, calibrated to current happy-path
 /// scenarios (100 L → ~20 adults, 10 L → ~2 adults). Only used when
 /// `auto_stock_shrimp` is enabled and no explicit count is provided.
 pub const AUTO_STOCK_ADULTS_PER_LITER: f64 = 0.2;
+
+/// Reference footprint for initial microbe biomass scaling (cm²).
+/// `MicrobeState::default()` was calibrated for the default `TankGeometry`
+/// (40 × 25 = 1000 cm² footprint). Tanks with larger footprint receive
+/// proportionally more initial bacteria so that biofilter maturity ratios remain
+/// consistent as habitat area scales. Bacteria colonize surfaces, so footprint
+/// (∝ size_scale²) is a better proxy than volume (∝ size_scale³).
+const MICROBE_REFERENCE_FOOTPRINT_CM2: f64 = 1000.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ScenarioGeometryOverrides {
@@ -495,18 +500,23 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
     }
 }
 
-/// Scales hardware defaults to match the current tank geometry.
+/// Scales hardware and biological defaults to match the current tank geometry.
 ///
-/// Called once during materialization so that hardware is proportional to tank
+/// Called once during materialization so that defaults are proportional to tank
 /// size before any explicit overrides are applied. Explicit scenario overrides
 /// in [`apply_startup_overrides`] always take priority.
 ///
 /// **Scaling rules applied:**
 /// - Filter flow: `volume_l × FILTER_FLOW_TURNOVERS_PER_HOUR` (10 turnovers/hr)
-/// - Filter media area: `volume_l × FILTER_MEDIA_CM2_PER_LITER` (200 cm²/L)
 /// - Heater max watts: `volume_l × HEATER_WATTS_PER_LITER` (0.75 W/L)
+/// - Initial microbe biomass: scaled proportionally with footprint area relative
+///   to the 1000 cm² reference, floored at 1.0× (tanks ≤ 1000 cm² keep defaults).
+///   Bacteria colonize surfaces, so footprint (∝ size²) matches how carrying
+///   capacity scales, keeping maturity ratios consistent across tank sizes.
 ///
 /// Properties that do **not** scale automatically:
+/// - Filter media area (hardware specification; kept at default or scenario-authored
+///   value — scaling media dilutes nitrifier density and disrupts biofilter maturation)
 /// - Light intensity/photoperiod (fixture property, independent of tank size)
 /// - Aeration intensity (setting property; physical effect already scales via
 ///   the habitat registry's surface-area calculations)
@@ -514,14 +524,31 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
 fn scale_hardware_to_geometry(state: &mut TankState) {
     let volume_l = state.geometry.gross_water_volume_l();
 
-    // Filter: flow and media area scale with volume
+    // Filter: flow scales with volume (turnovers stay constant per hour)
     if state.hardware.filter.enabled {
         state.hardware.filter.flow_lph = volume_l * FILTER_FLOW_TURNOVERS_PER_HOUR;
-        state.hardware.filter.media_area_cm2 = volume_l * FILTER_MEDIA_CM2_PER_LITER;
     }
 
     // Heater: max wattage scales with volume (thermal mass)
     state.hardware.heater.max_watts = volume_l * HEATER_WATTS_PER_LITER;
+
+    // Microbes: scale initial biomass with footprint area so that the biofilter
+    // maturity ratio (nitrifier_g / carrying_capacity_g) stays consistent
+    // across tank sizes. Bacteria colonize surfaces, so footprint (∝ size²)
+    // is the right proxy. Without this, larger tanks start with the same
+    // bacterial inoculum but much higher carrying capacity, depressing
+    // maturity and creating a negative feedback loop via maturity_factor.
+    let footprint_cm2 = state.geometry.footprint_area_cm2();
+    let microbe_scale = (footprint_cm2 / MICROBE_REFERENCE_FOOTPRINT_CM2).max(1.0);
+    if microbe_scale > 1.0 {
+        state.microbe.ammonia_oxidizer_biomass_g *= microbe_scale;
+        state.microbe.nitrite_oxidizer_biomass_g *= microbe_scale;
+        state.microbe.comammox_biomass_g *= microbe_scale;
+        state.microbe.decomposer_biomass_g *= microbe_scale;
+        for val in state.microbe.decomposer_by_habitat.values_mut() {
+            *val *= microbe_scale;
+        }
+    }
 }
 
 /// Materializes a scenario preset into a fully resolved `TankState`.
@@ -754,7 +781,6 @@ fn apply_startup_overrides(
             if state.hardware.filter.flow_lph <= 0.0 {
                 let volume_l = state.geometry.gross_water_volume_l();
                 state.hardware.filter.flow_lph = volume_l * FILTER_FLOW_TURNOVERS_PER_HOUR;
-                state.hardware.filter.media_area_cm2 = volume_l * FILTER_MEDIA_CM2_PER_LITER;
             }
         } else {
             state.hardware.filter.flow_lph = 0.0;

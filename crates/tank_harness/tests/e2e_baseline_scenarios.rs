@@ -90,8 +90,8 @@ fn nano_cycle_baseline_envelope() -> Result<(), Box<dyn std::error::Error>> {
                     .tan_mg_n_per_l(0.0, 20.0)
                     // DO stays near saturation — minimal bioload
                     .do_min(7.0)
-                    // Plants should still be near starting mass (5g ± 1g)
-                    .plant_biomass_g(3.0, 8.0)
+                    // Plant biomass scales with footprint: nano 600cm² × 3g/1000cm² ≈ 1.8g
+                    .plant_biomass_g(1.0, 8.0)
                     // Biofilter just starting to establish
                     .biofilter_maturity(0.05, 0.5),
             );
@@ -169,8 +169,8 @@ fn nano_cycle_baseline_envelope() -> Result<(), Box<dyn std::error::Error>> {
                     .shrimp_count(0, 0)
                     // TAN very high — no shrimp ammonia but continued feed decomposition
                     .tan_mg_n_per_l(10.0, 100.0)
-                    // Plants declining but still present
-                    .plant_biomass_g(2.0, 8.0),
+                    // Plants declining but still present (started at ~1.8g in nano)
+                    .plant_biomass_g(1.0, 8.0),
             );
         }
     }
