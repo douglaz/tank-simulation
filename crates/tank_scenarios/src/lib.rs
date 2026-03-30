@@ -473,6 +473,12 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
         comammox_growth_yield: preset.comammox_growth_yield,
         comammox_decay_rate_per_hour: preset.comammox_decay_rate_per_hour,
 
+        denitrification_vmax_mg_n_per_l_per_hour: defaults.denitrification_vmax_mg_n_per_l_per_hour,
+        denitrification_k_no3_mg_n_per_l: defaults.denitrification_k_no3_mg_n_per_l,
+        denitrification_k_doc_mg_c_per_l: defaults.denitrification_k_doc_mg_c_per_l,
+        denitrification_pore_water_mixing_factor: defaults.denitrification_pore_water_mixing_factor,
+        denitrification_activity_maturation_days: defaults.denitrification_activity_maturation_days,
+
         nitrifier_base_density_g_per_cm2: defaults.nitrifier_base_density_g_per_cm2,
 
         o2_per_mg_n_nitrified: preset.o2_per_mg_n_nitrified,

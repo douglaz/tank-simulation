@@ -2,13 +2,20 @@ use std::collections::BTreeMap;
 
 use crate::types::{
     concentration_from_total, find_habitat, live_biomass_carbon_mg, live_biomass_nitrogen_mg,
-    HabitatKind, TankState, ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G,
-    SUB_ADULT_SHRIMP_BIOMASS_G,
+    HabitatKind, TankState, ADULT_SHRIMP_BIOMASS_G, DENITRIFICATION_ALK_MEQ_PER_MG_N,
+    JUVENILE_SHRIMP_BIOMASS_G, SUB_ADULT_SHRIMP_BIOMASS_G,
 };
 
 const FEED_P_TO_N_MASS_RATIO: f64 = 0.10;
 const SMALL_NEGATIVE_ROUNDING_TOLERANCE_MG: f64 = 1e-9;
 const SMALL_NEGATIVE_ROUNDING_TOLERANCE_MEQ: f64 = 1e-9;
+
+/// Stoichiometric DOC consumed per mg N denitrified.
+///
+/// From simplified denitrification: 5 CH₂O + 4 NO₃⁻ → 2 N₂ + 5 CO₂ + 7 H₂O
+/// Carbon consumed = 5 mol C / 4 mol N × (12 g/mol C) / (14.007 g/mol N)
+/// ≈ 1.0714 mg C per mg N.
+const DENITRIFICATION_DOC_MG_C_PER_MG_N: f64 = 5.0 / 4.0 * 12.0 / 14.007;
 
 /// Result of one hourly nitrogen cycle step, carrying coupling values
 /// that downstream systems (DO, chemistry) need.
@@ -498,11 +505,84 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     state.microbe.comammox_biomass_g =
         (state.microbe.comammox_biomass_g + comammox_step.growth_g - comammox_decay).max(0.0);
 
-    // ---- 6. Alkalinity consumption from nitrification ----
-    // Only AOB and comammox consume alkalinity (TAN oxidation step).
-    // NOB (nitrite -> nitrate) does not consume additional alkalinity.
+    // ---- 5. Denitrification: NO₃⁻ → N₂ in suboxic substrate zone ----
+    //
+    // Simplified denitrification occurs in the suboxic pore water where O₂ is
+    // depleted. The rate depends on NO₃ and DOC concentrations (estimated from
+    // water-column values via a pore-water mixing factor), the denitrifier
+    // activity index (matures over weeks), and the suboxic pore volume.
+    //
+    // Stoichiometry: 5 CH₂O + 4 NO₃⁻ + 4 H⁺ → 2 N₂↑ + 5 CO₂ + 7 H₂O
+    //   N removed as N₂ gas (permanent export)
+    //   DOC consumed: DENITRIFICATION_DOC_MG_C_PER_MG_N per mg N
+    //   DIC produced: same amount (carbon is conserved, changes form)
+    //   Alkalinity produced: DENITRIFICATION_ALK_MEQ_PER_MG_N per mg N
+    let suboxic_pore_volume_l = state.substrate_suboxic_pore_volume_cm3() / 1000.0;
+
+    let (
+        denitrification_n2_export_mg_n,
+        denitrification_doc_consumed_mg_c,
+        denitrification_alk_meq,
+    ) = if suboxic_pore_volume_l > f64::EPSILON {
+        let mixing_factor = safe_rate(pp.denitrification_pore_water_mixing_factor).min(1.0);
+        let no3_pore_mg_n_per_l = state.water.nitrate_mg_n_per_l(volume_l) * mixing_factor;
+        let doc_pore_mg_c_per_l = state.water.doc_mg_c_per_l(volume_l) * mixing_factor;
+
+        let k_no3 = pp.denitrification_k_no3_mg_n_per_l.max(0.01);
+        let k_doc = pp.denitrification_k_doc_mg_c_per_l.max(0.01);
+
+        let monod_no3 = monod_factor(no3_pore_mg_n_per_l, k_no3);
+        let monod_doc_denit = monod_factor(doc_pore_mg_c_per_l, k_doc);
+
+        let activity = state.microbe.denitrifier_activity_index.clamp(0.0, 1.0);
+        let denitrification_vmax = safe_rate(pp.denitrification_vmax_mg_n_per_l_per_hour);
+
+        // rate = vmax × activity × monod(NO₃) × monod(DOC) × volume × f_temp
+        let potential_mg_n = denitrification_vmax
+            * activity
+            * monod_no3
+            * monod_doc_denit
+            * suboxic_pore_volume_l
+            * temperature_factor(temp);
+
+        // Clamp to available NO₃ and stoichiometrically available DOC.
+        let potential_mg_n = safe_rate(potential_mg_n);
+        let no3_limited = potential_mg_n.min(state.water.nitrate_mg_n_total);
+        let doc_limited = if DENITRIFICATION_DOC_MG_C_PER_MG_N > f64::EPSILON {
+            state.water.dissolved_organic_carbon_mg_c_total / DENITRIFICATION_DOC_MG_C_PER_MG_N
+        } else {
+            f64::MAX
+        };
+        let actual_mg_n = no3_limited.min(doc_limited).max(0.0);
+        let actual_doc_mg_c = actual_mg_n * DENITRIFICATION_DOC_MG_C_PER_MG_N;
+
+        if actual_mg_n > f64::EPSILON {
+            // Remove NO₃ (converted to N₂ gas — permanent export).
+            state.water.nitrate_mg_n_total =
+                (state.water.nitrate_mg_n_total - actual_mg_n).max(0.0);
+            // Remove DOC consumed as electron donor.
+            state.water.dissolved_organic_carbon_mg_c_total =
+                (state.water.dissolved_organic_carbon_mg_c_total - actual_doc_mg_c).max(0.0);
+            // Produce DIC: organic C is oxidized to CO₂ which enters
+            // the DIC pool. Carbon is conserved (DOC → DIC).
+            state.water.dissolved_inorganic_carbon_mg_c_total += actual_doc_mg_c;
+            // Track cumulative N₂ export for budget diagnostics.
+            state.cumulative_n2_export_mg_n += actual_mg_n;
+
+            let alk_produced = actual_mg_n * DENITRIFICATION_ALK_MEQ_PER_MG_N;
+            (actual_mg_n, actual_doc_mg_c, alk_produced)
+        } else {
+            (0.0, 0.0, 0.0)
+        }
+    } else {
+        (0.0, 0.0, 0.0)
+    };
+
+    // ---- 6. Alkalinity accounting ----
+    // Nitrification consumed alkalinity (AOB + comammox); denitrification
+    // produces alkalinity. Both are committed to the water pool here.
     let alkalinity_consumed_meq = aob_alk_cost + comammox_alk_cost;
-    let alkalinity_produced_meq = 0.0;
+    let alkalinity_produced_meq = denitrification_alk_meq;
     state.water.alkalinity_meq_total = (alk_budget + alkalinity_produced_meq).max(0.0);
     // The subsequent chemistry step is responsible for re-running the carbonate
     // solver after this alkalinity mutation. Until then, `water.ph` and
@@ -517,8 +597,8 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
         tan_oxidized_mg,
         alkalinity_consumed_meq,
         alkalinity_produced_meq,
-        denitrification_n2_export_mg_n: 0.0,
-        denitrification_doc_consumed_mg_c: 0.0,
+        denitrification_n2_export_mg_n,
+        denitrification_doc_consumed_mg_c,
         aob_n_oxidized_mg: aob_step.oxidized_n_mg,
         nob_n_oxidized_mg: nob_step.oxidized_n_mg,
         comammox_n_oxidized_mg: comammox_step.oxidized_n_mg,
@@ -883,6 +963,29 @@ pub fn update_daily_biofilter_maturity(state: &mut TankState) -> f64 {
     state.filter_state.biofilter_maturity_index = new_maturity;
 
     new_maturity - prev
+}
+
+/// Daily denitrifier activity maturation update. Called every 24 ticks.
+///
+/// The denitrifier activity index ramps from 0.0 toward 1.0 over the
+/// configured maturation period. The ramp requires a suboxic zone to exist;
+/// if the substrate is fully oxic, activity decays back toward zero.
+pub fn update_daily_denitrifier_activity(state: &mut TankState) {
+    let maturation_days = state
+        .process_params
+        .denitrification_activity_maturation_days
+        .max(1.0);
+
+    let suboxic_pore_volume_cm3 = state.substrate_suboxic_pore_volume_cm3();
+    let has_suboxic_zone = suboxic_pore_volume_cm3 > f64::EPSILON;
+
+    let prev = state.microbe.denitrifier_activity_index.clamp(0.0, 1.0);
+    let target = if has_suboxic_zone { 1.0 } else { 0.0 };
+
+    // Exponential approach toward target: daily step = 1/maturation_days.
+    let daily_rate = 1.0 / maturation_days;
+    let new_activity = (prev + daily_rate * (target - prev)).clamp(0.0, 1.0);
+    state.microbe.denitrifier_activity_index = new_activity;
 }
 
 pub fn update_daily_filter_clogging(state: &mut TankState) -> f64 {

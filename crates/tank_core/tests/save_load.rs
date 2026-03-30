@@ -350,6 +350,7 @@ fn save_load_with_active_cycle_state() -> Result<(), tank_core::SimError> {
         // Empty map: ensure_habitat_pools() will distribute using registry
         // weights on engine creation, keeping scalar and map in sync.
         decomposer_by_habitat: BTreeMap::new(),
+        denitrifier_activity_index: 0.0,
     };
     state.filter_state.biofilter_maturity_index = 0.5;
 

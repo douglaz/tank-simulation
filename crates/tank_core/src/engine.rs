@@ -302,7 +302,23 @@ impl Engine {
                     "nitrogen_cycle.comammox_n_oxidized_mg={:.6}",
                     output.comammox_n_oxidized_mg
                 ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.denitrification_n2_export_mg_n={:.6}",
+                    output.denitrification_n2_export_mg_n
+                ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.denitrification_doc_consumed_mg_c={:.6}",
+                    output.denitrification_doc_consumed_mg_c
+                ));
             }
+            stage_trace.metric(
+                "nitrogen_cycle.denitrification_n2_export_mg_n",
+                output.denitrification_n2_export_mg_n,
+            );
+            stage_trace.metric(
+                "nitrogen_cycle.denitrification_doc_consumed_mg_c",
+                output.denitrification_doc_consumed_mg_c,
+            );
         });
 
         // Step 9: update DIC, alkalinity, and pH.
@@ -555,6 +571,9 @@ impl Engine {
                         format!("Nitrogen cycle progressing, maturity {current_maturity:.3}"),
                     );
                 }
+                // Update denitrifier community activity alongside biofilter maturity.
+                systems::nitrogen_cycle::update_daily_denitrifier_activity(&mut engine.state);
+
                 if stage_trace.is_enabled() {
                     stage_trace.note(format!("biofilter_maturity.before={maturity_before:.6}"));
                     stage_trace
@@ -566,6 +585,10 @@ impl Engine {
                     ));
                     stage_trace.note(format!(
                         "biofilter_maturity.emitted.cycle_progressing={cycle_progressing_emitted}"
+                    ));
+                    stage_trace.note(format!(
+                        "denitrifier_activity.index={:.6}",
+                        engine.state.microbe.denitrifier_activity_index
                     ));
                 }
                 maturity_delta
