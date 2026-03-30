@@ -1,0 +1,53 @@
+{
+  "payload_id": "run-20260329213438-apply_fixes-c2-a1-cr1",
+  "stage_id": "apply_fixes",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-29T22:30:07.948661942Z",
+  "payload": {
+    "data": {
+      "change_summary": "Completed the DIC/photosynthesis remediation by finalizing the shipped `medium_planted` regression path: the day/night probe now samples complete settled cycles from the last 72 hours so end-of-dark/end-of-light counts stay aligned, `moderate_planted` water was retuned to a lower alkalinity profile to keep the scenario inside the tightened 6.0-8.0 pH envelope, and the `medium_planted` startup default photoperiod was increased to 12h so the real scenario now clears the required >=0.1 pH separation. The resulting suite passes with the planted lights-off regression and tightened photosynthesis stoichiometry checks active.",
+      "outstanding_risks": [
+        "I did not run the full workspace test matrix; validation was focused on the DIC/photosynthesis path plus adjacent scenario and carbon-budget regressions."
+      ],
+      "steps": [
+        {
+          "description": "Inspect the existing photosynthesis/DIC regression coverage and confirm how the shipped `medium_planted` scenario behaves under the stronger acceptance criteria.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Harden the regression expectations so the planted scenario probe samples complete settled light/dark cycles instead of mismatched boundary counts.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Retune the shipped `moderate_planted` source-water alkalinity and the `medium_planted` startup photoperiod so the actual scenario shows a >=0.1 pH day/night split while staying within the tighter pH envelope.",
+          "order": 3,
+          "status": "completed"
+        },
+        {
+          "description": "Run focused validation across the DIC regression suite and adjacent scenario/budget integration coverage.",
+          "order": 4,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo fmt --all` completed successfully.",
+        "`cargo test -p tank_core --test photosynthesis_dic` passed (9 tests).",
+        "`cargo test -p tank_scenarios` passed.",
+        "`cargo test -p tank_core --test budget_tracking` passed (24 tests).",
+        "`cargo test -p tank_core --test plant_algae_integration` passed (13 tests).",
+        "`cargo test -p tank_data` passed (32 tests)."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

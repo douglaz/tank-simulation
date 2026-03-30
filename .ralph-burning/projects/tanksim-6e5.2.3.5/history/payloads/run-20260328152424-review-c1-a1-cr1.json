@@ -1,0 +1,32 @@
+{
+  "payload_id": "run-20260328152424-review-c1-a1-cr1",
+  "stage_id": "review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T15:41:24.615450148Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "Reviewed the checkpoint in a detached worktree at commit `c1440e7` to avoid unrelated moving workspace changes during review.",
+        "`cargo test --test cycling concentration_kinetics` passed in that detached worktree: both `concentration_kinetics_are_volume_independent` and `concentration_kinetics_volume_independent_extreme_scales` succeeded.",
+        "`crates/tank_core/tests/cycling.rs:548` builds 10 L and 100 L states with matched TAN/NO2/DOC/DO concentrations, volume-proportional guild biomass, growth/decay zeroed, non-nitrogen couplings disabled, then asserts equal per-liter deltas for TAN/NO2/NO3/DOC/DON after one `step_nitrogen_cycle` tick.",
+        "`crates/tank_core/tests/cycling.rs:632-680` also checks pre-tick Monod-style limitation factors from the normalized concentration parameters, and `crates/tank_core/tests/cycling.rs:753` repeats the rate-invariance check at 1 L vs 1000 L for the requested extreme-scale guardrail.",
+        "Inference from pre-refactor code inspection at commit `587dc4a`: `crates/tank_core/src/systems/nitrogen_cycle.rs:83-90` and `crates/tank_core/src/systems/nitrogen_cycle.rs:138-179` used total-mass terms (`do_total`, `doc_total`, `ammonia_total_mg_n_total`, `tan_after_aob`) directly in Monod calculations, so the new mg/L delta assertions target the historical tank-size artifact the bead describes.",
+        "Full-workspace validation for this historical checkpoint is not available as approval evidence because unchanged integration tests already fail to compile due missing `colonizable_area_factor` initializers (for example `crates/tank_core/tests/substrate_filter_integration.rs:35`), which is outside this diff."
+      ],
+      "findings_or_gaps": [
+        "No task-specific correctness or completeness findings in the new cycling regression tests."
+      ],
+      "follow_up_or_amendments": [],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

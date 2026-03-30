@@ -1,0 +1,39 @@
+{
+  "payload_id": "run-20260327225238-final_review-vote-1-c1-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T23:13:58.231532716Z",
+  "payload": {
+    "summary": "Accepted all four amendments. The first three are straightforward correctness and maintainability fixes. The migration-test amendment is also valid: the current suite mostly feeds current-schema state back through older schema numbers, which is weaker than exercising a true historical payload and can miss future required-field regressions.",
+    "votes": [
+      {
+        "amendment_id": "fr-1-47383507",
+        "decision": "accept",
+        "rationale": "`post_load` already receives `Json<Value>`, but it serializes that value to a string only for `SaveFile::from_json` to parse it back into `Value`. That round-trip is redundant work with no behavioral benefit. Refactoring the migration/deserialization path behind a `from_value` entry point is safe and makes the API cleaner; `from_json` can remain as the string-parsing wrapper."
+      },
+      {
+        "amendment_id": "fr-1-9fa711df",
+        "decision": "accept",
+        "rationale": "`SchemaVersionMismatch` is no longer part of the active save-loading path now that the code distinguishes `SchemaVersionTooNew` and `SchemaVersionTooOld`. Leaving an unused, less precise variant in `SimError` makes the enum easier to misuse later. Removing it is a sound cleanup, though if external API stability matters a deprecation step could be considered separately."
+      },
+      {
+        "amendment_id": "fr-1-fe78d820",
+        "decision": "accept",
+        "rationale": "The current code reads `schema_version` as `u64` and then narrows it with `as u32`, which silently wraps on overflow. That means a far-future save can be misreported as too old instead of too new, which is a real correctness bug in version handling. Using `u32::try_from` or equivalent explicit overflow handling is the correct fix."
+      },
+      {
+        "amendment_id": "fr-1-540a2c8b",
+        "decision": "accept",
+        "rationale": "This identifies a real testing gap. The existing migration tests largely serialize the current `TankState` shape and relabel it as schema 2, so they do not prove that an actual older payload lacking newly introduced required fields will still load. The `stability_tracker` test removes one field, but that is narrow and does not make the overall payload a faithful historical schema. A fixture or hand-built pre-bump payload would provide stronger regression coverage for future schema changes."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

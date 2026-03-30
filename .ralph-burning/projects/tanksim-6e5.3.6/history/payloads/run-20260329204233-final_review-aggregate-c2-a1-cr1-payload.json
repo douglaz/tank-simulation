@@ -1,0 +1,125 @@
+{
+  "payload_id": "run-20260329204233-final_review-aggregate-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-29T21:39:35.923019299Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-1-d5896362",
+      "fr-1-0ed6fb15",
+      "fr-1-bd5aaa0c"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-1-d5896362",
+        "normalized_body": "In conservation_regression.rs, the grazing test (closed_system_grazing_conserves_n_and_c, lines 257-271) still uses bare `assert!()` for pathway verification instead of the new `assert_or_dump()` helper that all other five tests use. This means a grazing pathway assertion failure will NOT dump the trace to /tmp/tank_conservation_traces/grazing.jsonl, violating the acceptance criterion that 'failures dump the full trace to a file for debugging.' Replace the three bare `assert!()` calls with `assert_or_dump(\"grazing\", &engine, ...)` calls.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-0ed6fb15",
+        "normalized_body": "In e2e_conservation.rs, `run_grazing()` (lines 375-390) has no pathway-verification assertions (ensure/ensure_trace_delta), while all other five scenario runners (run_feeding, run_mortality_senescence, run_trim_and_remove, run_trim_and_leave, run_water_change) were enhanced with these checks in this diff. Add at minimum: ensure that periphyton decreased, TAN increased, and fine detritus increased (mirroring the unit test), so the e2e runner catches the case where grazing is silently not exercised.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-bd5aaa0c",
+        "normalized_body": "In the water-change test (both files), the expected_n_import calculation only sums `source.ammonia_mg_n_per_l + source.nitrate_mg_n_per_l + source.don_mg_n_per_l`, omitting `source.nitrite_mg_n_per_l`. The engine's budget (apply_water_change_with_budget, line 125-128) sums all four source species including nitrite. This only works because the source profile's nitrite is implicitly zero from SourceWaterProfile::zero(). Add `+ source.nitrite_mg_n_per_l` to the test's expected_n_import formula for correctness and resilience against fixture evolution.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-026ed985",
+        "normalized_body": "crates/tank_core/src/engine.rs:229-239 now emits `nitrogen_cycle.total_n_nitrified_mg` beside `nitrogen_cycle.alk_consumed_meq`, but those two notes are not measuring the same nitrogen flow. `total_mg_n_nitrified` is computed as `nob_step.oxidized_n_mg + comammox_step.oxidized_n_mg` in crates/tank_core/src/systems/nitrogen_cycle.rs:343-346, while alkalinity consumption is driven by `aob_alk_cost + comammox_alk_cost` in crates/tank_core/src/systems/nitrogen_cycle.rs:366-384. In ticks where AOB produces nitrite that NOB does not finish oxidizing, the trace will under-report the N associated with the alkalinity loss and the two diagnostics become internally inconsistent. Trace the TAN-oxidation amount instead, or rename the nitrate-only metric so it cannot be mistaken for the alkalinity-coupled quantity.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-bcb79444",
+        "normalized_body": "crates/tank_core/src/budget_helpers.rs:442-477 and crates/tank_core/src/budget_helpers.rs:494-507 still format alkalinity failures as `mg` even when `element == Element::Alkalinity`, even though the underlying budget is explicitly `meq` in crates/tank_core/src/types/budget.rs:72-76 and crates/tank_core/src/types/budget.rs:106-109. That means a failing alkalinity assertion will report the wrong units for the net delta, per-stage deltas, and tolerance, which makes the new diagnostics easy to misread and encourages callers to treat a meq check like an mg check. Add an alkalinity-aware formatting/helper path instead of reusing the mg-oriented output.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-1-d5896362",
+        "normalized_body": "In conservation_regression.rs, the grazing test (closed_system_grazing_conserves_n_and_c, lines 257-271) still uses bare `assert!()` for pathway verification instead of the new `assert_or_dump()` helper that all other five tests use. This means a grazing pathway assertion failure will NOT dump the trace to /tmp/tank_conservation_traces/grazing.jsonl, violating the acceptance criterion that 'failures dump the full trace to a file for debugging.' Replace the three bare `assert!()` calls with `assert_or_dump(\"grazing\", &engine, ...)` calls.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-0ed6fb15",
+        "normalized_body": "In e2e_conservation.rs, `run_grazing()` (lines 375-390) has no pathway-verification assertions (ensure/ensure_trace_delta), while all other five scenario runners (run_feeding, run_mortality_senescence, run_trim_and_remove, run_trim_and_leave, run_water_change) were enhanced with these checks in this diff. Add at minimum: ensure that periphyton decreased, TAN increased, and fine detritus increased (mirroring the unit test), so the e2e runner catches the case where grazing is silently not exercised.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-bd5aaa0c",
+        "normalized_body": "In the water-change test (both files), the expected_n_import calculation only sums `source.ammonia_mg_n_per_l + source.nitrate_mg_n_per_l + source.don_mg_n_per_l`, omitting `source.nitrite_mg_n_per_l`. The engine's budget (apply_water_change_with_budget, line 125-128) sums all four source species including nitrite. This only works because the source profile's nitrite is implicitly zero from SourceWaterProfile::zero(). Add `+ source.nitrite_mg_n_per_l` to the test's expected_n_import formula for correctness and resilience against fixture evolution.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 1,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-1-026ed985",
+      "fr-1-bcb79444"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 3 amendment(s); restart required.",
+    "total_proposed_amendments": 5,
+    "total_reviewers": 2,
+    "unique_amendment_count": 5
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 1
+}

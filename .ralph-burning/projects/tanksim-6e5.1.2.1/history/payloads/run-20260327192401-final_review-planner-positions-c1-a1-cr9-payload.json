@@ -1,0 +1,39 @@
+{
+  "payload_id": "run-20260327192401-final_review-planner-positions-c1-a1-cr9-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T01:38:28.451866751Z",
+  "payload": {
+    "summary": "Reviewed all four amendments against the actual codebase. Three address real defects or gaps and should be accepted. One (budget field naming enforcement) is a marginal improvement over an already-reasonable test + documentation approach and is rejected due to the complexity cost relative to the risk mitigation provided.",
+    "votes": [
+      {
+        "amendment_id": "fr-9-c184923c",
+        "decision": "accept",
+        "rationale": "The constrained_live_growth_g function clamps its scale to [0.0, 1.0], so theoretically the consumed amounts should never exceed what was allocated for biomass growth. However, floating-point arithmetic can produce tiny negative residuals (e.g., from the multiplication and subtraction chain). The .max(0.0) clamp silently absorbs these. Adding debug_assert!(value >= -1e-9) before the clamp is zero-cost in release builds and provides a valuable safety net during development: if constrained_live_growth_g ever has a logic error that produces meaningfully negative residuals (not just ULP-level rounding), it would be caught immediately rather than silently masked. This is a low-cost, high-signal defensive measure."
+      },
+      {
+        "amendment_id": "fr-9-d04f2d54",
+        "decision": "reject",
+        "rationale": "The existing structural coverage test is already a robust enforcement mechanism: it serializes TankState to JSON, discovers all numeric paths, filters by naming convention, and asserts exact equality with the budget component functions. The doc-comments on nitrogen_budget_components and carbon_budget_components explicitly warn developers to update discovery rules for non-standard names. The suggested alternatives (#[deny(unused)] marker attribute or manual registry pattern) would add significant complexity and boilerplate for a marginal improvement. The actual risk — a developer adding a field with a non-standard name AND forgetting to update the discovery rules despite the doc-comment warning — is low, and the consequence (a silent gap in one element's budget tracking) would likely surface in integration tests or budget closure checks. The existing design balances pragmatism and safety well."
+      },
+      {
+        "amendment_id": "fr-9-3c23e6c5",
+        "decision": "accept",
+        "rationale": "This amendment exposes a genuine implementation gap, not just a missing test. The investigation confirmed that SiphonDetritus is classified as open-system in is_open_system_action_label (engine.rs:615-624) but process_action() returns None for it (engine.rs:362-366), meaning no BudgetDelta is recorded for the exported mass. In contrast, WaterChangePercent properly returns a BudgetDelta via apply_water_change_with_budget(). Adding the proposed test would immediately fail, exposing the missing budget tracking implementation. Every open-system action that removes mass from the tank should record an explicit export in the budget ledger; otherwise the siphoned mass appears as unexplained loss, undermining the conservation accounting the budget system is designed to enforce."
+      },
+      {
+        "amendment_id": "fr-9-13581788",
+        "decision": "accept",
+        "rationale": "This is a real validation regression. The investigation confirmed the full chain: (1) clamp_carbonate_ph() converts non-finite pH to 7.0, (2) validate_source_water_carbonate_profile() only rejects pH outside [5.5, 8.5] bounds, so 7.0 passes, (3) source_water.rs validation checks that input fields like dic_mg_c_per_l are finite but does not check whether the solver's output was non-finite before normalization. A profile with extreme-but-technically-finite inputs (e.g., dic_mg_c_per_l = 1e308) would overflow the quadratic solver internally, get silently normalized to neutral water at pH 7.0, and be accepted as a valid calibrated source water profile. The solver's neutral fallback is appropriate for runtime resilience during simulation ticks, but the validation path for source water profiles should explicitly detect and reject this condition rather than treating overflow-derived pH 7.0 as a legitimate calibration result."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 9
+}

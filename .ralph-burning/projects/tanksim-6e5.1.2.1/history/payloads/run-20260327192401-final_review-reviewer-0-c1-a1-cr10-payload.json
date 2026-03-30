@@ -1,0 +1,31 @@
+{
+  "payload_id": "run-20260327192401-final_review-reviewer-0-c1-a1-cr10-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T01:59:04.227042774Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "The budget guard (`enforce_tracked_tick_budget_guard`) only checks nitrogen and carbon residuals, not oxygen. While the acceptance criteria says 'Track oxygen demand in the same framework where feasible', and BudgetDelta does carry an oxygen ElementBudget, the guard silently ignores oxygen imbalances. If a system creates or destroys oxygen without accounting for it, no error is raised even with budget tracking enabled. Consider adding an oxygen guard check (possibly with a wider tolerance to account for atmospheric exchange via reaeration) or documenting the intentional omission.",
+        "rationale": "The oxygen budget is tracked through BudgetDelta and recorded per-stage, but never actually validated/guarded. This means the oxygen tracking is purely informational — conservation bugs in dissolved oxygen would not be caught. This is a gap relative to the acceptance criteria's 'Track oxygen demand in the same framework where feasible' requirement."
+      },
+      {
+        "body": "The `BudgetLedger` is always compiled into release builds — it is gated by a runtime `Option<BudgetLedger>` flag, not `#[cfg(test)]` or a cargo feature. The acceptance criteria require 'the instrumentation compiles out or is zero-cost when not in use'. The current runtime-flag approach is zero-cost when disabled (no allocations occur when `budget_ledger` is `None`, and `BudgetSnapshot::from_state` is only called inside `if tick.is_some()` branches), but the budget infrastructure types and all helper functions (nitrogen_budget_components, carbon_budget_components, etc.) are unconditionally compiled into every binary. This is a defensible design choice since the types are small and the hot path is gated, but the test `test_budget_ledger_zero_cost_when_disabled` only asserts 'no ledger is allocated' — it does not verify zero additional cost (e.g., that `BudgetSnapshot::from_state` is never called). If the acceptance criteria strictly require compile-time gating, a `budget-tracking` feature flag should be added.",
+        "rationale": "The acceptance criteria explicitly state 'the instrumentation compiles out or is zero-cost when not in use'. The current design satisfies the 'zero-cost when not in use' interpretation via runtime check, but does not satisfy the 'compiles out' interpretation. The distinction matters for downstream dependents who never need budget tracking."
+      },
+      {
+        "body": "In `nitrogen_budget_components` (budget.rs:170), microbe biomasses are tracked individually (4 separate components), but the test `test_total_n_helper_sums_all_pools` (budget_tracking.rs:280-298) sums all four microbe biomasses into a single value and computes expected N from the aggregate. While this works because the conversion is linear, it means the test does not independently verify each microbe component's contribution. If a microbe pool were accidentally omitted from the budget helper, the aggregate-based test would still pass as long as the total was adjusted elsewhere. The structural coverage test (`test_budget_component_labels_cover_all_element_bearing_fields`) provides the real safety net, but consider making the per-pool verification explicit in the helper sum tests for defense in depth.",
+        "rationale": "Minor test robustness concern. The structural coverage test catches missing fields by label, so this is not a bug, but the per-pool sum test is slightly weaker than the acceptance criteria's 'Verify against hand-calculated sum for a known state' suggests."
+      }
+    ],
+    "summary": "The implementation is solid and well-structured. The BudgetLedger, BudgetDelta, BudgetTotals, and BudgetSnapshot types provide comprehensive per-tick mass budget tracking for N, C, and O2. Canonical `total_nitrogen_mg()` and `total_carbon_mg()` helpers are defined in a single location (budget.rs) and include all explicit element-bearing pools including substrate nutrient stores. A structural coverage test auto-discovers fields by naming convention to catch future omissions. The engine records per-system deltas via `maybe_record_stage` and `maybe_record_stage_with_explicit_budget`, and a budget guard (`enforce_tracked_tick_budget_guard`) checks N and C conservation at 1e-6 mg tolerance. Open-system actions (feed, water change, siphon, add/remove shrimp) are correctly subtracted from the guard, and the chemistry system's atmospheric DIC exchange is explicitly tracked. All 19 budget tracking tests pass, including closed-system conservation over 24-tick and 60-day runs. The `dissolved_feed_residue_g_total` is correctly excluded from budget helpers as it's a shadow counter mirroring DOC/DON. Three minor issues identified: (1) oxygen budget is tracked but never guarded, (2) budget types are unconditionally compiled rather than feature-gated, (3) test helper sum verification aggregates microbe pools rather than verifying individually."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 10
+}
