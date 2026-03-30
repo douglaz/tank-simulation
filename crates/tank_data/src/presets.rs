@@ -1034,14 +1034,6 @@ impl ShrimpPreset {
                 self.molt_failure_instability_threshold,
             ),
             (
-                "temp_condition_low_divisor_c",
-                self.temp_condition_low_divisor_c,
-            ),
-            (
-                "temp_condition_high_divisor_c",
-                self.temp_condition_high_divisor_c,
-            ),
-            (
                 "molt_stress_warning_threshold",
                 self.molt_stress_warning_threshold,
             ),
