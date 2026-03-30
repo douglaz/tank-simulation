@@ -308,8 +308,37 @@ fn test_mineral_modifier_named_parameters() {
     assert!(permissive_mg > baseline);
 
     assert_eq!(params.molt_success_threshold, 0.55);
+    assert_eq!(params.critical_molt_gh_ratio, 0.3);
     assert!(params.juvenile_molt_interval_days < params.sub_adult_molt_interval_days);
     assert!(params.sub_adult_molt_interval_days < params.base_molt_interval_days);
+}
+
+#[test]
+fn test_critical_molt_gh_ratio_is_named_parameter() {
+    let run_case = |critical_ratio: f64| {
+        let mut state = molt_test_state(SimSeed(8_350));
+        configure_stage_locked_population(&mut state, 10, 0, 0);
+        set_minerals(&mut state, 20.0, 5.0);
+        state.animal.set_population_condition_index(0.95);
+        seed_molt_reserves(&mut state);
+        state.process_params.shrimp_condition_smoothing = 0.0;
+        state.shrimp_params.gh_min_d = 10.0;
+        state.shrimp_params.molt_success_threshold = 0.1;
+        state.shrimp_params.critical_molt_gh_ratio = critical_ratio;
+        state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days;
+
+        step_daily_shrimp(&mut state);
+        state.animal.last_molt_success
+    };
+
+    assert!(
+        run_case(0.3),
+        "the named cutoff should allow a low-but-not-critical GH molt to succeed when the score clears the threshold"
+    );
+    assert!(
+        !run_case(0.4),
+        "raising the named cutoff should force the same GH case to fail"
+    );
 }
 
 #[test]
@@ -407,4 +436,48 @@ fn test_soft_vs_hard_water_shrimp_survival() -> Result<(), SimError> {
         .any(|event| event.summary.contains("GH")));
 
     Ok(())
+}
+
+#[test]
+fn test_cold_molt_failure_reports_low_temperature() {
+    let mut state = molt_test_state(SimSeed(9_100));
+    configure_stage_locked_population(&mut state, 10, 0, 0);
+    set_minerals(&mut state, 40.0, 10.0);
+    state.animal.set_population_condition_index(0.95);
+    seed_molt_reserves(&mut state);
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.water.temperature_c = 10.0;
+    state.environment.ambient_temp_c = 10.0;
+    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days;
+
+    step_daily_shrimp(&mut state);
+
+    let failure = state
+        .event_log
+        .iter()
+        .find(|event| event.kind == EventKind::MoltFailure)
+        .expect("cold molt failure should emit an event");
+    assert!(failure.cause_codes.contains(&EventCause::LowTemperature));
+    assert!(failure.summary.contains("temp 10.0<22.0 C"));
+}
+
+#[test]
+fn test_molt_failure_reports_reserve_shortfall() {
+    let mut state = molt_test_state(SimSeed(9_101));
+    configure_stage_locked_population(&mut state, 10, 0, 0);
+    set_minerals(&mut state, 40.0, 10.0);
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.animal.adult.condition_index = 0.58;
+    state.animal.adult.reserve_g = 0.0;
+    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days;
+
+    step_daily_shrimp(&mut state);
+
+    let failure = state
+        .event_log
+        .iter()
+        .find(|event| event.kind == EventKind::MoltFailure)
+        .expect("reserve-limited molt failure should emit an event");
+    assert!(failure.cause_codes.contains(&EventCause::Starvation));
+    assert!(failure.summary.contains("reserve"));
 }

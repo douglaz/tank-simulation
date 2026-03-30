@@ -821,6 +821,7 @@ impl Engine {
                     0.0,
                     crate::types::biology::DEFAULT_STAGE_CONDITION_INDEX,
                 );
+                self.state.animal.inter_molt_timer_days = self.state.animal.adult.molt_timer_days;
                 None
             }
             PlayerAction::RemoveShrimp { count } => {

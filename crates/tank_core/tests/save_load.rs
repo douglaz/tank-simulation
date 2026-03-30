@@ -1096,6 +1096,7 @@ fn malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected() -> 
         ("shrimp_params.juvenile_molt_interval_days", 0.0),
         ("shrimp_params.sub_adult_molt_interval_days", 0.0),
         ("shrimp_params.molt_success_threshold", 1.2),
+        ("shrimp_params.critical_molt_gh_ratio", 1.2),
     ];
 
     for (index, (field, value)) in invalid_cases.into_iter().enumerate() {
@@ -1111,6 +1112,9 @@ fn malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected() -> 
             }
             "shrimp_params.molt_success_threshold" => {
                 state.shrimp_params.molt_success_threshold = value;
+            }
+            "shrimp_params.critical_molt_gh_ratio" => {
+                state.shrimp_params.critical_molt_gh_ratio = value;
             }
             _ => unreachable!(),
         }
@@ -1384,6 +1388,24 @@ fn save_load_roundtrip_preserves_zero_penetration_depth() -> Result<(), SimError
 }
 
 #[test]
+fn current_schema_roundtrip_preserves_zero_stage_timer_for_newly_added_adults(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut engine = Engine::from_parts(TankState::new(SimSeed(205)), vec![]);
+    engine.apply_action(PlayerAction::AddShrimp { count: 4 })?;
+
+    assert!(engine.full_state().animal.adult.molt_timer_days.abs() < 1e-9);
+    assert!(engine.full_state().animal.inter_molt_timer_days.abs() < 1e-9);
+
+    let json = SaveFile::from_engine(&engine).to_json_pretty()?;
+    let loaded = SaveFile::from_json(&json)?;
+
+    assert!(loaded.state.animal.adult.molt_timer_days.abs() < 1e-9);
+    assert!(loaded.state.animal.inter_molt_timer_days.abs() < 1e-9);
+
+    Ok(())
+}
+
+#[test]
 fn legacy_schema_v12_saves_backfill_stage_molt_timers_from_population_timer(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut state = TankState::new(SimSeed(203));
@@ -1406,7 +1428,7 @@ fn legacy_schema_v12_saves_backfill_stage_molt_timers_from_population_timer(
     }
 
     let save_json = serde_json::json!({
-        "schema_version": SCHEMA_VERSION - 1,
+        "schema_version": 12,
         "app_version": APP_VERSION,
         "state": state_json,
         "queued_actions": [],
@@ -1434,7 +1456,7 @@ fn legacy_schema_v12_migration_preserves_explicit_stage_molt_timers(
     state.animal.juvenile.molt_timer_days = 4.0;
 
     let save_json = serde_json::json!({
-        "schema_version": SCHEMA_VERSION - 1,
+        "schema_version": 12,
         "app_version": APP_VERSION,
         "state": serde_json::to_value(&state)?,
         "queued_actions": [],

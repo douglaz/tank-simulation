@@ -1,5 +1,6 @@
 use tank_core::{
-    EggCohort, Engine, EventKind, PlayerAction, ProcessParams, SimSeed, SimulationEngine, TankState,
+    EggCohort, Engine, EventCause, EventKind, PlayerAction, ProcessParams, SimSeed,
+    SimulationEngine, TankState,
 };
 
 fn threshold_state(seed: SimSeed) -> TankState {
@@ -316,6 +317,53 @@ fn molt_stress_warning_has_cause_codes() -> Result<(), tank_core::SimError> {
             "MoltStressWarning events must have non-empty cause_codes"
         );
     }
+
+    Ok(())
+}
+
+#[test]
+fn molt_stress_warning_reports_low_temperature() -> Result<(), tank_core::SimError> {
+    let mut state = TankState::new(SimSeed(5501));
+    state.water.temperature_c = 12.0;
+    state.environment.ambient_temp_c = 12.0;
+    let vol = state.water_volume_l();
+    state.water.calcium_mg_total = 40.0 * vol;
+    state.water.magnesium_mg_total = 10.0 * vol;
+    state.water.alkalinity_meq_total = 8.0 * vol;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * vol;
+    state.water.dissolved_oxygen_mg_total = 8.0 * vol;
+
+    state.animal.adult.count = 10;
+    state.animal.adult.condition_index = 0.95;
+    state.animal.adult.reserve_g = 0.05;
+    state.animal.molt_stress_index = 0.5;
+    state.hardware.aeration.enabled = true;
+    state.hardware.aeration.intensity = 0.2;
+    state.algae.set_periphyton_total(0.1);
+
+    let mut engine = Engine::from_parts(state, vec![]);
+
+    for _ in 0..14 {
+        engine.step_hours(24)?;
+    }
+
+    let cold_warnings: Vec<_> = engine
+        .full_state()
+        .event_log
+        .iter()
+        .filter(|e| e.kind == EventKind::MoltStressWarning)
+        .collect();
+
+    assert!(
+        !cold_warnings.is_empty(),
+        "Should emit MoltStressWarning under sustained cold-water stress"
+    );
+    assert!(cold_warnings
+        .iter()
+        .any(|event| event.cause_codes.contains(&EventCause::LowTemperature)));
+    assert!(cold_warnings
+        .iter()
+        .any(|event| event.summary.contains("below 22.0-26.0 C optimal")));
 
     Ok(())
 }

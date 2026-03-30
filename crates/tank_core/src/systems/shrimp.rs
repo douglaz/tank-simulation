@@ -9,7 +9,23 @@ use crate::types::{
 const ROUTING_MASS_ASSERT_TOLERANCE_G: f64 = 1e-12;
 const DEATH_DETRITUS_FRACTION_TOLERANCE: f64 = 1e-9;
 const DETERMINISTIC_CARRY_LIMIT: f64 = 1.0;
-const CRITICAL_MOLT_GH_RATIO: f64 = 0.3;
+
+#[derive(Debug, Clone, Copy)]
+struct MoltConditionBreakdown {
+    modifier: f64,
+    reserve_factor: f64,
+    reserve_per_shrimp_g: f64,
+    reserve_target_g: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FailedMoltDiagnostics {
+    min_condition_index: f64,
+    poor_condition_involved: bool,
+    reserve_limited: bool,
+    min_reserve_per_shrimp_g: f64,
+    reserve_target_g: f64,
+}
 
 // ── Hourly ──────────────────────────────────────────────────────────────────
 
@@ -474,7 +490,7 @@ fn molt_cycle(state: &mut TankState) {
     let ca_mg_per_l = chemistry.calcium_mg_per_l();
     let mg_mg_per_l = chemistry.magnesium_mg_per_l();
     let mineral_factor = molt_mineral_modifier(gh_d, ca_mg_per_l, mg_mg_per_l, &params);
-    let critical_gh_deficit = (gh_d / params.gh_min_d.max(0.01)) < CRITICAL_MOLT_GH_RATIO;
+    let critical_gh_deficit = (gh_d / params.gh_min_d.max(0.01)) < params.critical_molt_gh_ratio;
     let temp_factor = temp_condition_factor(state.water.temperature_c, &params).max(0.25);
     let thermal_factor = temp_condition_factor(state.water.temperature_c, &params);
     let instability_factor = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
@@ -512,9 +528,14 @@ fn molt_cycle(state: &mut TankState) {
     let mut any_resolved = false;
     let mut failed_stage_count = 0u32;
     let mut successful_stage_count = 0u32;
-    let mut any_failed_condition = false;
-    let mut min_failed_condition: f64 = 1.0;
     let mut max_readiness: f64 = 0.0;
+    let mut failed_diagnostics = FailedMoltDiagnostics {
+        min_condition_index: 1.0,
+        poor_condition_involved: false,
+        reserve_limited: false,
+        min_reserve_per_shrimp_g: f64::INFINITY,
+        reserve_target_g: 0.0,
+    };
 
     for (
         stage_index,
@@ -537,8 +558,9 @@ fn molt_cycle(state: &mut TankState) {
         if readiness >= 1.0 {
             any_resolved = true;
 
-            let condition_factor =
-                molt_condition_modifier(condition_index, reserve_g, count, biomass_g);
+            let condition_breakdown =
+                molt_condition_breakdown(condition_index, reserve_g, count, biomass_g);
+            let condition_factor = condition_breakdown.modifier;
             let success_score =
                 (mineral_factor * condition_factor * instability_factor * thermal_factor)
                     .clamp(0.0, 1.0);
@@ -547,8 +569,18 @@ fn molt_cycle(state: &mut TankState) {
                 successful_stage_count += 1;
             } else {
                 failed_stage_count += 1;
-                any_failed_condition |= condition_factor < 0.65;
-                min_failed_condition = min_failed_condition.min(condition_index);
+                failed_diagnostics.poor_condition_involved |= condition_factor < 0.65;
+                failed_diagnostics.min_condition_index =
+                    failed_diagnostics.min_condition_index.min(condition_index);
+                if condition_breakdown.reserve_factor < 1.0 - f64::EPSILON
+                    && condition_breakdown.reserve_per_shrimp_g
+                        < failed_diagnostics.min_reserve_per_shrimp_g
+                {
+                    failed_diagnostics.reserve_limited = true;
+                    failed_diagnostics.min_reserve_per_shrimp_g =
+                        condition_breakdown.reserve_per_shrimp_g;
+                    failed_diagnostics.reserve_target_g = condition_breakdown.reserve_target_g;
+                }
             }
 
             match stage_index {
@@ -593,8 +625,7 @@ fn molt_cycle(state: &mut TankState) {
             gh_d,
             ca_mg_per_l,
             mg_mg_per_l,
-            min_failed_condition,
-            any_failed_condition,
+            failed_diagnostics,
         );
     }
 
@@ -1112,8 +1143,7 @@ fn emit_molt_failure(
     gh_d: f64,
     ca_mg_per_l: f64,
     mg_mg_per_l: f64,
-    min_failed_condition: f64,
-    poor_condition_involved: bool,
+    failed_diagnostics: FailedMoltDiagnostics,
 ) {
     let params = &state.shrimp_params;
     let mut causes = Vec::new();
@@ -1148,20 +1178,30 @@ fn emit_molt_failure(
             state.stability_tracker.instability_index
         ));
     }
-    if state.water.temperature_c > params.optimal_temp_max_c {
-        causes.push(EventCause::HighTemperature);
+    if let Some((cause, detail)) = temperature_penalty_detail(state.water.temperature_c, params) {
+        causes.push(cause);
+        details.push(detail);
+    }
+    if failed_diagnostics.reserve_limited {
+        causes.push(EventCause::Starvation);
         details.push(format!(
-            "temp {:.1}>{:.1} C",
-            state.water.temperature_c, params.optimal_temp_max_c
+            "reserve {:.4}<{:.4} g/shrimp",
+            failed_diagnostics.min_reserve_per_shrimp_g, failed_diagnostics.reserve_target_g
         ));
     }
-    if poor_condition_involved {
+    if failed_diagnostics.poor_condition_involved {
         causes.push(EventCause::PoorCondition);
-        details.push(format!("condition {:.2}", min_failed_condition));
+        details.push(format!(
+            "condition {:.2}",
+            failed_diagnostics.min_condition_index
+        ));
     }
     if causes.is_empty() {
         causes.push(EventCause::PoorCondition);
-        details.push(format!("condition {:.2}", min_failed_condition));
+        details.push(format!(
+            "condition {:.2}",
+            failed_diagnostics.min_condition_index
+        ));
     }
 
     crate::systems::events::emit_once_per_day_pub(
@@ -1196,12 +1236,16 @@ fn emit_molt_stress_warning(state: &mut TankState) {
     if state.stability_tracker.instability_index > 0.3 {
         causes.push(EventCause::ChemistryInstability);
     }
-    if state.water.temperature_c > state.shrimp_params.optimal_temp_max_c {
-        causes.push(EventCause::HighTemperature);
+    if let Some((cause, _)) =
+        temperature_penalty_detail(state.water.temperature_c, &state.shrimp_params)
+    {
+        causes.push(cause);
     }
     if causes.is_empty() {
         causes.push(EventCause::PoorCondition);
     }
+
+    let temp_summary = temperature_summary(state.water.temperature_c, &state.shrimp_params);
 
     crate::systems::events::emit_once_per_day_pub(
         state,
@@ -1209,8 +1253,8 @@ fn emit_molt_stress_warning(state: &mut TankState) {
         EventKind::MoltStressWarning,
         causes,
         format!(
-            "Molt stress elevated: {:.2} (GH {:.1} dGH, Ca {:.1} mg/L, Mg {:.1} mg/L)",
-            state.animal.molt_stress_index, gh_d, ca_mg_per_l, mg_mg_per_l
+            "Molt stress elevated: {:.2} ({}, GH {:.1} dGH, Ca {:.1} mg/L, Mg {:.1} mg/L)",
+            state.animal.molt_stress_index, temp_summary, gh_d, ca_mg_per_l, mg_mg_per_l
         ),
     );
 }
@@ -1273,6 +1317,41 @@ fn gh_mineral_factor(gh_d: f64, params: &ShrimpRuntimeParams) -> f64 {
     }
 }
 
+fn temperature_penalty_detail(
+    temp_c: f64,
+    params: &ShrimpRuntimeParams,
+) -> Option<(EventCause, String)> {
+    if temp_c < params.optimal_temp_min_c {
+        Some((
+            EventCause::LowTemperature,
+            format!("temp {:.1}<{:.1} C", temp_c, params.optimal_temp_min_c),
+        ))
+    } else if temp_c > params.optimal_temp_max_c {
+        Some((
+            EventCause::HighTemperature,
+            format!("temp {:.1}>{:.1} C", temp_c, params.optimal_temp_max_c),
+        ))
+    } else {
+        None
+    }
+}
+
+fn temperature_summary(temp_c: f64, params: &ShrimpRuntimeParams) -> String {
+    if temp_c < params.optimal_temp_min_c {
+        format!(
+            "temp {:.1} C below {:.1}-{:.1} C optimal",
+            temp_c, params.optimal_temp_min_c, params.optimal_temp_max_c
+        )
+    } else if temp_c > params.optimal_temp_max_c {
+        format!(
+            "temp {:.1} C above {:.1}-{:.1} C optimal",
+            temp_c, params.optimal_temp_min_c, params.optimal_temp_max_c
+        )
+    } else {
+        format!("temp {:.1} C", temp_c)
+    }
+}
+
 pub fn molt_mineral_modifier(
     gh_d: f64,
     ca_mg_per_l: f64,
@@ -1299,8 +1378,22 @@ fn molt_condition_modifier(
     count: u32,
     wet_biomass_g: f64,
 ) -> f64 {
+    molt_condition_breakdown(condition_index, reserve_g, count, wet_biomass_g).modifier
+}
+
+fn molt_condition_breakdown(
+    condition_index: f64,
+    reserve_g: f64,
+    count: u32,
+    wet_biomass_g: f64,
+) -> MoltConditionBreakdown {
     if count == 0 {
-        return 1.0;
+        return MoltConditionBreakdown {
+            modifier: 1.0,
+            reserve_factor: 1.0,
+            reserve_per_shrimp_g: 0.0,
+            reserve_target_g: 0.0,
+        };
     }
 
     let reserve_per_shrimp_g = reserve_g / f64::from(count);
@@ -1311,7 +1404,12 @@ fn molt_condition_modifier(
         1.0
     };
 
-    (0.75 * condition_index.clamp(0.0, 1.0) + 0.25 * reserve_factor).clamp(0.0, 1.0)
+    MoltConditionBreakdown {
+        modifier: (0.75 * condition_index.clamp(0.0, 1.0) + 0.25 * reserve_factor).clamp(0.0, 1.0),
+        reserve_factor,
+        reserve_per_shrimp_g,
+        reserve_target_g,
+    }
 }
 
 #[cfg(test)]

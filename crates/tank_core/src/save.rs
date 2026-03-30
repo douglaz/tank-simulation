@@ -14,11 +14,12 @@ use crate::{
 ///
 /// When you bump from N to N+1, you **must** also append a migration function
 /// to [`MIGRATIONS`]. See the migration contract below.
-pub const SCHEMA_VERSION: u32 = 13;
+pub const SCHEMA_VERSION: u32 = 14;
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Oldest schema version that the migration chain can handle.
 const MIN_SUPPORTED_SCHEMA: u32 = 2;
+const PER_STAGE_MOLT_TIMER_SCHEMA_VERSION: u32 = 13;
 
 // ---------------------------------------------------------------------------
 // Migration registry
@@ -139,6 +140,11 @@ const MIGRATIONS: &[MigrationFn] = &[
     // stage-specific molting continues smoothly when loading saves created
     // before `StageCohort.molt_timer_days` was persisted.
     migrate_v12_to_v13,
+    // Index 11: schema 13 → 14
+    // Shrimp runtime parameters gained an explicit critical molt GH cutoff.
+    // Serde defaults are sufficient for legacy saves, so this is a no-op
+    // schema boundary for save/load auditing.
+    migrate_v13_to_v14,
 ];
 
 // Compile-time check: MIGRATIONS length must equal SCHEMA_VERSION - MIN_SUPPORTED_SCHEMA.
@@ -236,7 +242,7 @@ impl SaveFile {
         let mut save: Self = serde_json::from_value(value)
             .map_err(|error| SimError::Deserialization(error.to_string()))?;
 
-        normalize_loaded_shrimp_reproduction_state(&mut save.state);
+        normalize_loaded_shrimp_reproduction_state(&mut save.state, file_version);
         let carbonate_cache_normalized = normalize_loaded_carbonate_state(&mut save.state);
         reconcile_stability_tracker(
             &mut save.state,
@@ -863,6 +869,14 @@ fn migrate_v12_to_v13(value: &mut Value) -> Result<(), SimError> {
     Ok(())
 }
 
+/// Schema 13 → 14: explicit critical GH hard-fail ratio for molts.
+///
+/// `ShrimpRuntimeParams.critical_molt_gh_ratio` carries a serde default, so
+/// no JSON transform is required.
+fn migrate_v13_to_v14(_value: &mut Value) -> Result<(), SimError> {
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -930,7 +944,7 @@ fn normalize_loaded_carbonate_state(state: &mut TankState) -> bool {
         || (state.water.bicarbonate_mg_total - original_bicarbonate_mg_total).abs() > 1e-6
 }
 
-fn normalize_loaded_shrimp_reproduction_state(state: &mut TankState) {
+fn normalize_loaded_shrimp_reproduction_state(state: &mut TankState, source_schema_version: u32) {
     state.animal.egg_cohorts.retain(|cohort| cohort.count > 0);
     state.animal.clamp_berried_to_adults();
     state.animal.repair_egg_cohort_counts_for_load();
@@ -943,7 +957,8 @@ fn normalize_loaded_shrimp_reproduction_state(state: &mut TankState) {
     if state.animal.juvenile.count == 0 {
         state.animal.juvenile.molt_timer_days = 0.0;
     }
-    if state.animal.inter_molt_timer_days > 0.0
+    if source_schema_version < PER_STAGE_MOLT_TIMER_SCHEMA_VERSION
+        && state.animal.inter_molt_timer_days > 0.0
         && state.animal.adult.molt_timer_days == 0.0
         && state.animal.sub_adult.molt_timer_days == 0.0
         && state.animal.juvenile.molt_timer_days == 0.0
@@ -959,6 +974,7 @@ fn normalize_loaded_shrimp_reproduction_state(state: &mut TankState) {
             state.animal.juvenile.molt_timer_days = legacy_timer;
         }
     }
+    state.animal.inter_molt_timer_days = state.animal.adult.molt_timer_days.max(0.0);
 }
 
 fn reconcile_stability_tracker(
