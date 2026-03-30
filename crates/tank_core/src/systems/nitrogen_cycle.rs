@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::types::{
     concentration_from_total, find_habitat, live_biomass_carbon_mg, live_biomass_nitrogen_mg,
     HabitatKind, TankState, ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G,
@@ -250,10 +252,11 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
         "decomposer DOC remineralization",
     );
     let decomp_decay = safe_rate(pp.decomposer_decay_rate_per_hour) * decomposer_biomass;
-    route_live_biomass_to_dissolved_organics(state, decomp_decay, n_to_c);
 
-    // Distribute growth and decay back to per-habitat pools proportionally
-    // to each habitat's effective contribution.
+    // Distribute growth back to per-habitat pools proportionally to each
+    // habitat's effective contribution. Decay is then removed using the same
+    // weights, but routed according to the biomass actually removed so low-DO
+    // edge cases stay mass-conservative.
     if total_effective_biomass > f64::EPSILON {
         for (kind, effective) in &habitat_effective {
             let fraction = effective / total_effective_biomass;
@@ -263,23 +266,16 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
                 .get(kind)
                 .copied()
                 .unwrap_or(0.0);
-            let new_g = (current + decomp_growth * fraction - decomp_decay * fraction).max(0.0);
-            state.microbe.decomposer_by_habitat.insert(*kind, new_g);
-        }
-    } else {
-        // All habitats have zero effective biomass; apply uniform decay.
-        for kind in &habitat_keys {
-            let current = state
-                .microbe
-                .decomposer_by_habitat
-                .get(kind)
-                .copied()
-                .unwrap_or(0.0);
-            let n = habitat_keys.len().max(1) as f64;
-            let new_g = (current - decomp_decay / n).max(0.0);
+            let new_g = (current + decomp_growth * fraction).max(0.0);
             state.microbe.decomposer_by_habitat.insert(*kind, new_g);
         }
     }
+    let actual_decomp_decay = remove_weighted_biomass(
+        &mut state.microbe.decomposer_by_habitat,
+        decomp_decay,
+        &habitat_effective,
+    );
+    route_live_biomass_to_dissolved_organics(state, actual_decomp_decay, n_to_c);
     state.microbe.sync_decomposer_total();
 
     // ---- 4. Nitrification: TAN -> nitrite -> nitrate (+ comammox TAN -> nitrate) ----
@@ -657,6 +653,110 @@ fn route_live_biomass_to_dissolved_organics(
         live_biomass_nitrogen_mg(biomass_g, n_to_c_ratio);
     state.water.dissolved_organic_carbon_mg_c_total +=
         live_biomass_carbon_mg(biomass_g, n_to_c_ratio);
+}
+
+fn remove_weighted_biomass(
+    pools: &mut BTreeMap<HabitatKind, f64>,
+    requested_g: f64,
+    weights: &[(HabitatKind, f64)],
+) -> f64 {
+    if requested_g <= f64::EPSILON {
+        return 0.0;
+    }
+
+    let total_biomass: f64 = pools.values().copied().sum();
+    let target = requested_g.min(total_biomass);
+    if target <= f64::EPSILON {
+        return 0.0;
+    }
+
+    let mut removal_by_kind = BTreeMap::new();
+    let mut active: Vec<(HabitatKind, f64, f64)> = weights
+        .iter()
+        .filter_map(|(kind, weight)| {
+            let current = pools.get(kind).copied().unwrap_or(0.0).max(0.0);
+            (current > f64::EPSILON).then_some((*kind, current, weight.max(0.0)))
+        })
+        .collect();
+    if active.is_empty() {
+        return 0.0;
+    }
+
+    let mut remaining = target;
+    while remaining > f64::EPSILON && !active.is_empty() {
+        let has_positive_weight = active.iter().any(|(_, _, weight)| *weight > f64::EPSILON);
+        let total_score: f64 = active
+            .iter()
+            .map(|(_, current, weight)| {
+                if has_positive_weight {
+                    current * weight.max(0.0)
+                } else {
+                    *current
+                }
+            })
+            .sum();
+        if total_score <= f64::EPSILON {
+            let total_current: f64 = active.iter().map(|(_, current, _)| *current).sum();
+            if total_current <= f64::EPSILON {
+                break;
+            }
+            for (kind, current, _) in &active {
+                let share = remaining * (*current / total_current);
+                removal_by_kind
+                    .entry(*kind)
+                    .and_modify(|removal| *removal += share)
+                    .or_insert(share);
+            }
+            break;
+        }
+
+        let mut saturated_any = false;
+        let mut next_active = Vec::with_capacity(active.len());
+        for (kind, current, weight) in active.iter().copied() {
+            let score = if has_positive_weight {
+                current * weight.max(0.0)
+            } else {
+                current
+            };
+            let proposed = remaining * score / total_score;
+            if proposed >= current - f64::EPSILON {
+                saturated_any = true;
+                remaining = (remaining - current).max(0.0);
+                removal_by_kind
+                    .entry(kind)
+                    .and_modify(|removal| *removal += current)
+                    .or_insert(current);
+            } else {
+                next_active.push((kind, current, weight));
+            }
+        }
+
+        if !saturated_any {
+            for (kind, current, weight) in next_active {
+                let score = if has_positive_weight {
+                    current * weight.max(0.0)
+                } else {
+                    current
+                };
+                let share = remaining * score / total_score;
+                removal_by_kind
+                    .entry(kind)
+                    .and_modify(|removal| *removal += share)
+                    .or_insert(share);
+            }
+            remaining = 0.0;
+        } else {
+            active = next_active;
+        }
+    }
+
+    let actual_removed: f64 = removal_by_kind.values().copied().sum();
+    for (kind, removal) in removal_by_kind {
+        if let Some(current) = pools.get_mut(&kind) {
+            *current = (*current - removal).max(0.0);
+        }
+    }
+    actual_removed
 }
 
 /// Temperature factor: peaks around 25-30°C, drops off at extremes.

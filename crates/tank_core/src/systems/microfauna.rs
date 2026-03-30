@@ -1,6 +1,6 @@
 use crate::types::{
     algae_carbon_mg, algae_nitrogen_mg, detritus_carbon_mg, detritus_nitrogen_mg, AlgaeState,
-    TankState, MG_N_PER_MEQ_AMMONIA,
+    HabitatKind, TankState, MG_N_PER_MEQ_AMMONIA,
 };
 
 /// Stoichiometric O2:C for organic matter oxidation (32/12 ≈ 2.67).
@@ -55,13 +55,18 @@ pub fn step_daily_microfauna(state: &mut TankState) {
     state.microfauna.grazing_pressure_index =
         (state.microfauna.population_index * resource_availability.sqrt()).clamp(0.0, 1.0);
 
-    // Microfauna consume some periphyton (without driving it negative).
-    // Consumption is drawn proportionally from all habitat pools.
-    // TODO(habitat-aware grazing): weight consumption toward accessible habitats.
+    // Microfauna graze accessible surface biofilm first. Filter-internal biofilm
+    // remains partially protected, which keeps habitat differentiation visible
+    // without introducing species-level grazer state.
     let consumption_fraction =
         pp.microfauna_periphyton_consumption * state.microfauna.population_index;
-    let periphyton_consumed = state.algae.periphyton_biomass_g * consumption_fraction;
-    remove_periphyton_proportionally(&mut state.algae, periphyton_consumed);
+    let requested_periphyton = state.algae.periphyton_biomass_g * consumption_fraction;
+    let substrate_surface_access =
+        0.6 + 0.4 * state.avg_substrate_index(|layer| layer.grazing_surface_index);
+    let periphyton_consumed =
+        remove_periphyton_by_accessibility(&mut state.algae, requested_periphyton, |kind| {
+            microfauna_periphyton_accessibility(substrate_surface_access, kind)
+        });
 
     // Microfauna also process some fine detritus (modest)
     let detritus_consumed =
@@ -149,15 +154,63 @@ fn route_consumed_food(state: &mut TankState, consumed_n_mg: f64, consumed_c_mg:
     state.microfauna.reserve_g += retained_mass_g;
 }
 
-/// Remove periphyton proportionally from all habitat pools and sync the total.
-pub(crate) fn remove_periphyton_proportionally(algae: &mut AlgaeState, amount_g: f64) {
+fn microfauna_periphyton_accessibility(substrate_surface_access: f64, kind: HabitatKind) -> f64 {
+    match kind {
+        HabitatKind::GlassHardscape => 1.0,
+        HabitatKind::SubstrateSurface => substrate_surface_access.clamp(0.0, 1.0),
+        HabitatKind::PlantSurfaces => 0.7,
+        HabitatKind::FilterMedia => 0.15,
+        HabitatKind::SubstrateDeep => 0.0,
+    }
+}
+
+/// Remove periphyton from habitat pools using per-habitat accessibility caps.
+///
+/// `accessibility(kind)` is interpreted as the fraction of a habitat's current
+/// biomass that grazers can realistically reach this tick. The function returns
+/// the biomass actually removed so downstream routing can stay mass-conservative
+/// when some habitats are partially or fully inaccessible.
+pub(crate) fn remove_periphyton_by_accessibility<F>(
+    algae: &mut AlgaeState,
+    amount_g: f64,
+    accessibility: F,
+) -> f64
+where
+    F: Fn(HabitatKind) -> f64,
+{
     let total = algae.periphyton_biomass_g;
     if total <= f64::EPSILON || amount_g <= f64::EPSILON {
-        return;
+        return 0.0;
     }
-    let fraction = (amount_g / total).min(1.0);
-    for biomass in algae.periphyton_by_habitat.values_mut() {
-        *biomass = (*biomass * (1.0 - fraction)).max(0.0);
+
+    let accessible_by_habitat: Vec<(HabitatKind, f64)> = algae
+        .periphyton_by_habitat
+        .iter()
+        .filter_map(|(kind, biomass)| {
+            let accessible = biomass.max(0.0) * accessibility(*kind).clamp(0.0, 1.0);
+            (accessible > f64::EPSILON).then_some((*kind, accessible))
+        })
+        .collect();
+    let total_accessible: f64 = accessible_by_habitat
+        .iter()
+        .map(|(_, accessible)| *accessible)
+        .sum();
+    if total_accessible <= f64::EPSILON {
+        return 0.0;
+    }
+
+    let actual_removed = amount_g.min(total_accessible);
+    for (kind, accessible) in accessible_by_habitat {
+        let current = algae
+            .periphyton_by_habitat
+            .get(&kind)
+            .copied()
+            .unwrap_or(0.0);
+        let removal = actual_removed * accessible / total_accessible;
+        algae
+            .periphyton_by_habitat
+            .insert(kind, (current - removal).max(0.0));
     }
     algae.sync_periphyton_total();
+    actual_removed
 }

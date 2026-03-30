@@ -2,7 +2,7 @@ use crate::systems::chemistry::{compute_nh3_mg_n_per_l, resolve_carbonate_state}
 use crate::types::{
     algae_carbon_mg, algae_detrital_mass_g, algae_nitrogen_mg, detritus_carbon_mg,
     detritus_nitrogen_mg, shrimp_body_detrital_mass_g, EggCohort, EventCause, EventKind,
-    EventSeverity, ShrimpRuntimeParams, TankState, ADULT_SHRIMP_BIOMASS_G,
+    EventSeverity, HabitatKind, ShrimpRuntimeParams, TankState, ADULT_SHRIMP_BIOMASS_G,
     JUVENILE_SHRIMP_BIOMASS_G, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G, MG_N_PER_MEQ_AMMONIA,
     SUB_ADULT_SHRIMP_BIOMASS_G,
 };
@@ -145,6 +145,16 @@ fn shrimp_target_food_route_g(state: &TankState) -> f64 {
     )
 }
 
+fn shrimp_periphyton_accessibility(substrate_surface_access: f64, kind: HabitatKind) -> f64 {
+    match kind {
+        HabitatKind::GlassHardscape => 1.0,
+        HabitatKind::SubstrateSurface => substrate_surface_access.clamp(0.0, 1.0),
+        HabitatKind::PlantSurfaces => 0.45,
+        HabitatKind::FilterMedia => 0.05,
+        HabitatKind::SubstrateDeep => 0.0,
+    }
+}
+
 fn shrimp_feeding(state: &mut TankState) {
     let total_feeding_units = state.animal.feeding_units();
 
@@ -161,15 +171,16 @@ fn shrimp_feeding(state: &mut TankState) {
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let food_demand_route_g = algae_detrital_mass_g(food_demand_biomass_g, n_to_c_ratio);
 
-    // Shrimp graze periphyton (at most 50% of available per day).
-    // Grazing is drawn proportionally from all habitat pools for now.
-    // TODO(habitat-aware grazing): weight toward accessible habitats
-    // (glass, substrate surface) and away from FilterMedia.
+    // Shrimp graze periphyton (at most 50% of available per day), preferring
+    // exposed surfaces over filter-internal or buried biofilm.
     let max_periph = state.algae.periphyton_biomass_g * 0.5;
-    let periph_consumed_biomass_g = food_demand_biomass_g.min(max_periph).max(0.0);
-    super::microfauna::remove_periphyton_proportionally(
+    let requested_periph_biomass_g = food_demand_biomass_g.min(max_periph).max(0.0);
+    let substrate_surface_access =
+        0.4 + 0.6 * state.avg_substrate_index(|layer| layer.grazing_surface_index);
+    let periph_consumed_biomass_g = super::microfauna::remove_periphyton_by_accessibility(
         &mut state.algae,
-        periph_consumed_biomass_g,
+        requested_periph_biomass_g,
+        |kind| shrimp_periphyton_accessibility(substrate_surface_access, kind),
     );
     let periph_consumed_route_g = algae_detrital_mass_g(periph_consumed_biomass_g, n_to_c_ratio);
 

@@ -4,8 +4,8 @@
 use std::collections::BTreeMap;
 
 use tank_core::{
-    Engine, HabitatKind, SaveFile, SimSeed, SimulationEngine, SubstrateKind, SubstrateLayerState,
-    TankState,
+    live_biomass_carbon_mg, live_biomass_nitrogen_mg, Engine, HabitatKind, SaveFile, SimSeed,
+    SimulationEngine, SubstrateKind, SubstrateLayerState, TankState,
 };
 
 // ---------------------------------------------------------------------------
@@ -223,20 +223,20 @@ fn test_total_biomass_conserved_on_split() -> Result<(), tank_core::SimError> {
 }
 
 // ---------------------------------------------------------------------------
-// 5. Grazing targets habitat periphyton (proportional removal)
+// 5. Shrimp grazing favors accessible habitats over filter media
 // ---------------------------------------------------------------------------
 
 #[test]
 fn test_grazing_targets_habitat_periphyton() -> Result<(), tank_core::SimError> {
     let mut state = growth_state(SimSeed(5005));
 
-    // Set known periphyton distribution.
+    // Start exposed and protected habitats at equal biomass so accessibility,
+    // not starting abundance, determines which habitats lose more.
     state.algae.periphyton_by_habitat = BTreeMap::from([
-        (HabitatKind::GlassHardscape, 2.0),
+        (HabitatKind::GlassHardscape, 1.0),
         (HabitatKind::SubstrateSurface, 1.0),
-        (HabitatKind::PlantSurfaces, 0.5),
-        (HabitatKind::FilterMedia, 0.1),
-        (HabitatKind::SubstrateDeep, 0.0),
+        (HabitatKind::PlantSurfaces, 1.0),
+        (HabitatKind::FilterMedia, 1.0),
     ]);
     state.algae.sync_periphyton_total();
 
@@ -250,6 +250,8 @@ fn test_grazing_targets_habitat_periphyton() -> Result<(), tank_core::SimError> 
 
     let total_before = state.algae.periphyton_biomass_g;
     let glass_before = state.algae.periphyton_by_habitat[&HabitatKind::GlassHardscape];
+    let substrate_before = state.algae.periphyton_by_habitat[&HabitatKind::SubstrateSurface];
+    let filter_before = state.algae.periphyton_by_habitat[&HabitatKind::FilterMedia];
 
     let mut engine = Engine::from_parts(state, vec![]);
     engine.step_hours(24)?;
@@ -261,6 +263,16 @@ fn test_grazing_targets_habitat_periphyton() -> Result<(), tank_core::SimError> 
         .get(&HabitatKind::GlassHardscape)
         .copied()
         .unwrap_or(0.0);
+    let substrate_after = algae
+        .periphyton_by_habitat
+        .get(&HabitatKind::SubstrateSurface)
+        .copied()
+        .unwrap_or(0.0);
+    let filter_after = algae
+        .periphyton_by_habitat
+        .get(&HabitatKind::FilterMedia)
+        .copied()
+        .unwrap_or(0.0);
 
     // Total periphyton should decrease from grazing.
     assert!(
@@ -268,11 +280,17 @@ fn test_grazing_targets_habitat_periphyton() -> Result<(), tank_core::SimError> 
         "grazing should reduce total periphyton ({total_before:.4} -> {total_after:.4})"
     );
 
-    // Glass (dominant habitat) should lose the most.
+    // Exposed surfaces should be grazed harder than filter-internal biofilm.
     let glass_loss = glass_before - glass_after;
+    let substrate_loss = substrate_before - substrate_after;
+    let filter_loss = filter_before - filter_after;
     assert!(
-        glass_loss > 0.0,
-        "glass periphyton should decrease from grazing"
+        glass_loss > filter_loss,
+        "glass loss ({glass_loss:.6}) should exceed filter loss ({filter_loss:.6})"
+    );
+    assert!(
+        substrate_loss > filter_loss,
+        "substrate loss ({substrate_loss:.6}) should exceed filter loss ({filter_loss:.6})"
     );
 
     // Per-habitat sum should equal total.
@@ -285,7 +303,67 @@ fn test_grazing_targets_habitat_periphyton() -> Result<(), tank_core::SimError> 
 }
 
 // ---------------------------------------------------------------------------
-// 6. Save/load habitat pools round-trip
+// 6. Microfauna grazing also favors accessible habitats
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_microfauna_grazing_prefers_accessible_habitats() -> Result<(), tank_core::SimError> {
+    let mut state = growth_state(SimSeed(5011));
+    state.algae.periphyton_by_habitat = BTreeMap::from([
+        (HabitatKind::GlassHardscape, 1.0),
+        (HabitatKind::SubstrateSurface, 1.0),
+        (HabitatKind::PlantSurfaces, 1.0),
+        (HabitatKind::FilterMedia, 1.0),
+    ]);
+    state.algae.sync_periphyton_total();
+
+    state.animal.adult.count = 0;
+    state.animal.sub_adult.count = 0;
+    state.animal.juvenile.count = 0;
+    state.microfauna.population_index = 1.0;
+    state.hardware.light.enabled = false;
+    state.process_params.periphyton_max_growth_rate_per_day = 0.0;
+
+    let glass_before = state.algae.periphyton_by_habitat[&HabitatKind::GlassHardscape];
+    let substrate_before = state.algae.periphyton_by_habitat[&HabitatKind::SubstrateSurface];
+    let filter_before = state.algae.periphyton_by_habitat[&HabitatKind::FilterMedia];
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.step_hours(24)?;
+
+    let algae = &engine.full_state().algae;
+    let glass_loss = glass_before
+        - algae
+            .periphyton_by_habitat
+            .get(&HabitatKind::GlassHardscape)
+            .copied()
+            .unwrap_or(0.0);
+    let substrate_loss = substrate_before
+        - algae
+            .periphyton_by_habitat
+            .get(&HabitatKind::SubstrateSurface)
+            .copied()
+            .unwrap_or(0.0);
+    let filter_loss = filter_before
+        - algae
+            .periphyton_by_habitat
+            .get(&HabitatKind::FilterMedia)
+            .copied()
+            .unwrap_or(0.0);
+
+    assert!(
+        glass_loss > filter_loss,
+        "glass loss ({glass_loss:.6}) should exceed filter loss ({filter_loss:.6})"
+    );
+    assert!(
+        substrate_loss > filter_loss,
+        "substrate loss ({substrate_loss:.6}) should exceed filter loss ({filter_loss:.6})"
+    );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// 7. Save/load habitat pools round-trip
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -358,7 +436,7 @@ fn test_save_load_habitat_pools() -> Result<(), tank_core::SimError> {
 }
 
 // ---------------------------------------------------------------------------
-// 7. Decomposer activity: filter media > glass
+// 8. Decomposer activity: filter media > glass
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -412,7 +490,7 @@ fn test_decomposer_filter_media_exceeds_glass() -> Result<(), tank_core::SimErro
 }
 
 // ---------------------------------------------------------------------------
-// 8. Integration: 200-hour lit-surface preference
+// 9. Integration: 200-hour lit-surface preference
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -484,7 +562,57 @@ fn test_200hr_lit_surface_periphyton_preference() -> Result<(), tank_core::SimEr
 }
 
 // ---------------------------------------------------------------------------
-// 9. Conservation: habitat split doesn't create or destroy biomass
+// 10. Habitat refresh removes biomass from vanished habitats
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_refresh_habitat_registry_redistributes_removed_habitats() -> Result<(), tank_core::SimError>
+{
+    let mut state = growth_state(SimSeed(5012));
+    state.algae.periphyton_by_habitat = BTreeMap::from([
+        (HabitatKind::GlassHardscape, 0.4),
+        (HabitatKind::SubstrateSurface, 0.3),
+        (HabitatKind::PlantSurfaces, 0.2),
+        (HabitatKind::FilterMedia, 0.1),
+    ]);
+    state.algae.sync_periphyton_total();
+    state.microbe.decomposer_by_habitat = BTreeMap::from([
+        (HabitatKind::FilterMedia, 0.05),
+        (HabitatKind::SubstrateSurface, 0.03),
+        (HabitatKind::SubstrateDeep, 0.02),
+        (HabitatKind::GlassHardscape, 0.01),
+    ]);
+    state.microbe.sync_decomposer_total();
+
+    let periphyton_total_before = state.algae.periphyton_biomass_g;
+    let decomposer_total_before = state.microbe.decomposer_biomass_g;
+
+    state.plant_guilds.clear();
+    state.substrate_layers.clear();
+    state.hardware.filter.enabled = false;
+    state.hardware.filter.media_area_cm2 = 0.0;
+    state.refresh_habitat_registry();
+
+    assert_eq!(state.algae.periphyton_by_habitat.len(), 1);
+    assert_eq!(state.microbe.decomposer_by_habitat.len(), 1);
+    assert!(
+        (state.algae.periphyton_by_habitat[&HabitatKind::GlassHardscape] - periphyton_total_before)
+            .abs()
+            < 1e-10,
+        "all periphyton should be redistributed onto the remaining glass habitat"
+    );
+    assert!(
+        (state.microbe.decomposer_by_habitat[&HabitatKind::GlassHardscape]
+            - decomposer_total_before)
+            .abs()
+            < 1e-10,
+        "all decomposers should be redistributed onto the remaining glass habitat"
+    );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// 11. Conservation: habitat split doesn't create or destroy biomass
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -528,7 +656,88 @@ fn test_habitat_split_conservation() -> Result<(), tank_core::SimError> {
 }
 
 // ---------------------------------------------------------------------------
-// 10. Habitat diversity supports more microbes
+// 12. Zero-DO decomposer decay stays mass-conservative
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_decomposer_decay_conserved_when_do_zero_and_habitats_uneven(
+) -> Result<(), tank_core::SimError> {
+    let mut state = growth_state(SimSeed(5013));
+    state.algae.set_periphyton_total(0.0);
+    state.animal.adult.count = 0;
+    state.animal.sub_adult.count = 0;
+    state.animal.juvenile.count = 0;
+    state.microfauna.population_index = 0.0;
+    state.hardware.light.enabled = false;
+    state.water.dissolved_oxygen_mg_total = 0.0;
+    state.water.dissolved_organic_carbon_mg_c_total = 0.0;
+    state.water.dissolved_organic_nitrogen_mg_n_total = 0.0;
+    state.microbe.ammonia_oxidizer_biomass_g = 0.0;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.0;
+    state.microbe.comammox_biomass_g = 0.0;
+    state.microbe.decomposer_by_habitat = BTreeMap::from([
+        (HabitatKind::FilterMedia, 0.19),
+        (HabitatKind::GlassHardscape, 0.01),
+    ]);
+    state.microbe.sync_decomposer_total();
+
+    let expected_decay =
+        state.microbe.decomposer_biomass_g * state.process_params.decomposer_decay_rate_per_hour;
+    let doc_before = state.water.dissolved_organic_carbon_mg_c_total;
+    let don_before = state.water.dissolved_organic_nitrogen_mg_n_total;
+    let total_before = state.microbe.decomposer_biomass_g;
+    let filter_before = state.microbe.decomposer_by_habitat[&HabitatKind::FilterMedia];
+    let glass_before = state.microbe.decomposer_by_habitat[&HabitatKind::GlassHardscape];
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.step_hours(1)?;
+
+    let after = engine.full_state();
+    let actual_decay = total_before - after.microbe.decomposer_biomass_g;
+    let filter_loss = filter_before
+        - after
+            .microbe
+            .decomposer_by_habitat
+            .get(&HabitatKind::FilterMedia)
+            .copied()
+            .unwrap_or(0.0);
+    let glass_loss = glass_before
+        - after
+            .microbe
+            .decomposer_by_habitat
+            .get(&HabitatKind::GlassHardscape)
+            .copied()
+            .unwrap_or(0.0);
+
+    assert!(
+        (actual_decay - expected_decay).abs() < 1e-10,
+        "expected {expected_decay:.12} g decay, got {actual_decay:.12} g"
+    );
+    assert!(
+        (after.water.dissolved_organic_nitrogen_mg_n_total
+            - (don_before
+                + live_biomass_nitrogen_mg(actual_decay, after.process_params.feed_n_to_c_ratio)))
+        .abs()
+            < 1e-9,
+        "DON increase should match the biomass actually removed"
+    );
+    assert!(
+        (after.water.dissolved_organic_carbon_mg_c_total
+            - (doc_before
+                + live_biomass_carbon_mg(actual_decay, after.process_params.feed_n_to_c_ratio)))
+        .abs()
+            < 1e-9,
+        "DOC increase should match the biomass actually removed"
+    );
+    assert!(
+        filter_loss > glass_loss,
+        "larger habitat pool should absorb more of the zero-DO fallback decay"
+    );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// 13. Habitat diversity supports more microbes
 // ---------------------------------------------------------------------------
 
 #[test]

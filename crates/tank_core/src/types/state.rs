@@ -268,23 +268,19 @@ impl TankState {
         let registry = super::habitat::compute_habitat_registry(self);
         self.habitat_registry = registry;
 
-        // Ensure per-habitat pools are populated (migration or first run).
+        // Reconcile per-habitat pools against the refreshed registry.
         self.ensure_habitat_pools();
     }
 
-    /// If per-habitat biomass maps are empty (legacy save or fresh default
-    /// before registry was computed), distribute the lumped totals using
-    /// the current habitat registry weights.
+    /// Normalize per-habitat biomass maps against the current habitat registry.
+    ///
+    /// Legacy saves still backfill from lumped totals, while existing maps are
+    /// also pruned and redistributed when habitats disappear or appear.
     fn ensure_habitat_pools(&mut self) {
-        if self.algae.periphyton_by_habitat.is_empty() && self.algae.periphyton_biomass_g > 0.0 {
-            self.algae
-                .distribute_periphyton_to_habitats(&self.habitat_registry);
-        }
-        if self.microbe.decomposer_by_habitat.is_empty() && self.microbe.decomposer_biomass_g > 0.0
-        {
-            self.microbe
-                .distribute_decomposer_to_habitats(&self.habitat_registry);
-        }
+        self.algae
+            .normalize_periphyton_habitats(&self.habitat_registry);
+        self.microbe
+            .normalize_decomposer_habitats(&self.habitat_registry);
     }
 
     pub fn concentrations(&self) -> ConcentrationView<'_> {

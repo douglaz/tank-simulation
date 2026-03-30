@@ -341,6 +341,22 @@ impl AlgaeState {
         self.periphyton_by_habitat =
             distribute_biomass_by_weight(total, registry, periphyton_habitat_affinity);
     }
+
+    /// Reconcile persisted per-habitat pools with the current habitat registry.
+    ///
+    /// This keeps biomass tied to currently available habitats after hardware,
+    /// plants, or substrate change. Biomass stranded on removed habitats is
+    /// redistributed across the remaining valid habitats without changing the
+    /// aggregate total.
+    pub fn normalize_periphyton_habitats(&mut self, registry: &[super::habitat::HabitatEntry]) {
+        self.periphyton_by_habitat = normalize_biomass_by_weight(
+            self.periphyton_biomass_g,
+            &self.periphyton_by_habitat,
+            registry,
+            periphyton_habitat_affinity,
+        );
+        self.sync_periphyton_total();
+    }
 }
 
 impl MicrobeState {
@@ -378,12 +394,31 @@ impl MicrobeState {
         self.decomposer_by_habitat =
             distribute_biomass_by_weight(total, registry, decomposer_habitat_affinity);
     }
+
+    /// Reconcile persisted per-habitat pools with the current habitat registry.
+    ///
+    /// This removes biomass from habitats that no longer exist and
+    /// redistributes it across the remaining valid habitats while preserving
+    /// the aggregate decomposer total.
+    pub fn normalize_decomposer_habitats(&mut self, registry: &[super::habitat::HabitatEntry]) {
+        self.decomposer_by_habitat = normalize_biomass_by_weight(
+            self.decomposer_biomass_g,
+            &self.decomposer_by_habitat,
+            registry,
+            decomposer_habitat_affinity,
+        );
+        self.sync_decomposer_total();
+    }
 }
 
 /// Ecological affinity weight for periphyton colonization of a habitat.
 /// Periphyton is light-driven: high affinity on lit surfaces, near-zero
 /// in dark habitats. Area is factored in separately.
 fn periphyton_habitat_affinity(entry: &super::habitat::HabitatEntry) -> f64 {
+    if entry.kind == HabitatKind::SubstrateDeep {
+        return 0.0;
+    }
+
     // Light is the primary driver; a small baseline (0.01) allows trace
     // colonization even in dim habitats like FilterMedia.
     (entry.light_exposure + 0.01) * entry.colonizable_area_cm2
@@ -409,15 +444,79 @@ fn distribute_biomass_by_weight(
 ) -> BTreeMap<HabitatKind, f64> {
     let weights: Vec<(HabitatKind, f64)> = registry
         .iter()
-        .map(|entry| (entry.kind, affinity(entry).max(0.0)))
+        .filter_map(|entry| {
+            let weight = affinity(entry).max(0.0);
+            (weight > f64::EPSILON).then_some((entry.kind, weight))
+        })
         .collect();
-    let total_weight: f64 = weights.iter().map(|(_, w)| w).sum();
-    if total_weight <= f64::EPSILON || total_g <= f64::EPSILON {
+    if weights.is_empty() {
+        return BTreeMap::new();
+    }
+
+    if total_g <= f64::EPSILON {
         return weights.into_iter().map(|(kind, _)| (kind, 0.0)).collect();
     }
+
+    let total_weight: f64 = weights.iter().map(|(_, w)| w).sum();
+    if total_weight <= f64::EPSILON {
+        return weights.into_iter().map(|(kind, _)| (kind, 0.0)).collect();
+    }
+
     weights
         .into_iter()
         .map(|(kind, w)| (kind, total_g * w / total_weight))
+        .collect()
+}
+
+fn normalize_biomass_by_weight(
+    total_g: f64,
+    current: &BTreeMap<HabitatKind, f64>,
+    registry: &[super::habitat::HabitatEntry],
+    affinity: fn(&super::habitat::HabitatEntry) -> f64,
+) -> BTreeMap<HabitatKind, f64> {
+    let available: Vec<(HabitatKind, f64, f64)> = registry
+        .iter()
+        .filter_map(|entry| {
+            let weight = affinity(entry).max(0.0);
+            (weight > f64::EPSILON).then_some((
+                entry.kind,
+                weight,
+                current.get(&entry.kind).copied().unwrap_or(0.0).max(0.0),
+            ))
+        })
+        .collect();
+
+    if available.is_empty() {
+        return BTreeMap::new();
+    }
+
+    if total_g <= f64::EPSILON {
+        return available
+            .into_iter()
+            .map(|(kind, _, _)| (kind, 0.0))
+            .collect();
+    }
+
+    let retained_sum: f64 = available.iter().map(|(_, _, biomass)| *biomass).sum();
+    if retained_sum > f64::EPSILON {
+        let scale = total_g / retained_sum;
+        return available
+            .into_iter()
+            .map(|(kind, _, biomass)| (kind, biomass * scale))
+            .collect();
+    }
+
+    let total_weight: f64 = available.iter().map(|(_, weight, _)| *weight).sum();
+    if total_weight <= f64::EPSILON {
+        return available
+            .into_iter()
+            .map(|(kind, _, _)| (kind, 0.0))
+            .collect();
+    }
+
+    available
+        .into_iter()
+        .map(|(kind, weight, _)| (kind, total_g * weight / total_weight))
         .collect()
 }
 
@@ -430,7 +529,6 @@ impl Default for AlgaeState {
             (HabitatKind::SubstrateSurface, 0.06),
             (HabitatKind::PlantSurfaces, 0.03),
             (HabitatKind::FilterMedia, 0.01),
-            (HabitatKind::SubstrateDeep, 0.0),
         ]);
         Self {
             suspended_biomass_g: 0.0,
