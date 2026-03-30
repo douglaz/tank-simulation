@@ -66,8 +66,11 @@ pub fn compute_effective_nitrite_hazard(
     if nitrite_mg_l <= 0.0 {
         return 0.0;
     }
-    let cl_no2_ratio = chloride_mg_l.max(0.0) / nitrite_mg_l;
-    nitrite_mg_l / (1.0 + chloride_protection_factor.max(0.0) * cl_no2_ratio)
+    if chloride_protection_factor <= 0.0 || chloride_mg_l <= 0.0 {
+        return nitrite_mg_l;
+    }
+    let cl_no2_ratio = chloride_mg_l / nitrite_mg_l;
+    nitrite_mg_l / (1.0 + chloride_protection_factor * cl_no2_ratio)
 }
 
 fn compute_hourly_nitrite_stress_increment(effective_nitrite_mg_l: f64) -> f64 {

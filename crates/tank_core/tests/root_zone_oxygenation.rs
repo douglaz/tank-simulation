@@ -34,8 +34,9 @@ fn make_rol_test_state(seed: SimSeed, rooted_biomass_g: f64) -> TankState {
     // Moderate DO: 6 mg/L
     state.water.dissolved_oxygen_mg_total = 6.0 * vol;
 
-    // Moderate decomposer activity to generate meaningful O₂ demand
-    state.microbe.decomposer_biomass_g = 2.0;
+    // High decomposer biomass so root respiration demand is negligible
+    // relative to total O₂ demand, ensuring the ROL bonus dominates.
+    state.microbe.decomposer_biomass_g = 20.0;
 
     // Nitrifiers for substrate-surface nitrification
     state.microbe.ammonia_oxidizer_biomass_g = 0.2;

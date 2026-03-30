@@ -2,7 +2,10 @@ use serde::{de::Error as DeError, Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 
 use super::{PlantGuild, SimEvent, TankState};
-use crate::systems::{chemistry::compute_nh3_mg_n_per_l, temperature::do_sat_mg_l};
+use crate::systems::{
+    chemistry::compute_nh3_mg_n_per_l, shrimp::compute_effective_nitrite_hazard,
+    temperature::do_sat_mg_l,
+};
 
 /// Legacy chemistry field names accepted during snapshot deserialization and
 /// still emitted in API responses for compatibility.
@@ -40,6 +43,8 @@ pub struct TankSnapshot {
     pub kh_d: f64,
     pub estimated_tds_7_ion_mg_per_l: f64,
     pub estimated_conductivity_us_cm: f64,
+    pub chloride_mg_per_l: f64,
+    pub effective_nitrite_hazard_mg_per_l: f64,
     pub ph: f64,
     pub light_enabled: bool,
     pub photoperiod_hours: f64,
@@ -101,6 +106,10 @@ struct TankSnapshotRepr {
     kh_d: f64,
     estimated_tds_7_ion_mg_per_l: f64,
     estimated_conductivity_us_cm: f64,
+    #[serde(default)]
+    chloride_mg_per_l: f64,
+    #[serde(default)]
+    effective_nitrite_hazard_mg_per_l: f64,
     ph: f64,
     light_enabled: bool,
     photoperiod_hours: f64,
@@ -164,6 +173,8 @@ impl From<TankSnapshotRepr> for TankSnapshot {
             kh_d: value.kh_d,
             estimated_tds_7_ion_mg_per_l: value.estimated_tds_7_ion_mg_per_l,
             estimated_conductivity_us_cm: value.estimated_conductivity_us_cm,
+            chloride_mg_per_l: value.chloride_mg_per_l,
+            effective_nitrite_hazard_mg_per_l: value.effective_nitrite_hazard_mg_per_l,
             ph: value.ph,
             light_enabled: value.light_enabled,
             photoperiod_hours: value.photoperiod_hours,
@@ -254,6 +265,12 @@ impl TankSnapshot {
             .estimated_dissolved_solids_with_carbonate_equilibrium(volume_l, carbonate_eq);
         let ph = carbonate_eq.ph;
         let nh3_mg_n_per_l = compute_nh3_mg_n_per_l(tan_mg_n_per_l, ph, state.water.temperature_c);
+        let chloride_mg_per_l = chemistry.chloride_mg_per_l();
+        let effective_nitrite_hazard_mg_per_l = compute_effective_nitrite_hazard(
+            nitrite_mg_n_per_l,
+            chloride_mg_per_l,
+            state.shrimp_params.chloride_protection_factor,
+        );
         let fast_stem_biomass_g: f64 = state
             .plant_guilds
             .iter()
@@ -292,6 +309,8 @@ impl TankSnapshot {
             kh_d,
             estimated_tds_7_ion_mg_per_l: estimated_dissolved_solids.tds_mg_per_l,
             estimated_conductivity_us_cm: estimated_dissolved_solids.conductivity_us_cm,
+            chloride_mg_per_l,
+            effective_nitrite_hazard_mg_per_l,
             ph,
             light_enabled: state.hardware.light.enabled,
             photoperiod_hours: state.hardware.light.photoperiod_hours,

@@ -841,8 +841,10 @@ mod tests {
         unplanted.refresh_habitat_registry();
         let volume_l = unplanted.water_volume_l();
         unplanted.water.dissolved_oxygen_mg_total = 7.0 * volume_l;
-        unplanted.microbe.decomposer_biomass_g = 3.0;
+        // High decomposer demand so root respiration is negligible
+        unplanted.microbe.decomposer_biomass_g = 10.0;
         unplanted.plant_guilds.clear();
+        unplanted.microfauna.population_index = 0.0;
 
         let mut planted = unplanted.clone();
         planted.plant_guilds = vec![make_rooted_plant(10.0)];
@@ -864,6 +866,35 @@ mod tests {
     #[test]
     fn root_oxygenation_proportional_to_biomass_with_diminishing_returns(
     ) -> Result<(), Box<dyn std::error::Error>> {
+        // Test the bonus function directly (isolated from O₂ demand effects)
+        let mut state = make_state();
+        state.plant_guilds = vec![make_rooted_plant(2.0)];
+        let bonus_low = root_oxygenation_bonus_cm(&state);
+
+        state.plant_guilds = vec![make_rooted_plant(20.0)];
+        let bonus_high = root_oxygenation_bonus_cm(&state);
+
+        assert!(
+            bonus_high > bonus_low,
+            "more root biomass should yield larger bonus: high={bonus_high:.4}, low={bonus_low:.4}"
+        );
+
+        // Diminishing returns: 10× more biomass should yield less than 10× bonus
+        let ratio = bonus_high / bonus_low;
+        let biomass_ratio = 20.0_f64 / 2.0;
+        assert!(
+            ratio < biomass_ratio,
+            "bonus should show diminishing returns: bonus_ratio={ratio:.2}, biomass_ratio={biomass_ratio:.1}"
+        );
+        // With sqrt model, ratio should be sqrt(10) ≈ 3.16 for 10× biomass
+        assert!(
+            (ratio - biomass_ratio.sqrt()).abs() < 0.01,
+            "bonus ratio should follow sqrt scaling: got {ratio:.4}, expected {:.4}",
+            biomass_ratio.sqrt()
+        );
+
+        // Also verify via effective penetration with high background demand
+        // so root respiration is negligible.
         let mut base = make_state();
         base.substrate_layers = vec![SubstrateLayerState {
             kind: SubstrateKind::ActivePlanted,
@@ -874,7 +905,8 @@ mod tests {
         base.refresh_habitat_registry();
         let volume_l = base.water_volume_l();
         base.water.dissolved_oxygen_mg_total = 7.0 * volume_l;
-        base.microbe.decomposer_biomass_g = 3.0;
+        base.microbe.decomposer_biomass_g = 10.0;
+        base.microfauna.population_index = 0.0;
 
         let mut low_biomass = base.clone();
         low_biomass.plant_guilds = vec![make_rooted_plant(2.0)];
@@ -894,22 +926,6 @@ mod tests {
             pen_high > pen_low,
             "more root biomass should deepen penetration: high={pen_high:.4}, low={pen_low:.4}"
         );
-
-        // Diminishing returns: 10× more biomass should yield less than 10× bonus
-        let bonus_low = root_oxygenation_bonus_cm(&low_biomass);
-        let bonus_high = root_oxygenation_bonus_cm(&high_biomass);
-        let ratio = bonus_high / bonus_low;
-        let biomass_ratio = 20.0_f64 / 2.0;
-        assert!(
-            ratio < biomass_ratio,
-            "bonus should show diminishing returns: bonus_ratio={ratio:.2}, biomass_ratio={biomass_ratio:.1}"
-        );
-        // With sqrt model, ratio should be sqrt(10) ≈ 3.16 for 10× biomass
-        assert!(
-            (ratio - biomass_ratio.sqrt()).abs() < 0.01,
-            "bonus ratio should follow sqrt scaling: got {ratio:.4}, expected {:.4}",
-            biomass_ratio.sqrt()
-        );
         Ok(())
     }
 
@@ -926,8 +942,9 @@ mod tests {
         base.refresh_habitat_registry();
         let volume_l = base.water_volume_l();
         base.water.dissolved_oxygen_mg_total = 7.0 * volume_l;
-        base.microbe.decomposer_biomass_g = 3.0;
+        base.microbe.decomposer_biomass_g = 10.0;
         base.plant_guilds.clear();
+        base.microfauna.population_index = 0.0;
 
         let mut with_floating = base.clone();
         with_floating.plant_guilds = vec![make_floating_plant(20.0)];
