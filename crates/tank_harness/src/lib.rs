@@ -34,6 +34,7 @@
 //! - `trace.jsonl` — JSON-lines trace output (if tracing was enabled)
 
 pub mod calibration;
+pub mod validation_suite;
 
 use std::fmt;
 use std::path::PathBuf;

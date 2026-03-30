@@ -11,8 +11,12 @@ of every real aquarium.
 
 **Usage**: Run the validation suite with
 `cargo test --test e2e_validation_suite -- --nocapture` to get a pass/fail
-summary for each scenario. The calibration workflow (G4) can auto-populate
-the report template at the end of this document.
+summary for each scenario. Run
+`cargo run -p tank_harness --bin calibration_report -- --output-dir artifacts/calibration/latest`
+to generate `calibration_report.json` and `calibration_summary.txt` for the
+same eight shipped scenarios, including confidence/provenance markers and
+artifact paths for marginal or failed rows. The calibration workflow (G4)
+can auto-populate the report template at the end of this document.
 
 ---
 
@@ -495,6 +499,8 @@ as better calibration data becomes available.
 
 The calibration workflow (G4) can auto-populate this template by running
 each scenario and recording observed values against the envelope bounds.
+Use `--compare-to <previous_report.json>` to emit a machine-readable diff of
+status changes between parameter sets.
 
 ```
 ============================================================

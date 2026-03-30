@@ -214,6 +214,7 @@ impl CheckpointRow {
 
 impl ScenarioRow {
     /// Construct a fully-populated scenario row from checkpoint data.
+    #[allow(clippy::too_many_arguments)]
     pub fn from_checkpoints(
         scenario_id: impl Into<String>,
         scenario_name: impl Into<String>,
@@ -492,6 +493,10 @@ pub struct CalibrationRun {
     inner: HarnessRun,
     parameter_variant: String,
     checkpoint_rows: Vec<CheckpointRow>,
+    scenario_name: String,
+    domain: String,
+    confidence: ValidationConfidence,
+    provenance_status: ProvenanceStatus,
 }
 
 impl CalibrationRun {
@@ -501,7 +506,28 @@ impl CalibrationRun {
             inner,
             parameter_variant: parameter_variant.into(),
             checkpoint_rows: Vec::new(),
+            scenario_name: String::new(),
+            domain: String::new(),
+            confidence: ValidationConfidence::High,
+            provenance_status: ProvenanceStatus::ValidatedDirectionally,
         }
+    }
+
+    /// Set scenario metadata that will be carried into the finished [`ScenarioRow`].
+    ///
+    /// Without this call, `finish()` populates these fields with empty defaults.
+    pub fn with_metadata(
+        mut self,
+        scenario_name: impl Into<String>,
+        domain: impl Into<String>,
+        confidence: ValidationConfidence,
+        provenance_status: ProvenanceStatus,
+    ) -> Self {
+        self.scenario_name = scenario_name.into();
+        self.domain = domain.into();
+        self.confidence = confidence;
+        self.provenance_status = provenance_status;
+        self
     }
 
     /// Access the underlying harness run.
@@ -582,6 +608,10 @@ impl CalibrationRun {
             inner,
             parameter_variant,
             checkpoint_rows,
+            scenario_name,
+            domain,
+            confidence,
+            provenance_status,
         } = self;
 
         let scenario_id = inner.scenario_id().to_owned();
@@ -608,19 +638,27 @@ impl CalibrationRun {
             checkpoint_status
         };
 
+        let artifacts = match &artifact_path {
+            Some(path) => vec![ScenarioArtifact {
+                label: "harness".to_owned(),
+                path: path.clone(),
+            }],
+            None => Vec::new(),
+        };
+
         ScenarioRow {
             scenario_id,
-            scenario_name: String::new(),
+            scenario_name,
             seed,
             parameter_variant,
-            domain: String::new(),
-            confidence: ValidationConfidence::High,
-            provenance_status: ProvenanceStatus::ValidatedDirectionally,
+            domain,
+            confidence,
+            provenance_status,
             status: overall_status,
             observed_summary: String::new(),
             checkpoints: checkpoint_rows,
             artifact_path,
-            artifacts: Vec::new(),
+            artifacts,
         }
     }
 }
@@ -903,10 +941,19 @@ fn summarize_fields(fields: &[FieldCheck]) -> String {
                 .unwrap_or_else(|| "n/a".to_string());
             match (field.envelope_min, field.envelope_max) {
                 (Some(min), Some(max)) if max.is_finite() => {
-                    format!("{}={} [{}..{}]", field.field, observed, trim_float(min), trim_float(max))
+                    format!(
+                        "{}={} [{}..{}]",
+                        field.field,
+                        observed,
+                        trim_float(min),
+                        trim_float(max)
+                    )
                 }
-                (Some(min), Some(max)) if max.is_infinite() => {
+                (Some(min), None) | (Some(min), Some(_)) => {
                     format!("{}={} [>= {}]", field.field, observed, trim_float(min))
+                }
+                (None, Some(max)) => {
+                    format!("{}={} [<= {}]", field.field, observed, trim_float(max))
                 }
                 _ => format!("{}={}", field.field, observed),
             }

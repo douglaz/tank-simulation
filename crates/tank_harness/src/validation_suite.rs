@@ -256,6 +256,7 @@ fn fail_field(field: impl Into<String>, detail: impl Into<String>) -> FieldCheck
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn finalize_custom_row(
     definition: &ValidationScenarioDefinition,
     parameter_variant: &str,
@@ -1540,10 +1541,849 @@ fn run_vs08_stocking_density_crash() -> Result<ProbeResult, Box<dyn std::error::
 }
 
 // ===========================================================================
+// Calibration workflow: structured report rows for all shipped scenarios
+// ===========================================================================
+
+pub fn run_calibration_suite(parameter_variant: &str) -> Result<CalibrationReport, Box<dyn Error>> {
+    let mut rows = Vec::new();
+    for definition in validation_scenarios() {
+        rows.push(run_calibration_scenario(definition.id, parameter_variant)?);
+    }
+    Ok(CalibrationReport::from_rows(parameter_variant, rows))
+}
+
+pub fn run_calibration_scenario(
+    scenario_id: &str,
+    parameter_variant: &str,
+) -> Result<ScenarioRow, Box<dyn Error>> {
+    match scenario_id {
+        "vs01_cycling_timeline" => calibrate_vs01(parameter_variant),
+        "vs02_aeration_effects" => calibrate_vs02(parameter_variant),
+        "vs03_day_night_ph_swing" => calibrate_vs03(parameter_variant),
+        "vs04_source_water_differentiation" => calibrate_vs04(parameter_variant),
+        "vs05_shrimp_breeding_thermal_window" => calibrate_vs05(parameter_variant),
+        "vs06_algae_plant_competition" => calibrate_vs06(parameter_variant),
+        "vs07_nitrate_removal_denitrification" => calibrate_vs07(parameter_variant),
+        "vs08_stocking_density_crash" => calibrate_vs08(parameter_variant),
+        _ => Err(format!("unknown validation scenario id '{scenario_id}'").into()),
+    }
+}
+
+fn calibrate_vs01(parameter_variant: &str) -> Result<ScenarioRow, Box<dyn Error>> {
+    let definition = scenario_definition("vs01_cycling_timeline");
+    let overrides = StartupOverrides {
+        geometry: ScenarioGeometryOverrides {
+            size_scale: 2.0,
+            fill_ratio: 1.0,
+        },
+        source_water_profile_id: Some("hard_shrimp".to_string()),
+        substrate_preset: Some(StartupSubstratePreset::ActivePlantedWithCoarsePorous),
+        plant_selection: Some(StartupPlantSelection::BothGuilds),
+        filter_enabled: Some(true),
+        light_preset: Some(StartupLightPreset::Hours12),
+        heater_preset: Some(StartupHeaterPreset::Celsius25),
+        aeration_enabled: Some(true),
+        initial_adult_shrimp_count: Some(0),
+        ..StartupOverrides::default()
+    };
+    let run = HarnessRun::with_overrides(definition.seed, "medium_planted", overrides)?
+        .with_artifact_label(definition.id);
+    let mut calibration = CalibrationRun::new(run, parameter_variant);
+    calibration.enable_instrumentation();
+
+    for day in 1..=56 {
+        calibration.apply_action(PlayerAction::Feed { grams: 0.1 })?;
+        calibration.step_hours(24)?;
+
+        if day % 7 == 0 {
+            calibration.apply_action(PlayerAction::WaterChangePercent {
+                percent: 15.0,
+                source_profile_id: "hard_shrimp".to_string(),
+            })?;
+            calibration.step_hours(1)?;
+
+            match day / 7 {
+                2 => calibration.check_envelope(
+                    "week_2",
+                    &Envelope::default()
+                        .ph(6.5, 8.5)
+                        .tan_mg_n_per_l(0.0, 15.0)
+                        .nitrite_mg_n_per_l(0.0, 5.0)
+                        .nitrate_mg_n_per_l(0.0, 15.0)
+                        .do_min(6.0),
+                ),
+                4 => calibration.check_envelope(
+                    "week_4",
+                    &Envelope::default()
+                        .ph(6.5, 8.5)
+                        .tan_mg_n_per_l(0.0, 10.0)
+                        .nitrite_mg_n_per_l(0.0, 10.0)
+                        .nitrate_mg_n_per_l(0.5, 25.0)
+                        .do_min(5.5),
+                ),
+                6 => calibration.check_envelope(
+                    "week_6",
+                    &Envelope::default()
+                        .ph(6.5, 8.5)
+                        .tan_mg_n_per_l(0.0, 3.0)
+                        .nitrite_mg_n_per_l(0.0, 3.0)
+                        .nitrate_mg_n_per_l(2.0, 40.0)
+                        .do_min(5.5),
+                ),
+                8 => calibration.check_envelope(
+                    "week_8",
+                    &Envelope::default()
+                        .ph(6.5, 8.5)
+                        .tan_mg_n_per_l(0.0, 2.0)
+                        .nitrite_mg_n_per_l(0.0, 2.0)
+                        .nitrate_mg_n_per_l(5.0, 60.0)
+                        .do_min(5.5),
+                ),
+                _ => {}
+            }
+        }
+    }
+
+    let snap = calibration.inner().snapshot();
+    let observed = format!(
+        "week8: TAN={:.3} NO2={:.3} NO3={:.3} pH={:.3} maturity={:.3}",
+        snap.tan_mg_n_per_l,
+        snap.nitrite_mg_n_per_l,
+        snap.nitrate_mg_n_per_l,
+        snap.ph,
+        snap.biofilter_maturity_index,
+    );
+
+    Ok(annotate_row(definition, calibration.finish(), observed))
+}
+
+fn calibrate_vs02(parameter_variant: &str) -> Result<ScenarioRow, Box<dyn Error>> {
+    let definition = scenario_definition("vs02_aeration_effects");
+    let make_state = |aerated: bool| -> TankState {
+        let mut state = TankState::new(definition.seed);
+        let volume_l = state.water_volume_l();
+
+        state.water.temperature_c = 25.0;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 40.0 * volume_l;
+        state.water.alkalinity_meq_total = 2.0 * volume_l;
+        state.water.dissolved_oxygen_mg_total = 3.0 * volume_l;
+        state.water.ammonia_total_mg_n_total = 4.0 * volume_l;
+        state.microbe.ammonia_oxidizer_biomass_g = 1.0;
+        state.microbe.nitrite_oxidizer_biomass_g = 0.5;
+        state.microbe.set_decomposer_total(0.5);
+        state.filter_state.biofilter_maturity_index = 0.6;
+        state.process_params.reaeration_kla_base = 0.01;
+        state.hardware.aeration.enabled = aerated;
+        state.hardware.aeration.intensity = if aerated { 1.0 } else { 0.0 };
+
+        resolve_carbonate_state(&mut state.water, volume_l);
+        state
+    };
+
+    let mut aerated_run = HarnessRun::from_state(definition.seed, "vs02_aerated", make_state(true))
+        .with_artifact_label("vs02_aerated");
+    let mut passive_run =
+        HarnessRun::from_state(definition.seed, "vs02_passive", make_state(false))
+            .with_artifact_label("vs02_passive");
+    enable_instrumentation(&mut aerated_run);
+    enable_instrumentation(&mut passive_run);
+
+    aerated_run.step_hours(24)?;
+    passive_run.step_hours(24)?;
+
+    let aerated_snap = aerated_run.snapshot();
+    let passive_snap = passive_run.snapshot();
+    let do_gap = aerated_snap.do_mg_l - passive_snap.do_mg_l;
+    let ph_gap = aerated_snap.ph - passive_snap.ph;
+    let observed = format!(
+        "aerated: DO={:.2} pH={:.3} | passive: DO={:.2} pH={:.3} | DO_gap={:.2} pH_gap={:.3}",
+        aerated_snap.do_mg_l,
+        aerated_snap.ph,
+        passive_snap.do_mg_l,
+        passive_snap.ph,
+        do_gap,
+        ph_gap,
+    );
+
+    let state = aerated_run.engine().full_state();
+    let fields = vec![
+        FieldCheck::observed_only("aerated_do_mg_l", aerated_snap.do_mg_l),
+        FieldCheck::observed_only("passive_do_mg_l", passive_snap.do_mg_l),
+        classify_field_f64("do_gap_mg_l", do_gap, 0.5, f64::INFINITY),
+        FieldCheck::observed_only("aerated_ph", aerated_snap.ph),
+        FieldCheck::observed_only("passive_ph", passive_snap.ph),
+        classify_field_f64("ph_gap", ph_gap, 0.2, f64::INFINITY),
+    ];
+
+    Ok(finalize_custom_row(
+        definition,
+        parameter_variant,
+        "comparison_24h",
+        state.environment.day,
+        state.environment.hour_of_day,
+        fields,
+        observed,
+        vec![("aerated", aerated_run), ("passive", passive_run)],
+    ))
+}
+
+fn calibrate_vs03(parameter_variant: &str) -> Result<ScenarioRow, Box<dyn Error>> {
+    let definition = scenario_definition("vs03_day_night_ph_swing");
+    let mut state = TankState::new(definition.seed);
+    let volume_l = state.water_volume_l();
+
+    state.plant_guilds[0].biomass_g = 18.0;
+    state.plant_guilds[1].biomass_g = 12.0;
+    state.algae.set_periphyton_total(2.0);
+    state.algae.suspended_biomass_g = 0.5;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 20.0 * volume_l;
+    state.water.alkalinity_meq_total = 1.5 * volume_l;
+    state.water.temperature_c = 25.0;
+    state.hardware.light.enabled = true;
+    state.hardware.light.photoperiod_hours = 12.0;
+    state.hardware.light.intensity_index = 1.0;
+    state.animal.adult.count = 12;
+    state
+        .process_params
+        .background_bod_mg_o2_per_g_biomass_per_hour = 0.08;
+    state
+        .process_params
+        .respiration_dic_rate_mg_c_per_g_per_hour = 0.03;
+    state
+        .process_params
+        .plant_photosynthesis_o2_mg_per_g_per_hour = 0.4;
+    state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.15;
+    state.process_params.reaeration_kla_base = 0.0;
+    state.process_params.aeration_kla_boost = 0.0;
+    state.hardware.aeration.enabled = false;
+    state.hardware.filter.flow_lph = 0.0;
+    resolve_carbonate_state(&mut state.water, volume_l);
+    state.environment.hour_of_day = 0;
+    state.environment.day = 1;
+
+    let photoperiod = state.hardware.light.photoperiod_hours;
+    let mut end_of_dark = None;
+    let mut end_of_light = None;
+    for hour in 0..24u8 {
+        let now = is_light_on(hour, photoperiod);
+        let next = is_light_on((hour + 1) % 24, photoperiod);
+        if !now && next {
+            end_of_dark = Some((hour + 1) % 24);
+        }
+        if now && !next {
+            end_of_light = Some((hour + 1) % 24);
+        }
+    }
+    let end_of_dark = end_of_dark.expect("photoperiod should define end-of-dark");
+    let end_of_light = end_of_light.expect("photoperiod should define end-of-light");
+
+    let mut run = HarnessRun::from_state(definition.seed, definition.id, state)
+        .with_artifact_label(definition.id);
+    enable_instrumentation(&mut run);
+
+    let mut ph_end_of_light = Vec::new();
+    let mut ph_end_of_dark = Vec::new();
+    for _ in 0..72 {
+        run.step_hours(1)?;
+        let state = run.engine().full_state();
+        if state.environment.day >= 2 {
+            let hour = state.environment.hour_of_day;
+            if hour == end_of_light {
+                ph_end_of_light.push(run.snapshot().ph);
+            }
+            if hour == end_of_dark {
+                ph_end_of_dark.push(run.snapshot().ph);
+            }
+        }
+    }
+
+    let max_light = ph_end_of_light
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    let min_dark = ph_end_of_dark.iter().copied().fold(f64::INFINITY, f64::min);
+    let swing = max_light - min_dark;
+    let observed = format!(
+        "light_max_pH={:.3} dark_min_pH={:.3} swing={:.3} (samples: light={}, dark={})",
+        max_light,
+        min_dark,
+        swing,
+        ph_end_of_light.len(),
+        ph_end_of_dark.len(),
+    );
+
+    let mut fields = vec![
+        FieldCheck::observed_only("light_sample_count", ph_end_of_light.len() as f64),
+        FieldCheck::observed_only("dark_sample_count", ph_end_of_dark.len() as f64),
+        classify_field_f64("ph_swing", swing, 0.2, 1.0),
+    ];
+    if ph_end_of_light.len() < 2 || ph_end_of_dark.len() < 2 {
+        fields.push(fail_field(
+            "transition_samples",
+            "insufficient light/dark transition samples",
+        ));
+    } else {
+        for (index, (light_ph, dark_ph)) in ph_end_of_light
+            .iter()
+            .zip(ph_end_of_dark.iter())
+            .enumerate()
+        {
+            fields.push(classify_field_f64(
+                &format!("cycle_{}_light_minus_dark", index + 1),
+                light_ph - dark_ph,
+                0.001,
+                f64::INFINITY,
+            ));
+        }
+    }
+
+    let state = run.engine().full_state();
+    Ok(finalize_custom_row(
+        definition,
+        parameter_variant,
+        "day_night_cycles",
+        state.environment.day,
+        state.environment.hour_of_day,
+        fields,
+        observed,
+        vec![("day_night", run)],
+    ))
+}
+
+fn calibrate_vs04(parameter_variant: &str) -> Result<ScenarioRow, Box<dyn Error>> {
+    let definition = scenario_definition("vs04_source_water_differentiation");
+    let hard = load_source_profile("hard_shrimp");
+    let ro = load_source_profile("ro_like");
+    let volume_l = 30.0;
+
+    let hard_state = equilibrium_tank(&hard, volume_l, definition.seed);
+    let ro_state = equilibrium_tank(&ro, volume_l, definition.seed);
+    let mut hard_run = HarnessRun::from_state(definition.seed, "vs04_hard", hard_state)
+        .with_artifact_label("vs04_hard");
+    let mut ro_run =
+        HarnessRun::from_state(definition.seed, "vs04_ro", ro_state).with_artifact_label("vs04_ro");
+    enable_instrumentation(&mut hard_run);
+    enable_instrumentation(&mut ro_run);
+
+    hard_run.step_hours(100)?;
+    ro_run.step_hours(100)?;
+
+    let hard_snap = hard_run.snapshot();
+    let ro_snap = ro_run.snapshot();
+    let ph_gap = hard_snap.ph - ro_snap.ph;
+    let observed = format!(
+        "hard_shrimp: pH={:.3} | ro_like: pH={:.3} | gap={:.3}",
+        hard_snap.ph, ro_snap.ph, ph_gap,
+    );
+
+    let state = hard_run.engine().full_state();
+    let fields = vec![
+        classify_field_f64("hard_shrimp_ph", hard_snap.ph, 7.0, 8.5),
+        classify_field_f64("ro_like_ph", ro_snap.ph, 5.5, 7.0),
+        classify_field_f64("ph_gap", ph_gap, 1.0, f64::INFINITY),
+    ];
+
+    Ok(finalize_custom_row(
+        definition,
+        parameter_variant,
+        "equilibrium_100h",
+        state.environment.day,
+        state.environment.hour_of_day,
+        fields,
+        observed,
+        vec![("hard_shrimp", hard_run), ("ro_like", ro_run)],
+    ))
+}
+
+fn calibrate_vs05(parameter_variant: &str) -> Result<ScenarioRow, Box<dyn Error>> {
+    let definition = scenario_definition("vs05_shrimp_breeding_thermal_window");
+    let cool_state = breeding_state(definition.seed, 25.0);
+    let warm_state = breeding_state(definition.seed, 31.0);
+    let mut cool_run = HarnessRun::from_state(definition.seed, "vs05_cool", cool_state)
+        .with_artifact_label("vs05_cool");
+    let mut warm_run = HarnessRun::from_state(definition.seed, "vs05_warm", warm_state)
+        .with_artifact_label("vs05_warm");
+    enable_instrumentation(&mut cool_run);
+    enable_instrumentation(&mut warm_run);
+
+    for day in 1..=60 {
+        cool_run.apply_action(PlayerAction::Feed { grams: 0.05 })?;
+        warm_run.apply_action(PlayerAction::Feed { grams: 0.05 })?;
+        cool_run.step_hours(24)?;
+        warm_run.step_hours(24)?;
+
+        if day % 5 == 0 {
+            cool_run.apply_action(PlayerAction::WaterChangePercent {
+                percent: 20.0,
+                source_profile_id: "breed_source".to_string(),
+            })?;
+            warm_run.apply_action(PlayerAction::WaterChangePercent {
+                percent: 20.0,
+                source_profile_id: "breed_source".to_string(),
+            })?;
+            cool_run.step_hours(1)?;
+            warm_run.step_hours(1)?;
+        }
+    }
+
+    let cool_snap = cool_run.snapshot();
+    let warm_snap = warm_run.snapshot();
+    let cool_state = cool_run.engine().full_state().clone();
+    let cool_cycles = cool_state
+        .event_log
+        .iter()
+        .filter(|event| event.kind == EventKind::ShrimpBerried)
+        .count()
+        .min(
+            cool_state
+                .event_log
+                .iter()
+                .filter(|event| event.kind == EventKind::ShrimpHatched)
+                .count(),
+        ) as f64;
+    let cool_offspring = (cool_snap.juveniles_count + cool_snap.sub_adult_count) as f64;
+    let warm_offspring = (warm_snap.juveniles_count + warm_snap.sub_adult_count) as f64;
+
+    let observed = format!(
+        "cool: pop={} cycles={} juv={} sub={} readiness={:.3} | warm: pop={} juv={} sub={} readiness={:.3}",
+        cool_snap.total_shrimp_count,
+        cool_cycles as u32,
+        cool_snap.juveniles_count,
+        cool_snap.sub_adult_count,
+        cool_snap.shrimp_reproductive_readiness,
+        warm_snap.total_shrimp_count,
+        warm_snap.juveniles_count,
+        warm_snap.sub_adult_count,
+        warm_snap.shrimp_reproductive_readiness,
+    );
+
+    let state = cool_run.engine().full_state();
+    let fields = vec![
+        classify_field_f64(
+            "cool_final_population",
+            cool_snap.total_shrimp_count as f64,
+            11.0,
+            f64::INFINITY,
+        ),
+        classify_field_f64("cool_complete_cycles", cool_cycles, 2.0, f64::INFINITY),
+        classify_field_f64("cool_offspring_count", cool_offspring, 1.0, f64::INFINITY),
+        classify_field_f64(
+            "cool_minus_warm_offspring",
+            cool_offspring - warm_offspring,
+            0.001,
+            f64::INFINITY,
+        ),
+        classify_field_f64(
+            "cool_minus_warm_readiness",
+            cool_snap.shrimp_reproductive_readiness - warm_snap.shrimp_reproductive_readiness,
+            0.001,
+            f64::INFINITY,
+        ),
+        FieldCheck::observed_only("warm_final_population", warm_snap.total_shrimp_count as f64),
+    ];
+
+    Ok(finalize_custom_row(
+        definition,
+        parameter_variant,
+        "day_60",
+        state.environment.day,
+        state.environment.hour_of_day,
+        fields,
+        observed,
+        vec![("cool_25c", cool_run), ("warm_31c", warm_run)],
+    ))
+}
+
+fn calibrate_vs06(parameter_variant: &str) -> Result<ScenarioRow, Box<dyn Error>> {
+    let definition = scenario_definition("vs06_algae_plant_competition");
+    let mut state = TankState::new(definition.seed);
+    let volume_l = state.water_volume_l();
+    state.plant_guilds[0].biomass_g = 0.0;
+    state.plant_guilds[1].biomass_g = 8.0;
+    state.water.ammonia_total_mg_n_total = 0.5 * volume_l;
+    state.water.nitrate_mg_n_total = 2.0 * volume_l;
+    state.water.phosphate_mg_p_total = 0.1 * volume_l;
+    state.hardware.light.enabled = true;
+    state.hardware.light.intensity_index = 1.0;
+    state.hardware.light.photoperiod_hours = 14.0;
+    state.algae.suspended_biomass_g = 0.5;
+    state.algae.set_periphyton_total(2.0);
+    state.animal.adult.count = 0;
+    state.animal.sub_adult.count = 0;
+    state.animal.juvenile.count = 0;
+    state.microfauna.population_index = 0.0;
+    state.microfauna.grazing_pressure_index = 0.0;
+    state.water.temperature_c = 25.0;
+    state.environment.ambient_temp_c = 25.0;
+
+    let initial_snap = TankSnapshot::from_state(&state);
+    let initial_plant = initial_snap.total_plant_biomass_g;
+    let initial_algae_total =
+        initial_snap.suspended_algae_biomass_g + initial_snap.periphyton_biomass_g;
+    let initial_health = initial_snap.root_feeding_rosette_health_index;
+
+    let mut run = HarnessRun::from_state(definition.seed, definition.id, state)
+        .with_artifact_label(definition.id);
+    enable_instrumentation(&mut run);
+
+    for _ in 0..90 {
+        run.apply_action(PlayerAction::Feed { grams: 0.02 })?;
+        run.step_hours(24)?;
+    }
+
+    let final_snap = run.snapshot();
+    let final_plant = final_snap.total_plant_biomass_g;
+    let final_algae_total = final_snap.suspended_algae_biomass_g + final_snap.periphyton_biomass_g;
+    let final_health = final_snap.root_feeding_rosette_health_index;
+    let observed = format!(
+        "plants: {initial_plant:.2}g->{final_plant:.2}g health: {initial_health:.3}->{final_health:.3} | algae: {initial_algae_total:.3}g->{final_algae_total:.3}g nuisance: {:.3}->{:.3}",
+        initial_snap.algae_nuisance_index,
+        final_snap.algae_nuisance_index,
+    );
+
+    let state = run.engine().full_state();
+    let fields = vec![
+        classify_field_f64(
+            "algae_fraction_of_initial",
+            final_algae_total / initial_algae_total,
+            0.5,
+            f64::INFINITY,
+        ),
+        classify_field_f64(
+            "plant_biomass_multiplier",
+            final_plant / initial_plant,
+            f64::NEG_INFINITY,
+            1.2,
+        ),
+        classify_field_f64(
+            "plant_health_drop",
+            initial_health - final_health,
+            0.001,
+            f64::INFINITY,
+        ),
+    ];
+
+    Ok(finalize_custom_row(
+        definition,
+        parameter_variant,
+        "day_90",
+        state.environment.day,
+        state.environment.hour_of_day,
+        fields,
+        observed,
+        vec![("competition_tank", run)],
+    ))
+}
+
+fn calibrate_vs07(parameter_variant: &str) -> Result<ScenarioRow, Box<dyn Error>> {
+    let definition = scenario_definition("vs07_nitrate_removal_denitrification");
+    const VS07_WATER_CHANGE_SOURCE: &str = "vs07_buffered_low_nitrate";
+
+    let mut buffered_source = load_source_profile("hard_shrimp");
+    buffered_source.nitrate_mg_n_per_l = 0.0;
+
+    let normalize_fast_stems = |state: &mut TankState, biomass_g: f64| {
+        for plant in &mut state.plant_guilds {
+            match plant.guild {
+                PlantGuild::FastStem => {
+                    plant.biomass_g = biomass_g;
+                    plant.health_index = 0.95;
+                }
+                _ => {
+                    plant.biomass_g = 0.0;
+                }
+            }
+        }
+    };
+
+    let prepare_vs07_biology = |state: &mut TankState| {
+        normalize_fast_stems(state, 18.0);
+        state.microbe.decomposer_biomass_g = 8.0;
+        state.detritus.fine_detritus_g_total = 2.0;
+        state.microfauna.population_index = 0.8;
+        state.algae.set_periphyton_total(4.0);
+        state.algae.suspended_biomass_g = 0.4;
+    };
+
+    let planted_overrides = StartupOverrides {
+        geometry: ScenarioGeometryOverrides {
+            size_scale: 2.0,
+            fill_ratio: 1.0,
+        },
+        source_water_profile_id: Some("hard_shrimp".to_string()),
+        substrate_preset: Some(StartupSubstratePreset::ActivePlanted),
+        plant_selection: Some(StartupPlantSelection::FastStemOnly),
+        filter_enabled: Some(true),
+        light_preset: Some(StartupLightPreset::Hours12),
+        heater_preset: Some(StartupHeaterPreset::Celsius25),
+        aeration_enabled: Some(true),
+        initial_adult_shrimp_count: Some(0),
+        ..StartupOverrides::default()
+    };
+    let mut planted_state = tank_scenarios::seeded_state_with_full_overrides(
+        definition.seed,
+        "medium_planted",
+        planted_overrides,
+    )?;
+    planted_state.source_water_catalog.insert(
+        VS07_WATER_CHANGE_SOURCE.to_string(),
+        buffered_source.clone(),
+    );
+    prepare_vs07_biology(&mut planted_state);
+    planted_state.microbe.denitrifier_activity_index = 1.0;
+    planted_state
+        .process_params
+        .denitrification_vmax_mg_n_per_l_per_hour = 0.2;
+    planted_state
+        .process_params
+        .denitrification_pore_water_mixing_factor = 1.0;
+    for layer in &mut planted_state.substrate_layers {
+        layer.depth_cm = 10.0;
+        layer.porosity = 0.32;
+        layer.nutrient_store_mg_n_total = 0.0;
+        layer.nutrient_store_mg_p_total = 0.0;
+    }
+    let vol = planted_state.water_volume_l();
+    planted_state.water.dissolved_organic_carbon_mg_c_total = 12.0 * vol;
+    planted_state.water.nitrate_mg_n_total = 12.0 * vol;
+    planted_state.refresh_habitat_registry();
+
+    let mut planted_run = HarnessRun::from_state(definition.seed, "vs07_planted", planted_state)
+        .with_artifact_label("vs07_planted");
+    enable_instrumentation(&mut planted_run);
+
+    let bare_overrides = StartupOverrides {
+        geometry: ScenarioGeometryOverrides {
+            size_scale: 2.0,
+            fill_ratio: 1.0,
+        },
+        source_water_profile_id: Some("hard_shrimp".to_string()),
+        substrate_preset: Some(StartupSubstratePreset::InertSand),
+        plant_selection: Some(StartupPlantSelection::FastStemOnly),
+        filter_enabled: Some(true),
+        light_preset: Some(StartupLightPreset::Hours12),
+        heater_preset: Some(StartupHeaterPreset::Celsius25),
+        aeration_enabled: Some(true),
+        initial_adult_shrimp_count: Some(0),
+        ..StartupOverrides::default()
+    };
+    let mut bare_state = tank_scenarios::seeded_state_with_full_overrides(
+        definition.seed,
+        "medium_planted",
+        bare_overrides,
+    )?;
+    bare_state
+        .source_water_catalog
+        .insert(VS07_WATER_CHANGE_SOURCE.to_string(), buffered_source);
+    prepare_vs07_biology(&mut bare_state);
+    bare_state.substrate_layers.clear();
+    bare_state
+        .process_params
+        .denitrification_vmax_mg_n_per_l_per_hour = 0.2;
+    bare_state
+        .process_params
+        .denitrification_pore_water_mixing_factor = 1.0;
+    let bare_vol = bare_state.water_volume_l();
+    bare_state.water.nitrate_mg_n_total = 12.0 * bare_vol;
+    bare_state.water.dissolved_organic_carbon_mg_c_total = 12.0 * bare_vol;
+    bare_state.refresh_habitat_registry();
+
+    let mut bare_run = HarnessRun::from_state(definition.seed, "vs07_bare", bare_state)
+        .with_artifact_label("vs07_bare");
+    enable_instrumentation(&mut bare_run);
+
+    for day in 1..=120 {
+        planted_run.apply_action(PlayerAction::Feed { grams: 0.1 })?;
+        bare_run.apply_action(PlayerAction::Feed { grams: 0.1 })?;
+        planted_run.step_hours(24)?;
+        bare_run.step_hours(24)?;
+
+        if day % 7 == 0 {
+            planted_run.apply_action(PlayerAction::WaterChangePercent {
+                percent: 15.0,
+                source_profile_id: VS07_WATER_CHANGE_SOURCE.to_string(),
+            })?;
+            bare_run.apply_action(PlayerAction::WaterChangePercent {
+                percent: 15.0,
+                source_profile_id: VS07_WATER_CHANGE_SOURCE.to_string(),
+            })?;
+            planted_run.step_hours(1)?;
+            bare_run.step_hours(1)?;
+        }
+    }
+
+    let planted_snap = planted_run.snapshot();
+    let bare_snap = bare_run.snapshot();
+    let planted_n2 = planted_run.engine().full_state().cumulative_n2_export_mg_n;
+    let bare_n2 = bare_run.engine().full_state().cumulative_n2_export_mg_n;
+    let planted_denitrifier_act = planted_run
+        .engine()
+        .full_state()
+        .microbe
+        .denitrifier_activity_index;
+    let observed = format!(
+        "planted: NO3={:.2} N2_export={:.2}mg_N denitrifier_act={:.3} | bare: NO3={:.2} N2_export={:.2}mg_N",
+        planted_snap.nitrate_mg_n_per_l,
+        planted_n2,
+        planted_denitrifier_act,
+        bare_snap.nitrate_mg_n_per_l,
+        bare_n2,
+    );
+
+    let state = planted_run.engine().full_state();
+    let fields = vec![
+        classify_field_f64(
+            "bare_minus_planted_no3_mg_n_per_l",
+            bare_snap.nitrate_mg_n_per_l - planted_snap.nitrate_mg_n_per_l,
+            0.001,
+            f64::INFINITY,
+        ),
+        classify_field_f64("planted_n2_export_mg_n", planted_n2, 1.0, f64::INFINITY),
+        classify_field_f64("bare_n2_export_mg_n", bare_n2, f64::NEG_INFINITY, 0.1),
+        classify_field_f64(
+            "planted_denitrifier_activity",
+            planted_denitrifier_act,
+            0.1,
+            f64::INFINITY,
+        ),
+    ];
+
+    Ok(finalize_custom_row(
+        definition,
+        parameter_variant,
+        "day_120",
+        state.environment.day,
+        state.environment.hour_of_day,
+        fields,
+        observed,
+        vec![
+            ("planted_substrate", planted_run),
+            ("bare_bottom", bare_run),
+        ],
+    ))
+}
+
+fn calibrate_vs08(parameter_variant: &str) -> Result<ScenarioRow, Box<dyn Error>> {
+    let definition = scenario_definition("vs08_stocking_density_crash");
+    let geometry = TankGeometry {
+        length_cm: 30.0,
+        width_cm: 20.0,
+        height_cm: 30.0,
+        fill_height_cm: 25.0,
+        glass_thickness_mm: 5.0,
+        open_top: true,
+        lid_exchange_factor: 0.25,
+        hardscape_area_cm2: 0.0,
+    };
+    let mut state = TankState::new(definition.seed);
+    state.geometry = geometry;
+    state.water = WaterState::default_for_volume_l(state.water_volume_l());
+    state.water.temperature_c = 25.0;
+    state.environment.ambient_temp_c = 25.0;
+
+    let vol = state.water_volume_l();
+    state.water.calcium_mg_total = 30.0 * vol;
+    state.water.magnesium_mg_total = 8.0 * vol;
+    state.water.alkalinity_meq_total = 4.0 * vol;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 10.0 * vol;
+    state.water.dissolved_oxygen_mg_total = 7.0 * vol;
+    state.water.bicarbonate_mg_total = 200.0 * vol;
+    state.algae.set_periphyton_total(2.0);
+    state.microbe.set_decomposer_total(0.15);
+    state.microbe.ammonia_oxidizer_biomass_g = 0.3;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.2;
+    state.microbe.comammox_biomass_g = 0.1;
+    state.filter_state.biofilter_maturity_index = 0.5;
+    state.hardware.aeration.enabled = false;
+    state.hardware.light.enabled = true;
+    state.hardware.light.intensity_index = 0.4;
+    state.hardware.light.photoperiod_hours = 8.0;
+    state.animal.adult.count = 20;
+    state.animal.set_population_condition_index(0.6);
+    state.animal.molt_stress_index = 0.2;
+    state.animal.reproductive_readiness_index = 0.1;
+    state.process_params = ProcessParams::default();
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.reseed_stability_tracker();
+
+    let run = HarnessRun::from_state(definition.seed, definition.id, state)
+        .with_artifact_label(definition.id);
+    let mut calibration = CalibrationRun::new(run, parameter_variant);
+    calibration.enable_instrumentation();
+    let initial_count = calibration
+        .inner()
+        .engine()
+        .full_state()
+        .animal
+        .total_count();
+
+    for day in 1..=56 {
+        calibration.apply_action(PlayerAction::Feed { grams: 0.5 })?;
+        calibration.step_hours(24)?;
+
+        if day % 7 == 0 {
+            match day / 7 {
+                1 => calibration.check_envelope(
+                    "week_1",
+                    &Envelope::default()
+                        .tan_mg_n_per_l(1.0, 30.0)
+                        .shrimp_count(5, 20)
+                        .ph(5.0, 8.5),
+                ),
+                2 => calibration.check_envelope(
+                    "week_2",
+                    &Envelope::default()
+                        .tan_mg_n_per_l(3.0, 60.0)
+                        .shrimp_count(0, 15)
+                        .ph(4.5, 8.5),
+                ),
+                4 => calibration.check_envelope(
+                    "week_4",
+                    &Envelope::default()
+                        .tan_mg_n_per_l(5.0, 100.0)
+                        .shrimp_count(0, 5)
+                        .ph(4.5, 8.5),
+                ),
+                8 => calibration.check_envelope(
+                    "week_8",
+                    &Envelope::default()
+                        .tan_mg_n_per_l(10.0, 400.0)
+                        .shrimp_count(0, 0)
+                        .ph(4.5, 8.5),
+                ),
+                _ => {}
+            }
+        }
+    }
+
+    let final_snap = calibration.inner().snapshot();
+    if final_snap.total_shrimp_count > initial_count / 2 {
+        calibration.inner_mut().record_failure(
+            "population_crash",
+            format!(
+                "crash scenario should lose >=50% of population: initial={initial_count}, final={}",
+                final_snap.total_shrimp_count
+            ),
+        );
+    }
+    let observed = format!(
+        "initial={initial_count}, final={}, TAN={:.2}, NO2={:.2}, pH={:.3}",
+        final_snap.total_shrimp_count,
+        final_snap.tan_mg_n_per_l,
+        final_snap.nitrite_mg_n_per_l,
+        final_snap.ph,
+    );
+
+    Ok(annotate_row(definition, calibration.finish(), observed))
+}
+
+// ===========================================================================
 // Summary runner: executes all 8 probes and prints a validation report
 // ===========================================================================
 
-type ProbeFn = Box<dyn Fn() -> Result<ProbeResult, Box<dyn std::error::Error>>>;
+type ProbeFn = Box<dyn Fn() -> Result<ProbeResult, Box<dyn Error>>>;
 
 pub fn validation_suite_summary() {
     let probes: Vec<(&str, ProbeFn)> = vec![
@@ -1617,27 +2457,33 @@ pub fn validation_suite_summary() {
 
     let passed_count = results.iter().filter(|r| r.passed).count();
     let total = results.len();
-    let high_conf_indices = [0, 1, 2, 3, 4, 7]; // VS-01..05, VS-08
-    let high_passed = high_conf_indices
+    let high_total = validation_scenarios()
         .iter()
-        .filter(|&&i| results[i].passed)
+        .filter(|scenario| scenario.confidence == ValidationConfidence::High)
         .count();
-    let med_conf_indices = [5, 6]; // VS-06, VS-07
-    let med_passed = med_conf_indices
+    let high_passed = results
         .iter()
-        .filter(|&&i| results[i].passed)
+        .zip(validation_scenarios().iter())
+        .filter(|(result, scenario)| {
+            result.passed && scenario.confidence == ValidationConfidence::High
+        })
+        .count();
+    let medium_total = validation_scenarios()
+        .iter()
+        .filter(|scenario| scenario.confidence == ValidationConfidence::Medium)
+        .count();
+    let medium_passed = results
+        .iter()
+        .zip(validation_scenarios().iter())
+        .filter(|(result, scenario)| {
+            result.passed && scenario.confidence == ValidationConfidence::Medium
+        })
         .count();
 
     eprintln!("\n============================================================");
     eprintln!("  SUMMARY: {passed_count}/{total} scenarios passed");
-    eprintln!(
-        "  High-confidence:   {high_passed}/{} passed",
-        high_conf_indices.len()
-    );
-    eprintln!(
-        "  Medium-confidence: {med_passed}/{} passed",
-        med_conf_indices.len()
-    );
+    eprintln!("  High-confidence:   {high_passed}/{high_total} passed");
+    eprintln!("  Medium-confidence: {medium_passed}/{medium_total} passed");
     eprintln!("============================================================\n");
 
     assert!(

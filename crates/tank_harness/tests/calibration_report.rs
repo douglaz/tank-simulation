@@ -7,10 +7,14 @@
 //! Run all:    `cargo test --test calibration_report`
 //! Verbose:    `TANK_E2E_VERBOSE=1 cargo test --test calibration_report -- --nocapture`
 
-use tank_core::{PlayerAction, SimSeed, TankSnapshot, TankState};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use tank_core::{SimSeed, TankSnapshot, TankState};
 use tank_harness::calibration::{
-    check_classified, CalibrationReport, CalibrationRun, CheckStatus, ComparisonReport, ScenarioRow,
+    check_classified, CalibrationReport, CalibrationRun, CheckStatus, ComparisonReport,
+    ProvenanceStatus, ScenarioRow, ValidationConfidence,
 };
+use tank_harness::validation_suite::{run_calibration_suite, validation_scenarios};
 use tank_harness::{Envelope, HarnessRun};
 
 // ---------------------------------------------------------------------------
@@ -96,6 +100,17 @@ fn test_report_machine_readable() -> Result<(), Box<dyn std::error::Error>> {
         "generated_at should be ISO-8601 format"
     );
 
+    let bundle_dir = std::env::temp_dir().join(format!(
+        "tank_harness_report_bundle_{}",
+        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
+    ));
+    let artifacts = report.write_bundle(&bundle_dir)?;
+    assert!(artifacts.report_json.exists());
+    assert!(artifacts.summary_txt.exists());
+    let summary = std::fs::read_to_string(&artifacts.summary_txt)?;
+    assert!(summary.contains("CALIBRATION REPORT"));
+    let _ = std::fs::remove_dir_all(bundle_dir);
+
     Ok(())
 }
 
@@ -126,6 +141,7 @@ fn test_report_includes_artifact_paths() -> Result<(), Box<dyn std::error::Error
         row.artifact_path.is_some(),
         "failed scenario should have artifact path"
     );
+    assert_eq!(row.artifacts.len(), 1);
 
     // Checkpoint-level artifact path for failed checkpoint.
     let cp = &row.checkpoints[0];
@@ -205,11 +221,17 @@ fn test_report_comparison_across_runs() -> Result<(), Box<dyn std::error::Error>
     fn make_row(scenario_id: &str, status: CheckStatus, variant: &str) -> ScenarioRow {
         ScenarioRow {
             scenario_id: scenario_id.to_owned(),
+            scenario_name: scenario_id.to_owned(),
             seed: 42,
             parameter_variant: variant.to_owned(),
+            domain: String::new(),
+            confidence: ValidationConfidence::High,
+            provenance_status: ProvenanceStatus::ValidatedDirectionally,
             status,
+            observed_summary: String::new(),
             checkpoints: vec![],
             artifact_path: None,
+            artifacts: vec![],
         }
     }
 
@@ -374,62 +396,39 @@ fn test_report_uses_shared_harness() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_full_calibration_workflow() -> Result<(), Box<dyn std::error::Error>> {
     let start = std::time::Instant::now();
-
-    let shipped_scenarios = ["nano_cycle", "medium_planted", "warm_room"];
-    let mut rows = Vec::new();
-
-    for (i, scenario_id) in shipped_scenarios.iter().enumerate() {
-        let seed = SimSeed(7400 + i as u64);
-        let run = HarnessRun::new(seed, scenario_id)?
-            .with_artifact_label(&format!("calibration_{scenario_id}"));
-        let mut cal = CalibrationRun::new(run, "default");
-        cal.enable_instrumentation();
-
-        // 4 weeks of cycling with daily feed.
-        for day in 1..=28 {
-            cal.apply_action(PlayerAction::Feed { grams: 0.05 })?;
-            cal.step_hours(24)?;
-
-            if day == 7 {
-                cal.check_envelope(
-                    "week_1",
-                    &Envelope::default()
-                        .ph(4.0, 10.0)
-                        .tan_mg_n_per_l(0.0, 80.0)
-                        .do_min(4.0),
-                );
-            }
-            if day == 28 {
-                cal.check_envelope(
-                    "week_4",
-                    &Envelope::default()
-                        .ph(4.0, 10.0)
-                        .tan_mg_n_per_l(0.0, 150.0)
-                        .do_min(3.0)
-                        .biofilter_maturity(0.0, 1.0),
-                );
-            }
-        }
-
-        rows.push(cal.finish());
-    }
-
-    let report = CalibrationReport::from_rows("default", rows);
+    let report = run_calibration_suite("default")?;
 
     // All scenarios should produce a status.
-    assert_eq!(report.summary.total, 3);
+    assert_eq!(report.summary.total, validation_scenarios().len());
     assert_eq!(
         report.summary.passed + report.summary.marginal + report.summary.failed,
-        3,
+        validation_scenarios().len(),
         "every scenario must have exactly one status"
     );
 
-    // Each scenario has both checkpoints.
-    for row in &report.scenarios {
-        assert_eq!(
-            row.checkpoints.len(),
-            2,
-            "expected 2 checkpoints for {}",
+    let expected_ids: Vec<&str> = validation_scenarios()
+        .iter()
+        .map(|scenario| scenario.id)
+        .collect();
+    let actual_ids: Vec<&str> = report
+        .scenarios
+        .iter()
+        .map(|row| row.scenario_id.as_str())
+        .collect();
+    assert_eq!(
+        actual_ids, expected_ids,
+        "workflow should cover the shipped validation suite"
+    );
+
+    for (row, definition) in report.scenarios.iter().zip(validation_scenarios().iter()) {
+        assert_eq!(row.scenario_name, definition.title);
+        assert_eq!(row.domain, definition.domain);
+        assert_eq!(row.confidence, definition.confidence);
+        assert_eq!(row.provenance_status, definition.provenance_status);
+        assert!(!row.observed_summary.is_empty());
+        assert!(
+            !row.checkpoints.is_empty(),
+            "expected at least one checkpoint for {}",
             row.scenario_id
         );
         for cp in &row.checkpoints {
@@ -442,7 +441,16 @@ fn test_full_calibration_workflow() -> Result<(), Box<dyn std::error::Error>> {
     // Report should be valid JSON.
     let json = serde_json::to_string_pretty(&report)?;
     let parsed: CalibrationReport = serde_json::from_str(&json)?;
-    assert_eq!(parsed.scenarios.len(), 3);
+    assert_eq!(parsed.scenarios.len(), validation_scenarios().len());
+
+    let bundle_dir = std::env::temp_dir().join(format!(
+        "tank_harness_calibration_workflow_{}",
+        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
+    ));
+    let artifacts = report.write_bundle(&bundle_dir)?;
+    assert!(artifacts.report_json.exists());
+    assert!(artifacts.summary_txt.exists());
+    let _ = std::fs::remove_dir_all(bundle_dir);
 
     // CI viability: < 60 seconds.
     let elapsed = start.elapsed();
