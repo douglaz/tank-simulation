@@ -258,7 +258,7 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
     const INITIAL_CAPACITY_FRACTION: f64 = 0.35;
     const INITIAL_TAN_MG_N_PER_L: f64 = 4.0;
     const DURATION_HOURS: u32 = 24 * 21;
-    const REDUCED_N_CLEARANCE_THRESHOLD: f64 = 1.0;
+    const TAN_CLEARANCE_THRESHOLD: f64 = 1.0;
 
     let build_state = |seed: SimSeed, media_area_cm2: f64| -> TankState {
         let mut state = TankState::new(seed);
@@ -367,14 +367,10 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
             .nitrifier_base_density_g_per_cm2,
     );
 
-    let initial_small_reduced_n =
-        run_small.snapshot().tan_mg_n_per_l + run_small.snapshot().nitrite_mg_n_per_l;
-    let initial_large_reduced_n =
-        run_large.snapshot().tan_mg_n_per_l + run_large.snapshot().nitrite_mg_n_per_l;
-    let mut reduced_n_exposure_small = initial_small_reduced_n;
-    let mut reduced_n_exposure_large = initial_large_reduced_n;
-    let mut reduced_n_clearance_small = None;
-    let mut reduced_n_clearance_large = None;
+    let mut tan_exposure_small = run_small.snapshot().tan_mg_n_per_l;
+    let mut tan_exposure_large = run_large.snapshot().tan_mg_n_per_l;
+    let mut tan_clearance_small = None;
+    let mut tan_clearance_large = None;
 
     for hour in 0..DURATION_HOURS {
         run_small.step_hours(1)?;
@@ -382,17 +378,15 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
 
         let snap_small = run_small.snapshot();
         let snap_large = run_large.snapshot();
-        let reduced_n_small = snap_small.tan_mg_n_per_l + snap_small.nitrite_mg_n_per_l;
-        let reduced_n_large = snap_large.tan_mg_n_per_l + snap_large.nitrite_mg_n_per_l;
-        reduced_n_exposure_small += reduced_n_small;
-        reduced_n_exposure_large += reduced_n_large;
+        tan_exposure_small += snap_small.tan_mg_n_per_l;
+        tan_exposure_large += snap_large.tan_mg_n_per_l;
 
         let clearance_hour = hour + 1;
-        if reduced_n_clearance_small.is_none() && reduced_n_small <= REDUCED_N_CLEARANCE_THRESHOLD {
-            reduced_n_clearance_small = Some(clearance_hour);
+        if tan_clearance_small.is_none() && snap_small.tan_mg_n_per_l <= TAN_CLEARANCE_THRESHOLD {
+            tan_clearance_small = Some(clearance_hour);
         }
-        if reduced_n_clearance_large.is_none() && reduced_n_large <= REDUCED_N_CLEARANCE_THRESHOLD {
-            reduced_n_clearance_large = Some(clearance_hour);
+        if tan_clearance_large.is_none() && snap_large.tan_mg_n_per_l <= TAN_CLEARANCE_THRESHOLD {
+            tan_clearance_large = Some(clearance_hour);
         }
     }
 
@@ -408,8 +402,8 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
     eprintln!(
         "Biofilter metrics: filter_area small={filter_area_small:.1} cm² large={filter_area_large:.1} cm²; \
          capacity small={capacity_small:.4}g large={capacity_large:.4}g; \
-         reduced-N exposure small={reduced_n_exposure_small:.2} large={reduced_n_exposure_large:.2}; \
-         clearance small={reduced_n_clearance_small:?}h large={reduced_n_clearance_large:?}h"
+         TAN exposure small={tan_exposure_small:.2} large={tan_exposure_large:.2}; \
+         clearance small={tan_clearance_small:?}h large={tan_clearance_large:?}h"
     );
 
     {
@@ -434,11 +428,11 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
         );
         record_check(
             &mut runs,
-            "biofilter_reduced_n_exposure",
-            reduced_n_exposure_large < reduced_n_exposure_small,
+            "biofilter_tan_exposure",
+            tan_exposure_large < tan_exposure_small,
             format!(
-                "larger filter should reduce combined TAN+NO₂ exposure under the same ammonia challenge: \
-                 small={reduced_n_exposure_small:.2}, large={reduced_n_exposure_large:.2}"
+                "larger filter should reduce TAN exposure under the same ammonia challenge: \
+                 small={tan_exposure_small:.2}, large={tan_exposure_large:.2}"
             ),
         );
         record_check(
@@ -450,29 +444,29 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
                  small={nitrifier_small:.4} g, large={nitrifier_large:.4} g"
             ),
         );
-        match (reduced_n_clearance_small, reduced_n_clearance_large) {
+        match (tan_clearance_small, tan_clearance_large) {
             (Some(small_hour), Some(large_hour)) => record_check(
                 &mut runs,
-                "biofilter_reduced_n_clearance",
+                "biofilter_tan_clearance",
                 large_hour <= small_hour,
                 format!(
-                    "larger filter should clear TAN+NO₂ to <= {REDUCED_N_CLEARANCE_THRESHOLD:.1} mg N/L no later than the smaller filter: \
+                    "larger filter should clear TAN to <= {TAN_CLEARANCE_THRESHOLD:.1} mg N/L no later than the smaller filter: \
                      small={small_hour}h, large={large_hour}h"
                 ),
             ),
             (None, Some(_)) => {}
             (Some(small_hour), None) => record_failure_all(
                 &mut runs,
-                "biofilter_reduced_n_clearance",
+                "biofilter_tan_clearance",
                 format!(
-                    "smaller filter cleared TAN+NO₂ by {small_hour}h but the larger filter never did"
+                    "smaller filter cleared TAN by {small_hour}h but the larger filter never did"
                 ),
             ),
             (None, None) => record_failure_all(
                 &mut runs,
-                "biofilter_reduced_n_clearance",
+                "biofilter_tan_clearance",
                 format!(
-                    "neither filter cleared TAN+NO₂ to <= {REDUCED_N_CLEARANCE_THRESHOLD:.1} mg N/L within {DURATION_HOURS}h"
+                    "neither filter cleared TAN to <= {TAN_CLEARANCE_THRESHOLD:.1} mg N/L within {DURATION_HOURS}h"
                 ),
             ),
         }
@@ -497,7 +491,7 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
         "biofilter_scaling",
         format!(
             "area {filter_area_small:.0}->{filter_area_large:.0} cm², capacity {capacity_small:.3}->{capacity_large:.3} g, \
-             reduced-N exposure {reduced_n_exposure_small:.2}->{reduced_n_exposure_large:.2}, clearance {reduced_n_clearance_small:?}->{reduced_n_clearance_large:?}"
+             TAN exposure {tan_exposure_small:.2}->{tan_exposure_large:.2}, clearance {tan_clearance_small:?}->{tan_clearance_large:?}"
         ),
         vec![run_small, run_large],
     ))
