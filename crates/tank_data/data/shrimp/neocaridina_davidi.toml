@@ -33,6 +33,8 @@ molt_condition_weight = 0.75
 molt_reserve_weight = 0.25
 molt_failure_poor_condition_threshold = 0.65
 molt_failure_instability_threshold = 0.3
+temp_condition_low_divisor_c = 10.0
+temp_condition_high_divisor_c = 8.0
 molt_stress_warning_threshold = 0.6
 molt_stress_mortality_threshold = 0.5
 molt_stress_mineral_gh_weight = 0.5
@@ -41,7 +43,9 @@ molt_stress_mineral_mg_weight = 0.2
 molt_stress_pressure_mineral_weight = 0.3
 molt_stress_pressure_instability_weight = 0.3
 molt_stress_pressure_condition_weight = 0.2
+molt_stress_condition_midpoint = 0.5
 molt_stress_pressure_thermal_weight = 0.2
+molt_stress_thermal_cap = 0.5
 molt_stress_pressure_hourly_weight = 0.3
 molt_stress_rise_smoothing = 0.2
 molt_stress_decay_smoothing = 0.05
@@ -52,6 +56,8 @@ sub_adult_molt_interval_days = 21.0
 molt_success_threshold = 0.55
 critical_molt_gh_ratio = 0.3
 chloride_protection_factor = 0.5
+nh3_stress_threshold_mg_n_per_l = 0.02
+nh3_stress_response_scale = 2.0
 
 # Reproduction suppression parameters
 density_repro_threshold_per_l = 10.0

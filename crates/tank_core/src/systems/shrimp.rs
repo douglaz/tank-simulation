@@ -106,6 +106,7 @@ pub fn step_hourly_shrimp_stress(state: &mut TankState) {
         return;
     }
 
+    let params = &state.shrimp_params;
     let chemistry = state.concentrations();
     let volume_l = chemistry.volume_l();
     if volume_l <= f64::EPSILON {
@@ -119,16 +120,19 @@ pub fn step_hourly_shrimp_stress(state: &mut TankState) {
     let do_mg_l = chemistry.do_mg_per_l();
     let temp = state.water.temperature_c;
 
-    // NH3 stress (threshold 0.02 mg/L, stronger than TAN alone)
-    if nh3_mg_l > 0.02 {
-        state.animal.hourly_nh3_stress_accum += (nh3_mg_l - 0.02) * 2.0 / 24.0;
+    // NH3 stress (stronger than TAN alone once unionized ammonia clears the
+    // species-specific threshold).
+    if nh3_mg_l > params.nh3_stress_threshold_mg_n_per_l {
+        state.animal.hourly_nh3_stress_accum += (nh3_mg_l - params.nh3_stress_threshold_mg_n_per_l)
+            * params.nh3_stress_response_scale
+            / 24.0;
     }
 
     // Nitrite stress with chloride protection (threshold 0.5 mg/L effective hazard)
     let nitrite_diagnostics = compute_nitrite_stress_diagnostics(
         nitrite_mg_l,
         chloride_mg_l,
-        state.shrimp_params.chloride_protection_factor,
+        params.chloride_protection_factor,
     );
     if nitrite_diagnostics.hourly_stress_increment > 0.0 {
         state.animal.hourly_nitrite_stress_accum += nitrite_diagnostics.hourly_stress_increment;
@@ -487,9 +491,12 @@ fn update_molt_stress(state: &mut TankState) {
         .clamp(0.0, 1.0);
 
     let instability_stress = state.stability_tracker.instability_index;
-    let condition_stress = (0.5 - state.animal.population_condition_index()).max(0.0);
+    let condition_stress =
+        (params.molt_stress_condition_midpoint - state.animal.population_condition_index()).max(0.0);
     let thermal_stress = if state.water.temperature_c > params.optimal_temp_max_c {
-        ((state.water.temperature_c - params.optimal_temp_max_c) / 8.0).clamp(0.0, 0.5)
+        ((state.water.temperature_c - params.optimal_temp_max_c)
+            / params.temp_condition_high_divisor_c.max(0.01))
+        .clamp(0.0, params.molt_stress_thermal_cap)
     } else {
         0.0
     };
@@ -1603,9 +1610,11 @@ fn temp_condition_factor(temp: f64, params: &ShrimpRuntimeParams) -> f64 {
     if temp >= params.optimal_temp_min_c && temp <= params.optimal_temp_max_c {
         1.0
     } else if temp < params.optimal_temp_min_c {
-        (1.0 - (params.optimal_temp_min_c - temp) / 10.0).clamp(0.2, 1.0)
+        (1.0 - (params.optimal_temp_min_c - temp) / params.temp_condition_low_divisor_c.max(0.01))
+            .clamp(0.2, 1.0)
     } else {
-        (1.0 - (temp - params.optimal_temp_max_c) / 8.0).clamp(0.2, 1.0)
+        (1.0 - (temp - params.optimal_temp_max_c) / params.temp_condition_high_divisor_c.max(0.01))
+            .clamp(0.2, 1.0)
     }
 }
 
@@ -1742,7 +1751,10 @@ pub fn molt_mineral_modifier(
         1.0
     } else if gh_d < params.gh_min_d {
         let gh_ratio = (gh_d / gh_min_d).clamp(0.0, 1.0);
-        gh_ratio * gh_ratio
+        // GH is the aggregate mineral-availability signal, so let low GH bite
+        // faster than isolated Ca/Mg shortfalls; the shared floor still keeps
+        // subcritical deficits from forcing a hard zero on their own.
+        (gh_ratio * gh_ratio).max(mineral_factor_floor)
     } else {
         (1.0 - (gh_d - params.gh_max_d) / gh_excess_penalty_divisor)
             .clamp(mineral_factor_floor, 1.0)

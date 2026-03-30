@@ -329,6 +329,15 @@ pub struct ShrimpRuntimeParams {
     /// `ChemistryInstability` diagnostic on molt failure/stress events.
     #[serde(default = "default_molt_failure_instability_threshold")]
     pub molt_failure_instability_threshold: f64,
+    /// Degrees Celsius below `optimal_temp_min_c` required to reach the cold
+    /// floor in `temp_condition_factor`.
+    #[serde(default = "default_temp_condition_low_divisor_c")]
+    pub temp_condition_low_divisor_c: f64,
+    /// Degrees Celsius above `optimal_temp_max_c` required to reach the hot
+    /// floor in `temp_condition_factor` and the daily thermal contribution to
+    /// `molt_stress_index`.
+    #[serde(default = "default_temp_condition_high_divisor_c")]
+    pub temp_condition_high_divisor_c: f64,
     /// Molt-stress index threshold above which a `MoltStressWarning` event
     /// should fire.
     #[serde(default = "default_molt_stress_warning_threshold")]
@@ -359,9 +368,17 @@ pub struct ShrimpRuntimeParams {
     /// Weight of low condition in the overall molt-stress pressure blend.
     #[serde(default = "default_molt_stress_pressure_condition_weight")]
     pub molt_stress_pressure_condition_weight: f64,
+    /// Population condition index below which low condition contributes to the
+    /// daily `molt_stress_index` pressure blend.
+    #[serde(default = "default_molt_stress_condition_midpoint")]
+    pub molt_stress_condition_midpoint: f64,
     /// Weight of thermal stress in the overall molt-stress pressure blend.
     #[serde(default = "default_molt_stress_pressure_thermal_weight")]
     pub molt_stress_pressure_thermal_weight: f64,
+    /// Upper clamp applied to the thermal component before it is blended into
+    /// daily `molt_stress_index` pressure.
+    #[serde(default = "default_molt_stress_thermal_cap")]
+    pub molt_stress_thermal_cap: f64,
     /// Weight of short-horizon hourly stress accumulation in the overall
     /// molt-stress pressure blend.
     #[serde(default = "default_molt_stress_pressure_hourly_weight")]
@@ -379,9 +396,10 @@ pub struct ShrimpRuntimeParams {
     /// penalty curve.
     #[serde(default = "default_molt_gh_excess_penalty_divisor")]
     pub molt_gh_excess_penalty_divisor: f64,
-    /// Floor applied to GH/Ca/Mg factors inside `molt_mineral_modifier` and
-    /// the shared reproduction GH penalty curve so mineral shortfalls degrade
-    /// outcomes without forcing a hard zero.
+    /// Floor applied to the low-GH branch after the quadratic deficit curve,
+    /// to Ca/Mg sub-factors inside `molt_mineral_modifier`, and to the shared
+    /// reproduction GH penalty curve so mineral shortfalls degrade outcomes
+    /// without forcing a hard zero.
     #[serde(default = "default_molt_mineral_factor_floor")]
     pub molt_mineral_factor_floor: f64,
     /// Base inter-molt period for juveniles (days). Shorter than adults.
@@ -407,6 +425,15 @@ pub struct ShrimpRuntimeParams {
     /// calibrated so that Cl:NO2 > 10:1 yields < 20% of unprotected hazard.
     #[serde(default = "default_chloride_protection_factor")]
     pub chloride_protection_factor: f64,
+    /// Unionized ammonia threshold (mg N/L NH3) above which hourly NH3 stress
+    /// begins accumulating.
+    #[serde(default = "default_nh3_stress_threshold_mg_n_per_l")]
+    pub nh3_stress_threshold_mg_n_per_l: f64,
+    /// Scaling applied to NH3 excess above
+    /// `nh3_stress_threshold_mg_n_per_l` when routing hourly NH3 stress into
+    /// mortality and molt-stress channels.
+    #[serde(default = "default_nh3_stress_response_scale")]
+    pub nh3_stress_response_scale: f64,
 
     // ── Reproduction suppression parameters ────────────────────────────────
     /// Density (shrimp per litre) below which per-capita reproduction is
@@ -844,6 +871,8 @@ impl Default for ShrimpRuntimeParams {
             molt_reserve_weight: default_molt_reserve_weight(),
             molt_failure_poor_condition_threshold: default_molt_failure_poor_condition_threshold(),
             molt_failure_instability_threshold: default_molt_failure_instability_threshold(),
+            temp_condition_low_divisor_c: default_temp_condition_low_divisor_c(),
+            temp_condition_high_divisor_c: default_temp_condition_high_divisor_c(),
             molt_stress_warning_threshold: default_molt_stress_warning_threshold(),
             molt_stress_mortality_threshold: default_molt_stress_mortality_threshold(),
             molt_stress_mineral_gh_weight: default_molt_stress_mineral_gh_weight(),
@@ -853,7 +882,9 @@ impl Default for ShrimpRuntimeParams {
             molt_stress_pressure_instability_weight:
                 default_molt_stress_pressure_instability_weight(),
             molt_stress_pressure_condition_weight: default_molt_stress_pressure_condition_weight(),
+            molt_stress_condition_midpoint: default_molt_stress_condition_midpoint(),
             molt_stress_pressure_thermal_weight: default_molt_stress_pressure_thermal_weight(),
+            molt_stress_thermal_cap: default_molt_stress_thermal_cap(),
             molt_stress_pressure_hourly_weight: default_molt_stress_pressure_hourly_weight(),
             molt_stress_rise_smoothing: default_molt_stress_rise_smoothing(),
             molt_stress_decay_smoothing: default_molt_stress_decay_smoothing(),
@@ -864,6 +895,8 @@ impl Default for ShrimpRuntimeParams {
             molt_success_threshold: default_molt_success_threshold(),
             critical_molt_gh_ratio: default_critical_molt_gh_ratio(),
             chloride_protection_factor: default_chloride_protection_factor(),
+            nh3_stress_threshold_mg_n_per_l: default_nh3_stress_threshold_mg_n_per_l(),
+            nh3_stress_response_scale: default_nh3_stress_response_scale(),
             density_repro_threshold_per_l: default_density_repro_threshold_per_l(),
             density_repro_half_suppression_per_l: default_density_repro_half_suppression_per_l(),
             tan_repro_threshold_mg_n_per_l: default_tan_repro_threshold_mg_n_per_l(),
@@ -997,6 +1030,14 @@ fn default_molt_failure_instability_threshold() -> f64 {
     0.3
 }
 
+fn default_temp_condition_low_divisor_c() -> f64 {
+    10.0
+}
+
+fn default_temp_condition_high_divisor_c() -> f64 {
+    8.0
+}
+
 fn default_molt_stress_warning_threshold() -> f64 {
     0.6
 }
@@ -1029,8 +1070,16 @@ fn default_molt_stress_pressure_condition_weight() -> f64 {
     0.2
 }
 
+fn default_molt_stress_condition_midpoint() -> f64 {
+    0.5
+}
+
 fn default_molt_stress_pressure_thermal_weight() -> f64 {
     0.2
+}
+
+fn default_molt_stress_thermal_cap() -> f64 {
+    0.5
 }
 
 fn default_molt_stress_pressure_hourly_weight() -> f64 {
@@ -1071,6 +1120,14 @@ fn default_critical_molt_gh_ratio() -> f64 {
 
 fn default_chloride_protection_factor() -> f64 {
     0.5
+}
+
+fn default_nh3_stress_threshold_mg_n_per_l() -> f64 {
+    0.02
+}
+
+fn default_nh3_stress_response_scale() -> f64 {
+    2.0
 }
 
 fn default_density_repro_threshold_per_l() -> f64 {

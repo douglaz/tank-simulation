@@ -112,6 +112,8 @@ fn shrimp_runtime_default_param_value(name: &str) -> Option<f64> {
             Some(defaults.molt_failure_poor_condition_threshold)
         }
         "molt_failure_instability_threshold" => Some(defaults.molt_failure_instability_threshold),
+        "temp_condition_low_divisor_c" => Some(defaults.temp_condition_low_divisor_c),
+        "temp_condition_high_divisor_c" => Some(defaults.temp_condition_high_divisor_c),
         "molt_stress_warning_threshold" => Some(defaults.molt_stress_warning_threshold),
         "molt_stress_mortality_threshold" => Some(defaults.molt_stress_mortality_threshold),
         "molt_stress_mineral_gh_weight" => Some(defaults.molt_stress_mineral_gh_weight),
@@ -124,7 +126,9 @@ fn shrimp_runtime_default_param_value(name: &str) -> Option<f64> {
         "molt_stress_pressure_condition_weight" => {
             Some(defaults.molt_stress_pressure_condition_weight)
         }
+        "molt_stress_condition_midpoint" => Some(defaults.molt_stress_condition_midpoint),
         "molt_stress_pressure_thermal_weight" => Some(defaults.molt_stress_pressure_thermal_weight),
+        "molt_stress_thermal_cap" => Some(defaults.molt_stress_thermal_cap),
         "molt_stress_pressure_hourly_weight" => Some(defaults.molt_stress_pressure_hourly_weight),
         "molt_stress_rise_smoothing" => Some(defaults.molt_stress_rise_smoothing),
         "molt_stress_decay_smoothing" => Some(defaults.molt_stress_decay_smoothing),
@@ -135,6 +139,8 @@ fn shrimp_runtime_default_param_value(name: &str) -> Option<f64> {
         "molt_success_threshold" => Some(defaults.molt_success_threshold),
         "critical_molt_gh_ratio" => Some(defaults.critical_molt_gh_ratio),
         "chloride_protection_factor" => Some(defaults.chloride_protection_factor),
+        "nh3_stress_threshold_mg_n_per_l" => Some(defaults.nh3_stress_threshold_mg_n_per_l),
+        "nh3_stress_response_scale" => Some(defaults.nh3_stress_response_scale),
         "density_repro_threshold_per_l" => Some(defaults.density_repro_threshold_per_l),
         "density_repro_half_suppression_per_l" => {
             Some(defaults.density_repro_half_suppression_per_l)
@@ -560,6 +566,10 @@ pub struct ShrimpPreset {
     #[serde(default)]
     pub molt_failure_instability_threshold: Option<f64>,
     #[serde(default)]
+    pub temp_condition_low_divisor_c: Option<f64>,
+    #[serde(default)]
+    pub temp_condition_high_divisor_c: Option<f64>,
+    #[serde(default)]
     pub molt_stress_warning_threshold: Option<f64>,
     #[serde(default)]
     pub molt_stress_mortality_threshold: Option<f64>,
@@ -576,7 +586,11 @@ pub struct ShrimpPreset {
     #[serde(default)]
     pub molt_stress_pressure_condition_weight: Option<f64>,
     #[serde(default)]
+    pub molt_stress_condition_midpoint: Option<f64>,
+    #[serde(default)]
     pub molt_stress_pressure_thermal_weight: Option<f64>,
+    #[serde(default)]
+    pub molt_stress_thermal_cap: Option<f64>,
     #[serde(default)]
     pub molt_stress_pressure_hourly_weight: Option<f64>,
     #[serde(default)]
@@ -597,6 +611,10 @@ pub struct ShrimpPreset {
     pub critical_molt_gh_ratio: Option<f64>,
     #[serde(default)]
     pub chloride_protection_factor: Option<f64>,
+    #[serde(default)]
+    pub nh3_stress_threshold_mg_n_per_l: Option<f64>,
+    #[serde(default)]
+    pub nh3_stress_response_scale: Option<f64>,
     #[serde(default)]
     pub density_repro_threshold_per_l: Option<f64>,
     #[serde(default)]
@@ -786,6 +804,14 @@ impl ShrimpPreset {
                 self.molt_failure_instability_threshold,
             ),
             (
+                "temp_condition_low_divisor_c",
+                self.temp_condition_low_divisor_c,
+            ),
+            (
+                "temp_condition_high_divisor_c",
+                self.temp_condition_high_divisor_c,
+            ),
+            (
                 "molt_stress_warning_threshold",
                 self.molt_stress_warning_threshold,
             ),
@@ -818,8 +844,16 @@ impl ShrimpPreset {
                 self.molt_stress_pressure_condition_weight,
             ),
             (
+                "molt_stress_condition_midpoint",
+                self.molt_stress_condition_midpoint,
+            ),
+            (
                 "molt_stress_pressure_thermal_weight",
                 self.molt_stress_pressure_thermal_weight,
+            ),
+            (
+                "molt_stress_thermal_cap",
+                self.molt_stress_thermal_cap,
             ),
             (
                 "molt_stress_pressure_hourly_weight",
@@ -851,6 +885,14 @@ impl ShrimpPreset {
             (
                 "chloride_protection_factor",
                 self.chloride_protection_factor,
+            ),
+            (
+                "nh3_stress_threshold_mg_n_per_l",
+                self.nh3_stress_threshold_mg_n_per_l,
+            ),
+            (
+                "nh3_stress_response_scale",
+                self.nh3_stress_response_scale,
             ),
             (
                 "density_repro_threshold_per_l",
@@ -891,6 +933,11 @@ impl ShrimpPreset {
                 "full_clutch_condition_threshold",
                 self.full_clutch_condition_threshold,
             ),
+            (
+                "nh3_stress_threshold_mg_n_per_l",
+                self.nh3_stress_threshold_mg_n_per_l,
+            ),
+            ("nh3_stress_response_scale", self.nh3_stress_response_scale),
             ("instability_temp_swing_c", self.instability_temp_swing_c),
             ("instability_ph_swing", self.instability_ph_swing),
             ("instability_gh_swing_d", self.instability_gh_swing_d),
@@ -929,6 +976,14 @@ impl ShrimpPreset {
             (
                 "low_temp_repro_ramp_width_c",
                 self.low_temp_repro_ramp_width_c,
+            ),
+            (
+                "temp_condition_low_divisor_c",
+                self.temp_condition_low_divisor_c,
+            ),
+            (
+                "temp_condition_high_divisor_c",
+                self.temp_condition_high_divisor_c,
             ),
             ("ca_min_mg_per_l", self.ca_min_mg_per_l),
             ("mg_min_mg_per_l", self.mg_min_mg_per_l),
@@ -993,6 +1048,14 @@ impl ShrimpPreset {
                 self.molt_failure_instability_threshold,
             ),
             (
+                "temp_condition_low_divisor_c",
+                self.temp_condition_low_divisor_c,
+            ),
+            (
+                "temp_condition_high_divisor_c",
+                self.temp_condition_high_divisor_c,
+            ),
+            (
                 "molt_stress_warning_threshold",
                 self.molt_stress_warning_threshold,
             ),
@@ -1025,9 +1088,14 @@ impl ShrimpPreset {
                 self.molt_stress_pressure_condition_weight,
             ),
             (
+                "molt_stress_condition_midpoint",
+                self.molt_stress_condition_midpoint,
+            ),
+            (
                 "molt_stress_pressure_thermal_weight",
                 self.molt_stress_pressure_thermal_weight,
             ),
+            ("molt_stress_thermal_cap", self.molt_stress_thermal_cap),
             (
                 "molt_stress_pressure_hourly_weight",
                 self.molt_stress_pressure_hourly_weight,
@@ -1261,6 +1329,12 @@ impl ParamMetaPreset for ShrimpPreset {
             "molt_failure_instability_threshold" => self
                 .molt_failure_instability_threshold
                 .or_else(|| shrimp_runtime_default_param_value(name)),
+            "temp_condition_low_divisor_c" => self
+                .temp_condition_low_divisor_c
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "temp_condition_high_divisor_c" => self
+                .temp_condition_high_divisor_c
+                .or_else(|| shrimp_runtime_default_param_value(name)),
             "molt_stress_warning_threshold" => self
                 .molt_stress_warning_threshold
                 .or_else(|| shrimp_runtime_default_param_value(name)),
@@ -1285,8 +1359,14 @@ impl ParamMetaPreset for ShrimpPreset {
             "molt_stress_pressure_condition_weight" => self
                 .molt_stress_pressure_condition_weight
                 .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_stress_condition_midpoint" => self
+                .molt_stress_condition_midpoint
+                .or_else(|| shrimp_runtime_default_param_value(name)),
             "molt_stress_pressure_thermal_weight" => self
                 .molt_stress_pressure_thermal_weight
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_stress_thermal_cap" => self
+                .molt_stress_thermal_cap
                 .or_else(|| shrimp_runtime_default_param_value(name)),
             "molt_stress_pressure_hourly_weight" => self
                 .molt_stress_pressure_hourly_weight
@@ -1317,6 +1397,12 @@ impl ParamMetaPreset for ShrimpPreset {
                 .or_else(|| shrimp_runtime_default_param_value(name)),
             "chloride_protection_factor" => self
                 .chloride_protection_factor
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "nh3_stress_threshold_mg_n_per_l" => self
+                .nh3_stress_threshold_mg_n_per_l
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "nh3_stress_response_scale" => self
+                .nh3_stress_response_scale
                 .or_else(|| shrimp_runtime_default_param_value(name)),
             "density_repro_threshold_per_l" => self
                 .density_repro_threshold_per_l
@@ -1412,6 +1498,8 @@ impl ParamMetaPreset for ShrimpPreset {
                 | "molt_reserve_weight"
                 | "molt_failure_poor_condition_threshold"
                 | "molt_failure_instability_threshold"
+                | "temp_condition_low_divisor_c"
+                | "temp_condition_high_divisor_c"
                 | "molt_stress_warning_threshold"
                 | "molt_stress_mortality_threshold"
                 | "molt_stress_mineral_gh_weight"
@@ -1420,7 +1508,9 @@ impl ParamMetaPreset for ShrimpPreset {
                 | "molt_stress_pressure_mineral_weight"
                 | "molt_stress_pressure_instability_weight"
                 | "molt_stress_pressure_condition_weight"
+                | "molt_stress_condition_midpoint"
                 | "molt_stress_pressure_thermal_weight"
+                | "molt_stress_thermal_cap"
                 | "molt_stress_pressure_hourly_weight"
                 | "molt_stress_rise_smoothing"
                 | "molt_stress_decay_smoothing"
@@ -1431,6 +1521,8 @@ impl ParamMetaPreset for ShrimpPreset {
                 | "molt_success_threshold"
                 | "critical_molt_gh_ratio"
                 | "chloride_protection_factor"
+                | "nh3_stress_threshold_mg_n_per_l"
+                | "nh3_stress_response_scale"
                 | "density_repro_threshold_per_l"
                 | "density_repro_half_suppression_per_l"
                 | "tan_repro_threshold_mg_n_per_l"

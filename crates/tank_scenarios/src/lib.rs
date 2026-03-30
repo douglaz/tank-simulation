@@ -838,6 +838,12 @@ fn shrimp_preset_to_params(
     if let Some(value) = shrimp_preset.molt_failure_instability_threshold {
         params.molt_failure_instability_threshold = value;
     }
+    if let Some(value) = shrimp_preset.temp_condition_low_divisor_c {
+        params.temp_condition_low_divisor_c = value;
+    }
+    if let Some(value) = shrimp_preset.temp_condition_high_divisor_c {
+        params.temp_condition_high_divisor_c = value;
+    }
     if let Some(value) = shrimp_preset.molt_stress_warning_threshold {
         params.molt_stress_warning_threshold = value;
     }
@@ -862,8 +868,14 @@ fn shrimp_preset_to_params(
     if let Some(value) = shrimp_preset.molt_stress_pressure_condition_weight {
         params.molt_stress_pressure_condition_weight = value;
     }
+    if let Some(value) = shrimp_preset.molt_stress_condition_midpoint {
+        params.molt_stress_condition_midpoint = value;
+    }
     if let Some(value) = shrimp_preset.molt_stress_pressure_thermal_weight {
         params.molt_stress_pressure_thermal_weight = value;
+    }
+    if let Some(value) = shrimp_preset.molt_stress_thermal_cap {
+        params.molt_stress_thermal_cap = value;
     }
     if let Some(value) = shrimp_preset.molt_stress_pressure_hourly_weight {
         params.molt_stress_pressure_hourly_weight = value;
@@ -894,6 +906,12 @@ fn shrimp_preset_to_params(
     }
     if let Some(value) = shrimp_preset.chloride_protection_factor {
         params.chloride_protection_factor = value;
+    }
+    if let Some(value) = shrimp_preset.nh3_stress_threshold_mg_n_per_l {
+        params.nh3_stress_threshold_mg_n_per_l = value;
+    }
+    if let Some(value) = shrimp_preset.nh3_stress_response_scale {
+        params.nh3_stress_response_scale = value;
     }
     if let Some(value) = shrimp_preset.density_repro_threshold_per_l {
         params.density_repro_threshold_per_l = value;
@@ -1458,6 +1476,8 @@ mod tests {
         preset.mg_min_mg_per_l = Some(4.0);
         preset.molt_failure_poor_condition_threshold = Some(0.7);
         preset.molt_failure_instability_threshold = Some(0.24);
+        preset.temp_condition_low_divisor_c = Some(8.5);
+        preset.temp_condition_high_divisor_c = Some(6.5);
         preset.molt_stress_warning_threshold = Some(0.58);
         preset.molt_stress_mortality_threshold = Some(0.42);
         preset.molt_stress_mineral_gh_weight = Some(0.4);
@@ -1466,7 +1486,9 @@ mod tests {
         preset.molt_stress_pressure_mineral_weight = Some(0.28);
         preset.molt_stress_pressure_instability_weight = Some(0.27);
         preset.molt_stress_pressure_condition_weight = Some(0.19);
+        preset.molt_stress_condition_midpoint = Some(0.47);
         preset.molt_stress_pressure_thermal_weight = Some(0.18);
+        preset.molt_stress_thermal_cap = Some(0.35);
         preset.molt_stress_pressure_hourly_weight = Some(0.22);
         preset.molt_stress_rise_smoothing = Some(0.44);
         preset.molt_stress_decay_smoothing = Some(0.12);
@@ -1476,6 +1498,8 @@ mod tests {
         preset.sub_adult_molt_interval_days = Some(17.0);
         preset.molt_success_threshold = Some(0.61);
         preset.critical_molt_gh_ratio = Some(0.22);
+        preset.nh3_stress_threshold_mg_n_per_l = Some(0.03);
+        preset.nh3_stress_response_scale = Some(1.4);
         preset.tan_repro_threshold_mg_n_per_l = Some(0.8);
         preset.tan_repro_full_suppression_mg_n_per_l = Some(1.7);
         preset.no2_repro_threshold_mg_n_per_l = Some(0.3);
@@ -1501,6 +1525,8 @@ mod tests {
         assert_eq!(params.mg_min_mg_per_l, 4.0);
         assert_eq!(params.molt_failure_poor_condition_threshold, 0.7);
         assert_eq!(params.molt_failure_instability_threshold, 0.24);
+        assert_eq!(params.temp_condition_low_divisor_c, 8.5);
+        assert_eq!(params.temp_condition_high_divisor_c, 6.5);
         assert_eq!(params.molt_stress_warning_threshold, 0.58);
         assert_eq!(params.molt_stress_mortality_threshold, 0.42);
         assert_eq!(params.molt_stress_mineral_gh_weight, 0.4);
@@ -1509,7 +1535,9 @@ mod tests {
         assert_eq!(params.molt_stress_pressure_mineral_weight, 0.28);
         assert_eq!(params.molt_stress_pressure_instability_weight, 0.27);
         assert_eq!(params.molt_stress_pressure_condition_weight, 0.19);
+        assert_eq!(params.molt_stress_condition_midpoint, 0.47);
         assert_eq!(params.molt_stress_pressure_thermal_weight, 0.18);
+        assert_eq!(params.molt_stress_thermal_cap, 0.35);
         assert_eq!(params.molt_stress_pressure_hourly_weight, 0.22);
         assert_eq!(params.molt_stress_rise_smoothing, 0.44);
         assert_eq!(params.molt_stress_decay_smoothing, 0.12);
@@ -1519,6 +1547,8 @@ mod tests {
         assert_eq!(params.sub_adult_molt_interval_days, 17.0);
         assert_eq!(params.molt_success_threshold, 0.61);
         assert_eq!(params.critical_molt_gh_ratio, 0.22);
+        assert_eq!(params.nh3_stress_threshold_mg_n_per_l, 0.03);
+        assert_eq!(params.nh3_stress_response_scale, 1.4);
         assert_eq!(params.tan_repro_threshold_mg_n_per_l, 0.8);
         assert_eq!(params.tan_repro_full_suppression_mg_n_per_l, 1.7);
         assert_eq!(params.no2_repro_threshold_mg_n_per_l, 0.3);

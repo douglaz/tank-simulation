@@ -455,6 +455,14 @@ fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), Si
         "shrimp_params.molt_failure_instability_threshold",
         params.molt_failure_instability_threshold,
     )?;
+    check_positive(
+        "shrimp_params.temp_condition_low_divisor_c",
+        params.temp_condition_low_divisor_c,
+    )?;
+    check_positive(
+        "shrimp_params.temp_condition_high_divisor_c",
+        params.temp_condition_high_divisor_c,
+    )?;
     check_unit_interval(
         "shrimp_params.molt_stress_warning_threshold",
         params.molt_stress_warning_threshold,
@@ -494,8 +502,16 @@ fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), Si
         params.molt_stress_pressure_condition_weight,
     )?;
     check_unit_interval(
+        "shrimp_params.molt_stress_condition_midpoint",
+        params.molt_stress_condition_midpoint,
+    )?;
+    check_unit_interval(
         "shrimp_params.molt_stress_pressure_thermal_weight",
         params.molt_stress_pressure_thermal_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_thermal_cap",
+        params.molt_stress_thermal_cap,
     )?;
     check_unit_interval(
         "shrimp_params.molt_stress_pressure_hourly_weight",
@@ -540,6 +556,14 @@ fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), Si
     check_non_negative(
         "shrimp_params.chloride_protection_factor",
         params.chloride_protection_factor,
+    )?;
+    check_non_negative(
+        "shrimp_params.nh3_stress_threshold_mg_n_per_l",
+        params.nh3_stress_threshold_mg_n_per_l,
+    )?;
+    check_non_negative(
+        "shrimp_params.nh3_stress_response_scale",
+        params.nh3_stress_response_scale,
     )?;
     check_non_negative(
         "shrimp_params.density_repro_threshold_per_l",

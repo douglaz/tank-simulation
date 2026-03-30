@@ -356,12 +356,16 @@ fn step_hours_rejects_invalid_molt_mineral_parameters_before_simulation() {
         ("shrimp_params.failed_molt_stress_blend", 1.2),
         ("shrimp_params.molt_failure_poor_condition_threshold", 1.2),
         ("shrimp_params.molt_failure_instability_threshold", -0.1),
+        ("shrimp_params.temp_condition_low_divisor_c", 0.0),
+        ("shrimp_params.temp_condition_high_divisor_c", 0.0),
         ("shrimp_params.molt_stress_warning_threshold", 1.2),
         ("shrimp_params.molt_stress_mortality_threshold", 1.2),
         ("shrimp_params.molt_stress_mineral_gh_weight", 1.2),
         ("shrimp_params.molt_stress_mineral_ca_weight", -0.1),
         ("shrimp_params.molt_stress_mineral_mg_weight", 1.2),
         ("shrimp_params.molt_stress_pressure_hourly_weight", 1.2),
+        ("shrimp_params.molt_stress_condition_midpoint", 1.2),
+        ("shrimp_params.molt_stress_thermal_cap", 1.2),
         ("shrimp_params.molt_stress_rise_smoothing", 1.2),
         ("shrimp_params.molt_stress_decay_smoothing", -0.1),
         ("shrimp_params.molt_gh_excess_penalty_divisor", 0.0),
@@ -371,6 +375,8 @@ fn step_hours_rejects_invalid_molt_mineral_parameters_before_simulation() {
         ("shrimp_params.molt_success_threshold", 1.2),
         ("shrimp_params.critical_molt_gh_ratio", 1.2),
         ("shrimp_params.chloride_protection_factor", -1.0),
+        ("shrimp_params.nh3_stress_threshold_mg_n_per_l", -0.1),
+        ("shrimp_params.nh3_stress_response_scale", -0.1),
         ("shrimp_params.low_temp_repro_ramp_width_c", 0.0),
         ("shrimp_params.tan_repro_full_suppression_mg_n_per_l", 0.0),
         ("shrimp_params.no2_repro_full_suppression_mg_n_per_l", 0.0),
@@ -413,6 +419,12 @@ fn step_hours_rejects_invalid_molt_mineral_parameters_before_simulation() {
             "shrimp_params.molt_failure_instability_threshold" => {
                 state.shrimp_params.molt_failure_instability_threshold = value;
             }
+            "shrimp_params.temp_condition_low_divisor_c" => {
+                state.shrimp_params.temp_condition_low_divisor_c = value;
+            }
+            "shrimp_params.temp_condition_high_divisor_c" => {
+                state.shrimp_params.temp_condition_high_divisor_c = value;
+            }
             "shrimp_params.molt_stress_warning_threshold" => {
                 state.shrimp_params.molt_stress_warning_threshold = value;
             }
@@ -430,6 +442,12 @@ fn step_hours_rejects_invalid_molt_mineral_parameters_before_simulation() {
             }
             "shrimp_params.molt_stress_pressure_hourly_weight" => {
                 state.shrimp_params.molt_stress_pressure_hourly_weight = value;
+            }
+            "shrimp_params.molt_stress_condition_midpoint" => {
+                state.shrimp_params.molt_stress_condition_midpoint = value;
+            }
+            "shrimp_params.molt_stress_thermal_cap" => {
+                state.shrimp_params.molt_stress_thermal_cap = value;
             }
             "shrimp_params.molt_stress_rise_smoothing" => {
                 state.shrimp_params.molt_stress_rise_smoothing = value;
@@ -457,6 +475,12 @@ fn step_hours_rejects_invalid_molt_mineral_parameters_before_simulation() {
             }
             "shrimp_params.chloride_protection_factor" => {
                 state.shrimp_params.chloride_protection_factor = value;
+            }
+            "shrimp_params.nh3_stress_threshold_mg_n_per_l" => {
+                state.shrimp_params.nh3_stress_threshold_mg_n_per_l = value;
+            }
+            "shrimp_params.nh3_stress_response_scale" => {
+                state.shrimp_params.nh3_stress_response_scale = value;
             }
             "shrimp_params.low_temp_repro_ramp_width_c" => {
                 state.shrimp_params.low_temp_repro_ramp_width_c = value;
