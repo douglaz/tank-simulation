@@ -185,7 +185,7 @@ fn probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<(), Box<dyn s
                 light_preset: Some(StartupLightPreset::Hours10),
                 heater_preset: Some(StartupHeaterPreset::Celsius25),
                 aeration_enabled: Some(true),
-                initial_adult_shrimp_count: Some(0),
+                initial_adult_shrimp_count: Some(10),
                 ..StartupOverrides::default()
             };
             Ok(
@@ -728,21 +728,12 @@ fn probe_substrate_redox_denitrification() -> Result<(), Box<dyn std::error::Err
         .microbe
         .denitrifier_activity_index;
 
-    // Run for 60 days with daily feeding and weekly water changes
-    for day in 0..60 {
+    // Run for 60 days with daily feeding (no water changes — from_state()
+    // doesn't populate the source water catalog, and the test doesn't need
+    // them since we're measuring cumulative N₂ export).
+    for _day in 0..60 {
         run_planted.apply_action(PlayerAction::Feed { grams: 0.05 })?;
         run_inert.apply_action(PlayerAction::Feed { grams: 0.05 })?;
-
-        if day % 7 == 6 {
-            run_planted.apply_action(PlayerAction::WaterChangePercent {
-                percent: 20.0,
-                source_profile_id: "moderate".to_string(),
-            })?;
-            run_inert.apply_action(PlayerAction::WaterChangePercent {
-                percent: 20.0,
-                source_profile_id: "moderate".to_string(),
-            })?;
-        }
 
         run_planted.step_hours(24)?;
         run_inert.step_hours(24)?;
