@@ -128,8 +128,8 @@ fn planted_vs_unplanted_diverge_in_penetration_depth() -> Result<(), Box<dyn std
 }
 
 // ---------------------------------------------------------------------------
-// Integration: planted substrate shows more N₂ export from denitrification
-// (deeper oxic zone → larger suboxic zone pushed deeper → more capacity)
+// Integration: planted substrate shifts denitrification because the deeper
+// rooted oxic zone leaves less suboxic volume available near the surface.
 // ---------------------------------------------------------------------------
 
 #[test]

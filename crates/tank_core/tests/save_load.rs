@@ -1123,6 +1123,9 @@ fn malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected() -> 
         ("shrimp_params.molt_success_threshold", 1.2),
         ("shrimp_params.critical_molt_gh_ratio", 1.2),
         ("shrimp_params.chloride_protection_factor", -1.0),
+        ("shrimp_params.low_temp_repro_ramp_width_c", 0.0),
+        ("shrimp_params.tan_repro_full_suppression_mg_n_per_l", 0.0),
+        ("shrimp_params.no2_repro_full_suppression_mg_n_per_l", 0.0),
         ("shrimp_params.egg_drop_max_probability", 1.2),
         ("shrimp_params.egg_oxygen_reference_mg_l", 0.0),
         ("shrimp_params.reproductive_readiness_smoothing", -0.1),
@@ -1206,6 +1209,15 @@ fn malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected() -> 
             }
             "shrimp_params.chloride_protection_factor" => {
                 state.shrimp_params.chloride_protection_factor = value;
+            }
+            "shrimp_params.low_temp_repro_ramp_width_c" => {
+                state.shrimp_params.low_temp_repro_ramp_width_c = value;
+            }
+            "shrimp_params.tan_repro_full_suppression_mg_n_per_l" => {
+                state.shrimp_params.tan_repro_full_suppression_mg_n_per_l = value;
+            }
+            "shrimp_params.no2_repro_full_suppression_mg_n_per_l" => {
+                state.shrimp_params.no2_repro_full_suppression_mg_n_per_l = value;
             }
             "shrimp_params.egg_drop_max_probability" => {
                 state.shrimp_params.egg_drop_max_probability = value;

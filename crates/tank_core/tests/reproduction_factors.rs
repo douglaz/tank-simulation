@@ -704,7 +704,8 @@ fn test_mineral_suppression_is_applied_once_in_spawning() {
     state.water.calcium_mg_total = 10.0 * state.water_volume_l();
     state.water.magnesium_mg_total = 2.0 * state.water_volume_l();
 
-    let mineral_factor = (state.gh_d() / state.shrimp_params.gh_min_d.max(0.01)).clamp(0.3, 1.0);
+    let mineral_factor = (state.gh_d() / state.shrimp_params.gh_min_d.max(0.01))
+        .clamp(state.shrimp_params.molt_mineral_factor_floor, 1.0);
     state.animal.reproductive_readiness_index = mineral_factor;
 
     let eligible = ((0.5 * f64::from(state.animal.adult.count))
@@ -780,12 +781,17 @@ fn test_all_reproduction_factors_are_named_parameters() -> Result<(), SimError> 
     let preset = tank_data::load_shrimp("neocaridina_davidi")
         .expect("neocaridina_davidi preset should load with reproduction knobs");
     for param in [
+        "low_temp_repro_ramp_width_c",
         "high_temp_repro_penalty_start_c",
         "high_temp_repro_penalty_full_c",
         "density_repro_threshold_per_l",
         "density_repro_half_suppression_per_l",
+        "molt_gh_excess_penalty_divisor",
+        "molt_mineral_factor_floor",
         "tan_repro_threshold_mg_n_per_l",
+        "tan_repro_full_suppression_mg_n_per_l",
         "no2_repro_threshold_mg_n_per_l",
+        "no2_repro_full_suppression_mg_n_per_l",
         "egg_drop_temp_swing_c",
         "egg_drop_instability_threshold",
         "egg_drop_max_probability",
@@ -881,7 +887,7 @@ fn test_all_reproduction_factors_are_named_parameters() -> Result<(), SimError> 
     tan_strict.filter_state.biofilter_maturity_index = 0.0;
     tan_strict.shrimp_params.tan_repro_threshold_mg_n_per_l = 0.5;
     let mut tan_relaxed = tan_strict.clone();
-    tan_relaxed.shrimp_params.tan_repro_threshold_mg_n_per_l = 2.0;
+    tan_relaxed.shrimp_params.tan_repro_threshold_mg_n_per_l = 1.5;
 
     let mut tan_strict_engine = Engine::from_parts(tan_strict, vec![]);
     let mut tan_relaxed_engine = Engine::from_parts(tan_relaxed, vec![]);
@@ -909,7 +915,7 @@ fn test_all_reproduction_factors_are_named_parameters() -> Result<(), SimError> 
     no2_strict.filter_state.biofilter_maturity_index = 0.0;
     no2_strict.shrimp_params.no2_repro_threshold_mg_n_per_l = 0.2;
     let mut no2_relaxed = no2_strict.clone();
-    no2_relaxed.shrimp_params.no2_repro_threshold_mg_n_per_l = 1.0;
+    no2_relaxed.shrimp_params.no2_repro_threshold_mg_n_per_l = 0.8;
 
     let mut no2_strict_engine = Engine::from_parts(no2_strict, vec![]);
     let mut no2_relaxed_engine = Engine::from_parts(no2_relaxed, vec![]);

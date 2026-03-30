@@ -156,6 +156,15 @@ fn format_snapshot_summary(label: &str, snap: &TankSnapshot) -> String {
     )
 }
 
+fn format_clearance_summary(small: Option<u32>, large: Option<u32>) -> String {
+    match (small, large) {
+        (Some(small_hour), Some(large_hour)) => format!("{small_hour}h->{large_hour}h"),
+        (Some(small_hour), None) => format!("{small_hour}h->not-cleared"),
+        (None, Some(large_hour)) => format!("not-cleared->{large_hour}h"),
+        (None, None) => "not-cleared->not-cleared (terminal reduced-N fallback)".to_string(),
+    }
+}
+
 struct ProbeResult {
     name: &'static str,
     passed: bool,
@@ -449,6 +458,8 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix(
     let final_reduced_n_large = snap_large.tan_mg_n_per_l + snap_large.nitrite_mg_n_per_l;
     let nitrifier_small = nitrifier_biomass(run_small.engine().full_state());
     let nitrifier_large = nitrifier_biomass(run_large.engine().full_state());
+    let clearance_summary =
+        format_clearance_summary(reduced_n_clearance_small, reduced_n_clearance_large);
 
     dump_habitat_debug("biofilter_small", run_small.engine().full_state());
     dump_habitat_debug("biofilter_large", run_large.engine().full_state());
@@ -460,7 +471,7 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix(
          reduced-N exposure small={reduced_n_exposure_small:.2} large={reduced_n_exposure_large:.2}; \
          final TAN small={:.3} large={:.3}; final NO₂ small={:.3} large={:.3}; \
          final reduced-N small={final_reduced_n_small:.3} large={final_reduced_n_large:.3}; \
-         clearance small={reduced_n_clearance_small:?}h large={reduced_n_clearance_large:?}h",
+         clearance {clearance_summary}",
         snap_small.tan_mg_n_per_l,
         snap_large.tan_mg_n_per_l,
         snap_small.nitrite_mg_n_per_l,
@@ -569,7 +580,7 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix(
             "area {filter_area_small:.0}->{filter_area_large:.0} cm², capacity {capacity_small:.3}->{capacity_large:.3} g, \
              reduced-N exposure {reduced_n_exposure_small:.2}->{reduced_n_exposure_large:.2}, \
              final TAN {tan_small:.3}->{tan_large:.3}, final NO₂ {no2_small:.3}->{no2_large:.3}, \
-             final reduced-N {final_reduced_n_small:.3}->{final_reduced_n_large:.3}, clearance {reduced_n_clearance_small:?}->{reduced_n_clearance_large:?}",
+             final reduced-N {final_reduced_n_small:.3}->{final_reduced_n_large:.3}, clearance {clearance_summary}",
             tan_small = snap_small.tan_mg_n_per_l,
             tan_large = snap_large.tan_mg_n_per_l,
             no2_small = snap_small.nitrite_mg_n_per_l,

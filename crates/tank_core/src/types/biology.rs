@@ -865,11 +865,9 @@ impl Default for ShrimpRuntimeParams {
             density_repro_threshold_per_l: default_density_repro_threshold_per_l(),
             density_repro_half_suppression_per_l: default_density_repro_half_suppression_per_l(),
             tan_repro_threshold_mg_n_per_l: default_tan_repro_threshold_mg_n_per_l(),
-            tan_repro_full_suppression_mg_n_per_l:
-                default_tan_repro_full_suppression_mg_n_per_l(),
+            tan_repro_full_suppression_mg_n_per_l: default_tan_repro_full_suppression_mg_n_per_l(),
             no2_repro_threshold_mg_n_per_l: default_no2_repro_threshold_mg_n_per_l(),
-            no2_repro_full_suppression_mg_n_per_l:
-                default_no2_repro_full_suppression_mg_n_per_l(),
+            no2_repro_full_suppression_mg_n_per_l: default_no2_repro_full_suppression_mg_n_per_l(),
             egg_drop_temp_swing_c: default_egg_drop_temp_swing_c(),
             egg_drop_instability_threshold: default_egg_drop_instability_threshold(),
             egg_drop_max_probability: default_egg_drop_max_probability(),
