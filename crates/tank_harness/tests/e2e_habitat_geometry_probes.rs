@@ -251,7 +251,7 @@ fn probe_artifact_label(base: &str, suffix: Option<&str>) -> String {
 
 // ---------------------------------------------------------------------------
 // 1. Biofilter scaling: bigger filter media → higher nitrifier capacity
-//    → faster cycling
+//    → lower reduced-nitrogen burden (and faster clearance when it occurs)
 // ---------------------------------------------------------------------------
 
 /// Biofilter scaling scenario: substantially larger filter media should
@@ -277,16 +277,16 @@ fn probe_artifact_label(base: &str, suffix: Option<&str>) -> String {
 // already executes each multi-day scenario once in ordinary `cargo test` runs.
 #[test]
 #[ignore = "run explicitly with -- --ignored when iterating on a single habitat probe"]
-fn probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<(), Box<dyn std::error::Error>> {
-    require_probe_pass(run_probe_biofilter_scaling_bigger_media_faster_cycling())
+fn probe_biofilter_scaling_bigger_media_higher_capacity() -> Result<(), Box<dyn std::error::Error>> {
+    require_probe_pass(run_probe_biofilter_scaling_bigger_media_higher_capacity())
 }
 
-fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
+fn run_probe_biofilter_scaling_bigger_media_higher_capacity(
 ) -> Result<ProbeResult, Box<dyn std::error::Error>> {
-    run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix(None)
+    run_probe_biofilter_scaling_bigger_media_higher_capacity_with_suffix(None)
 }
 
-fn run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix(
+fn run_probe_biofilter_scaling_bigger_media_higher_capacity_with_suffix(
     artifact_suffix: Option<&str>,
 ) -> Result<ProbeResult, Box<dyn std::error::Error>> {
     const SMALL_MEDIA_CM2: f64 = 500.0;
@@ -1529,9 +1529,9 @@ fn run_probe_equipment_scaling_1x_vs_2x_with_suffix(
     ))
 }
 
-fn run_probe_biofilter_scaling_bigger_media_faster_cycling_summary(
+fn run_probe_biofilter_scaling_bigger_media_higher_capacity_summary(
 ) -> Result<ProbeResult, Box<dyn std::error::Error>> {
-    run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix(Some("summary"))
+    run_probe_biofilter_scaling_bigger_media_higher_capacity_with_suffix(Some("summary"))
 }
 
 fn run_probe_light_depth_shallow_vs_deep_growth_summary(
@@ -1566,7 +1566,7 @@ fn all_habitat_geometry_probes_summary() -> Result<(), Box<dyn std::error::Error
     let probes: [(&str, ProbeFn); 5] = [
         (
             "biofilter_scaling",
-            run_probe_biofilter_scaling_bigger_media_faster_cycling_summary,
+            run_probe_biofilter_scaling_bigger_media_higher_capacity_summary,
         ),
         (
             "light_depth",
