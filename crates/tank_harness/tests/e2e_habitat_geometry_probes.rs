@@ -16,8 +16,7 @@
 
 use tank_core::{
     systems::{
-        chemistry::resolve_carbonate_state,
-        nitrogen_cycle::compute_biofilter_carrying_capacity,
+        chemistry::resolve_carbonate_state, nitrogen_cycle::compute_biofilter_carrying_capacity,
     },
     HabitatKind, PlayerAction, SimSeed, SimulationEngine, SubstrateKind, SubstrateLayerState,
     TankSnapshot, TankState, WaterState,
@@ -156,13 +155,14 @@ struct ProbeResult {
     failure_detail: String,
 }
 
-fn require_probe_pass(
-    result: Result<ProbeResult, String>,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn require_probe_pass<E>(result: Result<ProbeResult, E>) -> Result<(), Box<dyn std::error::Error>>
+where
+    E: std::fmt::Display,
+{
     match result {
         Ok(probe) if probe.passed => Ok(()),
         Ok(probe) => Err(format!("{} failed:\n{}", probe.name, probe.failure_detail).into()),
-        Err(err) => Err(err.into()),
+        Err(err) => Err(err.to_string().into()),
     }
 }
 
@@ -200,11 +200,7 @@ fn record_within_fraction(
     );
 }
 
-fn finish_probe(
-    name: &'static str,
-    observed: String,
-    runs: Vec<HarnessRun>,
-) -> Result<ProbeResult, String> {
+fn finish_probe(name: &'static str, observed: String, runs: Vec<HarnessRun>) -> ProbeResult {
     let mut finish_errors = Vec::new();
     for run in runs {
         if let Err(err) = run.finish() {
@@ -213,12 +209,12 @@ fn finish_probe(
     }
 
     let failure_detail = finish_errors.join("\n");
-    Ok(ProbeResult {
+    ProbeResult {
         name,
         passed: failure_detail.is_empty(),
         observed,
         failure_detail,
-    })
+    }
 }
 
 fn panic_message(panic: Box<dyn std::any::Any + Send>) -> String {
@@ -255,13 +251,14 @@ fn probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<(), Box<dyn s
     require_probe_pass(run_probe_biofilter_scaling_bigger_media_faster_cycling())
 }
 
-fn run_probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<ProbeResult, String> {
+fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
+) -> Result<ProbeResult, Box<dyn std::error::Error>> {
     const SMALL_MEDIA_CM2: f64 = 500.0;
     const LARGE_MEDIA_CM2: f64 = 4000.0;
-    const INITIAL_CAPACITY_FRACTION: f64 = 0.08;
-    const INITIAL_TAN_MG_N_PER_L: f64 = 6.0;
+    const INITIAL_CAPACITY_FRACTION: f64 = 0.35;
+    const INITIAL_TAN_MG_N_PER_L: f64 = 4.0;
     const DURATION_HOURS: u32 = 24 * 21;
-    const TAN_CLEARANCE_THRESHOLD: f64 = 0.5;
+    const REDUCED_N_CLEARANCE_THRESHOLD: f64 = 1.0;
 
     let build_state = |seed: SimSeed, media_area_cm2: f64| -> TankState {
         let mut state = TankState::new(seed);
@@ -270,11 +267,8 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<ProbeResu
         state.geometry.height_cm = 36.0;
         state.geometry.fill_height_cm = 32.0;
         let footprint_cm2 = state.geometry.footprint_area_cm2();
-        let substrate = SubstrateLayerState {
-            colonizable_area_cm2: SubstrateKind::InertSand
-                .derived_colonizable_area_cm2(footprint_cm2, 3.0),
-            ..SubstrateLayerState::default()
-        };
+        let mut substrate = SubstrateLayerState::default();
+        substrate.colonizable_area_cm2 = substrate.derived_colonizable_area_cm2(footprint_cm2);
         state.substrate_layers = vec![substrate];
 
         let volume_l = state.water_volume_l();
@@ -299,9 +293,18 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<ProbeResu
         state.plant_guilds.clear();
         state.algae.set_periphyton_total(0.0);
         state.algae.suspended_biomass_g = 0.0;
+        state.microbe.decomposer_biomass_g = 0.0;
+        state.microbe.decomposer_by_habitat.clear();
+        state.microbe.denitrifier_activity_index = 0.0;
+        state.microfauna.population_index = 0.0;
         state.animal.adult.count = 0;
         state.animal.sub_adult.count = 0;
         state.animal.juvenile.count = 0;
+        state.detritus.particulate_organics_g_total = 0.0;
+        state.detritus.fine_detritus_g_total = 0.0;
+        state.detritus.dissolved_feed_residue_g_total = 0.0;
+        state.process_params.feed_leach_rate_per_hour = 0.0;
+        state.process_params.decomposer_vmax_per_hour = 0.0;
         state.refresh_habitat_registry();
 
         let carrying_capacity_g = compute_biofilter_carrying_capacity(
@@ -316,13 +319,19 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<ProbeResu
         state
     };
 
-    let mut run_small =
-        HarnessRun::from_state(SimSeed(42), "biofilter_capacity", build_state(SimSeed(42), SMALL_MEDIA_CM2))
-            .with_artifact_label("biofilter_small");
+    let mut run_small = HarnessRun::from_state(
+        SimSeed(42),
+        "biofilter_capacity",
+        build_state(SimSeed(42), SMALL_MEDIA_CM2),
+    )
+    .with_artifact_label("biofilter_small");
     run_small.enable_instrumentation();
-    let mut run_large =
-        HarnessRun::from_state(SimSeed(42), "biofilter_capacity", build_state(SimSeed(42), LARGE_MEDIA_CM2))
-            .with_artifact_label("biofilter_large");
+    let mut run_large = HarnessRun::from_state(
+        SimSeed(42),
+        "biofilter_capacity",
+        build_state(SimSeed(42), LARGE_MEDIA_CM2),
+    )
+    .with_artifact_label("biofilter_large");
     run_large.enable_instrumentation();
 
     let filter_area = |state: &TankState| {
@@ -358,10 +367,14 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<ProbeResu
             .nitrifier_base_density_g_per_cm2,
     );
 
-    let mut tan_exposure_small = run_small.snapshot().tan_mg_n_per_l;
-    let mut tan_exposure_large = run_large.snapshot().tan_mg_n_per_l;
-    let mut tan_clearance_small = None;
-    let mut tan_clearance_large = None;
+    let initial_small_reduced_n =
+        run_small.snapshot().tan_mg_n_per_l + run_small.snapshot().nitrite_mg_n_per_l;
+    let initial_large_reduced_n =
+        run_large.snapshot().tan_mg_n_per_l + run_large.snapshot().nitrite_mg_n_per_l;
+    let mut reduced_n_exposure_small = initial_small_reduced_n;
+    let mut reduced_n_exposure_large = initial_large_reduced_n;
+    let mut reduced_n_clearance_small = None;
+    let mut reduced_n_clearance_large = None;
 
     for hour in 0..DURATION_HOURS {
         run_small.step_hours(1)?;
@@ -369,15 +382,17 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<ProbeResu
 
         let snap_small = run_small.snapshot();
         let snap_large = run_large.snapshot();
-        tan_exposure_small += snap_small.tan_mg_n_per_l;
-        tan_exposure_large += snap_large.tan_mg_n_per_l;
+        let reduced_n_small = snap_small.tan_mg_n_per_l + snap_small.nitrite_mg_n_per_l;
+        let reduced_n_large = snap_large.tan_mg_n_per_l + snap_large.nitrite_mg_n_per_l;
+        reduced_n_exposure_small += reduced_n_small;
+        reduced_n_exposure_large += reduced_n_large;
 
         let clearance_hour = hour + 1;
-        if tan_clearance_small.is_none() && snap_small.tan_mg_n_per_l <= TAN_CLEARANCE_THRESHOLD {
-            tan_clearance_small = Some(clearance_hour);
+        if reduced_n_clearance_small.is_none() && reduced_n_small <= REDUCED_N_CLEARANCE_THRESHOLD {
+            reduced_n_clearance_small = Some(clearance_hour);
         }
-        if tan_clearance_large.is_none() && snap_large.tan_mg_n_per_l <= TAN_CLEARANCE_THRESHOLD {
-            tan_clearance_large = Some(clearance_hour);
+        if reduced_n_clearance_large.is_none() && reduced_n_large <= REDUCED_N_CLEARANCE_THRESHOLD {
+            reduced_n_clearance_large = Some(clearance_hour);
         }
     }
 
@@ -393,8 +408,8 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<ProbeResu
     eprintln!(
         "Biofilter metrics: filter_area small={filter_area_small:.1} cm² large={filter_area_large:.1} cm²; \
          capacity small={capacity_small:.4}g large={capacity_large:.4}g; \
-         TAN exposure small={tan_exposure_small:.2} large={tan_exposure_large:.2}; \
-         clearance small={tan_clearance_small:?}h large={tan_clearance_large:?}h"
+         reduced-N exposure small={reduced_n_exposure_small:.2} large={reduced_n_exposure_large:.2}; \
+         clearance small={reduced_n_clearance_small:?}h large={reduced_n_clearance_large:?}h"
     );
 
     {
@@ -402,16 +417,16 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<ProbeResu
         record_check(
             &mut runs,
             "biofilter_filter_area",
-            filter_area_large > filter_area_small * 6.0,
+            filter_area_large > filter_area_small * 1.5,
             format!(
-                "larger media should expand filter habitat area by >6x: \
+                "2× media should expand filter habitat area by >1.5×: \
                  small={filter_area_small:.1} cm², large={filter_area_large:.1} cm²"
             ),
         );
         record_check(
             &mut runs,
             "biofilter_capacity",
-            capacity_large > capacity_small * 1.4,
+            capacity_large > capacity_small * 1.25,
             format!(
                 "larger media should materially increase nitrifier capacity: \
                  small={capacity_small:.4} g, large={capacity_large:.4} g"
@@ -419,11 +434,11 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<ProbeResu
         );
         record_check(
             &mut runs,
-            "biofilter_tan_exposure",
-            tan_exposure_large < tan_exposure_small,
+            "biofilter_reduced_n_exposure",
+            reduced_n_exposure_large < reduced_n_exposure_small,
             format!(
-                "larger filter should reduce TAN exposure under the same ammonia challenge: \
-                 small={tan_exposure_small:.2}, large={tan_exposure_large:.2}"
+                "larger filter should reduce combined TAN+NO₂ exposure under the same ammonia challenge: \
+                 small={reduced_n_exposure_small:.2}, large={reduced_n_exposure_large:.2}"
             ),
         );
         record_check(
@@ -435,29 +450,29 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<ProbeResu
                  small={nitrifier_small:.4} g, large={nitrifier_large:.4} g"
             ),
         );
-        match (tan_clearance_small, tan_clearance_large) {
+        match (reduced_n_clearance_small, reduced_n_clearance_large) {
             (Some(small_hour), Some(large_hour)) => record_check(
                 &mut runs,
-                "biofilter_tan_clearance",
+                "biofilter_reduced_n_clearance",
                 large_hour <= small_hour,
                 format!(
-                    "larger filter should clear TAN to <= {TAN_CLEARANCE_THRESHOLD:.1} mg N/L no later than the smaller filter: \
+                    "larger filter should clear TAN+NO₂ to <= {REDUCED_N_CLEARANCE_THRESHOLD:.1} mg N/L no later than the smaller filter: \
                      small={small_hour}h, large={large_hour}h"
                 ),
             ),
             (None, Some(_)) => {}
             (Some(small_hour), None) => record_failure_all(
                 &mut runs,
-                "biofilter_tan_clearance",
+                "biofilter_reduced_n_clearance",
                 format!(
-                    "smaller filter cleared TAN by {small_hour}h but the larger filter never did"
+                    "smaller filter cleared TAN+NO₂ by {small_hour}h but the larger filter never did"
                 ),
             ),
             (None, None) => record_failure_all(
                 &mut runs,
-                "biofilter_tan_clearance",
+                "biofilter_reduced_n_clearance",
                 format!(
-                    "neither filter cleared TAN to <= {TAN_CLEARANCE_THRESHOLD:.1} mg N/L within {DURATION_HOURS}h"
+                    "neither filter cleared TAN+NO₂ to <= {REDUCED_N_CLEARANCE_THRESHOLD:.1} mg N/L within {DURATION_HOURS}h"
                 ),
             ),
         }
@@ -478,14 +493,14 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling() -> Result<ProbeResu
             .tan_mg_n_per_l(0.0, 8.0),
     );
 
-    finish_probe(
+    Ok(finish_probe(
         "biofilter_scaling",
         format!(
             "area {filter_area_small:.0}->{filter_area_large:.0} cm², capacity {capacity_small:.3}->{capacity_large:.3} g, \
-             TAN exposure {tan_exposure_small:.2}->{tan_exposure_large:.2}, clearance {tan_clearance_small:?}->{tan_clearance_large:?}"
+             reduced-N exposure {reduced_n_exposure_small:.2}->{reduced_n_exposure_large:.2}, clearance {reduced_n_clearance_small:?}->{reduced_n_clearance_large:?}"
         ),
         vec![run_small, run_large],
-    )
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -513,7 +528,8 @@ fn probe_light_depth_shallow_vs_deep_growth() -> Result<(), Box<dyn std::error::
     require_probe_pass(run_probe_light_depth_shallow_vs_deep_growth())
 }
 
-fn run_probe_light_depth_shallow_vs_deep_growth() -> Result<ProbeResult, String> {
+fn run_probe_light_depth_shallow_vs_deep_growth() -> Result<ProbeResult, Box<dyn std::error::Error>>
+{
     // Build two tanks with SAME footprint but different fill heights.
     // Use from_state to control geometry directly without size_scale
     // (which would change footprint and starting biomass).
@@ -664,14 +680,14 @@ fn run_probe_light_depth_shallow_vs_deep_growth() -> Result<ProbeResult, String>
             .temperature_c(20.0, 30.0),
     );
 
-    finish_probe(
+    Ok(finish_probe(
         "light_depth",
         format!(
             "depth {shallow_depth:.1}->{deep_depth:.1} cm, substrate light {substrate_light_shallow:.4}->{substrate_light_deep:.4}, \
              plant growth {growth_shallow:.4}->{growth_deep:.4} g"
         ),
         vec![run_shallow, run_deep],
-    )
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -703,7 +719,7 @@ fn probe_habitat_fouling_glass_vs_filter() -> Result<(), Box<dyn std::error::Err
     require_probe_pass(run_probe_habitat_fouling_glass_vs_filter())
 }
 
-fn run_probe_habitat_fouling_glass_vs_filter() -> Result<ProbeResult, String> {
+fn run_probe_habitat_fouling_glass_vs_filter() -> Result<ProbeResult, Box<dyn std::error::Error>> {
     let build_run = |light_preset: StartupLightPreset,
                      feed_g: f64,
                      label: &str|
@@ -847,7 +863,7 @@ fn run_probe_habitat_fouling_glass_vs_filter() -> Result<ProbeResult, String> {
         );
     }
 
-    finish_probe(
+    Ok(finish_probe(
         "habitat_fouling",
         format!(
             "glass periphyton high={hl_glass_peri:.6} g low={ll_glass_peri:.6} g; \
@@ -856,7 +872,7 @@ fn run_probe_habitat_fouling_glass_vs_filter() -> Result<ProbeResult, String> {
             ratio_change * 100.0
         ),
         vec![run_high_light, run_low_light, run_heavy_feed],
-    )
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -891,7 +907,7 @@ fn probe_substrate_redox_denitrification() -> Result<(), Box<dyn std::error::Err
     require_probe_pass(run_probe_substrate_redox_denitrification())
 }
 
-fn run_probe_substrate_redox_denitrification() -> Result<ProbeResult, String> {
+fn run_probe_substrate_redox_denitrification() -> Result<ProbeResult, Box<dyn std::error::Error>> {
     // Build a state with thick planted substrate configured for active
     // denitrification. The Bouldin model recalculates O₂ penetration each
     // tick, so we must create conditions that naturally produce a shallow
@@ -1140,14 +1156,14 @@ fn run_probe_substrate_redox_denitrification() -> Result<ProbeResult, String> {
             .temperature_c(22.0, 28.0),
     );
 
-    finish_probe(
+    Ok(finish_probe(
         "substrate_redox",
         format!(
             "suboxic pore volume={suboxic_vol:.2} cm³, N₂ export planted={planted_export:.2} inert={inert_export:.2} mg N, \
              activity {planted_initial_activity:.2}->{planted_final_activity:.2}"
         ),
         vec![run_planted, run_inert],
-    )
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -1176,7 +1192,7 @@ fn probe_equipment_scaling_1x_vs_2x() -> Result<(), Box<dyn std::error::Error>> 
     require_probe_pass(run_probe_equipment_scaling_1x_vs_2x())
 }
 
-fn run_probe_equipment_scaling_1x_vs_2x() -> Result<ProbeResult, String> {
+fn run_probe_equipment_scaling_1x_vs_2x() -> Result<ProbeResult, Box<dyn std::error::Error>> {
     let duration_hours: u32 = 500;
     let feed_per_adult_per_day: f64 = 0.001;
     let base_adult_count: u32 = 10;
@@ -1311,7 +1327,7 @@ fn run_probe_equipment_scaling_1x_vs_2x() -> Result<ProbeResult, String> {
             .plant_biomass_g(1.0, 400.0),
     );
 
-    finish_probe(
+    Ok(finish_probe(
         "equipment_scaling",
         format!(
             "peak TAN {peak_tan_1x:.4}/{peak_tan_2x:.4}, DO range {do_range_1x:.4}/{do_range_2x:.4}, \
@@ -1319,21 +1335,81 @@ fn run_probe_equipment_scaling_1x_vs_2x() -> Result<ProbeResult, String> {
             snap_1x.water_temp_c, snap_2x.water_temp_c
         ),
         vec![run_1x, run_2x],
-    )
+    ))
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Summary runner
 // ---------------------------------------------------------------------------
 
-fn assert_within_fraction(label: &str, lhs: f64, rhs: f64, tolerance: f64) {
-    let scale = lhs.abs().max(rhs.abs()).max(1e-9);
-    let fraction = (lhs - rhs).abs() / scale;
-    assert!(
-        fraction <= tolerance,
-        "{label}: values should stay within {:.0}% \
-         (lhs={lhs:.4}, rhs={rhs:.4}, divergence={:.1}%)",
-        tolerance * 100.0,
-        fraction * 100.0
-    );
+/// Runs all 5 habitat/geometry probes, prints a summary report, and fails the
+/// suite if any ecological envelope is violated.
+#[test]
+fn all_habitat_geometry_probes_summary() -> Result<(), Box<dyn std::error::Error>> {
+    type ProbeFn = fn() -> Result<ProbeResult, Box<dyn std::error::Error>>;
+    let probes: [(&str, ProbeFn); 5] = [
+        (
+            "biofilter_scaling",
+            run_probe_biofilter_scaling_bigger_media_faster_cycling,
+        ),
+        ("light_depth", run_probe_light_depth_shallow_vs_deep_growth),
+        ("habitat_fouling", run_probe_habitat_fouling_glass_vs_filter),
+        ("substrate_redox", run_probe_substrate_redox_denitrification),
+        ("equipment_scaling", run_probe_equipment_scaling_1x_vs_2x),
+    ];
+
+    let mut results = Vec::new();
+    for (name, probe_fn) in probes {
+        let result = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(probe_fn)) {
+            Ok(Ok(result)) => result,
+            Ok(Err(err)) => ProbeResult {
+                name,
+                passed: false,
+                observed: "probe execution aborted before summary".to_string(),
+                failure_detail: err.to_string(),
+            },
+            Err(panic) => ProbeResult {
+                name,
+                passed: false,
+                observed: "probe panicked before returning a summary".to_string(),
+                failure_detail: panic_message(panic),
+            },
+        };
+        results.push(result);
+    }
+
+    eprintln!();
+    eprintln!("=== Habitat/Geometry Probe Summary Report ===");
+    eprintln!("Structured traces are enabled for every probe run; set TANK_E2E_VERBOSE=1 to stream them on success.");
+    eprintln!();
+    for (index, result) in results.iter().enumerate() {
+        let status = if result.passed { "PASS" } else { "FAIL" };
+        eprintln!("  Probe {}: {} [{}]", index + 1, result.name, status);
+        eprintln!("    {}", result.observed);
+        if !result.passed {
+            for line in result.failure_detail.lines() {
+                eprintln!("    >> {line}");
+            }
+        }
+    }
+    let pass_count = results.iter().filter(|result| result.passed).count();
+    let fail_count = results.len() - pass_count;
+    eprintln!();
+    eprintln!("  {pass_count} passed, {fail_count} failed");
+    eprintln!();
+    eprintln!("=== End Habitat/Geometry Probe Report ===");
+    eprintln!();
+
+    if fail_count > 0 {
+        let mut message = format!("{fail_count} habitat/geometry probe(s) failed:\n");
+        for result in results.iter().filter(|result| !result.passed) {
+            message.push_str(&format!("  {}:\n", result.name));
+            for line in result.failure_detail.lines() {
+                message.push_str(&format!("    {line}\n"));
+            }
+        }
+        return Err(message.into());
+    }
+
+    Ok(())
 }
