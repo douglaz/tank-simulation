@@ -4,7 +4,8 @@ use crate::types::{
 };
 
 /// Stoichiometric O2:C for organic matter oxidation (32/12 ≈ 2.67).
-const O2_PER_MG_C_RESPIRED: f64 = 2.67;
+pub(crate) const MICROFAUNA_O2_PER_MG_C_RESPIRED: f64 = 2.67;
+pub(crate) const MICROFAUNA_DETRITUS_DAILY_FRACTION: f64 = 0.01;
 
 /// Daily microfauna turnover: updates population_index and grazing_pressure_index
 /// from detritus/periphyton resource availability and shrimp grazing pressure.
@@ -69,8 +70,9 @@ pub fn step_daily_microfauna(state: &mut TankState) {
         });
 
     // Microfauna also process some fine detritus (modest)
-    let detritus_consumed =
-        state.detritus.fine_detritus_g_total * 0.01 * state.microfauna.population_index;
+    let detritus_consumed = state.detritus.fine_detritus_g_total
+        * MICROFAUNA_DETRITUS_DAILY_FRACTION
+        * state.microfauna.population_index;
     state.detritus.fine_detritus_g_total =
         (state.detritus.fine_detritus_g_total - detritus_consumed).max(0.0);
 
@@ -126,7 +128,7 @@ fn route_consumed_food(state: &mut TankState, consumed_n_mg: f64, consumed_c_mg:
     // ── Respiration: O2 demand + DIC ──
     // O2-limited: only oxidize the share that available O2 can support.
     let target_respired_c_mg = assimilated_c_mg * resp_frac;
-    let o2_demand_mg = target_respired_c_mg * O2_PER_MG_C_RESPIRED;
+    let o2_demand_mg = target_respired_c_mg * MICROFAUNA_O2_PER_MG_C_RESPIRED;
     let actual_o2_consumed_mg = state
         .water
         .dissolved_oxygen_mg_total
@@ -154,7 +156,10 @@ fn route_consumed_food(state: &mut TankState, consumed_n_mg: f64, consumed_c_mg:
     state.microfauna.reserve_g += retained_mass_g;
 }
 
-fn microfauna_periphyton_accessibility(substrate_surface_access: f64, kind: HabitatKind) -> f64 {
+pub(crate) fn microfauna_periphyton_accessibility(
+    substrate_surface_access: f64,
+    kind: HabitatKind,
+) -> f64 {
     match kind {
         HabitatKind::GlassHardscape => 1.0,
         HabitatKind::SubstrateSurface => substrate_surface_access.clamp(0.0, 1.0),

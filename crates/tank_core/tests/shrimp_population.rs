@@ -757,3 +757,52 @@ fn poor_conditions_can_force_failed_molts() {
     assert!(!state.animal.last_molt_success);
     assert!(state.animal.failed_molt_accum > 0.0);
 }
+
+#[test]
+fn severe_soft_water_forces_failed_molt_even_for_healthy_shrimp() {
+    let mut state = shrimp_test_state(SimSeed(7_155));
+    state
+        .process_params
+        .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.animal.set_population_condition_index(1.0);
+    state.animal.inter_molt_timer_days = state.shrimp_params.base_molt_interval_days;
+    state.water.calcium_mg_total = 0.0;
+    state.water.magnesium_mg_total = 0.0;
+    state.stability_tracker.prev_gh_d = state.gh_d();
+
+    step_daily_shrimp(&mut state);
+
+    assert!(
+        !state.animal.last_molt_success,
+        "very soft water should still fail the molt gate even at high condition"
+    );
+    assert!(state.animal.failed_molt_accum > 0.0);
+}
+
+#[test]
+fn prior_molt_failure_does_not_block_subadult_maturation() {
+    let mut state = shrimp_test_state(SimSeed(7_156));
+    state
+        .process_params
+        .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.animal.adult.count = 0;
+    state.animal.sub_adult.count = 1;
+    state.animal.sub_adult.condition_index = 0.9;
+    state.animal.sub_adult.maturation_accum = 1.0;
+    state.animal.sub_adult.reserve_g = (ADULT_SHRIMP_BIOMASS_G - SUB_ADULT_SHRIMP_BIOMASS_G)
+        * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+    state.animal.last_molt_success = false;
+
+    step_daily_shrimp(&mut state);
+
+    assert_eq!(state.animal.sub_adult.count, 0);
+    assert_eq!(state.animal.adult.count, 1);
+}

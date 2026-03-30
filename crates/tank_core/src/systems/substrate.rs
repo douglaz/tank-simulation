@@ -1,3 +1,7 @@
+use crate::systems::microfauna::{
+    microfauna_periphyton_accessibility, MICROFAUNA_DETRITUS_DAILY_FRACTION,
+    MICROFAUNA_O2_PER_MG_C_RESPIRED,
+};
 use crate::types::{algae_carbon_mg, detritus_carbon_mg, HabitatKind, PlantGuild, TankState};
 
 /// Free-water O₂ diffusion coefficient at 20 °C (cm²/s).
@@ -5,18 +9,7 @@ use crate::types::{algae_carbon_mg, detritus_carbon_mg, HabitatKind, PlantGuild,
 /// Temperature dependence is approximated linearly: +1.5 %/°C above 20 °C.
 /// Source: Broecker & Peng, *Tracers in the Sea*, 1982.
 const D_O2_FREE_20C_CM2_PER_S: f64 = 2.0e-5;
-const MICROFAUNA_O2_PER_MG_C_RESPIRED: f64 = 2.67;
 const SECONDS_PER_DAY: f64 = 86_400.0;
-
-/// Daily fraction of fine detritus consumed by substrate-associated microfauna.
-///
-/// At full population index the microfauna community processes roughly 1% of
-/// the available fine detritus pool per day within the substrate zone. This is
-/// a conservative estimate for benthic meiofauna; the periphyton consumption
-/// rate is tunable via `process_params.microfauna_periphyton_consumption` but
-/// detritus processing is less variable in practice, so a constant suffices
-/// for the first-pass model.
-const MICROFAUNA_DETRITUS_DAILY_FRACTION: f64 = 0.01;
 
 /// Minimum volumetric O₂ consumption rate (mg O₂ cm⁻³ s⁻¹) to avoid
 /// division-by-zero in the Bouldin penetration model. When biological
@@ -141,6 +134,9 @@ fn estimate_substrate_o2_demand_rate(state: &TankState) -> f64 {
 }
 
 fn effective_substrate_porosity(state: &TankState) -> f64 {
+    // The penetration model currently treats the top substrate layer as the
+    // controlling diffusion bottleneck for the full stack. That is a
+    // conservative simplification when deeper layers are more porous.
     state
         .substrate_layers
         .iter()
@@ -171,13 +167,8 @@ fn estimate_substrate_microfauna_o2_demand_mg_per_s(state: &TankState) -> f64 {
         .periphyton_by_habitat
         .iter()
         .fold((0.0, 0.0), |(substrate, total), (kind, biomass_g)| {
-            let accessibility = match kind {
-                HabitatKind::GlassHardscape => 1.0,
-                HabitatKind::SubstrateSurface => substrate_surface_access,
-                HabitatKind::PlantSurfaces => 0.7,
-                HabitatKind::FilterMedia => 0.15,
-                HabitatKind::SubstrateDeep => 0.0,
-            };
+            let accessibility =
+                microfauna_periphyton_accessibility(substrate_surface_access, *kind);
             let accessible_biomass_g = biomass_g.max(0.0) * accessibility;
             let substrate = if *kind == HabitatKind::SubstrateSurface {
                 substrate + accessible_biomass_g

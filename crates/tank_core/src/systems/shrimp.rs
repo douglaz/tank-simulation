@@ -9,6 +9,8 @@ use crate::types::{
 const ROUTING_MASS_ASSERT_TOLERANCE_G: f64 = 1e-12;
 const DEATH_DETRITUS_FRACTION_TOLERANCE: f64 = 1e-9;
 const DETERMINISTIC_CARRY_LIMIT: f64 = 1.0;
+const MOLT_SUCCESS_THRESHOLD: f64 = 0.55;
+const CRITICAL_MOLT_GH_RATIO: f64 = 0.3;
 
 // ── Hourly ──────────────────────────────────────────────────────────────────
 
@@ -395,10 +397,11 @@ fn molt_cycle(state: &mut TankState) {
     let effective_interval = (base_interval / temp_factor).max(1.0);
 
     let timer_factor = (state.animal.inter_molt_timer_days / effective_interval).clamp(0.0, 1.0);
-    let mineral_factor = gh_mineral_factor(gh_d, params);
+    let mineral_factor = molt_mineral_factor(gh_d, params);
     let condition_factor = state.animal.population_condition_index();
     let instability_factor = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
     let thermal_factor = temp_condition_factor(state.water.temperature_c, params);
+    let critical_gh_deficit = molt_gh_ratio(gh_d, params) < CRITICAL_MOLT_GH_RATIO;
 
     state.animal.molt_readiness = timer_factor;
 
@@ -410,7 +413,7 @@ fn molt_cycle(state: &mut TankState) {
             .clamp(0.0, 1.0);
         state.animal.inter_molt_timer_days = 0.0;
 
-        if success_score >= 0.55 {
+        if !critical_gh_deficit && success_score >= MOLT_SUCCESS_THRESHOLD {
             state.animal.last_molt_success = true;
             state.animal.failed_molt_accum = (state.animal.failed_molt_accum - 0.35).max(0.0);
         } else {
@@ -708,10 +711,10 @@ fn subadult_to_adult(state: &mut TankState) {
     let temp = state.water.temperature_c;
     let temp_scale = temp_condition_factor(temp, params);
 
-    // Condition gate: condition threshold AND last molt must have succeeded
+    // Maturation should depend on stage-local condition, not on the shared
+    // population-wide last_molt_success flag.
     let condition_gate = if state.animal.sub_adult.condition_index
         >= params.subadult_maturation_condition_threshold
-        && state.animal.last_molt_success
     {
         1.0
     } else {
@@ -1019,6 +1022,20 @@ fn gh_mineral_factor(gh_d: f64, params: &ShrimpRuntimeParams) -> f64 {
     } else {
         (1.0 - (gh_d - params.gh_max_d) / 10.0).clamp(0.3, 1.0)
     }
+}
+
+fn molt_mineral_factor(gh_d: f64, params: &ShrimpRuntimeParams) -> f64 {
+    if gh_d >= params.gh_min_d && gh_d <= params.gh_max_d {
+        1.0
+    } else if gh_d < params.gh_min_d {
+        molt_gh_ratio(gh_d, params)
+    } else {
+        (1.0 - (gh_d - params.gh_max_d) / 10.0).clamp(0.3, 1.0)
+    }
+}
+
+fn molt_gh_ratio(gh_d: f64, params: &ShrimpRuntimeParams) -> f64 {
+    (gh_d / params.gh_min_d.max(0.01)).clamp(0.0, 1.0)
 }
 
 #[cfg(test)]
