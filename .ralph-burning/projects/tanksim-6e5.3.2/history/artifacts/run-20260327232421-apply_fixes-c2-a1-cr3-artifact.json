@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327232421-apply_fixes-c2-a1-cr3-artifact",
+  "payload_id": "run-20260327232421-apply_fixes-c2-a1-cr3",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-28T01:14:03.332019953Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNo code changes were required in this apply-fixes pass. The cycle-2 round-3 review returned `approved` with no follow-up amendments, so I left the shrimp ingestion/assimilation/excretion routing implementation unchanged and revalidated the current workspace state.\n\n## Steps\n\n1. [Completed] Reviewed the round-3 review outcome and current workspace state to confirm there were no requested follow-up fixes for the shrimp feeding loop.\n2. [Skipped] Skipped code edits because the review was approved and no additional amendments were requested.\n3. [Completed] Re-ran targeted and full `tank_core` validation to confirm the approved shrimp routing implementation still passes in the current workspace state.\n\n## Validation Evidence\n\n- `cargo test -p tank_core --test shrimp_feeding_pathway --test validation` passed (17 tests total).\n- `cargo test -p tank_core` passed in the current workspace state.\n- `git status --short` shows no tracked-file changes; only the pre-existing untracked `.ralph-burning/` directory remains.\n\n## Outstanding Risks\n\n- The worktree still contains an untracked `.ralph-burning/` directory that remains outside the scope of this bead.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

@@ -1,0 +1,27 @@
+{
+  "payload_id": "run-20260330074452-final_review-reviewer-1-c2-a1-cr7-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T12:34:27.780827433Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "Add `crates/tank_core/tests/nitrification_alkalinity.rs:1` to version control. It is currently untracked (`git status` shows `?? crates/tank_core/tests/nitrification_alkalinity.rs`), so none of the new alkalinity/pH/budget regression coverage is actually part of the patch yet.",
+        "rationale": "This change relies on new scientific-regression tests for stoichiometry, pH decline, soft-vs-hard water behavior, and budget visibility. If the file stays untracked, the implementation lands without the intended protection."
+      },
+      {
+        "body": "Fix the remaining hard-coded `mg` labels in the new alkalinity assertion paths at `crates/tank_core/src/budget_helpers.rs:473` and `crates/tank_core/src/budget_helpers.rs:495-503`. `Element::Alkalinity` now carries meq values, but these failure messages still print them as `mg`, which makes the debug output scientifically wrong when an alkalinity check fails.",
+        "rationale": "The whole point of the added alkalinity tracking is explainable diagnostics. Misreporting the unit in assertion output will send future debugging and tuning in the wrong direction."
+      }
+    ],
+    "summary": "Reviewed the alkalinity-budget/tracing changes and ran the dedicated `nitrification_alkalinity` test target successfully. The core runtime changes look consistent, but I found two follow-ups: the new regression test file is still untracked, and the new alkalinity helper diagnostics still label meq values as mg."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 7
+}

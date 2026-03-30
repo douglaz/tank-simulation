@@ -1,0 +1,59 @@
+{
+  "payload_id": "run-20260328023522-final_review-planner-positions-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T03:09:06.596473350Z",
+  "payload": {
+    "summary": "Accept the amendments that improve diagnostic resilience, clarify the runtime budget-tracking contract, and preserve meaningful integration coverage. Reject the dead-code and tolerance amendments because one misstates the current warning state and the other is already documented without evidence that the threshold should be tightened.",
+    "votes": [
+      {
+        "amendment_id": "fr-1-947a9f46",
+        "decision": "accept",
+        "rationale": "These helpers are diagnostic code, so panicking on `partial_cmp().unwrap()` when an upstream bug produces `NaN` obscures the real failure. Falling back to a non-panicking ordering is a robustness improvement and still allows the assertion path to emit useful diagnostics."
+      },
+      {
+        "amendment_id": "fr-1-15fa89b9",
+        "decision": "reject",
+        "rationale": "`PoolSnapshot::events_since` is already annotated with `#[allow(dead_code)]`, so there is no active compiler warning to fix. Reusing it in the engine is also not a drop-in replacement for the current logic, because summary tracing intentionally avoids capturing full `PoolSnapshot`s."
+      },
+      {
+        "amendment_id": "fr-1-53770879",
+        "decision": "accept",
+        "rationale": "The implementation is runtime opt-in via `Option<BudgetLedger>`, not a compile-time feature gate. Documenting that distinction in the module docs would prevent future confusion about what “disabled” means and better match the actual zero-work behavior."
+      },
+      {
+        "amendment_id": "fr-1-6d7f3ceb",
+        "decision": "reject",
+        "rationale": "The test already contains a comment explaining that the tolerance is intentionally generous for long runs with many interacting subsystems. Without evidence that the observed drift is much smaller, or that the current threshold is hiding real regressions, tightening it or demanding more justification is speculative."
+      },
+      {
+        "amendment_id": "fr-1-3d3b6612",
+        "decision": "accept",
+        "rationale": "Clamping negative dissolved oxygen to zero in `BudgetTotals::from_state` can hide an oxygen-system defect from the budget diagnostics. A debug-only assertion or warning would preserve release behavior while surfacing invalid state during development."
+      },
+      {
+        "amendment_id": "fr-1-5c021677",
+        "decision": "accept",
+        "rationale": "`step_hours` can fail after some ticks have already been recorded, and the current early return drops exactly the partial ledger data needed for diagnosis. Emitting those newly recorded ticks on the error path materially improves debuggability with low risk."
+      },
+      {
+        "amendment_id": "fr-1-80582d62",
+        "decision": "accept",
+        "rationale": "Calling `apply_water_change` directly is a useful unit-level isolation tactic, but it no longer verifies the public engine path for this mass-balance behavior. Keeping at least one assertion through `apply_action` plus `step_hours` preserves coverage of queue processing, profile lookup, and action wiring."
+      },
+      {
+        "amendment_id": "fr-1-2448ab6a",
+        "decision": "accept",
+        "rationale": "The new helper API is currently demonstrated only in dedicated helper tests, not in an existing scenario-style conservation test. Retrofitting one real shrimp-feeding test would better prove the API on a non-synthetic path and satisfy the stated adoption goal."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

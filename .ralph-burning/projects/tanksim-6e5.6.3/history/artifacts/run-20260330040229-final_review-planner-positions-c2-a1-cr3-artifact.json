@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330040229-final_review-planner-positions-c2-a1-cr3-artifact",
+  "payload_id": "run-20260330040229-final_review-planner-positions-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T06:39:55.981352590Z",
+  "content": "# Final Review Planner Positions\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAll seven amendments have technical merit. Five address real correctness, observability, or regression-strength issues in the molt system/tests; the remaining two are smaller maintainability improvements, but they are still sound and low-risk enough to accept.\n\n## Votes\n\n- `fr-3-611309a2`: Accept\n  The hardcoded `0.1` reserve target is a model-defining molt threshold, not an implementation detail. It should live in `ShrimpRuntimeParams` and species data, especially given the existing pattern of named molt parameters and the stated requirement to remove hardcoded molt thresholds/modifiers.\n- `fr-3-ae494480`: Accept\n  The `0.75`/`0.25` blend and the `0.4` reserve floor materially shape molt success probability. Keeping those as magic numbers makes the formula opaque and forces code edits for retuning; they are appropriate named runtime parameters.\n- `fr-3-8ff9da72`: Accept\n  `failed_molt_accum` really does affect mortality through two additive paths: once by being folded into `molt_stress_index`, and again via the explicit `molt_mortality` term. That is easy to misread as accidental double counting, so inline documentation at both sites is a worthwhile maintainability safeguard.\n- `fr-3-a23a3630`: Accept\n  This is a small but correct cleanup. Computing the raw temperature factor once and deriving the floored and unfloored forms from that single value removes duplication and makes the intended relationship between the two variables explicit.\n- `fr-3-63c5d776`: Accept\n  The current order is an off-by-one bug: a timer starting at `0.0` resolves after `interval + 1` daily steps, so configured molt intervals run one day slow. Readiness should be based on the post-step timer or the timer should be incremented before the check.\n- `fr-3-87421c36`: Accept\n  The model penalizes excessive GH in `molt_mineral_modifier`, but failure diagnostics cannot report that cause and may mislabel the event as poor condition. That mismatch makes troubleshooting and tuning misleading; either the mechanic or the diagnostic layer must be aligned.\n- `fr-3-4c43add6`: Accept\n  This regression test is meant to protect an ideal controlled reproduction path. Allowing zero shrimp, zero juveniles, and zero readiness at later checkpoints materially weakens it, because a collapse after an early hatch pulse could still pass; restoring non-zero floors is justified.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

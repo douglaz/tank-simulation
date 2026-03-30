@@ -1,0 +1,77 @@
+{
+  "rollback_id": "22d66c38-ee40-4349-8b86-caaa2ba0a30e",
+  "created_at": "2026-03-30T11:19:53.504878312Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "9373c380d94a77716bd943482b92c34241fc0a7d",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260330083637",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 5
+      },
+      "started_at": "2026-03-30T08:36:37.153046220Z",
+      "prompt_hash_at_cycle_start": "41159049fac54b1e",
+      "prompt_hash_at_stage_start": "41159049fac54b1e",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 4
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T09:07:10.536272059Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 5,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-4-fa502cd0",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 4,
+          "body": "In the equipment-scaling probe (e2e_habitat_geometry_probes.rs ~lines 1527-1546), the `plant_biomass_g(1.0, 400.0)` envelope is identical for both the 1× and 2× geometry runs. Since the 2× geometry has 4× footprint and proportionally scaled plant defaults, the 2× tank should accumulate roughly 4× the absolute plant biomass. Using the same 400g ceiling for both means the envelope is proportionally 4× looser for the larger tank. The acceptance criteria state the probe should verify \"proportionally scaled hardware, plants, and stocking\" with \"per-liter concentrations and qualitative outcomes stay within envelope.\" Consider either (a) scaling the plant envelope with geometry (e.g., `plant_biomass_g(1.0 * scale_factor, 400.0 * scale_factor)`) or (b) adding an explicit per-liter plant biomass density comparison via `record_within_fraction`.",
+          "created_at": "2026-03-30T11:19:53.448398764Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "9466365a103cc71b6f54a0a2fac6b29168e1ac611cc46fcafb555f971e24712d"
+        }
+      ],
+      "processed_count": 9
+    },
+    "status_summary": "running: final review restart round 5 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-30T11:00:31.995474199Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

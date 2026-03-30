@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327225238-final_review-vote-0-c2-a1-cr4-artifact",
+  "payload_id": "run-20260327225238-final_review-vote-0-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T00:19:57.703746173Z",
+  "content": "# Final Review Votes\n**Producer:** agent:claude/claude-opus-4-6\n\n## Summary\n\nThe amendment correctly identifies a violation of the documented migration contract in migrate_v2_to_v3. The contract (lines 30-31, 54-56) explicitly requires failing with SimError::SchemaMigration on malformed legacy payloads, but the current code silently clamps negative depths (line 237), caps against a possibly-negative fill_height (line 240), and falls back to scale=0.0 for non-positive gross volume (lines 244-248). This allows physically invalid geometry (e.g., negative fill_height_cm) to load successfully while silently zeroing dissolved chemistry totals — a data-corruption pathway.\n\n## Votes\n\n- `fr-4-bc2dc25a`: Accept\n  Verified in the source: (1) The migration contract at lines 30-31 and 54-56 explicitly mandates failing on malformed legacy payloads with SimError::SchemaMigration. (2) depth.max(0.0) at line 237 silently clamps negative substrate layer depths instead of rejecting them. (3) fill_height.max(0.0) in the clamp at line 240 silently converts negative fill heights to zero. (4) The scale=0.0 fallback at lines 244-248 silently zeroes all dissolved totals when gross_volume_l is non-positive, which is the consequence of negative geometry values. Physically invalid geometry (negative dimensions or fill heights) is unambiguously malformed data that should never pass migration. The existing malformed-save test at line 305 only tests a missing 'water' field; it does not cover invalid geometry values, so the proposed regression test is also warranted.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 4
+}

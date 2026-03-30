@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327225238-final_review-arbiter-c1-a1-cr2-artifact",
+  "payload_id": "run-20260327225238-final_review-arbiter-c1-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-27T23:37:11.874141178Z",
+  "content": "# Final Review Arbiter\n**Producer:** agent:claude/claude-opus-4-6\n\n## Summary\n\nRejected the disputed amendment fr-2-8bd2540e. The claimed silent-corruption path — where missing/non-numeric geometry fields zero out all dissolved totals via unwrap_or(0.0) — cannot manifest because TankGeometry's required f64 fields (without serde defaults) cause serde_json::from_value to fail for the same inputs that trigger the unwrap fallback. The zeroed state is never returned to callers. Reviewer 2's counterargument that subsequent deserialization catches these cases is correct.\n\n## Rulings\n\n- `fr-2-8bd2540e`: Reject\n  The amendment describes a failure mode where missing or non-numeric geometry fields produce a silently zeroed water state. However, this path cannot manifest in practice. TankGeometry's fields (length_cm, width_cm, fill_height_cm) are required f64s without #[serde(default)]. If any geometry field is missing or non-numeric in the JSON, the unwrap_or(0.0) would indeed produce scale=0.0 and zero the dissolved totals during migration, BUT the subsequent serde_json::from_value() at line 175 would ALSO fail to deserialize TankGeometry — returning an error, not a valid SaveFile. The zeroed state is never actually used. For the corruption to be silent, the migration would need to zero the totals AND deserialization would need to succeed — but the same malformed data that triggers unwrap_or(0.0) also causes deserialization failure. The only scenario where scale=0.0 survives deserialization is when fields are present, numeric, but literally zero — but then as_f64() succeeds directly (unwrap_or is never reached), and zero-dimension geometry is a garbage-in-garbage-out scenario, not a migration defect. Reviewer 2's analysis is correct: the described silent-corruption path does not exist in the current code. While adding early validation in the migration would be a nice defensive coding practice, it is not fixing an actual bug.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}

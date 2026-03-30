@@ -1,0 +1,54 @@
+{
+  "payload_id": "run-20260330074452-final_review-planner-positions-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T10:20:37.476441667Z",
+  "payload": {
+    "summary": "Accept the reproduction-curve and nitrification-accounting amendments; reject the two amendments that are contradicted by the repository state rather than identifying an actual defect in the submitted work.",
+    "votes": [
+      {
+        "amendment_id": "fr-3-3ba94eb9",
+        "decision": "accept",
+        "rationale": "`gh_mineral_factor()` hardcodes a `0.3` floor that is part of the reproduction/condition curve shape. That makes GH suppression partly untunable and can silently diverge from mineral tuning once `molt_mineral_factor_floor` is changed. A dedicated reproduction-side floor parameter would be cleaner than leaving this as an implicit literal."
+      },
+      {
+        "amendment_id": "fr-3-d55993bf",
+        "decision": "accept",
+        "rationale": "The TAN/NO2 reproduction curves hardwire their post-threshold falloff width with `* 2.0`, so onset and ramp shape cannot be tuned independently. The amendment's exact \"2x threshold\" wording is slightly imprecise, but the core defect is real: the curve shape is coupled to the threshold through a hidden constant and should be parameterized explicitly."
+      },
+      {
+        "amendment_id": "fr-3-8df107a9",
+        "decision": "accept",
+        "rationale": "`temp_repro_factor()` still embeds several fixed curve-shape constants on the cold side and in the warm-side floors. Those values materially affect reproduction behavior and undermine the requirement that reproduction drivers be inspectable and tunable. At minimum they need explicit documentation; preferably the curve width/endpoints become named parameters."
+      },
+      {
+        "amendment_id": "fr-3-435cc5b4",
+        "decision": "accept",
+        "rationale": "The high-GH reproduction penalty width is hardcoded as `10.0`, which makes that part of the reproduction response untunable and inconsistent with the analogous molt implementation that already exposes this knob. This should be a named reproduction parameter rather than a literal."
+      },
+      {
+        "amendment_id": "fr-3-ac61b005",
+        "decision": "reject",
+        "rationale": "The `tanksim-6e5.6.4` work in this repository does include shrimp reproduction changes in `shrimp.rs`, species parameters, and `reproduction_factors.rs`, including egg-drop and long-horizon reproduction coverage. This amendment appears to describe a different diff, so it does not identify an actual defect in the submitted 6.4 implementation."
+      },
+      {
+        "amendment_id": "fr-3-537f7b3e",
+        "decision": "accept",
+        "rationale": "If a field labeled as total nitrification excludes AOB TAN oxidation, it misreports the nitrogen basis that actually consumes oxygen and alkalinity and will diverge from the chemistry trace whenever nitrite accumulates. That is a real observability bug; the metric must either include AOB oxidation or be renamed to what it actually represents."
+      },
+      {
+        "amendment_id": "fr-3-e4e95dbd",
+        "decision": "reject",
+        "rationale": "The cited test file is tracked in the repository and present in history, so the claim that it is still untracked and would not ship is not substantiated here. Without evidence of an actually untracked submission artifact, this amendment does not establish a real defect."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

@@ -1,0 +1,143 @@
+{
+  "rollback_id": "a62c5e86-37b6-4992-b5c0-6104c74dd9b8",
+  "created_at": "2026-03-30T11:28:27.213221926Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "c48d764e8afe59c2d893ad53fcf33830ab25c159",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260330040229",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 11
+      },
+      "started_at": "2026-03-30T04:02:29.670494821Z",
+      "prompt_hash_at_cycle_start": "0382c2f612a24a4a",
+      "prompt_hash_at_stage_start": "0382c2f612a24a4a",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 10
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T04:41:52.787819971Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 11,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-10-d47e77ef",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 10,
+          "body": "In `molt_mineral_modifier()` (shrimp.rs:1732-1734), the GH deficit penalty uses a quadratic formula `(gh_ratio)²` with NO floor clamp on the intermediate result, while `gh_mineral_factor()` (shrimp.rs:1677) uses a linear formula `gh_ratio` WITH a floor clamp to `mineral_factor_floor`. The docstring on `molt_mineral_factor_floor` (biology.rs:382-386) says the floor applies to 'GH/Ca/Mg factors inside `molt_mineral_modifier` and the shared reproduction GH penalty curve', but the GH factor in `molt_mineral_modifier` is computed as `gh_ratio * gh_ratio` and never clamped to the floor before multiplication. At GH=0.5 dGH (gh_min_d=5.0), the quadratic result is 0.01, well below the documented floor of 0.3. Either apply `.max(mineral_factor_floor)` to `gh_factor` in the deficit branch of `molt_mineral_modifier` (line 1734), or update the docstring to clarify that the floor only applies to Ca/Mg sub-factors and the reproduction curve, not the molt GH factor.",
+          "created_at": "2026-03-30T11:28:27.081305538Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "abb5bf902ba3a4b6a8b0ef2f969d23e8547a2f8c3341280f89fc8874af3bf79c"
+        },
+        {
+          "amendment_id": "fr-10-0558bfd9",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 10,
+          "body": "Hardcoded thermal divisors in `temp_condition_factor()` (shrimp.rs:1595 and 1597): the constants 10.0 (cold divisor) and 8.0 (hot divisor) control how quickly molt success degrades at non-optimal temperatures but are not exposed as named parameters in `ShrimpRuntimeParams`. The same 8.0 divisor appears hardcoded in `update_molt_stress()` (shrimp.rs:492). Extract these into named parameters (e.g., `temp_condition_low_divisor_c`, `temp_condition_high_divisor_c`) in `ShrimpRuntimeParams` with serde defaults, so they are inspectable and tunable through species data files as required by the acceptance criteria.",
+          "created_at": "2026-03-30T11:28:27.081313693Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "8d9f0539b42716e02aa42a630cc12cd45b339e6892ab9215423b75efb36d8545"
+        },
+        {
+          "amendment_id": "fr-10-a9163f4b",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 10,
+          "body": "The condition stress midpoint in `update_molt_stress()` (shrimp.rs:490) is hardcoded as `0.5`: `let condition_stress = (0.5 - state.animal.population_condition_index()).max(0.0)`. This threshold controls when poor condition starts contributing to the molt stress index but cannot be tuned through species data. Similarly, the thermal stress clamp max of 0.5 on line 492 is hardcoded. Both should be named parameters.",
+          "created_at": "2026-03-30T11:28:27.081318693Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "d1dce5923465d06c3bae8749c303009354f3bf257f3a48bb2ab8ce6c244047f4"
+        },
+        {
+          "amendment_id": "fr-10-183acb0a",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 10,
+          "body": "The NH3 stress threshold (0.02 mg/L) and response scale (2.0) in `step_hourly_shrimp_stress()` (shrimp.rs:123-124) are hardcoded: `if nh3_mg_l > 0.02 { state.animal.hourly_nh3_stress_accum += (nh3_mg_l - 0.02) * 2.0 / 24.0; }`. These feed into the stress_total that drives mortality, including molt-stress-linked mortality. Extract them as named parameters.",
+          "created_at": "2026-03-30T11:28:27.081323562Z",
+          "batch_sequence": 4,
+          "source": "workflow_stage",
+          "dedup_key": "13e6b25c71c75272fe052ddcf14bf8ca66c040f89193a3cef48a733eb2b1256b"
+        },
+        {
+          "amendment_id": "fr-10-d2a02c10",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 10,
+          "body": "The integration test `test_soft_vs_hard_water_shrimp_survival` (molt_mineral_budget.rs:726-748) asserts only that `hard_population - soft_population >= 5` over 1000 simulated hours starting from 36 shrimp. This is an extremely weak assertion — a gap of 5 is ~14% mortality difference, while the mineral modifier for the soft profile (Ca=10, Mg=2) should produce a modifier around 0.12, causing near-certain molt failures. The test should assert a more meaningful population gap (e.g., >= 15) or assert that the soft-water population drops below a specific threshold (e.g., < 20). The adjacent seeds (9000 vs 9001) also introduce unnecessary RNG variance; consider using the same seed to isolate the mineral effect.",
+          "created_at": "2026-03-30T11:28:27.081330825Z",
+          "batch_sequence": 5,
+          "source": "workflow_stage",
+          "dedup_key": "426240795099c31ae555c576737aad0c1ac17fde8b731ca55d93bdf6f6dedd3f"
+        },
+        {
+          "amendment_id": "fr-10-90536180",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 10,
+          "body": "The test `test_very_low_gh_causes_molt_deaths` (molt_mineral_budget.rs:282-286) asserts `final_count < 30` starting from 30 shrimp over 500 hours with Ca=1.5 mg/L, Mg=0.3 mg/L. A single death satisfies this assertion. Tighten to something like `final_count < 25` or assert a minimum number of MoltFailure events that led to deaths.",
+          "created_at": "2026-03-30T11:28:27.081335224Z",
+          "batch_sequence": 6,
+          "source": "workflow_stage",
+          "dedup_key": "97b5c66a1d7d0cb948081ce8e5bc09864e7d44ef5da279121d59293e33c69130"
+        },
+        {
+          "amendment_id": "fr-10-e2c036cf",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 10,
+          "body": "In `molt_mineral_modifier()` (shrimp.rs:1734), the GH deficit path uses a quadratic penalty `gh_ratio * gh_ratio` while Ca and Mg use linear ratios with sqrt deemphasis (lines 1742, 1747). This creates a ~3x sensitivity imbalance: at 50% of minimum, GH factor = 0.25 while Ca factor = sqrt(0.5) = 0.707. The design intent may be correct (GH is the aggregate measure), but verify this is intentional by adding a code comment explaining why different exponents are used for GH vs individual minerals.",
+          "created_at": "2026-03-30T11:28:27.081340574Z",
+          "batch_sequence": 7,
+          "source": "workflow_stage",
+          "dedup_key": "e444d497a6150c8b0e5785d4c7a5aec5f6fc0f2005d71ab3c0e26401a576f8d6"
+        }
+      ],
+      "processed_count": 40
+    },
+    "status_summary": "running: final review restart round 11 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-30T11:06:40.322866717Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

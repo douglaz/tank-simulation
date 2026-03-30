@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330040229-apply_fixes-c2-a1-cr6-artifact",
+  "payload_id": "run-20260330040229-apply_fixes-c2-a1-cr6",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-30T08:35:20.349231826Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nConfirmed the branch already contains the approved shrimp molt/reproduction fixes, so this apply-fixes pass was validation-only and required no additional source edits. I rechecked the relevant shrimp runtime and preset changes, then reran the focused reproduction and molt/mineral regressions plus the full `tank_core`, `tank_data`, and `tank_scenarios` suites; all passed on the current branch.\n\n## Steps\n\n1. [Completed] Inspected the current shrimp runtime and preset changes implicated by the approved review findings to confirm the branch already carried the requested fixes before editing anything.\n2. [Completed] Reran the focused shrimp regression suites covering reproduction-factor behavior and mineral-gated molting to verify the reviewed paths still pass without further changes.\n3. [Completed] Ran the full `tank_core` suite plus downstream `tank_data` and `tank_scenarios` tests to confirm broader stability and recorded this stage as validation-only because no new edits were needed.\n\n## Validation Evidence\n\n- `git status --short`\n- `git diff -- crates/tank_core/src/systems/shrimp.rs`\n- `git diff -- crates/tank_core/src/types/biology.rs`\n- `git diff -- crates/tank_data/data/shrimp/neocaridina_davidi.toml`\n- `cargo test -p tank_core --test reproduction_factors -- --nocapture`\n- `cargo test -p tank_core --test molt_mineral_budget -- --nocapture`\n- `cargo test -p tank_core -- --nocapture`\n- `cargo test -p tank_data`\n- `cargo test -p tank_scenarios`\n\n## Outstanding Risks\n\nNone identified.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 6
+}

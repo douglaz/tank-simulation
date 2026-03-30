@@ -1,0 +1,49 @@
+{
+  "payload_id": "run-20260327232421-final_review-vote-1-c2-a1-cr6-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T03:08:28.356381274Z",
+  "payload": {
+    "summary": "Accepted the two amendments that expose real verification or test-isolation defects. Rejected the others because current code already addresses the cited issue, the concern is speculative against current behavior, or the proposal would add unjustified model surface area.",
+    "votes": [
+      {
+        "amendment_id": "fr-6-6d614fa3",
+        "decision": "reject",
+        "rationale": "The cited failure mode is stale in the current tree. `feeding_test_state()` already sets `state.hardware.aeration.enabled = false` and `state.process_params.reaeration_kla_base = 0.0`, the high-mortality budget fixture already zeros the gas-transfer terms, and the reproduction fixture intentionally keeps reaeration on while explicitly subtracting the recorded `system:chemistry` carbon flux. The four named tests currently pass, so forcing additional gas-exchange shutdown there would change scenarios rather than fix a present defect."
+      },
+      {
+        "amendment_id": "fr-6-d08dd36c",
+        "decision": "reject",
+        "rationale": "It is true that CO2 exchange is derived from O2 KLA, but that is not a demonstrated correctness bug here. Existing tests already have workable options: fully close gas exchange with the current KLA controls, or keep the open-system behavior and account for the logged chemistry carbon flux. Adding a separate persisted CO2-only flag/scale would increase runtime and save-surface complexity while also permitting an unphysical O2-without-CO2 exchange state without a concrete need."
+      },
+      {
+        "amendment_id": "fr-6-95b16edc",
+        "decision": "reject",
+        "rationale": "This is speculative against the current implementation. The 60-day reproduction conservation test presently passes at `1e-6` mg, so the tight tolerance is acting as a strong regression detector rather than a known flake. Widening it to `0.1-1.0` mg, or stripping out the other systems, would materially reduce integrated leak detection without evidence that floating-point drift is already a real problem."
+      },
+      {
+        "amendment_id": "fr-6-c89182dd",
+        "decision": "reject",
+        "rationale": "There is already a comment in `route_consumed_food` stating that Phase 1 only accumulates reserve and that later work should add maintenance, molt, and reproduction drains. Also, `reserve_g` is not purely one-way even now: mortality transfers reserve to detritus proportionally, and reproduction funding debits reserve to create new biomass. A maintenance drain may be a legitimate future biology change, but this amendment is partly stale as documentation and partly a substantive model/calibration change that should not be folded in ad hoc."
+      },
+      {
+        "amendment_id": "fr-6-ea14338c",
+        "decision": "accept",
+        "rationale": "This is a real verification gap. `assert_o2_balanced()` only checks that oxygen inventory delta matches the sum of recorded net oxygen movement. Because snapshot-derived oxygen deltas are collapsed to `ElementBudget::from_delta(...)` and `record_stage()` only debug-asserts net consistency, a stage can regress to incorrect gross `in_mg`/`out_mg` bookkeeping while preserving the same net and still pass both the helper and its regression test."
+      },
+      {
+        "amendment_id": "fr-6-4c95fd77",
+        "decision": "accept",
+        "rationale": "This is a real test-isolation bug. `TANK_BUDGET_DEBUG` is process-global, but the mutex only serializes tests that also take that same lock; unrelated tests in the same integration-test process can still call `step_and_inspect()` while the env var is set. Running `cargo test -p tank_core --test budget_helpers -- --nocapture` produces extra debug blocks from other tests while the smoke test's guard is live, confirming cross-test interference and order dependence."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 6
+}

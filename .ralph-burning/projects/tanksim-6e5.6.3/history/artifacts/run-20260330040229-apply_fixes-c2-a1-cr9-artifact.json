@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330040229-apply_fixes-c2-a1-cr9-artifact",
+  "payload_id": "run-20260330040229-apply_fixes-c2-a1-cr9",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-30T10:37:11.350151047Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nRevalidated the review-flagged reproduction-parameter regression and found the current branch already carries TAN/NO2 threshold values that stay strictly below the newer full-suppression invariants, with formatting clean as well. This apply-fixes pass was therefore validation-only: no additional source edits were required, and both the targeted reproduction suite and the full `tank_core` suite now pass on current HEAD.\n\n## Steps\n\n1. [Completed] Inspected the current reproduction-factor thresholds and shrimp invariant defaults to confirm whether the reported named-parameter regression still reproduced on the branch.\n2. [Completed] Ran formatting plus the targeted `reproduction_factors` regression to verify the threshold/invariant contract and formatting state.\n3. [Completed] Ran the full `tank_core` suite to confirm broader stability, then recorded this stage as validation-only because no further code changes were needed.\n\n## Validation Evidence\n\n- `git show HEAD:crates/tank_core/tests/reproduction_factors.rs | sed -n '878,922p'`\n- `cargo fmt --all`\n- `cargo fmt --all --check`\n- `cargo test -p tank_core --test reproduction_factors -- --nocapture`\n- `cargo test -p tank_core -- --nocapture`\n\n## Outstanding Risks\n\nNone identified.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 9
+}

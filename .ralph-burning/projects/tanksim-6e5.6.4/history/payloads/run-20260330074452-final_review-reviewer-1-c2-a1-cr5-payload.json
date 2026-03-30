@@ -1,0 +1,23 @@
+{
+  "payload_id": "run-20260330074452-final_review-reviewer-1-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:28:17.375613337Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "The patch does not implement the bead it is being reviewed against. The changed files are all alkalinity/budget plumbing (`crates/tank_core/src/engine.rs:229`, `crates/tank_core/src/systems/nitrogen_cycle.rs:12`, `crates/tank_core/src/types/process.rs:6`), but the breeding logic that actually controls success/failure is still the existing code in `crates/tank_core/src/systems/shrimp.rs:419-507`: readiness and hatch rate only use temperature, condition, instability, molt stress/oxygen, and GH. There is still no density term, no TAN/NO2 suppression, no egg-drop path tied to sudden instability, and no new factor breakdown emitted for failed reproduction. The species data is likewise unchanged in `crates/tank_data/data/shrimp/neocaridina_davidi.toml:4-22`, so the required named parameters for density/chemistry/stability tuning are still absent. As submitted, this leaves the acceptance criteria for tanksim-6e5.6.4 unmet.",
+        "rationale": "This is a blocking correctness issue: the submission changes a different subsystem than the requested reproduction feature, so merging it would not deliver the task."
+      }
+    ],
+    "summary": "I found one blocking issue: the submitted changes add alkalinity accounting/tracing, but they do not modify the shrimp reproduction system or species parameters required by tanksim-6e5.6.4."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 5
+}

@@ -1,0 +1,115 @@
+{
+  "payload_id": "run-20260330074452-final_review-aggregate-c2-a1-cr7-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T12:47:12.905997334Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-7-ae2bf47c",
+      "fr-7-5d1c7cc7"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-7-ae2bf47c",
+        "normalized_body": "In `crates/tank_core/src/systems/shrimp.rs` lines 978-987, the `ShrimpHatched` event message includes only the count of hatched clutches/juveniles but does not log which suppression factors limited `hatch_rate`. In contrast, the `EggFailure` event (lines 996-1032) does diagnose causes (LowOxygen, HighTemperature, LowMinerals, etc.). When hatch_rate is mediocre (e.g. 0.4) but some clutches succeed, users see hatched events without any indication of which factor is dragging hatch success down. Add the same cause-tagging logic used for EggFailure to ShrimpHatched events when hatch_rate < some threshold (e.g. 0.8), so partial-success hatches also explain their limiting factors.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-7-8e8338a4",
+        "normalized_body": "In `crates/tank_core/src/systems/shrimp.rs` line 1530, the `condition` factor in `reproductive_readiness_factors` uses `state.animal.adult.condition_index` directly (range 0.0-1.0 from update_condition clamping at line 453). However, there is no minimum floor applied, unlike density (floor 0.05), TAN (floor 0.05), and nitrite (floor 0.05). At condition_index = 0.0, the product of all 8 factors becomes exactly 0.0, making reproductive_readiness_target 0.0. Combined with the EMA smoothing, this creates a very long recovery time since `readiness += 0.1 * (target - readiness)` starting from 0.0 requires many days to climb back. Consider applying a floor (e.g. 0.05) to the condition factor for consistency with other factors, or document the intentional lack of floor.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-7-5d1c7cc7",
+        "normalized_body": "The `test_chemistry_stress_suppresses_breeding` test (reproduction_factors.rs line 445) covers TAN and NO2 independently as required by the acceptance criteria, but does not independently verify low-GH suppression of breeding. The acceptance criteria state 'Water chemistry: very low GH, high TAN, or high NO2 suppress breeding' and the reviewer unit test list does not have a separate GH test. GH is tested only indirectly via `test_all_reproduction_factors_are_named_parameters` (which verifies parameter sensitivity) and via the mineral suppression snapshot label tests. Add an explicit assertion within `test_chemistry_stress_suppresses_breeding` (or a sibling test) that shows very low GH (e.g. 1-2 dGH) independently suppresses breeding readiness below the clean baseline.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-7-e6495363",
+        "normalized_body": "Add `crates/tank_core/tests/nitrification_alkalinity.rs:1` to version control. It is currently untracked (`git status` shows `?? crates/tank_core/tests/nitrification_alkalinity.rs`), so none of the new alkalinity/pH/budget regression coverage is actually part of the patch yet.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-7-43506246",
+        "normalized_body": "Fix the remaining hard-coded `mg` labels in the new alkalinity assertion paths at `crates/tank_core/src/budget_helpers.rs:473` and `crates/tank_core/src/budget_helpers.rs:495-503`. `Element::Alkalinity` now carries meq values, but these failure messages still print them as `mg`, which makes the debug output scientifically wrong when an alkalinity check fails.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [
+      "fr-7-e6495363",
+      "fr-7-43506246"
+    ],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-7-ae2bf47c",
+        "normalized_body": "In `crates/tank_core/src/systems/shrimp.rs` lines 978-987, the `ShrimpHatched` event message includes only the count of hatched clutches/juveniles but does not log which suppression factors limited `hatch_rate`. In contrast, the `EggFailure` event (lines 996-1032) does diagnose causes (LowOxygen, HighTemperature, LowMinerals, etc.). When hatch_rate is mediocre (e.g. 0.4) but some clutches succeed, users see hatched events without any indication of which factor is dragging hatch success down. Add the same cause-tagging logic used for EggFailure to ShrimpHatched events when hatch_rate < some threshold (e.g. 0.8), so partial-success hatches also explain their limiting factors.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-7-5d1c7cc7",
+        "normalized_body": "The `test_chemistry_stress_suppresses_breeding` test (reproduction_factors.rs line 445) covers TAN and NO2 independently as required by the acceptance criteria, but does not independently verify low-GH suppression of breeding. The acceptance criteria state 'Water chemistry: very low GH, high TAN, or high NO2 suppress breeding' and the reviewer unit test list does not have a separate GH test. GH is tested only indirectly via `test_all_reproduction_factors_are_named_parameters` (which verifies parameter sensitivity) and via the mineral suppression snapshot label tests. Add an explicit assertion within `test_chemistry_stress_suppresses_breeding` (or a sibling test) that shows very low GH (e.g. 1-2 dGH) independently suppresses breeding readiness below the clean baseline.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 7,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-7-8e8338a4"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 2 amendment(s); restart required.",
+    "total_proposed_amendments": 5,
+    "total_reviewers": 2,
+    "unique_amendment_count": 5
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 7
+}

@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330074452-plan_and_implement-c2-a1-cr2-artifact",
+  "payload_id": "run-20260330074452-plan_and_implement-c2-a1-cr2",
+  "stage_id": "plan_and_implement",
+  "created_at": "2026-03-30T09:12:20.803257604Z",
+  "content": "# Plan and Implement\n\n## Change Summary\n\nApplied the pending reproduction and habitat-probe amendments end to end. In `spawning()`, current crowding now caps same-day spawn readiness so sudden density spikes suppress berried-female creation immediately instead of waiting for the readiness EMA, and the berried event summary now reports the effective vs baseline readiness when density is limiting. In `reproductive_readiness_factors()`, GH/mineral pressure is now part of the named factor set so low-GH suppression can surface as `minerals` in snapshots and diagnostics. I also extended `crates/tank_core/tests/reproduction_factors.rs` with direct coverage for immediate density suppression, GH/mineral parameter tuning, and mineral-dominant suppression labels, and fixed `probe_light_depth_shallow_vs_deep_growth` to rescale all dissolved totals after geometry changes and reseed the stability tracker so shallow/deep comparisons isolate depth-driven light effects instead of stale chemistry concentrations.\n\n## Steps\n\n1. [Completed] Inspected the shrimp reproduction flow and the habitat geometry probe fixture to confirm the reported amendment gaps and choose minimal fixes that preserved the existing model shape.\n2. [Completed] Patched shrimp reproduction so density constrains same-day spawning, added GH/mineral suppression to the named reproductive factor set, and extended reproduction regression coverage for the new density and mineral behaviors.\n3. [Completed] Corrected the habitat light-depth probe to rescale dissolved totals after fill-height changes, reseeded its stability baseline, formatted the code, and ran targeted regression tests.\n\n## Validation Evidence\n\n- `cargo fmt --all` completed successfully.\n- `cargo test -p tank_core --test reproduction_factors -- --nocapture` passed with 14/14 tests, including the new immediate-density and mineral-observability coverage plus the long-horizon stable/neglected scenarios.\n- `cargo test -p tank_harness --test e2e_habitat_geometry_probes probe_light_depth_shallow_vs_deep_growth -- --nocapture` passed.\n\n## Outstanding Risks\n\n- I did not run the full workspace test suite or the full `tank_harness` integration suite; validation was targeted to the reproduction regressions and the corrected light-depth habitat probe.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

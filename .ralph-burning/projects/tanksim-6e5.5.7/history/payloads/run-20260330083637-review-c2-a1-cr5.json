@@ -1,0 +1,41 @@
+{
+  "payload_id": "run-20260330083637-review-c2-a1-cr5",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:24:47.423508918Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All 6 tests (5 probes + 1 summary) pass: `cargo test -p tank_harness --test e2e_habitat_geometry_probes -- --nocapture` reports 1 passed, 5 ignored (individual probes deferred to summary runner), 0 failed. Summary runner reports 5/5 probes passing.",
+        "Clippy clean: `cargo clippy -p tank_harness --test e2e_habitat_geometry_probes -- -D warnings` produces no warnings.",
+        "`cargo fmt --all --check` passes with no diff in the habitat geometry probe file.",
+        "All 5 acceptance-criteria scenarios present as named test functions with doc comments explaining ecological mechanisms: (1) `probe_biofilter_scaling_bigger_media_higher_capacity` — media area → nitrifier carrying capacity, (2) `probe_light_depth_shallow_vs_deep_growth` — Beer-Lambert attenuation, (3) `probe_habitat_fouling_glass_vs_filter` — photosynthesis vs organic-load-driven biofilm, (4) `probe_substrate_redox_denitrification` — suboxic rhizosphere denitrification, (5) `probe_equipment_scaling_1x_vs_2x` — proportional geometry scaling.",
+        "`format_habitat_debug` (line 44) dumps 8 structured sections on failure: habitat registry (area/flow/O₂/light per habitat), periphyton by habitat, decomposer by habitat, nitrifier biomass, filter state, substrate layers with O₂ penetration, denitrification metrics, and geometry dimensions. Called via `dump_habitat_debug` at probe boundaries.",
+        "`all_habitat_geometry_probes_summary` (line 1618) runs all 5 probes, catches panics via `catch_unwind`, prints a structured pass/fail report with observed values and per-failure detail lines, and returns `Err` on any failure (non-zero exit).",
+        "Equipment scaling probe uses paired 1× vs 2× geometry with cubic stocking scaling (`size_scale.powi(3)` at line 1423: 10 → 80 adults), proportional feeding, both plant guilds, and 40% concentration tolerance via `record_within_fraction()`. Per-liter comparisons cover peak TAN, DO range, and final temperature.",
+        "Equipment scaling probe now includes geometry-aware plant biomass validation: footprint ratio is computed (line 1458), a `plant biomass vs footprint scaling` check verifies that 2× plant biomass tracks the footprint expansion within 40% tolerance (line 1536-1542), and the 2× envelope is scaled by `plant_footprint_scale` (lines 1564-1567).",
+        "Assertions throughout are directional (`>`) and envelope-based (min/max tolerance bands), not exact values: e.g., `capacity_large > capacity_small * 1.25` (biofilter), `growth_shallow > growth_deep` (light-depth), `record_within_fraction()` for equipment scaling. Resilient to reasonable retuning.",
+        "Substrate redox probe doc comment (lines 1055-1057) explicitly documents the inert control's aeration asymmetry and why this strengthens the comparison.",
+        "Summary output is structured and readable: `Probe N: name [PASS/FAIL]` with observed metric strings and failure detail lines, ending with pass/fail counts."
+      ],
+      "findings_or_gaps": [
+        "The biofilter probe title says 'higher_capacity' but the observed summary shows `clearance not-cleared->not-cleared (terminal reduced-N fallback)` — neither arm fully clears within 28 days. The fallback path (lower terminal reduced-N + more nitrifier biomass) still validates the mechanism, and the title accurately reflects capacity rather than clearance speed. This is a cosmetic naming mismatch, not a functional gap.",
+        "The working tree has unrelated uncommitted changes from parallel projects (`.claude/worktrees/tanksim-6e5.4.7`, `.ralph-burning/`). These do not affect the committed habitat/geometry probes but need care during staging/commit to avoid scope mixing.",
+        "The `cargo test -p tank_harness` full package run is blocked by an unrelated compile error in `e2e_shrimp_scenario_probes.rs` referencing a missing `breeding_success_state` field from a parallel worktree. This does not affect the habitat/geometry probe suite which compiles and passes independently."
+      ],
+      "follow_up_or_amendments": [
+        "When merging parallel worktree changes (especially tanksim-6e5.6.4 biology.rs changes and shrimp preset additions), re-run the full habitat/geometry probe suite and fix the shrimp probe compile error to restore full `cargo test -p tank_harness` coverage."
+      ],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 5
+}

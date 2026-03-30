@@ -1,0 +1,24 @@
+{
+  "payload_id": "run-20260330040229-final_review-arbiter-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T08:17:50.605469246Z",
+  "payload": {
+    "rulings": [
+      {
+        "amendment_id": "fr-5-52f42a9a",
+        "decision": "reject",
+        "rationale": "The balance of evidence shows this amendment is stale against the current tree, not a live defect. In the current code, [crates/tank_core/src/types/snapshot.rs] imports and uses `dominant_repro_suppression_label(state)` rather than maintaining its own five-factor snapshot-only calculation, and [crates/tank_core/src/systems/shrimp.rs] builds the shared reproduction factor list with `molt_stress` included alongside temperature, condition, stability, density, TAN, and nitrite. That shared helper is exactly what the snapshot uses, so molt stress is already represented. The dedicated regression test `test_snapshot_uses_runtime_suppression_labels` also passes and explicitly asserts that a high `molt_stress_index` yields `\"molt_stress\"` as the snapshot suppression label. Those concrete facts outweigh the amendment’s claim that snapshot diagnostics still omit `f_molt`."
+      }
+    ],
+    "summary": "Rejected the disputed amendment because the current implementation already routes snapshot suppression labeling through the shared runtime factor logic, includes molt stress in that factor set, and has a passing test that verifies `molt_stress` is reported as the dominant suppressor."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 5
+}

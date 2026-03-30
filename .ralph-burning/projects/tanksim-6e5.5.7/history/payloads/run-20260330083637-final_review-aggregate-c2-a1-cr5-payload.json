@@ -1,0 +1,42 @@
+{
+  "payload_id": "run-20260330083637-final_review-aggregate-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:45:51.985610900Z",
+  "payload": {
+    "accepted_amendment_ids": [],
+    "amendments": [
+      {
+        "amendment_id": "fr-5-cf6e5225",
+        "normalized_body": "`crates/tank_data/src/presets.rs:1050-1056` accidentally puts `temp_condition_low_divisor_c` and `temp_condition_high_divisor_c` into the `<= 1.0` validation bucket, and `crates/tank_data/src/presets.rs:1136-1139` rejects any value above 1.0. These are temperature-span parameters, not unit-interval weights; the shipped preset already sets `10.0` and `8.0` in `crates/tank_data/data/shrimp/neocaridina_davidi.toml:36-37`. Because shrimp preset loading always runs `ShrimpPreset::validate` (`crates/tank_data/src/lib.rs:98-105`, `crates/tank_data/src/lib.rs:225-229`), the default `neocaridina_davidi` preset is rejected and scenario materialization can fail immediately.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [],
+    "final_review_restart_count": 4,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-5-cf6e5225"
+    ],
+    "restart_required": false,
+    "summary": "Final review accepted no amendments.",
+    "total_proposed_amendments": 1,
+    "total_reviewers": 2,
+    "unique_amendment_count": 1
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 5
+}

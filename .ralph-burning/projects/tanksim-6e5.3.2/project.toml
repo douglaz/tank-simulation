@@ -1,0 +1,7 @@
+id = "tanksim-6e5.3.2"
+name = "Shrimp mass routing"
+flow = "quick_dev"
+prompt_reference = "prompt.md"
+prompt_hash = "e27b6e04094528ad"
+created_at = "2026-03-27T23:24:21.213600967Z"
+status_summary = "created"

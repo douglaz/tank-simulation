@@ -1,0 +1,31 @@
+{
+  "payload_id": "run-20260330014558-final_review-reviewer-1-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T04:30:57.150327852Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "Low-mineral water can still pass the new molt gate. `molt_mineral_modifier` floors GH/Ca/Mg at 0.3 in `crates/tank_core/src/systems/shrimp.rs:1149-1174`, and `molt_cycle` only requires `success_score >= params.molt_success_threshold` in `crates/tank_core/src/systems/shrimp.rs:431,460-465`. With GH/Ca/Mg effectively zero, `mineral_factor` is still 0.3, so a cohort at condition 0.8 with stable temperature scores 0.615 and succeeds. That undermines the stated mineral-budget behavior in the severe-deficiency cases this patch is supposed to catch.",
+        "rationale": "This is a core correctness issue in the new feature: the worst-water cases can still molt successfully when they should be forced into failure/penalty paths."
+      },
+      {
+        "body": "Per-stage outcomes are collapsed back into one shared success/failure state, which breaks mixed-stage days. In `crates/tank_core/src/systems/shrimp.rs:495-505`, any successful stage subtracts 0.35 from `failed_molt_accum` even if another stage failed on the same tick, so a juvenile failure plus adult success can lower the failure penalty instead of increasing it. The same block also flips the shared `last_molt_success` flag, and `subadult_to_adult` still gates maturation on that global flag in `crates/tank_core/src/systems/shrimp.rs:846-849`. After this change, a failed juvenile molt can stall unrelated sub-adult maturation and mixed outcomes can reduce mortality pressure instead of increasing it.",
+        "rationale": "The old single-cycle bookkeeping no longer matches the new per-stage model. As written, mixed results produce contradictory population state and cross-stage regressions."
+      },
+      {
+        "body": "The new 'migration' seeding path also fires on ordinary fresh/default animal state, not just legacy saves. `StageCohort::default()` initializes `molt_timer_days` to 0.0 in `crates/tank_core/src/types/biology.rs:105-113`, while `AnimalState::default()` still initializes `inter_molt_timer_days` to 14.0 in `crates/tank_core/src/types/biology.rs:613-616`. Because `molt_cycle` unconditionally copies that legacy timer into all stage timers whenever they are all zero (`crates/tank_core/src/systems/shrimp.rs:409-419`), newly constructed or migrated populations with juveniles/sub-adults start partway through the new per-stage cycle. Juveniles become immediately molt-ready on day 1 (14-day interval) and sub-adults start 2/3 through their interval, front-loading molts/failures that never should have happened.",
+        "rationale": "This is a startup/load compatibility bug introduced by the migration heuristic. It changes initial conditions for any state that has stage counts but no per-stage timers yet."
+      }
+    ],
+    "summary": "Reviewed the diff in `crates/tank_core/src/systems/shrimp.rs`, `crates/tank_core/src/types/snapshot.rs`, and `crates/tank_data/data/shrimp/neocaridina_davidi.toml`, plus supporting biology/save code. I found 3 correctness issues in the new per-stage molt flow. `cargo check -p tank_core --lib` and `cargo test -p tank_core --lib` pass, but full `cargo test` is currently blocked by unrelated compile errors in `crates/tank_core/tests/molt_mineral_budget.rs`."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

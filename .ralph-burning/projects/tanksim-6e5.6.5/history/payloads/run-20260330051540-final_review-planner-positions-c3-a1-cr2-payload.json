@@ -1,0 +1,49 @@
+{
+  "payload_id": "run-20260330051540-final_review-planner-positions-c3-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 3,
+  "attempt": 1,
+  "created_at": "2026-03-30T06:28:55.957840260Z",
+  "payload": {
+    "summary": "Verified all six amendments against the actual codebase. Four amendments (invariant enforcement gaps and stale doc comment) are valid bugs that should be fixed. The worktree-shipping amendment raises a legitimate process concern. The chloride-aware nitrite hazard amendment is factually incorrect — the feature is already fully implemented in the main repo.",
+    "votes": [
+      {
+        "amendment_id": "fr-2-2792298a",
+        "decision": "accept",
+        "rationale": "Verified: enforce_invariants clamps all other 0-1 indices (biofilter_maturity_index, maturity_index, nuisance_index, population_index, grazing_pressure_index, etc.) but NOT denitrifier_activity_index. The field is only locally clamped at usage sites in nitrogen_cycle.rs (lines 537 and 982). A corrupted save or deserialization with value > 1.0 would pass through enforce_invariants unchecked and could amplify denitrification rate at the calculation site. This is a genuine consistency gap and a real invariant enforcement bug."
+      },
+      {
+        "amendment_id": "fr-2-e08fb6f7",
+        "decision": "accept",
+        "rationale": "Verified: cumulative_n2_export_mg_n is a monotonically increasing counter (only += at nitrogen_cycle.rs:570), included in the nitrogen budget array (budget.rs:343-346), but has no check_non_negative validation in validate_invariants_inner. A corrupted save with a negative value would silently unbalance the nitrogen budget. Other cumulative counters and budget-relevant fields are validated; this omission is inconsistent and represents a real defensive gap."
+      },
+      {
+        "amendment_id": "fr-2-8f4f8117",
+        "decision": "accept",
+        "rationale": "Verified: The process params validation block in invariants.rs validates all other kinetic parameters (aob_vmax, nob_vmax, decomposer_vmax, etc.) but none of the five denitrification params. The call-site uses .max(0.01) and safe_rate() as ad-hoc clamping (nitrogen_cycle.rs:531-538), but this silently masks invalid configs rather than rejecting them at validation time. All other kinetic params are validated upfront in invariants — the denitrification params should follow the same pattern for consistency and early error detection."
+      },
+      {
+        "amendment_id": "fr-2-e421d6bc",
+        "decision": "accept",
+        "rationale": "Verified: process.rs lines 25-27 still read 'Reserved for E4b (denitrification implementation). When wiring, add alk_produced = n_denitrified_mg * DENITRIFICATION_ALK_MEQ_PER_MG_N symmetrically to the nitrification deduction path.' However, this constant is actively used at nitrogen_cycle.rs:572 (alk_produced = actual_mg_n * DENITRIFICATION_ALK_MEQ_PER_MG_N). The stale 'Reserved for' / 'When wiring' language is misleading — it implies future work that is already done. This is a straightforward doc fix."
+      },
+      {
+        "amendment_id": "fr-2-c794c8e0",
+        "decision": "accept",
+        "rationale": "Verified: git diff from the root repo only shows changes to the .claude/worktrees/tanksim-6e5.4.7 subpath. The actual implementation changes (nitrogen_cycle.rs, process.rs, engine.rs, water_change.rs, budget.rs, budget_helpers.rs) exist only inside the worktree directory. If the deliverable is measured from the root repo's perspective, none of the tank_core changes would be included in a merge or release. The worktree changes need to be integrated back into the main repo tree to actually ship."
+      },
+      {
+        "amendment_id": "fr-2-1a0c886f",
+        "decision": "reject",
+        "rationale": "Factually incorrect. The main repo already fully implements chloride-aware nitrite hazard in shrimp.rs. The code at shrimp.rs:52-70 contains compute_effective_nitrite_hazard() which applies the formula: effective = [NO2] / (1 + chloride_protection_factor × [Cl] / [NO2]). The step_hourly_shrimp_stress function (line 122-128) calls compute_nitrite_stress_diagnostics with chloride_mg_l and state.shrimp_params.chloride_protection_factor. The species-level chloride_protection_factor exists in biology.rs:315-316 with defaults, and is populated from species presets (e.g., neocaridina_davidi.toml:29 sets it to 0.5). Dedicated tests exist in shrimp_chloride_protection.rs. The amendment's claim that 'shrimp.rs:18-43 still computes hourly_nitrite_stress_accum solely from nitrite_mg_l with no chloride modifier' is wrong — the cited line range does not contain that logic; the actual stress computation at lines 73-128 is fully chloride-aware."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}

@@ -1,0 +1,121 @@
+{
+  "rollback_id": "8fd1cdbe-e243-4fa6-892d-e5dfcf1f8826",
+  "created_at": "2026-03-28T14:52:29.061390460Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "806e426ebdfc230d3864a575f7948ae9f4e27e78",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260328125548",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 4
+      },
+      "started_at": "2026-03-28T12:55:48.213160678Z",
+      "prompt_hash_at_cycle_start": "d7516603ac68c5d3",
+      "prompt_hash_at_stage_start": "d7516603ac68c5d3",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 3
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-28T13:13:47.951205801Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 4,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-3-67e7ae00",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "Fix failing test `step_hours_leaves_state_untouched_when_clamps_precede_a_validation_error` in `crates/tank_core/tests/validation.rs:141`. The engine mutates `habitat_registry` light_exposure values (roughly doubles them) during pre-step processing before the invariant validation error fires, so the state snapshot after the failed step does not match the expected clone. Either the engine must defer habitat-registry light updates until after invariant checks pass, or the test must account for the mutation.",
+          "created_at": "2026-03-28T14:52:28.922043938Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "088978c74c807ee637af885e9c3e1295c24589879d85ccb04e334f1d5659705b"
+        },
+        {
+          "amendment_id": "fr-3-bfd109f4",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "Add `respiration_dic_rate_mg_c_per_g_per_hour` and `photosynthesis_dic_rate_mg_c_per_g_per_hour` to the non-negative/finite validation array in `ProcessParamsPreset::validate()` (`crates/tank_data/src/presets.rs`, around line 871). These two fields are present in the struct (line 242-243) and in `param_value()` (lines 433-437) but are absent from the validation fields list, meaning a TOML file setting them to NaN or negative values would silently pass validation.",
+          "created_at": "2026-03-28T14:52:28.922046933Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "fd1eb8845e2cbdda5c1e99ae9d6b3125df8eb872dd05c9e3fe4463f789e112a6"
+        },
+        {
+          "amendment_id": "fr-3-25137feb",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "Document in `ParamMeta.valid_range` (in `crates/tank_core/src/types/provenance.rs:57`) that for legacy `_mg` and `_mg_total` fields, valid_range values must be expressed in normalized concentration units (matching the `unit` field, e.g. mg/L), not in raw storage units. The `check_ranges()` path normalizes the VALUE via `provenance_value()` but does NOT normalize the range bounds, so TOML authors who write valid_range in raw units will get spurious or missing warnings.",
+          "created_at": "2026-03-28T14:52:28.922049969Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "a6f9baedcbaaafc9421115e134eb8b4c6454329625a632a5947ab071196e0d16"
+        },
+        {
+          "amendment_id": "fr-3-cb38a067",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "Surface `valid_range` diagnostics from the normal process-parameter loader. `load_process_params()` only deserializes and runs `validate()` ([crates/tank_data/src/lib.rs:65-74]), while the new warning path lives in `ProcessParamsPreset::check_ranges()` ([crates/tank_data/src/presets.rs:662-667]) and is never called there. In practice, an out-of-range or malformed `valid_range` loads silently in production, so the acceptance criterion for an explicit warning/diagnostic path is not actually met.",
+          "created_at": "2026-03-28T14:52:28.922052764Z",
+          "batch_sequence": 4,
+          "source": "workflow_stage",
+          "dedup_key": "945cec0d97d730cb793012aa57be944849ea0054f9b155f82811727b999a0e4d"
+        },
+        {
+          "amendment_id": "fr-3-ce96654a",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "Extend the adjacent per-parameter metadata slot beyond `ProcessParamsPreset`. The new schema is only attached to process coefficients ([crates/tank_data/src/presets.rs:503-508]); `SourceWaterPreset` still exposes only file-level `provenance` ([crates/tank_data/src/presets.rs:29-49]) and `ShrimpPreset` does the same ([crates/tank_data/src/presets.rs:142-185]). That means the task still cannot carry per-parameter source/confidence/range metadata for source-water chemistry or shrimp-life-history parameters without another schema/API change, which falls short of the requested chemistry-and-biology coverage.",
+          "created_at": "2026-03-28T14:52:28.922066801Z",
+          "batch_sequence": 5,
+          "source": "workflow_stage",
+          "dedup_key": "24543243014725858525cf855ae20efa1d65be4f1b4eda1a16f7ebcc4ea70bff"
+        }
+      ],
+      "processed_count": 10
+    },
+    "status_summary": "running: final review restart round 4 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T14:27:00.492780896Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

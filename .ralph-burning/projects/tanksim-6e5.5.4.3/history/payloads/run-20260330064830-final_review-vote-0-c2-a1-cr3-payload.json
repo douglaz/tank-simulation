@@ -1,0 +1,49 @@
+{
+  "payload_id": "run-20260330064830-final_review-vote-0-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T08:43:54.763073567Z",
+  "payload": {
+    "summary": "Verified all six amendments against the actual codebase. The planner positions are well-supported. Amendments fr-3-a011636a and fr-3-717340b3 are factually wrong about dead code — both parameters/variants are actively used in runtime. Amendment fr-3-a7b12680 is correct about dead public API. Amendment fr-3-72451f87 understates the test's actual assertion coverage. Amendments fr-3-6f64c62a and fr-3-ed44ead5 are factually incorrect — root-zone oxygenation is fully implemented and save/load tests pass.",
+    "votes": [
+      {
+        "amendment_id": "fr-3-a011636a",
+        "decision": "reject",
+        "rationale": "Verified in the codebase: `egg_drop_temp_swing_c` is actively read by `egg_drop_temp_swing_pressure()` at shrimp.rs:1563-1564, which compares `temp_swing_c > params.egg_drop_temp_swing_c` and uses the parameter in its pressure calculation. This pressure feeds into `egg_dropping()` at line 773 via `max(instability_pressure, temp_swing_pressure)`. The parameter is also used in diagnostic event messages at line 813. The amendment's premise that the parameter is 'never actually read by any runtime logic' is factually incorrect."
+      },
+      {
+        "amendment_id": "fr-3-717340b3",
+        "decision": "reject",
+        "rationale": "Verified in the codebase: `EventCause::HighDensity` is emitted in the `spawning()` function at shrimp.rs:731 when `density_factor < 1.0 - f64::EPSILON`. It is pushed into the causes vector and passed to `emit_once_per_day_pub()` as part of `ShrimpBerried` events. A regression test `test_high_density_berried_events_report_density_cause()` at reproduction_factors.rs:544-584 explicitly asserts that the HighDensity cause code is present in emitted events. The amendment's claim that HighDensity is 'defined but never emitted anywhere' is factually incorrect."
+      },
+      {
+        "amendment_id": "fr-3-a7b12680",
+        "decision": "accept",
+        "rationale": "Verified: `temp_repro_factor_pub` at shrimp.rs:1491-1494 is declared `pub` and wraps the private `temp_repro_factor` function, but has zero call sites anywhere in the workspace — no tests, no external consumers, no internal callers. The private function it wraps is called at lines 858 and 1445, so the wrapper is purely dead public API surface. The `_pub` suffix naming convention suggests it was added for test access that was subsequently removed or never materialized. It should be removed or documented with a clear external-use justification."
+      },
+      {
+        "amendment_id": "fr-3-72451f87",
+        "decision": "reject",
+        "rationale": "Verified the actual test at denitrification.rs:583-627. While the nitrate assertion was relaxed to `no3_with <= no3_without + 10.0`, the test includes two additional stronger assertions: (1) `total_n_with < total_n_without` which directly validates that denitrification permanently removes nitrogen from the system, and (2) `export_with > export_without + 0.01` confirming higher cumulative N₂ export. A substantial regression in denitrification efficacy would fail the total-nitrogen or N₂-export assertions, so the claimed blind spot from the relaxed nitrate margin is not actually a gap."
+      },
+      {
+        "amendment_id": "fr-3-6f64c62a",
+        "decision": "reject",
+        "rationale": "Verified: Root-zone oxygenation is fully implemented. substrate.rs contains `root_oxygenation_bonus_cm()`, `root_oxygenation_active_biomass_g()`, and integration into `step_substrate_zones()`. It is habitat-aware (only `RootFeedingRosette` guild contributes), uses a saturating exponential model, and has comprehensive test coverage in tests/root_zone_oxygenation.rs (351 lines) covering planted-vs-unplanted divergence, denitrification interaction, suboxic volume reduction, and tracing/budget exposure. The `rol_rate_cm_per_g` parameter exists in process.rs and default.toml. The amendment's claim that the feature is 'entirely unimplemented' is completely incorrect."
+      },
+      {
+        "amendment_id": "fr-3-ed44ead5",
+        "decision": "reject",
+        "rationale": "Verified by running `cargo test -p tank_core --test save_load`: all 40 tests pass, including `save_load_with_active_cycle_state` and `save_load_resume_determinism`. The carbonate normalization in save.rs (normalize_loaded_carbonate_state) properly re-solves on load, and the test validates that a saved/loaded engine produces identical state to a continuously running one. The claimed regression is not present in the current codebase."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 3
+}

@@ -1,0 +1,349 @@
+=== stdout ===
+=== stderr ===
+OpenAI Codex v0.117.0 (research preview)
+--------
+workdir: /home/master/p/tank-simulation
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019d3284-075b-7100-b344-49e83ce91d59
+--------
+user
+Contract: apply_fixes
+Role: Implementer
+
+# Stage Execution Prompt
+
+You are the Implementer. Your objective for this Apply Fixes stage is to apply the requested fixes, summarize the edits, and record the validation performed.
+
+## Original Project Prompt
+
+○ tanksim-6e5.1.2.4 · Add structured simulation tracing with per-system deltas and configurable verbosity   [● P0 · OPEN]
+Owner: master · Type: task
+Created: 2026-03-26 · Updated: 2026-03-27
+Labels: logging, phase-0, scientific-core, testing, tracing
+
+Context:
+- Budget tracking (A2a) answers whether a tick balanced, but later phases also need to know which system changed which pool and when across both short tests and long scenario runs.
+- Structured tracing should be a reusable substrate for scenario probes, CI artifacts, and future domain-specific diagnostics rather than something each later bead reinvents.
+- This bead is intentionally separate from A2b budget assertion helpers and A2e harness/artifact orchestration; keeping those ownership lines clean preserves parallel work after A2a.
+
+Deliverable:
+- A reusable SimTrace or TickLog facility that records, per tick and per system:
+  - system name (for example nitrogen_cycle, shrimp, chemistry)
+  - pools modified and their deltas
+  - key intermediate values worth debugging
+  - any events generated
+- Configurable verbosity levels: off (default gameplay), summary (per-tick totals), detail (per-system deltas), trace (intermediates).
+- Output modes: in-memory (for test assertions), file (JSON-lines for CI archival), stderr (for interactive debugging).
+- A stable trace schema/API that downstream beads and the A2e harness can consume directly without inventing a second trace format.
+- Non-goals: do not own budget-balance assertion helpers, budget-centric convenience APIs, or scenario artifact naming / runner conventions.
+
+Likely touch points:
+- crates/tank_core/src/engine.rs (wrap system calls with trace points)
+- new module: crates/tank_core/src/tracing.rs (or similar)
+- crates/tank_core/tests/ (test helpers that enable tracing and inspect output)
+
+## Acceptance Criteria
+
+Acceptance Criteria:
+- a test can run N ticks at detail verbosity and inspect per-system deltas for any pool.
+- file output mode produces valid JSON-lines that can be piped to jq or diffed across runs.
+- tracing is fully opt-in: normal gameplay has zero overhead (no allocation, no I/O).
+- at least one existing integration test is retrofitted to use tracing output for its assertions.
+- later harness/probe beads can reuse the same trace schema/API directly instead of inventing ad hoc per-domain trace formats.
+
+Dependencies:
+  -> tanksim-6e5.1.2.1 (blocks) - Implement per-tick mass budget tracking for N, C, and O2
+  -> tanksim-6e5.1.2 (parent-child) - Add conservation/debug instrumentation and save-schema migration scaffolding
+
+Dependents:
+  <- tanksim-6e5.1.2.5 (blocks) - Build deterministic scientific-regression harness, e2e runner, and failure artifact capture
+  <- tanksim-6e5.1.3 (blocks) - Capture baseline scenario envelopes for current v0.1 behavior
+  <- tanksim-6e5.4.7 (blocks) - Validate nitrification-driven alkalinity depletion with the carbonate solver, expose diagnostics, and prepare the denitrification return path
+  <- tanksim-6e5.6.6 (blocks) - Add shrimp-focused scenario tests for breeding, heat stress, molt failure, and crash modes
+  <- tanksim-6e5.5.7 (blocks) - Add habitat/geometry scenario tests and probes
+  <- tanksim-6e5.4.6 (blocks) - Add carbonate regression tests and scenario probes
+  <- tanksim-6e5.3.6 (blocks) - Add conservation diagnostics and regression tests for grazing and maintenance loops
+  <- tanksim-6e5.3.4 (blocks) - Audit feeding, detritus, DOC, and mineralization bookkeeping end to end
+  <- tanksim-6e5.7.4 (blocks) - Create calibration-report workflow comparing simulated outputs to target envelopes
+
+Comments:
+  [2026-03-26 13:46 UTC] backlog-planner: Rationale:
+- This is the infrastructure that makes "great, detailed logging" possible for every later bead's tests.
+- Without structured tracing, debugging a conservation violation means adding ad hoc printlns, which are removed after debugging and lost. Structured tracing makes diagnostic output permanent and reusable.
+- The JSON-lines format enables automated regression comparison: run a scenario before and after a change, diff the traces, and see exactly which system's behavior changed.
+
+Design guidance:
+- Keep it simple: a Vec<TickEntry> where TickEntry = { tick: u32, system: &str, deltas: HashMap<&str, f64>, notes: Vec<String> }.
+- For zero-cost when off: use a trait with a no-op implementation, or a compile-time feature flag. Prefer runtime flag for test flexibility.
+- The tracing should NOT replace the budget tracking from A2a — they serve different purposes. Budget tracking checks invariants (pass/fail). Tracing explains what happened (diagnostic).
+- Consider making the engine accept an optional &mut dyn Tracer so tests can inject a recording tracer while gameplay uses a no-op.
+
+## Prior Stage Outputs This Cycle
+
+### Apply Fixes (`apply_fixes`)
+- Payload ID: `run-20260328023528-apply_fixes-c2-a1-cr1`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "Added an explicit stage-trace note hook inside the engine and used it to record deterministic intermediate notes for traced chemistry, dissolved-oxygen, and daily biofilter maturity stages. Moved the daily biofilter follow-up event emission into the traced stage so `events_generated` is fully attributed, made `Verbosity::Off` skip tick construction/storage/sink writes entirely, updated the tracing docs to match that contract, and expanded integration coverage for trace notes, post-stage event attribution, summary-note suppression, and off-mode sink behavior.",
+    "outstanding_risks": [],
+    "steps": [
+      {
+        "description": "Inspected the current engine/tracing flow and existing tracing coverage to confirm the three remediation gaps around trace notes, event attribution, and off-mode behavior.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Patched the engine tracing path to support explicit per-stage note collection, to attribute daily biofilter events inside the traced stage, and to avoid creating or finishing ticks when tracer verbosity is `Off`.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Extended integration tests to assert non-empty trace notes for a deterministic daily biofilter fixture, exact post-stage event attribution for that stage, and zero retained/emitted output when tracing is configured with `Verbosity::Off`.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Formatted the code and ran targeted plus full-package validation to confirm the fixes and guard against regressions.",
+        "order": 3,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "`cargo fmt --all` completed successfully.",
+      "`cargo test -p tank_core --lib --test tracing --test dissolved_oxygen` passed.",
+      "`cargo test -p tank_core` passed the full `tank_core` test suite, including the updated tracing integration tests."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Plan and Implement (`plan_and_implement`)
+- Payload ID: `run-20260328023528-plan_and_implement-c2-a1-cr2`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "Tightened the structured tracing stack so external sinks no longer fail silently, tick ids remain monotonic after `drain_ticks()`, pool-delta reporting suppresses floating-point noise with a relative/absolute threshold, and detail tracing now covers the previously missing shrimp/stability/internal-state fields while rejecting unsupported pool lookups explicitly instead of treating them as unchanged. The tracer API now exposes sink-failure inspection and total emitted tick count, engine docs clarify that clones drop tracing because sinks are not cloneable, and integration coverage was updated to assert the expanded daily-shrimp/stability-tracker detail schema alongside sink-failure and monotonic-id behavior.",
+    "outstanding_risks": [],
+    "steps": [
+      {
+        "description": "Inspected the current tracing API, engine clone/tracing behavior, and existing unit/integration coverage against the five pending amendments to map the required code and test changes.",
+        "order": 0,
+        "status": "completed"
+      },
+      {
+        "description": "Patched the tracing facilities to surface sink write/serialization failures, keep tick numbering monotonic across drained buffers, use a practical delta threshold, expand the tracked detail-schema surface for internal shrimp/stability state, and make unsupported pool lookups explicit.",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Updated engine-facing tracing documentation to state that cloned engines do not retain tracer configuration and callers must re-enable tracing on scenario forks when needed.",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Extended tracing tests to cover sink-failure retention, monotonic tick ids after draining, and newly tracked daily shrimp/stability-tracker internal deltas, then ran focused and full-package validation.",
+        "order": 3,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "`cargo fmt --all` completed successfully.",
+      "`cargo test -p tank_core --lib tracing::tests` passed.",
+      "`cargo test -p tank_core --test tracing` passed.",
+      "`cargo test -p tank_core` passed the full `tank_core` test suite."
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+### Review (`review`)
+- Payload ID: `run-20260328023528-review-c2-a1-cr2`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "evidence": [
+      "Tracing module (tracing.rs) implements all five accepted amendments: (1) TraceSink::emit_tick returns Result<(), TraceSinkError> with serialization and write error variants; SimTracer captures sink failures in a Vec<TraceSinkFailure> accessible via sink_failures()/sink_failure_count(). (2) Engine Clone impl has doc comment explaining tracer is dropped because Box<dyn TraceSink> is not Clone; enable_tracing() also documents the limitation. (3) meaningful_delta() uses combined relative-and-absolute threshold (1e-12), replacing raw f64::EPSILON. (4) next_tick_index field on SimTracer tracks monotonic IDs independently of retained buffer length; begin_tick uses self.next_tick_index, finish_tick advances it. (5) PoolSnapshot::capture covers 70 pools including stability tracker baselines, shrimp internal state (molt_stress, reproductive_readiness, egg cohorts, stress accumulators), microfauna, per-guild plant metrics; delta_for/try_delta_for reject untracked pools with UntrackedPoolError; TRACKED_POOL_NAMES constant matches PoolSnapshot::capture exactly.",
+      "Integration test suite (crates/tank_core/tests/tracing.rs) has 16 tests covering: core tracing (off-by-default, one-tick-per-hour, detail pool deltas, summary no-deltas, trace notes and event attribution), JSON-lines output (valid parseable records, jq-compatible schema), zero overhead (identical results with/without tracing, off-mode no ticks/no sink), sink failure retention, drain/disable (frees memory, monotonic indices after drain), clone behavior, budget+tracing compatibility, and expanded detail coverage (daily_shrimp internal state, stability_tracker baselines).",
+      "Engine integration (engine.rs) correctly wraps all system stages via maybe_record_stage / maybe_record_stage_with_explicit_budget, capturing pool deltas at Detail+ verbosity, stage notes at Trace verbosity, and events_generated at all active verbosity levels. Verbosity::Off gate at step_one_hour:174 skips tick builder construction entirely.",
+      "Public API exports in lib.rs expose all consumer-facing types: JsonLinesSink, PoolDelta, SimTracer, StderrSink, SystemTraceEntry, TickTrace, TraceSink, TraceSinkError, TraceSinkFailure, UntrackedPoolError, Verbosity.",
+      "Unit tests in tracing.rs::tests cover: verbosity ordering, delta filtering (includes changes, suppresses rounding noise), JSON roundtrip, sink write success/failure, try_delta_for rejection of untracked pools."
+    ],
+    "findings_or_gaps": [
+      "BLOCKER: Workspace does not compile. MicrofaunaState::default() in biology.rs:195-201 is missing the reserve_g field, and BudgetSnapshot nitrogen_components array size is 17 but the function returns 18 elements. These failures originate from bead tanksim-6e5.3.2, not from this tracing bead, but they prevent running the tracing test suite to confirm green state. The prior stage's validation evidence claims 'cargo test -p tank_core passed', which means either the tests were run at a prior commit or the workspace was in a different state.",
+      "MINOR: TRACKED_POOL_NAMES is a linear array searched via .contains() in tracks_pool(). With 70 entries this is negligible, but if the list grows further a HashSet or compile-time sorted slice with binary search would be more idiomatic.",
+      "MINOR: The PoolSnapshot::capture and TRACKED_POOL_NAMES are maintained as two parallel lists with no compile-time or runtime assertion that they remain synchronized. A debug_assert or test asserting len/name equality would prevent silent drift when new pools are added to one but not the other."
+    ],
+    "follow_up_or_amendments": [
+      "The workspace build failures in biology.rs and budget.rs must be resolved (by whichever bead owns them) before this bead's tests can be verified green. If those fixes land independently, this bead's approval becomes unconditional — no further tracing-specific changes are needed.",
+      "Consider adding a unit test that asserts TRACKED_POOL_NAMES.len() equals PoolSnapshot::capture().pools.len() and that every name matches positionally, to guard against future drift between the two parallel lists."
+    ],
+    "outcome": "conditionally_approved"
+  },
+  "family": "Validation"
+}
+```
+
+## Authoritative JSON Schema
+
+The JSON schema below is authoritative. Return only JSON that conforms exactly to it.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ExecutionStep": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "order": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/definitions/StepStatus"
+        }
+      },
+      "required": [
+        "description",
+        "order",
+        "status"
+      ],
+      "type": "object"
+    },
+    "StepStatus": {
+      "enum": [
+        "intended",
+        "completed",
+        "skipped"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload for execution/update stages.\n\nRequires structured change summaries, intended or completed steps, validation evidence or plans, and outstanding-risk fields.",
+  "properties": {
+    "change_summary": {
+      "type": "string"
+    },
+    "outstanding_risks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/definitions/ExecutionStep"
+      },
+      "type": "array"
+    },
+    "validation_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "change_summary",
+    "outstanding_risks",
+    "steps",
+    "validation_evidence"
+  ],
+  "title": "ExecutionPayload",
+  "type": "object"
+}
+```
+
+--- Context JSON ---
+{
+  "attempt": 2,
+  "completion_round": 2,
+  "cycle": 2
+}
+
+Return ONLY valid JSON matching the following schema:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ExecutionStep": {
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "order": {
+          "format": "uint32",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/definitions/StepStatus"
+        }
+      },
+      "required": [
+        "description",
+        "order",
+        "status"
+      ],
+      "type": "object"
+    },
+    "StepStatus": {
+      "enum": [
+        "intended",
+        "completed",
+        "skipped"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload for execution/update stages.\n\nRequires structured change summaries, intended or completed steps, validation evidence or plans, and outstanding-risk fields.",
+  "properties": {
+    "change_summary": {
+      "type": "string"
+    },
+    "outstanding_risks": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/definitions/ExecutionStep"
+      },
+      "type": "array"
+    },
+    "validation_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "change_summary",
+    "outstanding_risks",
+    "steps",
+    "validation_evidence"
+  ],
+  "title": "ExecutionPayload",
+  "type": "object"
+}
+
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 4:47 AM.
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 4:47 AM.

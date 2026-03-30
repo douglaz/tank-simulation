@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330093843-final_review-vote-1-c2-a1-cr4-artifact",
+  "payload_id": "run-20260330093843-final_review-vote-1-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T12:09:26.927218710Z",
+  "content": "# Final Review Votes\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccepted one maintainability clarification. Rejected the other amendments because one weakens an intentional behavioral regression instead of fixing the real measurement concern, and the remaining three describe issues that are already fixed or not present in the current code.\n\n## Votes\n\n- `fr-4-5a2e1e96`: Reject\n  The sampling concern is plausible, but the proposed `<= initial_total + 2` tolerance weakens the test's actual contract: the neglected tank should finish no larger than it started. If daily snapshots ever become the problem, the right fix is better observation granularity or a more direct metric, not permitting positive end-state growth.\n- `fr-4-87d566aa`: Accept\n  Using `\"medium_planted\"` as the seed template for a bare-bottom, plantless arm is easy to misread, and the surrounding comments do not explain that this base is being reused to hold the rest of the startup conditions constant. A short explanatory comment or neutral template would improve maintainability without changing behavior.\n- `fr-4-beaf754d`: Reject\n  This is not a live defect in the current tree. `crates/tank_core/tests/nitrification_alkalinity.rs` is already tracked in version control, so the tests will be committed and exercised by CI normally.\n- `fr-4-c6a42041`: Reject\n  The default mismatch has already been eliminated. The preset path uses `default_alk_per_mg_n()`, which returns `NITRIFICATION_ALK_MEQ_PER_MG_N`, and there is already a regression test asserting that the preset default stays synchronized with the core constant.\n- `fr-4-4fc13edd`: Reject\n  The cited alkalinity path is not present in `budget_helpers.rs`. That helper still restricts `Element` to nitrogen, carbon, and oxygen and explicitly keeps non-mg diagnostics such as alkalinity out of this surface, so there is no existing alkalinity-specific panic text to fix there.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

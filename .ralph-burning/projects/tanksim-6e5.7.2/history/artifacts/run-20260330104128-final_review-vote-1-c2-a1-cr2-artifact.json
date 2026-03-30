@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330104128-final_review-vote-1-c2-a1-cr2-artifact",
+  "payload_id": "run-20260330104128-final_review-vote-1-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T11:53:20.926391562Z",
+  "content": "# Final Review Votes\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccept the documentation/provenance clarifications and reject the two amendments whose defect claims are contradicted by the current validation and shrimp-stress code paths.\n\n## Votes\n\n- `fr-2-8014730a`: Accept\n  `coarse_porous.toml` allows `colonizable_area_factor` up to 1.1, but the notes only describe footprint-scaled habitat value and the shipped preset sits at 0.9. Because values above 1.0 are semantically surprising unless porous-media surface area is explicitly intended, either documenting that meaning or tightening the cap improves correctness and maintainability.\n- `fr-2-d7c5dd73`: Accept\n  Adding an explicit 25°C reference value next to the temperature-dependent `pKa1(T)` formula is a safe documentation improvement. It makes the provenance table easier to cross-check against standard carbonate references and matches the presentation style already used for `PKA2`.\n- `fr-2-1c025102`: Reject\n  The cited validation defect is not present. `temp_condition_low_divisor_c` and `temp_condition_high_divisor_c` are validated in the positive-only bucket, while the `<= 1.0` bucket covers different fields. The shipped shrimp preset values `10.0` and `8.0` therefore do not get rejected by the current validator.\n- `fr-2-f229f75f`: Reject\n  The new NH3 tuning already reaches molt-related behavior through the condition path. Hourly NH3 stress feeds `update_condition`, the daily pipeline runs `update_condition` before `update_molt_stress`, and both `update_molt_stress` and `molt_cycle` consume condition. So changing the NH3 threshold/scale can affect `molt_stress_index`, warning emission, and molt success even though `hourly_pressure` itself only includes heat and instability.\n- `fr-2-7893222b`: Accept\n  These newly exposed shrimp tuning parameters have no corresponding `[param_meta.*]` entries in `neocaridina_davidi.toml`. Adding provenance metadata or explicit provisional notes improves auditability and is consistent with the repository’s stated expectation that new preset parameters carry per-parameter metadata.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

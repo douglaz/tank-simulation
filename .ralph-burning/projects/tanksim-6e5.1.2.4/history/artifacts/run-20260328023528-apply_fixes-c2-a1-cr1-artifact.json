@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328023528-apply_fixes-c2-a1-cr1-artifact",
+  "payload_id": "run-20260328023528-apply_fixes-c2-a1-cr1",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-28T03:08:41.355347433Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nAdded an explicit stage-trace note hook inside the engine and used it to record deterministic intermediate notes for traced chemistry, dissolved-oxygen, and daily biofilter maturity stages. Moved the daily biofilter follow-up event emission into the traced stage so `events_generated` is fully attributed, made `Verbosity::Off` skip tick construction/storage/sink writes entirely, updated the tracing docs to match that contract, and expanded integration coverage for trace notes, post-stage event attribution, summary-note suppression, and off-mode sink behavior.\n\n## Steps\n\n0. [Completed] Inspected the current engine/tracing flow and existing tracing coverage to confirm the three remediation gaps around trace notes, event attribution, and off-mode behavior.\n1. [Completed] Patched the engine tracing path to support explicit per-stage note collection, to attribute daily biofilter events inside the traced stage, and to avoid creating or finishing ticks when tracer verbosity is `Off`.\n2. [Completed] Extended integration tests to assert non-empty trace notes for a deterministic daily biofilter fixture, exact post-stage event attribution for that stage, and zero retained/emitted output when tracing is configured with `Verbosity::Off`.\n3. [Completed] Formatted the code and ran targeted plus full-package validation to confirm the fixes and guard against regressions.\n\n## Validation Evidence\n\n- `cargo fmt --all` completed successfully.\n- `cargo test -p tank_core --lib --test tracing --test dissolved_oxygen` passed.\n- `cargo test -p tank_core` passed the full `tank_core` test suite, including the updated tracing integration tests.\n\n## Outstanding Risks\n\nNone identified.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

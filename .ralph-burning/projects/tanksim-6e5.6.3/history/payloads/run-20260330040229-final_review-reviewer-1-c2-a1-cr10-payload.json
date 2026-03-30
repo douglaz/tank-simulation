@@ -1,0 +1,35 @@
+{
+  "payload_id": "run-20260330040229-final_review-reviewer-1-c2-a1-cr10-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:17:06.331905957Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "Blocker: this patch does not implement tanksim-6e5.6.3’s shrimp mineral/molt deliverable. The new behavior is confined to nitrification alkalinity bookkeeping and tracing (`crates/tank_core/src/systems/nitrogen_cycle.rs:366-385`, `crates/tank_core/src/engine.rs:229-241`, `crates/tank_core/tests/nitrification_alkalinity.rs:1-336`), while the shrimp molt path is untouched and still depends on the pre-existing GH-only shortcut in `crates/tank_core/src/systems/shrimp.rs:371-404` and `crates/tank_core/src/systems/shrimp.rs:990-998`. There is still no explicit Ca/Mg-aware mineral budget or reserve-driven molt success/failure implementation in the shrimp system.",
+        "rationale": "The bead remains functionally unimplemented; approving this would merge a different feature under the wrong task."
+      },
+      {
+        "body": "Blocker: very-low-GH water still does not create the required high molt-failure risk. `gh_mineral_factor()` bottoms out at 0.3 even at GH≈0 (`crates/tank_core/src/systems/shrimp.rs:990-998`), and `molt_cycle()` declares success once the weighted score reaches 0.55 (`crates/tank_core/src/systems/shrimp.rs:390-404`). With good condition and stability, that formula still yields a successful molt in essentially mineral-free water, so the acceptance criterion for GH < 2 remains unmet.",
+        "rationale": "This is a direct behavioral miss against the task’s core mechanic, not just a missing test."
+      },
+      {
+        "body": "Blocker: stage-specific molting and tunable mineral thresholds are still missing from the data model. `ShrimpRuntimeParams` only exposes `gh_min_d`, `gh_max_d`, and one shared `base_molt_interval_days`/`failed_molt_mortality_scale` (`crates/tank_core/src/types/biology.rs:205-247`), while `AnimalState` stores one population-wide `inter_molt_timer_days`, `molt_readiness`, and `last_molt_success` (`crates/tank_core/src/types/biology.rs:172-183`) that `molt_cycle()` applies to the whole population (`crates/tank_core/src/systems/shrimp.rs:371-408`). Juveniles therefore cannot molt more frequently than adults, and there are still no named Ca/Mg minima or other per-stage parameters to satisfy the bead.",
+        "rationale": "The current schema cannot express two explicit acceptance requirements: Ca/Mg-tunable mineral logic and faster juvenile molting."
+      },
+      {
+        "body": "The added verification is pointed at the wrong problem. The new suite only tests nitrification alkalinity behavior (`crates/tank_core/tests/nitrification_alkalinity.rs:1-336`); it does not cover the required shrimp scenarios such as Ca vs Mg contribution to molt success, low reserve lowering success, repeated failed molts increasing mortality, juvenile-vs-adult molt cadence, or a 1000-hour soft-vs-hard water shrimp survival comparison.",
+        "rationale": "Because the acceptance coverage is absent, the remaining shrimp regressions would ship unnoticed."
+      }
+    ],
+    "summary": "Found blocking acceptance gaps. The diff adds nitrification alkalinity accounting and tests, but it does not implement the requested shrimp mineral-budget/molt mechanics, and the existing shrimp model still lacks very-low-GH failure behavior, stage-specific molting, tunable Ca/Mg thresholds, and the required scenario coverage."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 10
+}

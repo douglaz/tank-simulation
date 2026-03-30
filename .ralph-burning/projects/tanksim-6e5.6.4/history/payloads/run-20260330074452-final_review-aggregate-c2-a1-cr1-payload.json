@@ -1,0 +1,138 @@
+{
+  "payload_id": "run-20260330074452-final_review-aggregate-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T09:05:19.918275337Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-1-49d3b132",
+      "fr-1-c4841f7b",
+      "fr-1-1d9eb769"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-1-49d3b132",
+        "normalized_body": "In `spawning()` (shrimp.rs:714-717), `density_factor` is computed via `density_repro_factor()` but is NOT applied to `spawn_rate`. The spawn rate is `base_spawn_rate * reproductive_readiness_index * f_mineral`, so density only affects spawning through the readiness EMA (smoothing=0.1). This means a sudden density increase (e.g., adding 50 shrimp at once) takes many days to suppress spawning. Consider multiplying `spawn_rate` by `density_factor` directly (matching how `f_mineral` is already applied directly), or document this as intentional delayed response. The variable `density_factor` is currently only used for event string formatting, which is misleading.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-c4841f7b",
+        "normalized_body": "GH/mineral factor (`gh_mineral_factor`) is excluded from `reproductive_readiness_factors()` (shrimp.rs:1438-1466), so `dominant_repro_suppression_label()` can never report mineral deficiency as the dominant suppression factor. GH affects spawning (line 707) and hatch success (line 864) through separate direct multipliers, but the snapshot diagnostic `repro_dominant_suppression` would report 'none' even when low GH is the primary reason breeding fails. Add a 'minerals' entry to the readiness factors array (e.g., `(\"minerals\", gh_mineral_factor(chemistry.gh_d(), params))`) so the observability contract matches the acceptance criterion that 'debug output identifies which factors suppressed reproduction'.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-f9a344a2",
+        "normalized_body": "The e2e_habitat_geometry_probes.rs file (1042 lines) in this diff is tagged as tanksim-6e5.5.7 (habitat/geometry probes) and appears unrelated to the tanksim-6e5.6.4 reproduction model task. If this is intentional bundling, no action needed. If not, it should be in a separate commit to keep the reproduction model change self-contained and reviewable.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-ef68088f",
+        "normalized_body": "`crates/tank_harness/tests/e2e_habitat_geometry_probes.rs:717-744` builds the redox scenarios with `HarnessRun::from_state(...)`, but `HarnessRun::from_state` only wraps the provided state (`crates/tank_harness/src/lib.rs:462-468`) and `TankState::new()` leaves `source_water_catalog` empty (`crates/tank_core/src/types/state.rs:107`). The weekly `WaterChangePercent { source_profile_id: \"moderate\" }` actions therefore fail with `UnknownSourceProfile`, so `probe_substrate_redox_denitrification` aborts before any of its assertions run. Either seed the source-water catalog for these custom states or keep using scenario-based construction for tests that perform water changes.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-153ec732",
+        "normalized_body": "`crates/tank_harness/tests/e2e_habitat_geometry_probes.rs:246-259` now requires the 2×-media run to finish with at least 95% of the small run's nitrifier biomass, but that proxy is not stable under the current model: the edited test fails with `small=0.0912g, large=0.0761g`. This refactor also stopped measuring the actual cycling behavior in the loop (`crates/tank_harness/tests/e2e_habitat_geometry_probes.rs:211-218`), so the probe is both red and no longer directly validating the \"bigger media cycles faster\" claim in its name.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-1d9eb769",
+        "normalized_body": "`crates/tank_harness/tests/e2e_habitat_geometry_probes.rs:302-325` mutates `TankState::new()` to use 18 cm vs 55 cm fill heights, then only rewrites a subset of dissolved totals. `TankState::new()` had already sized `state.water` for the original default geometry (`crates/tank_core/src/types/state.rs:63-79`), so untouched pools such as alkalinity, Ca/Mg, chloride, DOC/DON, etc. are left at default-tank totals and end up at different concentrations in the shallow and deep runs. That means `probe_light_depth_shallow_vs_deep_growth` is not isolating depth/light anymore; part of the observed divergence can come from stale chemistry that was never rescaled to the new volume.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [
+      "fr-1-153ec732"
+    ],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-1-49d3b132",
+        "normalized_body": "In `spawning()` (shrimp.rs:714-717), `density_factor` is computed via `density_repro_factor()` but is NOT applied to `spawn_rate`. The spawn rate is `base_spawn_rate * reproductive_readiness_index * f_mineral`, so density only affects spawning through the readiness EMA (smoothing=0.1). This means a sudden density increase (e.g., adding 50 shrimp at once) takes many days to suppress spawning. Consider multiplying `spawn_rate` by `density_factor` directly (matching how `f_mineral` is already applied directly), or document this as intentional delayed response. The variable `density_factor` is currently only used for event string formatting, which is misleading.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-c4841f7b",
+        "normalized_body": "GH/mineral factor (`gh_mineral_factor`) is excluded from `reproductive_readiness_factors()` (shrimp.rs:1438-1466), so `dominant_repro_suppression_label()` can never report mineral deficiency as the dominant suppression factor. GH affects spawning (line 707) and hatch success (line 864) through separate direct multipliers, but the snapshot diagnostic `repro_dominant_suppression` would report 'none' even when low GH is the primary reason breeding fails. Add a 'minerals' entry to the readiness factors array (e.g., `(\"minerals\", gh_mineral_factor(chemistry.gh_d(), params))`) so the observability contract matches the acceptance criterion that 'debug output identifies which factors suppressed reproduction'.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-1d9eb769",
+        "normalized_body": "`crates/tank_harness/tests/e2e_habitat_geometry_probes.rs:302-325` mutates `TankState::new()` to use 18 cm vs 55 cm fill heights, then only rewrites a subset of dissolved totals. `TankState::new()` had already sized `state.water` for the original default geometry (`crates/tank_core/src/types/state.rs:63-79`), so untouched pools such as alkalinity, Ca/Mg, chloride, DOC/DON, etc. are left at default-tank totals and end up at different concentrations in the shallow and deep runs. That means `probe_light_depth_shallow_vs_deep_growth` is not isolating depth/light anymore; part of the observed divergence can come from stale chemistry that was never rescaled to the new volume.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 1,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-1-f9a344a2",
+      "fr-1-ef68088f"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 3 amendment(s); restart required.",
+    "total_proposed_amendments": 6,
+    "total_reviewers": 2,
+    "unique_amendment_count": 6
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 1
+}

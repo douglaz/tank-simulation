@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330104128-final_review-planner-positions-c2-a1-cr2-artifact",
+  "payload_id": "run-20260330104128-final_review-planner-positions-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T11:49:13.258965876Z",
+  "content": "# Final Review Planner Positions\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccept the metadata/provenance clarifications and reject the two amendments whose defect claims are not supported by the current code paths.\n\n## Votes\n\n- `fr-2-8014730a`: Accept\n  The current `valid_range` allows `colonizable_area_factor > 1.0`, but the attached notes do not explain that choice. Either documenting why porous media can legitimately exceed projected footprint or tightening the bound would make the parameter semantics less misleading and more maintainable.\n- `fr-2-d7c5dd73`: Accept\n  Adding an explicit 25°C reference value next to the temperature-dependent `pKa1(T)` formula is a safe documentation improvement. It makes the table easier to cross-check against standard carbonate references without changing behavior.\n- `fr-2-1c025102`: Reject\n  The cited premise is not true in the current source. `temp_condition_low_divisor_c` and `temp_condition_high_divisor_c` are validated in the positive-only bucket, not the `<= 1.0` bucket, so the shipped shrimp preset is not rejected for having values `10.0` and `8.0`.\n- `fr-2-f229f75f`: Reject\n  NH3 stress already reaches molt-related behavior through the existing condition path: `hourly_nh3_stress_accum` reduces condition in `update_condition`, and that condition feeds both `update_molt_stress` and molt success scoring. The fact that `hourly_pressure` only includes heat and instability does not establish the claimed implementation/doc mismatch.\n- `fr-2-7893222b`: Accept\n  These newly exposed shrimp tunables are first-class scientific parameters but currently lack per-parameter provenance metadata. Adding `param_meta` entries or explicit provisional notes improves auditability and matches the repository’s documented expectations for new parameters.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

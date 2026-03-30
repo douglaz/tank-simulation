@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330113320-apply_fixes-c2-a1-cr2-artifact",
+  "payload_id": "run-20260330113320-apply_fixes-c2-a1-cr2",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-30T12:35:53.473309583Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNo additional fixes were applied in this stage because the review outcome was approved and did not request any follow-up amendments; the previously implemented validation-doc and shrimp-system fixes remain the current state.\n\n## Steps\n\n1. [Completed] Reviewed the approved validation output and prior apply-fixes payloads to confirm whether any new amendments were requested for this stage.\n2. [Skipped] Apply additional code or documentation edits for review amendments.\n3. [Skipped] Run fresh validation commands after new edits.\n\n## Validation Evidence\n\n- No new validation commands were run in this stage because the review returned `approved` with an empty `follow_up_or_amendments` list.\n- Current authoritative evidence remains the prior targeted runs: `cargo test --test e2e_validation_suite validation_suite_summary -- --nocapture` passed with `SUMMARY: 8/8 scenarios passed`.\n- Current authoritative evidence also includes the focused regressions from the preceding implementation round: `cargo test -p tank_core --test molt_mineral_budget`, `cargo test -p tank_core --test validation step_hours_accepts_zero_temp_condition_min_factor -- --nocapture`, and `git diff --check -- docs/validation_scenarios.md crates/tank_core/src/systems/shrimp.rs crates/tank_core/tests/molt_mineral_budget.rs`, all of which passed.\n\n## Outstanding Risks\n\n- VS-03 still passes at the model's current upper pH storage bound (`light_max_pH=8.500`), so future carbonate or photosynthesis retuning may require re-centering that scenario to avoid ceiling-dominated behavior.\n- VS-07 now satisfies the required nitrate direction, but the steady-state NO3 gap remains modest (`0.13` vs `0.24 mg N/L`), so later denitrification, feeding, or refill-water retunes may require refreshing that envelope.\n- VS-01 still emits `maturity` as an observability field in executable validation output; the documentation now marks it non-scoring, but naive report parsers could still misread it unless they honor that distinction.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

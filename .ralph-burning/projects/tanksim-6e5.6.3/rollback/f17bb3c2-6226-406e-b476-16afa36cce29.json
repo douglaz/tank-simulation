@@ -1,0 +1,99 @@
+{
+  "rollback_id": "f17bb3c2-6226-406e-b476-16afa36cce29",
+  "created_at": "2026-03-30T12:12:34.384003735Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "e9dd29829d75fd05dd1fd4a8a027f83141ae4d99",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260330040229",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 12
+      },
+      "started_at": "2026-03-30T04:02:29.670494821Z",
+      "prompt_hash_at_cycle_start": "0382c2f612a24a4a",
+      "prompt_hash_at_stage_start": "0382c2f612a24a4a",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 11
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T04:41:52.787819971Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 12,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-11-d6025c3e",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 11,
+          "body": "In `shrimp.rs` line 554, the `critical_gh_deficit` check `(gh_d / params.gh_min_d.max(0.01)) < params.critical_molt_gh_ratio` does not guard against `gh_min_d = 0.0` the same way `molt_mineral_modifier` does. When a user sets `gh_min_d = 0.0` (semantically 'no GH minimum'), the `.max(0.01)` guard converts it to 0.01, causing any GH below `0.01 * critical_molt_gh_ratio = 0.003` to falsely trigger a critical deficit override. The fix is to add a check: `let critical_gh_deficit = params.gh_min_d > 0.0 && (gh_d / params.gh_min_d.max(0.01)) < params.critical_molt_gh_ratio;`. The existing test `test_zero_ca_and_mg_min_parameters_use_defensive_guards` (line 411) does not check `last_molt_success` and misses this edge case — it should assert that molt succeeds when all minimums are disabled.",
+          "created_at": "2026-03-30T12:12:34.291360962Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "d3da6164f79f08e3aa0fbaf77fd63a5c5c9707d7afe660ab307eb1603f361675"
+        },
+        {
+          "amendment_id": "fr-11-987ddf4e",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 11,
+          "body": "crates/tank_core/src/systems/shrimp.rs:555-556 still hardcodes `let temp_factor = raw_temp_factor.max(0.25);` inside `molt_cycle`, even though crates/tank_core/src/systems/shrimp.rs:1611-1620 and crates/tank_data/data/shrimp/neocaridina_davidi.toml:164-171 now make the temperature floor species-configurable via `temp_condition_min_factor`. Any preset value below `0.25` changes condition/success scoring but has no effect on molt cadence, so the new parameter is only partially effective and the model still hides a thermal timing constant. Either parameterize the cadence floor separately or use the named floor consistently when computing `effective_interval`.",
+          "created_at": "2026-03-30T12:12:34.291367684Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "0eddfec847453b2218aec9818559be16bc805c491b6eb2490ca3e9e42edd2b0f"
+        },
+        {
+          "amendment_id": "fr-11-a1e5f0d8",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 11,
+          "body": "Validation for `temp_condition_min_factor` disagrees across data entry paths: crates/tank_data/src/presets.rs:981-1005 rejects `0.0` by treating the field as strictly positive, while crates/tank_core/src/invariants.rs:466-469 accepts `0.0` with `check_unit_interval`. As a result, a runtime/save-state configuration can legally use `0.0`, but the equivalent species preset cannot be authored or round-tripped through the preset layer. Align the lower bound across preset validation, runtime invariants, and tests/docs.",
+          "created_at": "2026-03-30T12:12:34.291373505Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "08f80bdae9d8e57d2291674dd60413c2c488a3921f696b71aba1caeaaba0f37d"
+        }
+      ],
+      "processed_count": 47
+    },
+    "status_summary": "running: final review restart round 12 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-30T11:51:04.193354120Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

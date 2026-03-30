@@ -1,0 +1,52 @@
+{
+  "payload_id": "run-20260330083637-apply_fixes-c2-a1-cr1",
+  "stage_id": "apply_fixes",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T09:21:59.622243697Z",
+  "payload": {
+    "data": {
+      "change_summary": "Added an artifact-safe habitat/geometry probe suite flow: the habitat/geometry tests now funnel mechanistic comparisons through recorded harness failures instead of raw `assert!`, the biofilter probe was rebuilt around a media-limited custom state that checks larger media for higher carrying capacity, lower reduced-nitrogen burden, and earlier clearance, and `all_habitat_geometry_probes_summary` now runs all five probes together, prints a readable pass/fail report, and fails non-zero on violations. I also added `HarnessRun::record_failure` coverage so custom probe failures still emit the usual harness artifacts before the test returns an error.",
+      "outstanding_risks": [
+        "Unexpected panics inside a probe before `finish_probe` still depend on the summary runner's panic reporting; the guaranteed artifact path now covers the intended assertion/failure checks but not arbitrary panics.",
+        "The strengthened biofilter probe asserts lower combined TAN+NO2 burden and earlier reduced-nitrogen clearance rather than a lower standalone nitrite peak, because the larger-media run currently clears ammonia faster while briefly allowing a higher NO2 crest."
+      ],
+      "steps": [
+        {
+          "description": "Added harness support for recording custom failures and verified the finish path still surfaces artifact-backed failure output.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Refactored the five habitat/geometry probes to use reusable probe runners plus recorded failure checks so mechanistic failures no longer bypass `finish()` artifact emission.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Strengthened the biofilter scaling probe with a custom media-limited setup that checks habitat area, carrying capacity, reduced-nitrogen exposure, nitrifier biomass, and earlier clearance for the larger filter.",
+          "order": 3,
+          "status": "completed"
+        },
+        {
+          "description": "Added the aggregate habitat/geometry summary test and revalidated the full `tank_harness` package after formatting.",
+          "order": 4,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo fmt --all` completed successfully.",
+        "`cargo test -p tank_harness --lib -- --nocapture` passed: 5 unit tests green, including the new recorded-failure harness coverage.",
+        "`cargo test -p tank_harness --test e2e_habitat_geometry_probes -- --nocapture` passed: 6 tests green, including `all_habitat_geometry_probes_summary` with 5/5 probes passing.",
+        "`cargo test -p tank_harness` passed for the full package: 37 tests passed, 0 failed, 1 doc-test ignored."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

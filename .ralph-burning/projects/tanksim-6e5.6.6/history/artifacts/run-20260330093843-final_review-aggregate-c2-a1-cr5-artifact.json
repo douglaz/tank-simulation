@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260330093843-final_review-aggregate-c2-a1-cr5-artifact",
+  "payload_id": "run-20260330093843-final_review-aggregate-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T12:39:05.979902582Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 1 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 3\n**Final Review Restarts:** 5/20\n\n## Accepted\n\n- `fr-5-dde06aca`\n\n## Rejected\n\n- `fr-5-7b8f536e`\n- `fr-5-5df4a807`\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-5-dde06aca`\n\nAll five fixture functions (breeding_success_state, thermal_scenario_state, chemistry_stress_state, chloride_test_base_state, crash_mode_state) manually override DIC, alkalinity, and bicarbonate_mg_total after calling WaterState::default_for_volume_l, but never re-solve carbonate equilibrium before calling reseed_stability_tracker(). This leaves state.water.ph stale (derived from the default DIC=20/alk=1.5 chemistry, roughly pH 7.3) while the actual overridden chemistry (e.g., DIC=5/alk=12 in breeding_success_state) would resolve to a significantly different pH (likely >8.5). On the first hourly tick, apply_hourly_chemistry_terms calls resolve_carbonate_state, correcting pH — but the stability tracker's prev_ph still holds the stale value, causing a false instability signal from the pH discontinuity. Fix: insert a resolve_carbonate_state(&mut state.water, vol) call after setting custom DIC/alkalinity/bicarbonate and before reseed_stability_tracker() in each fixture function. This ensures the initial state is internally consistent and the stability tracker baseline matches the actual chemistry.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 5
+}

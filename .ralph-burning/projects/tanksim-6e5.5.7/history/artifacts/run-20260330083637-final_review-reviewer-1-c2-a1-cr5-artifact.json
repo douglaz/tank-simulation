@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330083637-final_review-reviewer-1-c2-a1-cr5-artifact",
+  "payload_id": "run-20260330083637-final_review-reviewer-1-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T11:43:13.854325047Z",
+  "content": "# Final Review Proposal\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nReviewed `git diff` and the related shrimp runtime parameter path end-to-end. Found one blocking correctness issue: preset validation still treats the new temperature-divisor fields as unit-interval values, so valid/shipped shrimp presets can no longer be loaded.\n\n## Amendments\n\n1. `crates/tank_data/src/presets.rs:1050-1056` accidentally puts `temp_condition_low_divisor_c` and `temp_condition_high_divisor_c` into the `<= 1.0` validation bucket, and `crates/tank_data/src/presets.rs:1136-1139` rejects any value above 1.0. These are temperature-span parameters, not unit-interval weights; the shipped preset already sets `10.0` and `8.0` in `crates/tank_data/data/shrimp/neocaridina_davidi.toml:36-37`. Because shrimp preset loading always runs `ShrimpPreset::validate` (`crates/tank_data/src/lib.rs:98-105`, `crates/tank_data/src/lib.rs:225-229`), the default `neocaridina_davidi` preset is rejected and scenario materialization can fail immediately.\n   Rationale: Reproduced with `cargo test -p tank_scenarios shrimp_preset_mapping_carries_stage_runtime_fields_and_legacy_split -- --nocapture`, which fails while loading `neocaridina_davidi` with `field `temp_condition_low_divisor_c` must be <= 1.0, got 10`. The new core fields in this patch make that broken validation path user-visible.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 5
+}
