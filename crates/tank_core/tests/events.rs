@@ -417,7 +417,8 @@ fn molt_stress_warning_reports_low_temperature() -> Result<(), tank_core::SimErr
     state.animal.adult.reserve_g = 0.05;
     state.animal.molt_stress_index = 0.65;
     state.animal.inter_molt_timer_days = 0.0;
-    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days / 0.25;
+    state.animal.adult.molt_timer_days =
+        state.shrimp_params.base_molt_interval_days / state.shrimp_params.temp_condition_min_factor;
     state.hardware.aeration.enabled = true;
     state.hardware.aeration.intensity = 0.2;
     state.algae.set_periphyton_total(0.1);

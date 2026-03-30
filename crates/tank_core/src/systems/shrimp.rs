@@ -551,9 +551,12 @@ fn molt_cycle(state: &mut TankState) {
     let ca_mg_per_l = chemistry.calcium_mg_per_l();
     let mg_mg_per_l = chemistry.magnesium_mg_per_l();
     let mineral_factor = molt_mineral_modifier(gh_d, ca_mg_per_l, mg_mg_per_l, &params);
-    let critical_gh_deficit = (gh_d / params.gh_min_d.max(0.01)) < params.critical_molt_gh_ratio;
+    let critical_gh_deficit =
+        params.gh_min_d > 0.0 && (gh_d / params.gh_min_d.max(0.01)) < params.critical_molt_gh_ratio;
     let raw_temp_factor = temp_condition_factor(state.water.temperature_c, &params);
-    let temp_factor = raw_temp_factor.max(0.25);
+    let cadence_temp_factor = raw_temp_factor
+        .max(params.temp_condition_min_factor)
+        .max(0.01);
     let thermal_factor = raw_temp_factor;
     let instability_factor = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
 
@@ -626,7 +629,7 @@ fn molt_cycle(state: &mut TankState) {
             continue;
         }
 
-        let effective_interval = (base_interval_days / temp_factor).max(1.0);
+        let effective_interval = (base_interval_days / cadence_temp_factor).max(1.0);
         let readiness = (timer_days / effective_interval).clamp(0.0, 1.0);
         max_readiness = max_readiness.max(readiness);
 

@@ -556,8 +556,24 @@ fn step_hours_rejects_invalid_molt_condition_weight_sum_before_simulation() {
 }
 
 #[test]
-fn step_hours_rejects_invalid_molt_stress_mineral_weight_sum_before_simulation() {
+fn step_hours_accepts_zero_temp_condition_min_factor() {
     let mut state = tank_core::TankState::new(SimSeed(45));
+    state.shrimp_params.temp_condition_min_factor = 0.0;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine
+        .step_hours(1)
+        .expect("zero temp_condition_min_factor should remain valid at runtime");
+
+    assert_eq!(
+        engine.full_state().shrimp_params.temp_condition_min_factor,
+        0.0
+    );
+}
+
+#[test]
+fn step_hours_rejects_invalid_molt_stress_mineral_weight_sum_before_simulation() {
+    let mut state = tank_core::TankState::new(SimSeed(46));
     state.shrimp_params.molt_stress_mineral_gh_weight = 0.6;
     state.shrimp_params.molt_stress_mineral_ca_weight = 0.3;
     state.shrimp_params.molt_stress_mineral_mg_weight = 0.3;

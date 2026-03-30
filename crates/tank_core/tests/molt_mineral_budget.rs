@@ -431,12 +431,19 @@ fn test_zero_ca_and_mg_min_parameters_use_defensive_guards() {
     state.shrimp_params.gh_min_d = 0.0;
     state.shrimp_params.ca_min_mg_per_l = 0.0;
     state.shrimp_params.mg_min_mg_per_l = 0.0;
+    state.animal.set_population_condition_index(0.95);
+    seed_molt_reserves(&mut state);
+    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days;
 
     step_daily_shrimp(&mut state);
 
     assert!(
         state.animal.molt_stress_index.is_finite(),
         "zero Ca/Mg minimums should not destabilize molt stress calculations"
+    );
+    assert!(
+        state.animal.last_molt_success,
+        "disabling all mineral minimums should not trip the critical-GH hard-fail path"
     );
 }
 
@@ -801,7 +808,8 @@ fn test_cold_molt_failure_reports_low_temperature() {
     state.process_params.shrimp_condition_smoothing = 0.0;
     state.water.temperature_c = 10.0;
     state.environment.ambient_temp_c = 10.0;
-    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days / 0.25;
+    state.animal.adult.molt_timer_days =
+        state.shrimp_params.base_molt_interval_days / state.shrimp_params.temp_condition_min_factor;
 
     step_daily_shrimp(&mut state);
 
@@ -812,6 +820,37 @@ fn test_cold_molt_failure_reports_low_temperature() {
         .expect("cold molt failure should emit an event");
     assert!(failure.cause_codes.contains(&EventCause::LowTemperature));
     assert!(failure.summary.contains("temp 10.0<22.0 C"));
+}
+
+#[test]
+fn test_temp_condition_min_factor_controls_molt_cadence_floor() {
+    let mut baseline = molt_test_state(SimSeed(9_104));
+    configure_stage_locked_population(&mut baseline, 10, 0, 0);
+    set_minerals(&mut baseline, 40.0, 10.0);
+    baseline.animal.set_population_condition_index(0.95);
+    seed_molt_reserves(&mut baseline);
+    baseline.process_params.shrimp_condition_smoothing = 0.0;
+    baseline.process_params.shrimp_base_mortality_per_day = 0.0;
+    baseline.process_params.shrimp_stress_mortality_scale = 0.0;
+    baseline.water.temperature_c = 10.0;
+    baseline.environment.ambient_temp_c = 10.0;
+    baseline.animal.adult.molt_timer_days = baseline.shrimp_params.base_molt_interval_days
+        / baseline.shrimp_params.temp_condition_min_factor;
+
+    let mut lowered_floor = baseline.clone();
+    lowered_floor.shrimp_params.temp_condition_min_factor = 0.05;
+
+    step_daily_shrimp(&mut baseline);
+    step_daily_shrimp(&mut lowered_floor);
+
+    assert!(
+        baseline.animal.adult.molt_timer_days.abs() < 1e-9,
+        "default cadence floor should let the cold-stage molt resolve once the timer reaches base/floor"
+    );
+    assert!(
+        lowered_floor.animal.adult.molt_timer_days > 0.0,
+        "lowering the named cadence floor should delay readiness under the same cold conditions"
+    );
 }
 
 #[test]
