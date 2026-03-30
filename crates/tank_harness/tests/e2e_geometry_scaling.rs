@@ -1,9 +1,12 @@
 //! Integration tests for geometry-aware defaults using conservative stocked baselines.
 //!
-//! The acceptance target here is stricter than the original fishless smoke tests:
-//! run stocked 500-hour comparisons and assert that cycle-timeline, peak TAN,
-//! and dissolved-oxygen swing stay within 20% when geometry-scaled defaults are
-//! allowed to do their job.
+//! Run stocked 500-hour comparisons so geometry-scaled hardware, plants, and
+//! startup bioload can be compared against intentionally mismatched equipment.
+//!
+//! Cycle-timeline and thermal parity still target 20%. Concentration metrics
+//! currently need a wider band because fixed substrate depth plus
+//! footprint-scaled habitat/plant defaults still create larger geometry-driven
+//! steady-state TAN/DO differences than the backlog target allows.
 
 use tank_core::{PlayerAction, SimSeed};
 use tank_harness::{Envelope, HarnessRun};
@@ -17,9 +20,10 @@ const FEED_GRAMS_PER_ADULT_PER_DAY: f64 = 0.001;
 const BASE_MEDIUM_GROSS_VOLUME_L: f64 = 57.6;
 const CYCLE_TIMELINE_MATURITY_THRESHOLD: f64 = 0.04;
 const PARITY_TOLERANCE: f64 = 0.20;
-/// Concentration-based metrics (peak TAN, DO range) are more sensitive to
-/// carrying-capacity changes from the oxic/suboxic zone split (substrate
-/// area no longer scales linearly with geometry).
+/// Peak TAN and DO swing still drift more than the ideal 20% under the current
+/// fixed-depth substrate plus footprint-scaled habitat model. Keep the wider
+/// band explicit so the harness still catches regressions without overstating
+/// what the model currently guarantees.
 const CONCENTRATION_PARITY_TOLERANCE: f64 = 0.65;
 
 #[derive(Debug, Clone, Copy)]
@@ -159,9 +163,9 @@ fn collect_stocked_metrics(
         temperature_c: initial.water_temp_c,
     }];
 
-    let daily_feed_g = initial.adult_shrimp_count as f64
-        * FEED_GRAMS_PER_ADULT_PER_DAY
-        * size_scale.powf(2.5).min(2.0);
+    // Keep per-adult feed constant so geometry comparisons do not inject an
+    // extra size-dependent nitrogen load on top of the stocking baseline.
+    let daily_feed_g = initial.adult_shrimp_count as f64 * FEED_GRAMS_PER_ADULT_PER_DAY;
     assert!(
         daily_feed_g > 0.0,
         "{label}: stocked baseline should have shrimp to feed"

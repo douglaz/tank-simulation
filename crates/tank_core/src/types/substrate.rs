@@ -377,3 +377,30 @@ impl Default for SubstrateLayerState {
         layer
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zero_penetration_depth_remains_a_valid_computed_boundary() {
+        let layer = SubstrateLayerState {
+            o2_penetration_depth_cm: 0.0,
+            ..SubstrateLayerState::default()
+        };
+
+        assert!(layer.has_computed_o2_penetration_depth());
+        assert_eq!(layer.resolved_o2_penetration_depth_cm(5.0), 0.0);
+    }
+
+    #[test]
+    fn negative_penetration_depth_uses_the_uncomputed_sentinel() {
+        let layer = SubstrateLayerState {
+            o2_penetration_depth_cm: UNCOMPUTED_O2_PENETRATION_DEPTH_CM,
+            ..SubstrateLayerState::default()
+        };
+
+        assert!(!layer.has_computed_o2_penetration_depth());
+        assert_eq!(layer.resolved_o2_penetration_depth_cm(5.0), 5.0);
+    }
+}
