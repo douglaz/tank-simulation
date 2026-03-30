@@ -171,10 +171,9 @@ fn substrate_surface_area_includes_oxic_interstitial() -> Result<(), Box<dyn std
     let mut state = default_state();
     state.substrate_layers = vec![SubstrateLayerState::default()];
     let footprint = state.geometry.footprint_area_cm2();
-    let layer = &state.substrate_layers[0];
     // Default layer is fully oxic (o2_penetration_depth_cm == depth_cm),
     // so SubstrateSurface = footprint + all interstitial area.
-    let expected = footprint + layer.oxic_colonizable_area_cm2(footprint);
+    let expected = footprint + state.substrate_oxic_zone_geometry().colonizable_area_cm2;
     let registry = compute_habitat_registry(&state);
     let entry = find(&registry, HabitatKind::SubstrateSurface);
     assert!(

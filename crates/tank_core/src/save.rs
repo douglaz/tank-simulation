@@ -14,7 +14,7 @@ use crate::{
 ///
 /// When you bump from N to N+1, you **must** also append a migration function
 /// to [`MIGRATIONS`]. See the migration contract below.
-pub const SCHEMA_VERSION: u32 = 11;
+pub const SCHEMA_VERSION: u32 = 12;
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Oldest schema version that the migration chain can handle.
@@ -128,6 +128,12 @@ const MIGRATIONS: &[MigrationFn] = &[
     // refresh_habitat_registry call populates them from the lumped totals
     // via ensure_habitat_pools().
     migrate_v10_to_v11,
+    // Index 9: schema 11 → 12
+    // Distinguish the canonical stacked-substrate redox boundary semantics.
+    // `o2_penetration_depth_cm` still deserializes through serde defaults for
+    // legacy payloads, so the schema bump only preserves an explicit version
+    // boundary for save/load auditing.
+    migrate_v11_to_v12,
 ];
 
 // Compile-time check: MIGRATIONS length must equal SCHEMA_VERSION - MIN_SUPPORTED_SCHEMA.
@@ -238,6 +244,16 @@ impl SaveFile {
         // on load so stale saves and migrated payloads re-enter the engine with
         // current geometry-driven values.
         save.state.refresh_habitat_registry();
+
+        if save
+            .state
+            .substrate_layers
+            .iter()
+            .any(|layer| !layer.has_computed_o2_penetration_depth())
+        {
+            crate::systems::substrate::step_substrate_zones(&mut save.state);
+            save.state.refresh_habitat_registry();
+        }
 
         Ok(save)
     }
@@ -789,6 +805,14 @@ fn migrate_v9_to_v10(value: &mut Value) -> Result<(), SimError> {
 /// distributes the lumped totals into habitat-weighted pools.
 fn migrate_v10_to_v11(_value: &mut Value) -> Result<(), SimError> {
     // No-op: serde defaults + ensure_habitat_pools handle the transition.
+    Ok(())
+}
+
+/// Schema 11 → 12: distinguish the stacked redox-boundary save contract.
+///
+/// `SubstrateLayerState.o2_penetration_depth_cm` already carries a serde
+/// default for legacy payloads, so this migration is intentionally a no-op.
+fn migrate_v11_to_v12(_value: &mut Value) -> Result<(), SimError> {
     Ok(())
 }
 

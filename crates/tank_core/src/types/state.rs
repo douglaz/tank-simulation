@@ -8,7 +8,8 @@ use super::{
     AlgaeState, AnimalState, BudgetTotals, ConcentrationView, DetritusState, EnvironmentState,
     FilterState, HabitatEntry, HardwareState, MicrobeState, MicrofaunaState, PlantGuild,
     PlantGuildState, ProcessParams, ShrimpRuntimeParams, SimEvent, SourceWaterProfile,
-    StabilityTracker, SubstrateKind, SubstrateLayerState, TankGeometry, WaterState,
+    StabilityTracker, SubstrateKind, SubstrateLayerState, SubstrateZone, SubstrateZoneGeometry,
+    SubstrateZoneNutrientAvailability, TankGeometry, WaterState,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -204,6 +205,115 @@ impl TankState {
     pub fn water_depth_above_substrate_cm(&self) -> f64 {
         (self.geometry.fill_height_cm - self.substrate_depth_cm())
             .clamp(0.0, self.geometry.fill_height_cm.max(0.0))
+    }
+
+    /// Canonical shared O₂ penetration boundary depth (cm below the
+    /// substrate surface) for the full stacked substrate bed.
+    pub fn substrate_o2_penetration_depth_cm(&self) -> f64 {
+        let total_depth_cm = self.substrate_depth_cm();
+        if total_depth_cm <= f64::EPSILON {
+            return 0.0;
+        }
+
+        self.substrate_layers
+            .iter()
+            .map(|layer| layer.resolved_o2_penetration_depth_cm(total_depth_cm))
+            .fold(total_depth_cm, f64::min)
+            .clamp(0.0, total_depth_cm)
+    }
+
+    pub fn substrate_zone_geometry(&self, zone: SubstrateZone) -> SubstrateZoneGeometry {
+        let footprint_area_cm2 = self.geometry.footprint_area_cm2();
+        let o2_penetration_depth_cm = self.substrate_o2_penetration_depth_cm();
+        let mut geometry = SubstrateZoneGeometry::default();
+        let mut layer_top_depth_cm = 0.0;
+
+        for layer in &self.substrate_layers {
+            geometry.depth_cm +=
+                layer.zone_depth_cm(layer_top_depth_cm, o2_penetration_depth_cm, zone);
+            geometry.volume_cm3 += layer.zone_volume_cm3(
+                layer_top_depth_cm,
+                o2_penetration_depth_cm,
+                footprint_area_cm2,
+                zone,
+            );
+            geometry.pore_volume_cm3 += layer.zone_pore_volume_cm3(
+                layer_top_depth_cm,
+                o2_penetration_depth_cm,
+                footprint_area_cm2,
+                zone,
+            );
+            geometry.colonizable_area_cm2 += layer.zone_colonizable_area_cm2(
+                layer_top_depth_cm,
+                o2_penetration_depth_cm,
+                footprint_area_cm2,
+                zone,
+            );
+            layer_top_depth_cm += layer.depth_cm.max(0.0);
+        }
+
+        geometry
+    }
+
+    pub fn substrate_oxic_zone_geometry(&self) -> SubstrateZoneGeometry {
+        self.substrate_zone_geometry(SubstrateZone::Oxic)
+    }
+
+    pub fn substrate_suboxic_zone_geometry(&self) -> SubstrateZoneGeometry {
+        self.substrate_zone_geometry(SubstrateZone::Suboxic)
+    }
+
+    pub fn substrate_oxic_volume_cm3(&self) -> f64 {
+        self.substrate_oxic_zone_geometry().volume_cm3
+    }
+
+    pub fn substrate_suboxic_volume_cm3(&self) -> f64 {
+        self.substrate_suboxic_zone_geometry().volume_cm3
+    }
+
+    pub fn substrate_oxic_pore_volume_cm3(&self) -> f64 {
+        self.substrate_oxic_zone_geometry().pore_volume_cm3
+    }
+
+    pub fn substrate_suboxic_pore_volume_cm3(&self) -> f64 {
+        self.substrate_suboxic_zone_geometry().pore_volume_cm3
+    }
+
+    pub fn substrate_zone_nutrient_availability(
+        &self,
+        zone: SubstrateZone,
+    ) -> SubstrateZoneNutrientAvailability {
+        let footprint_area_m2 = self.geometry.footprint_area_m2();
+        let o2_penetration_depth_cm = self.substrate_o2_penetration_depth_cm();
+        let mut nutrients = SubstrateZoneNutrientAvailability::default();
+        let mut layer_top_depth_cm = 0.0;
+
+        for layer in &self.substrate_layers {
+            let layer_nutrients = layer.zone_nutrient_availability(
+                layer_top_depth_cm,
+                o2_penetration_depth_cm,
+                footprint_area_m2,
+                zone,
+            );
+            nutrients.nitrogen_mg_total += layer_nutrients.nitrogen_mg_total;
+            nutrients.phosphorus_mg_total += layer_nutrients.phosphorus_mg_total;
+            layer_top_depth_cm += layer.depth_cm.max(0.0);
+        }
+
+        nutrients.nitrogen_mg_per_m2 =
+            area_density_mg_per_m2(nutrients.nitrogen_mg_total, footprint_area_m2);
+        nutrients.phosphorus_mg_per_m2 =
+            area_density_mg_per_m2(nutrients.phosphorus_mg_total, footprint_area_m2);
+
+        nutrients
+    }
+
+    pub fn substrate_oxic_nutrient_availability(&self) -> SubstrateZoneNutrientAvailability {
+        self.substrate_zone_nutrient_availability(SubstrateZone::Oxic)
+    }
+
+    pub fn substrate_suboxic_nutrient_availability(&self) -> SubstrateZoneNutrientAvailability {
+        self.substrate_zone_nutrient_availability(SubstrateZone::Suboxic)
     }
 
     /// Extinction coefficient k (1/cm) for Beer-Lambert light attenuation.

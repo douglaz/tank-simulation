@@ -2,6 +2,39 @@ use serde::{Deserialize, Serialize};
 
 use super::TankGeometry;
 
+const UNCOMPUTED_O2_PENETRATION_DEPTH_CM: f64 = -1.0;
+
+fn default_uncomputed_o2_penetration_depth_cm() -> f64 {
+    UNCOMPUTED_O2_PENETRATION_DEPTH_CM
+}
+
+/// Canonical redox zones within the substrate bed.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum SubstrateZone {
+    Oxic,
+    Suboxic,
+}
+
+/// Aggregate geometry for one substrate redox zone across the full bed.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct SubstrateZoneGeometry {
+    pub depth_cm: f64,
+    pub volume_cm3: f64,
+    pub pore_volume_cm3: f64,
+    pub colonizable_area_cm2: f64,
+}
+
+/// First-pass nutrient availability metrics for one substrate redox zone.
+///
+/// Nutrients are partitioned uniformly by depth within each substrate layer.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct SubstrateZoneNutrientAvailability {
+    pub nitrogen_mg_total: f64,
+    pub phosphorus_mg_total: f64,
+    pub nitrogen_mg_per_m2: f64,
+    pub phosphorus_mg_per_m2: f64,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SubstrateKind {
     InertSand,
@@ -60,11 +93,12 @@ pub struct SubstrateLayerState {
     /// when deserialized as 0 from legacy saves.
     #[serde(default)]
     pub porosity: f64,
-    /// Dynamic O₂ penetration depth (cm) computed each tick from the
-    /// Bouldin (1968) steady-state diffusion model. Substrate above this
-    /// depth is oxic (maps to `SubstrateSurface` habitat); substrate below
-    /// is suboxic (maps to `SubstrateDeep` habitat).
-    #[serde(default)]
+    /// Dynamic O₂ penetration boundary depth (cm below the substrate
+    /// surface) computed each tick from the Bouldin (1968) steady-state
+    /// diffusion model. The same shared stack boundary is serialized onto
+    /// each layer so save/load can round-trip the zone state without a
+    /// separate top-level substrate-zone payload.
+    #[serde(default = "default_uncomputed_o2_penetration_depth_cm")]
     pub o2_penetration_depth_cm: f64,
 }
 
@@ -95,36 +129,117 @@ impl SubstrateLayerState {
             * self.resolved_colonizable_area_factor()
     }
 
-    /// O₂ penetration depth clamped to this layer's depth. Returns `depth_cm`
-    /// when the penetration depth has not yet been computed (zero from
-    /// legacy deserialization).
-    pub fn effective_o2_penetration_depth_cm(&self) -> f64 {
-        if self.o2_penetration_depth_cm <= 0.0 {
-            // Not yet computed or legacy save — assume fully oxic.
-            self.depth_cm.max(0.0)
+    pub fn has_computed_o2_penetration_depth(&self) -> bool {
+        self.o2_penetration_depth_cm.is_finite() && self.o2_penetration_depth_cm >= 0.0
+    }
+
+    /// O₂ penetration depth resolved against the total stacked substrate
+    /// depth. Legacy/uncomputed payloads deserialize as a negative sentinel
+    /// and resolve to full-depth penetration until the next zone update.
+    pub fn resolved_o2_penetration_depth_cm(&self, total_substrate_depth_cm: f64) -> f64 {
+        let total_depth_cm = total_substrate_depth_cm.max(0.0);
+        if self.has_computed_o2_penetration_depth() {
+            self.o2_penetration_depth_cm.clamp(0.0, total_depth_cm)
         } else {
-            self.o2_penetration_depth_cm.min(self.depth_cm.max(0.0))
+            total_depth_cm
+        }
+    }
+
+    /// Depth of the requested redox zone within this layer (cm), given the
+    /// cumulative layer top depth and the shared substrate O₂ boundary.
+    pub fn zone_depth_cm(
+        &self,
+        layer_top_depth_cm: f64,
+        o2_penetration_depth_cm: f64,
+        zone: SubstrateZone,
+    ) -> f64 {
+        let layer_depth_cm = self.depth_cm.max(0.0);
+        let layer_top_depth_cm = layer_top_depth_cm.max(0.0);
+        let layer_bottom_depth_cm = layer_top_depth_cm + layer_depth_cm;
+        let oxic_depth_cm = (o2_penetration_depth_cm.clamp(0.0, layer_bottom_depth_cm)
+            - layer_top_depth_cm)
+            .clamp(0.0, layer_depth_cm);
+
+        match zone {
+            SubstrateZone::Oxic => oxic_depth_cm,
+            SubstrateZone::Suboxic => (layer_depth_cm - oxic_depth_cm).max(0.0),
         }
     }
 
     /// Depth of the oxic zone within this layer (cm).
-    pub fn oxic_depth_cm(&self) -> f64 {
-        self.effective_o2_penetration_depth_cm()
+    pub fn oxic_depth_cm(&self, layer_top_depth_cm: f64, o2_penetration_depth_cm: f64) -> f64 {
+        self.zone_depth_cm(
+            layer_top_depth_cm,
+            o2_penetration_depth_cm,
+            SubstrateZone::Oxic,
+        )
     }
 
     /// Depth of the suboxic zone within this layer (cm).
-    pub fn suboxic_depth_cm(&self) -> f64 {
-        (self.depth_cm.max(0.0) - self.oxic_depth_cm()).max(0.0)
+    pub fn suboxic_depth_cm(&self, layer_top_depth_cm: f64, o2_penetration_depth_cm: f64) -> f64 {
+        self.zone_depth_cm(
+            layer_top_depth_cm,
+            o2_penetration_depth_cm,
+            SubstrateZone::Suboxic,
+        )
+    }
+
+    /// Bulk substrate volume in the requested redox zone (cm³).
+    pub fn zone_volume_cm3(
+        &self,
+        layer_top_depth_cm: f64,
+        o2_penetration_depth_cm: f64,
+        footprint_area_cm2: f64,
+        zone: SubstrateZone,
+    ) -> f64 {
+        footprint_area_cm2.max(0.0)
+            * self.zone_depth_cm(layer_top_depth_cm, o2_penetration_depth_cm, zone)
+    }
+
+    /// Pore water volume in the requested redox zone (cm³).
+    pub fn zone_pore_volume_cm3(
+        &self,
+        layer_top_depth_cm: f64,
+        o2_penetration_depth_cm: f64,
+        footprint_area_cm2: f64,
+        zone: SubstrateZone,
+    ) -> f64 {
+        self.zone_volume_cm3(
+            layer_top_depth_cm,
+            o2_penetration_depth_cm,
+            footprint_area_cm2,
+            zone,
+        ) * self.resolved_porosity()
     }
 
     /// Pore water volume in the oxic zone (cm³).
-    pub fn oxic_pore_volume_cm3(&self, footprint_area_cm2: f64) -> f64 {
-        footprint_area_cm2.max(0.0) * self.oxic_depth_cm() * self.resolved_porosity()
+    pub fn oxic_pore_volume_cm3(
+        &self,
+        layer_top_depth_cm: f64,
+        o2_penetration_depth_cm: f64,
+        footprint_area_cm2: f64,
+    ) -> f64 {
+        self.zone_pore_volume_cm3(
+            layer_top_depth_cm,
+            o2_penetration_depth_cm,
+            footprint_area_cm2,
+            SubstrateZone::Oxic,
+        )
     }
 
     /// Pore water volume in the suboxic zone (cm³).
-    pub fn suboxic_pore_volume_cm3(&self, footprint_area_cm2: f64) -> f64 {
-        footprint_area_cm2.max(0.0) * self.suboxic_depth_cm() * self.resolved_porosity()
+    pub fn suboxic_pore_volume_cm3(
+        &self,
+        layer_top_depth_cm: f64,
+        o2_penetration_depth_cm: f64,
+        footprint_area_cm2: f64,
+    ) -> f64 {
+        self.zone_pore_volume_cm3(
+            layer_top_depth_cm,
+            o2_penetration_depth_cm,
+            footprint_area_cm2,
+            SubstrateZone::Suboxic,
+        )
     }
 
     /// Total pore water volume for this layer (cm³).
@@ -132,16 +247,110 @@ impl SubstrateLayerState {
         footprint_area_cm2.max(0.0) * self.depth_cm.max(0.0) * self.resolved_porosity()
     }
 
+    /// Interstitial colonizable area within the requested redox zone (cm²).
+    pub fn zone_colonizable_area_cm2(
+        &self,
+        layer_top_depth_cm: f64,
+        o2_penetration_depth_cm: f64,
+        footprint_area_cm2: f64,
+        zone: SubstrateZone,
+    ) -> f64 {
+        footprint_area_cm2.max(0.0)
+            * self.zone_depth_cm(layer_top_depth_cm, o2_penetration_depth_cm, zone)
+            * self.resolved_colonizable_area_factor()
+    }
+
     /// Interstitial colonizable area within the oxic zone (cm²).
-    pub fn oxic_colonizable_area_cm2(&self, footprint_area_cm2: f64) -> f64 {
-        footprint_area_cm2.max(0.0) * self.oxic_depth_cm() * self.resolved_colonizable_area_factor()
+    pub fn oxic_colonizable_area_cm2(
+        &self,
+        layer_top_depth_cm: f64,
+        o2_penetration_depth_cm: f64,
+        footprint_area_cm2: f64,
+    ) -> f64 {
+        self.zone_colonizable_area_cm2(
+            layer_top_depth_cm,
+            o2_penetration_depth_cm,
+            footprint_area_cm2,
+            SubstrateZone::Oxic,
+        )
     }
 
     /// Interstitial colonizable area within the suboxic zone (cm²).
-    pub fn suboxic_colonizable_area_cm2(&self, footprint_area_cm2: f64) -> f64 {
-        footprint_area_cm2.max(0.0)
-            * self.suboxic_depth_cm()
-            * self.resolved_colonizable_area_factor()
+    pub fn suboxic_colonizable_area_cm2(
+        &self,
+        layer_top_depth_cm: f64,
+        o2_penetration_depth_cm: f64,
+        footprint_area_cm2: f64,
+    ) -> f64 {
+        self.zone_colonizable_area_cm2(
+            layer_top_depth_cm,
+            o2_penetration_depth_cm,
+            footprint_area_cm2,
+            SubstrateZone::Suboxic,
+        )
+    }
+
+    fn zone_fraction(
+        &self,
+        layer_top_depth_cm: f64,
+        o2_penetration_depth_cm: f64,
+        zone: SubstrateZone,
+    ) -> f64 {
+        let layer_depth_cm = self.depth_cm.max(0.0);
+        if layer_depth_cm <= f64::EPSILON {
+            0.0
+        } else {
+            self.zone_depth_cm(layer_top_depth_cm, o2_penetration_depth_cm, zone) / layer_depth_cm
+        }
+    }
+
+    pub fn zone_nutrient_store_mg_n_total(
+        &self,
+        layer_top_depth_cm: f64,
+        o2_penetration_depth_cm: f64,
+        zone: SubstrateZone,
+    ) -> f64 {
+        self.nutrient_store_mg_n_total
+            * self.zone_fraction(layer_top_depth_cm, o2_penetration_depth_cm, zone)
+    }
+
+    pub fn zone_nutrient_store_mg_p_total(
+        &self,
+        layer_top_depth_cm: f64,
+        o2_penetration_depth_cm: f64,
+        zone: SubstrateZone,
+    ) -> f64 {
+        self.nutrient_store_mg_p_total
+            * self.zone_fraction(layer_top_depth_cm, o2_penetration_depth_cm, zone)
+    }
+
+    pub fn zone_nutrient_availability(
+        &self,
+        layer_top_depth_cm: f64,
+        o2_penetration_depth_cm: f64,
+        footprint_area_m2: f64,
+        zone: SubstrateZone,
+    ) -> SubstrateZoneNutrientAvailability {
+        let nitrogen_mg_total =
+            self.zone_nutrient_store_mg_n_total(layer_top_depth_cm, o2_penetration_depth_cm, zone);
+        let phosphorus_mg_total =
+            self.zone_nutrient_store_mg_p_total(layer_top_depth_cm, o2_penetration_depth_cm, zone);
+        let area_m2 = footprint_area_m2.max(0.0);
+
+        SubstrateZoneNutrientAvailability {
+            nitrogen_mg_total,
+            phosphorus_mg_total,
+            nitrogen_mg_per_m2: if area_m2 <= f64::EPSILON {
+                0.0
+            } else {
+                nitrogen_mg_total / area_m2
+            },
+            phosphorus_mg_per_m2: if area_m2 <= f64::EPSILON {
+                0.0
+            } else {
+                phosphorus_mg_total / area_m2
+            },
+        }
     }
 }
 

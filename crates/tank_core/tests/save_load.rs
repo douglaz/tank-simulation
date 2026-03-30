@@ -1277,6 +1277,39 @@ fn save_load_roundtrip_preserves_o2_penetration_depth() -> Result<(), SimError> 
 }
 
 #[test]
+fn save_load_roundtrip_preserves_zero_penetration_depth() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(202));
+    for layer in &mut state.substrate_layers {
+        layer.o2_penetration_depth_cm = 0.0;
+    }
+    state.refresh_habitat_registry();
+
+    let json = SaveFile {
+        schema_version: SCHEMA_VERSION,
+        app_version: APP_VERSION.to_string(),
+        state,
+        queued_actions: vec![],
+    }
+    .to_json_pretty()?;
+    let loaded = SaveFile::from_json(&json)?;
+
+    assert!(
+        loaded
+            .state
+            .substrate_layers
+            .iter()
+            .all(|layer| layer.o2_penetration_depth_cm.abs() < 1e-12),
+        "valid 0 cm penetration should survive round-trip without being treated as legacy/uncomputed"
+    );
+    assert!(
+        loaded.state.substrate_oxic_zone_geometry().volume_cm3.abs() < 1e-12,
+        "0 cm penetration should leave no oxic substrate volume after load"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn legacy_save_without_o2_penetration_loads_with_computed_default(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let state = TankState::new(SimSeed(201));
@@ -1296,17 +1329,16 @@ fn legacy_save_without_o2_penetration_loads_with_computed_default(
     }
 
     let save_json = serde_json::json!({
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": SCHEMA_VERSION - 1,
         "app_version": APP_VERSION,
         "state": state_json,
         "queued_actions": [],
     });
 
     let loaded = SaveFile::from_json(&serde_json::to_string(&save_json)?)?;
-    let engine = loaded.into_engine()?;
-    let restored = engine.full_state();
+    let restored = &loaded.state;
+    assert_eq!(loaded.schema_version, SCHEMA_VERSION);
 
-    // After from_parts, the engine should have recomputed penetration depths.
     for layer in &restored.substrate_layers {
         assert!(
             layer.o2_penetration_depth_cm > 0.0,

@@ -22,43 +22,54 @@ const MIN_R_TOTAL_MG_PER_CM3_PER_S: f64 = 1e-12;
 ///   R_total = biological O₂ demand per cm³ of bulk substrate (mg cm⁻³ s⁻¹)
 pub fn step_substrate_zones(state: &mut TankState) {
     let volume_l = state.water_volume_l();
-    if volume_l <= f64::EPSILON {
+    let total_depth_cm = state.substrate_depth_cm();
+    if volume_l <= f64::EPSILON || total_depth_cm <= f64::EPSILON {
         return;
     }
 
     let do_mg_per_cm3 = (state.water.dissolved_oxygen_mg_total / volume_l) / 1000.0;
     let temperature_c = state.water.temperature_c;
     let r_total = estimate_substrate_o2_demand_rate(state);
+    let effective_porosity = effective_substrate_porosity(state);
+    let o2_penetration_depth_cm = compute_o2_penetration_depth_cm(
+        effective_porosity,
+        total_depth_cm,
+        do_mg_per_cm3,
+        temperature_c,
+        r_total,
+    );
 
     for layer in &mut state.substrate_layers {
-        layer.o2_penetration_depth_cm = compute_o2_penetration_depth_cm(
-            layer.resolved_porosity(),
-            layer.depth_cm,
-            do_mg_per_cm3,
-            temperature_c,
-            r_total,
-        );
+        layer.o2_penetration_depth_cm = o2_penetration_depth_cm;
     }
 }
 
-/// Bouldin penetration depth for a single layer.
+/// Bouldin penetration depth for the full stacked substrate bed.
 fn compute_o2_penetration_depth_cm(
     porosity: f64,
-    layer_depth_cm: f64,
+    substrate_depth_cm: f64,
     do_mg_per_cm3: f64,
     temperature_c: f64,
     r_total_mg_per_cm3_per_s: f64,
 ) -> f64 {
+    let substrate_depth_cm = substrate_depth_cm.max(0.0);
+    if substrate_depth_cm <= f64::EPSILON {
+        return 0.0;
+    }
+
     let d_free = d_o2_free_cm2_per_s(temperature_c);
     let d_eff = d_free * porosity * porosity;
 
-    if r_total_mg_per_cm3_per_s < MIN_R_TOTAL_MG_PER_CM3_PER_S || do_mg_per_cm3 <= 0.0 {
-        return layer_depth_cm.max(0.0);
+    if do_mg_per_cm3 <= 0.0 {
+        return 0.0;
+    }
+    if r_total_mg_per_cm3_per_s < MIN_R_TOTAL_MG_PER_CM3_PER_S {
+        return substrate_depth_cm;
     }
 
     let penetration = (2.0 * d_eff * do_mg_per_cm3.max(0.0) / r_total_mg_per_cm3_per_s).sqrt();
 
-    penetration.clamp(0.0, layer_depth_cm.max(0.0))
+    penetration.clamp(0.0, substrate_depth_cm)
 }
 
 /// Temperature-adjusted free-water O₂ diffusion coefficient (cm²/s).
@@ -113,6 +124,20 @@ fn estimate_substrate_o2_demand_rate(state: &TankState) -> f64 {
     (decomposer_demand + root_demand) / substrate_bulk_volume_cm3
 }
 
+fn effective_substrate_porosity(state: &TankState) -> f64 {
+    let total_depth_cm = state.substrate_depth_cm();
+    if total_depth_cm <= f64::EPSILON {
+        return 0.0;
+    }
+
+    state
+        .substrate_layers
+        .iter()
+        .map(|layer| layer.depth_cm.max(0.0) * layer.resolved_porosity())
+        .sum::<f64>()
+        / total_depth_cm
+}
+
 /// Fraction of total colonizable area that belongs to substrate habitats.
 fn substrate_habitat_area_fraction(state: &TankState) -> f64 {
     let total_area: f64 = state
@@ -139,7 +164,9 @@ fn substrate_habitat_area_fraction(state: &TankState) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{rng::SimSeed, types::SubstrateKind, TankState};
+    use crate::{
+        find_habitat, rng::SimSeed, HabitatKind, SubstrateKind, SubstrateLayerState, TankState,
+    };
 
     use super::*;
 
@@ -205,14 +232,12 @@ mod tests {
         state.plant_guilds.clear();
         step_substrate_zones(&mut state);
 
-        for layer in &state.substrate_layers {
-            let depth = layer.depth_cm;
-            assert!(
-                (layer.o2_penetration_depth_cm - depth).abs() < f64::EPSILON,
-                "expected full-depth penetration ({depth} cm) with zero demand, got {:.4} cm",
-                layer.o2_penetration_depth_cm
-            );
-        }
+        let total_depth = state.substrate_depth_cm();
+        assert!(
+            (state.substrate_o2_penetration_depth_cm() - total_depth).abs() < f64::EPSILON,
+            "expected full-depth penetration ({total_depth} cm) with zero demand, got {:.4} cm",
+            state.substrate_o2_penetration_depth_cm()
+        );
         Ok(())
     }
 
@@ -225,16 +250,17 @@ mod tests {
         step_substrate_zones(&mut state);
 
         let footprint = state.geometry.footprint_area_cm2();
-        for layer in &state.substrate_layers {
-            let total = layer.total_pore_volume_cm3(footprint);
-            let oxic = layer.oxic_pore_volume_cm3(footprint);
-            let suboxic = layer.suboxic_pore_volume_cm3(footprint);
-            assert!(
-                (oxic + suboxic - total).abs() < 1e-9,
-                "zone pore volumes ({oxic:.6} + {suboxic:.6} = {:.6}) != total ({total:.6})",
-                oxic + suboxic
-            );
-        }
+        let total_pore_volume: f64 = state
+            .substrate_layers
+            .iter()
+            .map(|layer| layer.total_pore_volume_cm3(footprint))
+            .sum();
+        let zoned_pore_volume =
+            state.substrate_oxic_pore_volume_cm3() + state.substrate_suboxic_pore_volume_cm3();
+        assert!(
+            (zoned_pore_volume - total_pore_volume).abs() < 1e-9,
+            "zone pore volumes ({zoned_pore_volume:.6}) should equal total ({total_pore_volume:.6})",
+        );
         Ok(())
     }
 
@@ -341,9 +367,6 @@ mod tests {
     #[test]
     fn zone_habitat_integration_oxic_maps_to_surface_suboxic_maps_to_deep(
     ) -> Result<(), Box<dyn std::error::Error>> {
-        use crate::types::habitat::find_habitat;
-        use crate::types::{HabitatKind, SubstrateLayerState};
-
         let mut state = make_state();
         // Set up a substrate with partial O₂ penetration.
         state.substrate_layers = vec![SubstrateLayerState {
@@ -356,22 +379,23 @@ mod tests {
         state.refresh_habitat_registry();
 
         let footprint = state.geometry.footprint_area_cm2();
-        let layer = &state.substrate_layers[0];
+        let oxic = state.substrate_oxic_zone_geometry();
+        let suboxic = state.substrate_suboxic_zone_geometry();
 
         // Verify zone depths.
         assert!(
-            (layer.oxic_depth_cm() - 2.0).abs() < 1e-9,
+            (oxic.depth_cm - 2.0).abs() < 1e-9,
             "oxic depth should be 2.0 cm"
         );
         assert!(
-            (layer.suboxic_depth_cm() - 3.0).abs() < 1e-9,
+            (suboxic.depth_cm - 3.0).abs() < 1e-9,
             "suboxic depth should be 3.0 cm"
         );
 
         // SubstrateSurface habitat area = footprint + oxic interstitial.
         let surface = find_habitat(&state.habitat_registry, HabitatKind::SubstrateSurface)
             .expect("SubstrateSurface should exist");
-        let expected_surface_area = footprint + layer.oxic_colonizable_area_cm2(footprint);
+        let expected_surface_area = footprint + oxic.colonizable_area_cm2;
         assert!(
             (surface.colonizable_area_cm2 - expected_surface_area).abs() < 1e-6,
             "SubstrateSurface area ({}) should equal footprint + oxic interstitial ({})",
@@ -382,7 +406,7 @@ mod tests {
         // SubstrateDeep habitat area = suboxic interstitial.
         let deep = find_habitat(&state.habitat_registry, HabitatKind::SubstrateDeep)
             .expect("SubstrateDeep should exist");
-        let expected_deep_area = layer.suboxic_colonizable_area_cm2(footprint);
+        let expected_deep_area = suboxic.colonizable_area_cm2;
         assert!(
             (deep.colonizable_area_cm2 - expected_deep_area).abs() < 1e-6,
             "SubstrateDeep area ({}) should equal suboxic interstitial ({})",
@@ -394,6 +418,171 @@ mod tests {
         assert!(
             deep.colonizable_area_cm2 > 0.0,
             "SubstrateDeep area should be positive with partial penetration"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn anoxic_water_yields_zero_penetration_and_positive_suboxic_volume(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = make_state();
+        state.water.dissolved_oxygen_mg_total = 0.0;
+        state.microbe.decomposer_biomass_g = 2.0;
+
+        step_substrate_zones(&mut state);
+        state.refresh_habitat_registry();
+
+        assert!(
+            state.substrate_o2_penetration_depth_cm().abs() < 1e-12,
+            "anoxic water should produce zero penetration, got {:.6} cm",
+            state.substrate_o2_penetration_depth_cm()
+        );
+        assert!(
+            state.substrate_oxic_zone_geometry().volume_cm3.abs() < 1e-12,
+            "anoxic water should leave no oxic substrate volume"
+        );
+        assert!(
+            state.substrate_suboxic_zone_geometry().volume_cm3 > 0.0,
+            "anoxic water should leave positive suboxic substrate volume"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn stacked_layers_use_single_shared_penetration_boundary(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = make_state();
+        state.substrate_layers = vec![
+            SubstrateLayerState {
+                kind: SubstrateKind::InertSand,
+                depth_cm: 1.5,
+                o2_penetration_depth_cm: 1.0,
+                ..SubstrateLayerState::default()
+            },
+            SubstrateLayerState {
+                kind: SubstrateKind::CoarsePorous,
+                depth_cm: 3.0,
+                o2_penetration_depth_cm: 1.0,
+                ..SubstrateLayerState::default()
+            },
+        ];
+        state.refresh_habitat_registry();
+
+        let boundary = state.substrate_o2_penetration_depth_cm();
+        let top = &state.substrate_layers[0];
+        let bottom = &state.substrate_layers[1];
+
+        assert!((boundary - 1.0).abs() < 1e-12);
+        assert!((top.oxic_depth_cm(0.0, boundary) - 1.0).abs() < 1e-12);
+        assert!((top.suboxic_depth_cm(0.0, boundary) - 0.5).abs() < 1e-12);
+        assert!((bottom.oxic_depth_cm(1.5, boundary) - 0.0).abs() < 1e-12);
+        assert!((bottom.suboxic_depth_cm(1.5, boundary) - 3.0).abs() < 1e-12);
+        assert!(
+            (state.substrate_oxic_zone_geometry().depth_cm - 1.0).abs() < 1e-12,
+            "only the uppermost 1 cm should be oxic"
+        );
+        assert!(
+            (state.substrate_suboxic_zone_geometry().depth_cm - 3.5).abs() < 1e-12,
+            "the remainder of the stacked bed should be suboxic"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn shallow_substrate_has_no_deep_zone() -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = make_state();
+        state.substrate_layers = vec![SubstrateLayerState {
+            depth_cm: 0.1,
+            kind: SubstrateKind::CoarsePorous,
+            porosity: SubstrateKind::CoarsePorous.default_porosity(),
+            ..SubstrateLayerState::default()
+        }];
+        state.refresh_habitat_registry();
+        let volume_l = state.water_volume_l();
+        state.water.dissolved_oxygen_mg_total = 8.0 * volume_l;
+        state.microbe.decomposer_biomass_g = 0.0;
+        state.plant_guilds.clear();
+
+        step_substrate_zones(&mut state);
+        state.refresh_habitat_registry();
+
+        assert!(
+            state.substrate_suboxic_zone_geometry().volume_cm3.abs() < 1e-12,
+            "1 mm substrate should have no meaningful deep zone"
+        );
+        assert!(
+            find_habitat(&state.habitat_registry, HabitatKind::SubstrateDeep)
+                .expect("deep habitat")
+                .colonizable_area_cm2
+                .abs()
+                < 1e-12,
+            "shallow substrate should leave no deep habitat area"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn zone_depths_sum_to_total_substrate_depth() -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = make_state();
+        state.substrate_layers = vec![
+            SubstrateLayerState {
+                depth_cm: 2.0,
+                o2_penetration_depth_cm: 1.2,
+                ..SubstrateLayerState::default()
+            },
+            SubstrateLayerState {
+                depth_cm: 1.0,
+                o2_penetration_depth_cm: 1.2,
+                ..SubstrateLayerState::default()
+            },
+        ];
+
+        let total_depth = state.substrate_depth_cm();
+        let oxic_depth = state.substrate_oxic_zone_geometry().depth_cm;
+        let suboxic_depth = state.substrate_suboxic_zone_geometry().depth_cm;
+        assert!(
+            (oxic_depth + suboxic_depth - total_depth).abs() < 1e-12,
+            "oxic + suboxic depths should equal total depth: oxic={oxic_depth}, suboxic={suboxic_depth}, total={total_depth}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn zone_nutrient_availability_sums_to_total_store() -> Result<(), Box<dyn std::error::Error>> {
+        let mut state = make_state();
+        state.substrate_layers = vec![SubstrateLayerState {
+            depth_cm: 5.0,
+            nutrient_store_mg_n_total: 50.0,
+            nutrient_store_mg_p_total: 10.0,
+            o2_penetration_depth_cm: 2.0,
+            ..SubstrateLayerState::default()
+        }];
+
+        let oxic = state.substrate_oxic_nutrient_availability();
+        let suboxic = state.substrate_suboxic_nutrient_availability();
+
+        assert!((oxic.nitrogen_mg_total - 20.0).abs() < 1e-12);
+        assert!((suboxic.nitrogen_mg_total - 30.0).abs() < 1e-12);
+        assert!((oxic.phosphorus_mg_total - 4.0).abs() < 1e-12);
+        assert!((suboxic.phosphorus_mg_total - 6.0).abs() < 1e-12);
+        assert!((oxic.nitrogen_mg_total + suboxic.nitrogen_mg_total - 50.0).abs() < 1e-12);
+        assert!((oxic.phosphorus_mg_total + suboxic.phosphorus_mg_total - 10.0).abs() < 1e-12);
+        assert!(
+            ((oxic.nitrogen_mg_per_m2 + suboxic.nitrogen_mg_per_m2)
+                - state.substrate_n_mg_n_per_m2())
+            .abs()
+                < 1e-12
+        );
+        assert!(
+            ((oxic.phosphorus_mg_per_m2 + suboxic.phosphorus_mg_per_m2)
+                - state.substrate_p_mg_p_per_m2())
+            .abs()
+                < 1e-12
         );
 
         Ok(())

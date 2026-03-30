@@ -206,12 +206,7 @@ fn compute_substrate_surface(state: &TankState, env: &HabitatEnv) -> (f64, f64, 
     } else {
         let footprint_area_cm2 = state.geometry.footprint_area_cm2();
         // SubstrateSurface = oxic zone: footprint top surface + oxic interstitial area.
-        let oxic_interstitial: f64 = state
-            .substrate_layers
-            .iter()
-            .map(|layer| layer.oxic_colonizable_area_cm2(footprint_area_cm2))
-            .sum();
-        footprint_area_cm2 + oxic_interstitial
+        footprint_area_cm2 + state.substrate_oxic_zone_geometry().colonizable_area_cm2
     };
 
     let flow = 0.05 + 0.2 * env.normalized_flow;
@@ -225,15 +220,9 @@ fn compute_substrate_surface(state: &TankState, env: &HabitatEnv) -> (f64, f64, 
 }
 
 fn compute_substrate_deep(state: &TankState, env: &HabitatEnv) -> (f64, f64, f64, f64) {
-    let footprint_area_cm2 = state.geometry.footprint_area_cm2();
-
     // SubstrateDeep = suboxic zone: only interstitial area below the O₂
     // penetration depth.
-    let area: f64 = state
-        .substrate_layers
-        .iter()
-        .map(|layer| layer.suboxic_colonizable_area_cm2(footprint_area_cm2))
-        .sum();
+    let area = state.substrate_suboxic_zone_geometry().colonizable_area_cm2;
 
     let flow = 0.02 + 0.05 * env.normalized_flow;
     // Capped at 0.2: even with flow, deep substrate remains oxygen-limited.

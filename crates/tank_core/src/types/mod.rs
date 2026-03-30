@@ -51,7 +51,10 @@ pub use provenance::{
 pub use snapshot::{TankSnapshot, LEGACY_SNAPSHOT_CHEMISTRY_FIELD_ALIASES};
 pub use source_water::SourceWaterProfile;
 pub use state::{SimMeta, TankState};
-pub use substrate::{SubstrateKind, SubstrateLayerState};
+pub use substrate::{
+    SubstrateKind, SubstrateLayerState, SubstrateZone, SubstrateZoneGeometry,
+    SubstrateZoneNutrientAvailability,
+};
 pub(crate) use water::concentration_from_total;
 pub use water::{
     ConcentrationView, WaterState, ESTIMATED_TDS_OMITTED_CONTRIBUTORS, ESTIMATED_TDS_SCOPE_LINES,

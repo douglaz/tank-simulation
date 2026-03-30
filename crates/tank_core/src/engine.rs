@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use crate::{
-    invariants::enforce_invariants,
+    invariants::{enforce_invariants, validate_invariants},
     rng::SimSeed,
     systems,
     tracing::{PoolSnapshot, SimTracer, SystemTraceEntry, TickTraceBuilder, Verbosity},
@@ -123,10 +123,13 @@ impl Engine {
     }
 
     pub fn from_parts(mut state: TankState, queued_actions: Vec<PlayerAction>) -> Self {
-        // Recompute substrate zone boundaries so the habitat registry sees
-        // up-to-date oxic/suboxic splits (important for legacy saves that
-        // lack the o2_penetration_depth_cm field).
-        systems::substrate::step_substrate_zones(&mut state);
+        // Only normalize derived substrate zones for states that already pass
+        // read-only invariant validation. Invalid states are preserved as-is
+        // so callers still get the expected pre-simulation validation error
+        // without incidental mutation from engine construction.
+        if validate_invariants(&state).is_ok() {
+            systems::substrate::step_substrate_zones(&mut state);
+        }
         state.refresh_habitat_registry();
         Self {
             state,
