@@ -63,12 +63,11 @@ pub const AUTO_STOCK_MAX_ADULTS_PER_LITER: f64 = 0.25;
 /// density bound. Smaller tanks interpolate between the min and max bounds.
 pub const AUTO_STOCK_FULL_DENSITY_VOLUME_L: f64 = 150.0;
 
-/// Reference footprint for initial microbe biomass scaling (cm²).
+/// Reference footprint for initial nitrifier biomass scaling (cm²).
 /// `MicrobeState::default()` was calibrated for the default `TankGeometry`
 /// (40 × 25 = 1000 cm² footprint). Tanks with larger footprint receive
-/// proportionally more initial bacteria so that biofilter maturity ratios remain
-/// consistent as habitat area scales. Bacteria colonize surfaces, so footprint
-/// (∝ size_scale²) is a better proxy than volume (∝ size_scale³).
+/// proportionally more initial nitrifiers so that biofilter maturity ratios
+/// remain consistent as habitat area scales.
 const MICROBE_REFERENCE_FOOTPRINT_CM2: f64 = 1000.0;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -580,10 +579,12 @@ pub fn recommended_heater_max_watts(
 /// - Heater max watts: `max(volume_l × HEATER_WATTS_PER_LITER,
 ///   UA(geometry) × HEATER_DESIGN_DELTA_C)`, capped at
 ///   `volume_l × HEATER_MAX_WATTS_PER_LITER`
-/// - Initial microbe biomass: scaled proportionally with footprint area relative
-///   to the 1000 cm² reference, floored at 1.0× (tanks ≤ 1000 cm² keep defaults).
-///   Bacteria colonize surfaces, so footprint (∝ size²) matches how carrying
-///   capacity scales, keeping maturity ratios consistent across tank sizes.
+/// - Initial nitrifier biomass: scaled proportionally with footprint area
+///   relative to the 1000 cm² reference, floored at 1.0× (tanks ≤ 1000 cm²
+///   keep defaults).
+/// - Initial decomposer biomass: scaled with gross water volume relative to the
+///   default 22 L reference so feed/DOC mineralization starts at a similar
+///   conservative per-liter intensity across geometry-scaled stocked runs.
 ///
 /// Properties that do **not** scale automatically:
 /// - Light intensity/photoperiod (fixture property, independent of tank size)
@@ -611,20 +612,23 @@ fn scale_hardware_to_geometry(state: &mut TankState, process_params: &ProcessPar
     // exposed-area heat-loss floor derived from the current geometry.
     state.hardware.heater.max_watts = recommended_heater_max_watts(&state.geometry, process_params);
 
-    // Microbes: scale initial biomass with footprint area so that the biofilter
-    // maturity ratio (nitrifier_g / carrying_capacity_g) stays consistent
-    // across tank sizes. Bacteria colonize surfaces, so footprint (∝ size²)
-    // is the right proxy. Without this, larger tanks start with the same
-    // bacterial inoculum but much higher carrying capacity, depressing
-    // maturity and creating a negative feedback loop via maturity_factor.
-    let microbe_scale = footprint_scale.max(1.0);
-    if microbe_scale > 1.0 {
-        state.microbe.ammonia_oxidizer_biomass_g *= microbe_scale;
-        state.microbe.nitrite_oxidizer_biomass_g *= microbe_scale;
-        state.microbe.comammox_biomass_g *= microbe_scale;
-        state.microbe.decomposer_biomass_g *= microbe_scale;
+    // Nitrifiers: scale with footprint area so startup biofilter maturity
+    // tracks the surface-driven habitat available to colonize.
+    let nitrifier_scale = footprint_scale.max(1.0);
+    if nitrifier_scale > 1.0 {
+        state.microbe.ammonia_oxidizer_biomass_g *= nitrifier_scale;
+        state.microbe.nitrite_oxidizer_biomass_g *= nitrifier_scale;
+        state.microbe.comammox_biomass_g *= nitrifier_scale;
+    }
+
+    // Decomposers: scale with gross water volume so proportional stocking and
+    // feeding do not produce a geometry-driven TAN pulse solely because larger
+    // tanks would otherwise start with less decomposer biomass per liter.
+    let decomposer_scale = volume_scale.max(1.0);
+    if decomposer_scale > 1.0 {
+        state.microbe.decomposer_biomass_g *= decomposer_scale;
         for val in state.microbe.decomposer_by_habitat.values_mut() {
-            *val *= microbe_scale;
+            *val *= decomposer_scale;
         }
     }
 }

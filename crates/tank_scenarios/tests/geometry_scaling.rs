@@ -480,11 +480,11 @@ fn no_auto_stock_when_disabled() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // ---------------------------------------------------------------------------
-// Microbe scaling with footprint
+// Microbe scaling with geometry
 // ---------------------------------------------------------------------------
 
 #[test]
-fn microbe_biomass_scales_with_footprint_for_large_tanks() -> Result<(), Box<dyn std::error::Error>>
+fn microbe_biomass_scales_with_geometry_for_large_tanks() -> Result<(), Box<dyn std::error::Error>>
 {
     let state_1x = medium_planted_at_scale(1.0);
     let state_2x = medium_planted_at_scale(2.0);
@@ -492,12 +492,20 @@ fn microbe_biomass_scales_with_footprint_for_large_tanks() -> Result<(), Box<dyn
     let footprint_1x = state_1x.geometry.footprint_area_cm2();
     let footprint_2x = state_2x.geometry.footprint_area_cm2();
     let area_ratio = footprint_2x / footprint_1x;
+    let volume_1x = state_1x.geometry.gross_water_volume_l();
+    let volume_2x = state_2x.geometry.gross_water_volume_l();
+    let volume_ratio = volume_2x / volume_1x;
 
-    // Microbe biomass should scale proportionally with footprint
+    // Nitrifiers track footprint-scaled startup habitat.
     let aob_ratio =
         state_2x.microbe.ammonia_oxidizer_biomass_g / state_1x.microbe.ammonia_oxidizer_biomass_g;
     let nob_ratio =
         state_2x.microbe.nitrite_oxidizer_biomass_g / state_1x.microbe.nitrite_oxidizer_biomass_g;
+    let comammox_ratio =
+        state_2x.microbe.comammox_biomass_g / state_1x.microbe.comammox_biomass_g;
+
+    // Decomposers track gross water volume so feed/DOC mineralization stays
+    // close to a constant per-liter startup intensity across scaled tanks.
     let decomp_ratio =
         state_2x.microbe.decomposer_biomass_g / state_1x.microbe.decomposer_biomass_g;
 
@@ -510,8 +518,12 @@ fn microbe_biomass_scales_with_footprint_for_large_tanks() -> Result<(), Box<dyn
         "NOB should scale ~{area_ratio:.1}× with 2× geometry: ratio={nob_ratio:.2}"
     );
     assert!(
-        (decomp_ratio - area_ratio).abs() < 0.1,
-        "decomposers should scale ~{area_ratio:.1}× with 2× geometry: ratio={decomp_ratio:.2}"
+        (comammox_ratio - area_ratio).abs() < 0.1,
+        "comammox should scale ~{area_ratio:.1}× with 2× geometry: ratio={comammox_ratio:.2}"
+    );
+    assert!(
+        (decomp_ratio - volume_ratio).abs() < 0.1,
+        "decomposers should scale ~{volume_ratio:.1}× with 2× geometry: ratio={decomp_ratio:.2}"
     );
 
     Ok(())
