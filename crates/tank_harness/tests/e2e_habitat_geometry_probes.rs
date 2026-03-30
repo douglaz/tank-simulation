@@ -305,8 +305,13 @@ fn probe_light_depth_shallow_vs_deep_growth() -> Result<(), Box<dyn std::error::
     // (which would change footprint and starting biomass).
     let build_state = |fill_height_cm: f64| -> TankState {
         let mut state = TankState::new(SimSeed(77));
+        let old_volume_l = state.water_volume_l();
         state.geometry.height_cm = fill_height_cm.max(state.geometry.height_cm) + 2.0;
         state.geometry.fill_height_cm = fill_height_cm;
+        let volume_l = state.water_volume_l();
+        state
+            .water
+            .rescale_totals_for_volume(old_volume_l, volume_l);
         state.environment.ambient_temp_c = 25.0;
         state.water.temperature_c = 25.0;
         state.hardware.light.enabled = true;
@@ -314,7 +319,6 @@ fn probe_light_depth_shallow_vs_deep_growth() -> Result<(), Box<dyn std::error::
         state.hardware.light.photoperiod_hours = 12.0;
         state.hardware.filter.enabled = true;
         state.hardware.aeration.enabled = true;
-        let volume_l = state.water_volume_l();
         state.water.ammonia_total_mg_n_total = 0.5 * volume_l;
         state.water.nitrate_mg_n_total = 5.0 * volume_l;
         state.water.phosphate_mg_p_total = 0.4 * volume_l;
@@ -325,6 +329,7 @@ fn probe_light_depth_shallow_vs_deep_growth() -> Result<(), Box<dyn std::error::
         state.animal.adult.count = 0;
         state.animal.sub_adult.count = 0;
         state.animal.juvenile.count = 0;
+        state.reseed_stability_tracker();
         state.refresh_habitat_registry();
         state
     };

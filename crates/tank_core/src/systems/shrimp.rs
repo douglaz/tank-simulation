@@ -721,9 +721,14 @@ fn spawning(state: &mut TankState) {
         0.0
     };
     let density_factor = density_repro_factor(state.animal.total_count(), volume_l, params);
-    let spawn_rate =
-        (params.base_spawn_rate * state.animal.reproductive_readiness_index * f_mineral)
-            .clamp(0.0, 1.0);
+    // Readiness is smoothed over multiple days, but crowding should still cap
+    // spawning immediately so sudden stock increases do not wait for the EMA
+    // to catch up.
+    let spawn_readiness = state
+        .animal
+        .reproductive_readiness_index
+        .min(density_factor);
+    let spawn_rate = (params.base_spawn_rate * spawn_readiness * f_mineral).clamp(0.0, 1.0);
     let new_berried =
         deterministic_transfer_count(eligible, spawn_rate, &mut state.animal.spawn_progress_accum);
 
@@ -745,16 +750,21 @@ fn spawning(state: &mut TankState) {
         } else {
             String::new()
         };
+        let readiness_detail = if density_factor < 1.0 - f64::EPSILON {
+            format!(
+                "effective readiness {:.2} (baseline {:.2}{density_detail})",
+                spawn_readiness, state.animal.reproductive_readiness_index
+            )
+        } else {
+            format!("readiness {:.2}", state.animal.reproductive_readiness_index)
+        };
 
         crate::systems::events::emit_once_per_day_pub(
             state,
             EventSeverity::Info,
             EventKind::ShrimpBerried,
             causes,
-            format!(
-                "{new_berried} female(s) became berried (readiness {:.2}{density_detail})",
-                state.animal.reproductive_readiness_index
-            ),
+            format!("{new_berried} female(s) became berried ({readiness_detail})"),
         );
     }
 }
@@ -1455,7 +1465,7 @@ fn reset_hourly_accumulators(state: &mut TankState) {
 
 // ── Factor functions ────────────────────────────────────────────────────────
 
-fn reproductive_readiness_factors(state: &TankState) -> [(&'static str, f64); 7] {
+fn reproductive_readiness_factors(state: &TankState) -> [(&'static str, f64); 8] {
     let chemistry = state.concentrations();
     let params = &state.shrimp_params;
 
@@ -1465,6 +1475,7 @@ fn reproductive_readiness_factors(state: &TankState) -> [(&'static str, f64); 7]
             temp_repro_factor(state.water.temperature_c, params),
         ),
         ("condition", state.animal.adult.condition_index),
+        ("minerals", gh_mineral_factor(chemistry.gh_d(), params)),
         (
             "stability",
             (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0),

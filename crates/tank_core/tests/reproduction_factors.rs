@@ -640,6 +640,57 @@ fn test_high_density_berried_events_report_density_cause() -> Result<(), SimErro
 }
 
 #[test]
+fn test_density_suppression_applies_immediately_to_spawning() -> Result<(), SimError> {
+    let mut low_density = breeding_fixture_with_volume(SimSeed(8017), 10.0);
+    low_density.animal.adult.count = 10;
+    low_density.animal.adult.reserve_g = 5.0;
+    low_density.animal.adult.condition_index = 1.0;
+    low_density.animal.molt_stress_index = 0.0;
+    low_density.animal.reproductive_readiness_index = 1.0;
+    low_density.process_params.shrimp_condition_smoothing = 0.0;
+    low_density.shrimp_params.base_spawn_rate = 0.4;
+    low_density.shrimp_params.density_repro_threshold_per_l = 2.0;
+    low_density
+        .shrimp_params
+        .density_repro_half_suppression_per_l = 4.0;
+    low_density.algae.set_periphyton_total(400.0);
+
+    let mut high_density = low_density.clone();
+    high_density.animal.adult.count = 150;
+    high_density.animal.adult.reserve_g = 75.0;
+
+    let low_eligible = ((0.5 * f64::from(low_density.animal.adult.count))
+        - f64::from(low_density.animal.berried_females_count))
+    .max(0.0);
+    let high_eligible = ((0.5 * f64::from(high_density.animal.adult.count))
+        - f64::from(high_density.animal.berried_females_count))
+    .max(0.0);
+
+    let mut low_engine = Engine::from_parts(low_density, vec![]);
+    let mut high_engine = Engine::from_parts(high_density, vec![]);
+
+    run_day(&mut low_engine, 0.1)?;
+    run_day(&mut high_engine, 0.1)?;
+
+    let low_spawn_per_capita =
+        f64::from(low_engine.full_state().animal.berried_females_count) / low_eligible.max(1.0);
+    let high_spawn_per_capita =
+        f64::from(high_engine.full_state().animal.berried_females_count) / high_eligible.max(1.0);
+    let high_readiness = high_engine.full_state().animal.reproductive_readiness_index;
+
+    assert!(
+        high_readiness > 0.85,
+        "Crowding regression should observe immediate spawn suppression before the smoothed readiness index fully adapts, got readiness={high_readiness:.4}"
+    );
+    assert!(
+        high_spawn_per_capita < low_spawn_per_capita * 0.7,
+        "High density should cap same-day per-capita spawning. low={low_spawn_per_capita:.4}, high={high_spawn_per_capita:.4}"
+    );
+
+    Ok(())
+}
+
+#[test]
 fn test_multiple_stressors_compound() -> Result<(), SimError> {
     // Two moderate stressors produce greater suppression than either alone.
 
@@ -815,6 +866,37 @@ fn test_all_reproduction_factors_are_named_parameters() -> Result<(), SimError> 
     assert!(
         no2_relaxed_readiness > no2_strict_readiness,
         "NO2 threshold should change readiness: relaxed={no2_relaxed_readiness:.4}, strict={no2_strict_readiness:.4}"
+    );
+
+    // GH/mineral thresholds should change the same low-GH state.
+    let mut mineral_strict = breeding_fixture(SimSeed(8017));
+    mineral_strict.process_params.shrimp_condition_smoothing = 0.0;
+    mineral_strict.animal.adult.condition_index = 1.0;
+    mineral_strict.animal.reproductive_readiness_index = 0.5;
+    mineral_strict.animal.molt_stress_index = 0.0;
+    mineral_strict.water.calcium_mg_total = 10.0 * mineral_strict.water_volume_l();
+    mineral_strict.water.magnesium_mg_total = 2.0 * mineral_strict.water_volume_l();
+    mineral_strict.shrimp_params.gh_min_d = 5.0;
+    mineral_strict.shrimp_params.gh_max_d = 10.0;
+    let mut mineral_relaxed = mineral_strict.clone();
+    mineral_relaxed.shrimp_params.gh_min_d = 1.0;
+    mineral_relaxed.shrimp_params.gh_max_d = 12.0;
+
+    let mut mineral_strict_engine = Engine::from_parts(mineral_strict, vec![]);
+    let mut mineral_relaxed_engine = Engine::from_parts(mineral_relaxed, vec![]);
+    run_days(&mut mineral_strict_engine, 8)?;
+    run_days(&mut mineral_relaxed_engine, 8)?;
+    let mineral_strict_readiness = mineral_strict_engine
+        .full_state()
+        .animal
+        .reproductive_readiness_index;
+    let mineral_relaxed_readiness = mineral_relaxed_engine
+        .full_state()
+        .animal
+        .reproductive_readiness_index;
+    assert!(
+        mineral_relaxed_readiness > mineral_strict_readiness,
+        "GH/mineral thresholds should change readiness: relaxed={mineral_relaxed_readiness:.4}, strict={mineral_strict_readiness:.4}"
     );
 
     // Instability tuning should change both the smoothed instability response
@@ -1134,5 +1216,16 @@ fn test_snapshot_uses_runtime_suppression_labels() {
     assert_eq!(
         nitrite_snap.repro_dominant_suppression, "nitrite",
         "snapshot should distinguish nitrite suppression from TAN"
+    );
+
+    let mut mineral_state = breeding_fixture(SimSeed(8017));
+    mineral_state.animal.adult.condition_index = 1.0;
+    mineral_state.animal.molt_stress_index = 0.0;
+    mineral_state.water.calcium_mg_total = 10.0 * mineral_state.water_volume_l();
+    mineral_state.water.magnesium_mg_total = 2.0 * mineral_state.water_volume_l();
+    let mineral_snap = Engine::from_parts(mineral_state, vec![]).snapshot();
+    assert_eq!(
+        mineral_snap.repro_dominant_suppression, "minerals",
+        "snapshot should surface GH/mineral suppression when low GH is the dominant limiter"
     );
 }
