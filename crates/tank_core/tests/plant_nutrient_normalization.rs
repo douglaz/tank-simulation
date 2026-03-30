@@ -149,6 +149,7 @@ fn rooted_plant_limitation_is_tank_size_independent() -> Result<(), tank_core::S
         colonizable_area_factor: 1.0,
         low_oxygen_tendency_index: 0.3,
         grazing_surface_index: 0.4,
+        ..SubstrateLayerState::default()
     };
 
     small.substrate_layers = vec![make_substrate(area_m2)];

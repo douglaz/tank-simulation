@@ -19,10 +19,22 @@ use tank_data::{load_scenario, ScenarioPreset, ShrimpPreset};
 /// circulation in planted shrimp tanks.
 pub const FILTER_FLOW_TURNOVERS_PER_HOUR: f64 = 10.0;
 
-/// Heater maximum wattage: 0.75 W per liter.
+/// Baseline heater sizing guideline: 0.75 W per liter.
 /// Standard recommendation is 0.5–1.0 W/L depending on ambient-to-target delta;
-/// 0.75 balances heating speed against overshoot risk.
+/// 0.75 is our default target for standard open-top tanks.
 pub const HEATER_WATTS_PER_LITER: f64 = 0.75;
+
+/// Upper heater sizing cap: 1.0 W per liter.
+/// Very exposed or shallow geometries can need more replacement heat than the
+/// 0.75 W/L midpoint, but we still clamp to the top of the common 0.5–1.0 W/L
+/// guideline band.
+pub const HEATER_MAX_WATTS_PER_LITER: f64 = 1.0;
+
+/// Design ambient-to-target delta used when converting geometry-driven heat
+/// loss (`UA`) into a heater recommendation.
+/// This keeps shallow/high-exposure tanks from being undersized while leaving
+/// standard geometries near the 0.75 W/L midpoint.
+pub const HEATER_DESIGN_DELTA_C: f64 = 8.0;
 
 /// Initial plant biomass per guild: 3.0 g per 1000 cm² of substrate footprint.
 /// Conservative starter density — below the "moderately planted" guideline
@@ -31,11 +43,25 @@ pub const HEATER_WATTS_PER_LITER: f64 = 0.75;
 /// Total initial plant mass = density × footprint / 1000 × number of guilds.
 pub const PLANT_BIOMASS_G_PER_1000_CM2_FOOTPRINT: f64 = 3.0;
 
-/// Conservative startup shrimp density for auto-stocking mode: 0.2 adults per liter.
-/// Well below the mature colony range of 2–5/L, calibrated to current happy-path
-/// scenarios (100 L → ~20 adults, 10 L → ~2 adults). Only used when
+/// Midpoint startup shrimp density for auto-stocking mode: 0.2 adults per liter.
+/// The effective density ramps between 0.15 and 0.25 adults/L as tank water
+/// volume grows, with this midpoint reached around a 75 L filled setup.
+/// Applied against the current filled water volume (after substrate
+/// displacement), not the nominal empty-box volume, so shallow heavily
+/// hardscaped starts do not silently overstock relative to actual water.
+/// This remains well below the mature colony range of 2–5/L. Only used when
 /// `auto_stock_shrimp` is enabled and no explicit count is provided.
 pub const AUTO_STOCK_ADULTS_PER_LITER: f64 = 0.2;
+
+/// Lower bound for conservative startup auto-stocking.
+pub const AUTO_STOCK_MIN_ADULTS_PER_LITER: f64 = 0.15;
+
+/// Upper bound for conservative startup auto-stocking.
+pub const AUTO_STOCK_MAX_ADULTS_PER_LITER: f64 = 0.25;
+
+/// Filled-water volume at which auto-stocking reaches the upper conservative
+/// density bound. Smaller tanks interpolate between the min and max bounds.
+pub const AUTO_STOCK_FULL_DENSITY_VOLUME_L: f64 = 150.0;
 
 /// Reference footprint for initial microbe biomass scaling (cm²).
 /// `MicrobeState::default()` was calibrated for the default `TankGeometry`
@@ -58,6 +84,12 @@ impl Default for ScenarioGeometryOverrides {
             fill_ratio: 1.0,
         }
     }
+}
+
+pub fn recommended_auto_stock_adults_per_liter(volume_l: f64) -> f64 {
+    let normalized_volume = (volume_l / AUTO_STOCK_FULL_DENSITY_VOLUME_L).clamp(0.0, 1.0);
+    AUTO_STOCK_MIN_ADULTS_PER_LITER
+        + (AUTO_STOCK_MAX_ADULTS_PER_LITER - AUTO_STOCK_MIN_ADULTS_PER_LITER) * normalized_volume
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -233,15 +265,17 @@ pub struct StartupOverrides {
     pub plant_selection: Option<StartupPlantSelection>,
     pub filter_enabled: Option<bool>,
     /// Optional explicit biomedia area (cm²). When `None`, starter hardware
-    /// scales the default filter media area with the tank footprint.
+    /// scales the default filter media area with the tank volume.
     pub filter_media_area_cm2: Option<f64>,
     pub light_preset: Option<StartupLightPreset>,
     pub heater_preset: Option<StartupHeaterPreset>,
     pub aeration_enabled: Option<bool>,
     pub initial_adult_shrimp_count: Option<u32>,
     /// When true and `initial_adult_shrimp_count` is `None`, auto-stock using
-    /// a conservative density of [`AUTO_STOCK_ADULTS_PER_LITER`] adults per liter.
-    /// Explicit counts always take priority over auto-stocking.
+    /// a conservative geometry-aware density between
+    /// [`AUTO_STOCK_MIN_ADULTS_PER_LITER`] and
+    /// [`AUTO_STOCK_MAX_ADULTS_PER_LITER`] adults per liter. Explicit counts
+    /// always take priority over auto-stocking.
     pub auto_stock_shrimp: bool,
 }
 
@@ -509,6 +543,28 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
     }
 }
 
+pub fn recommended_heater_max_watts(
+    geometry: &TankGeometry,
+    process_params: &ProcessParams,
+) -> f64 {
+    let volume_l = geometry.gross_water_volume_l().max(0.0);
+    if volume_l <= f64::EPSILON {
+        return 0.0;
+    }
+
+    let surface_area_m2 = geometry.surface_area_cm2() / 10_000.0;
+    let wall_area_m2 = geometry.wall_area_cm2() / 10_000.0;
+    let ua_total_w_per_k =
+        (process_params.k_surface_w_per_m2_k * surface_area_m2 * geometry.top_exchange_factor())
+            + (process_params.k_wall_w_per_m2_k * wall_area_m2);
+    let volume_guideline_w = volume_l * HEATER_WATTS_PER_LITER;
+    let exposed_loss_w = ua_total_w_per_k * HEATER_DESIGN_DELTA_C;
+
+    volume_guideline_w
+        .max(exposed_loss_w)
+        .min(volume_l * HEATER_MAX_WATTS_PER_LITER)
+}
+
 /// Scales hardware and biological defaults to match the current tank geometry.
 ///
 /// Called once during materialization so that defaults are proportional to tank
@@ -517,10 +573,13 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
 ///
 /// **Scaling rules applied:**
 /// - Filter flow: `volume_l × FILTER_FLOW_TURNOVERS_PER_HOUR` (10 turnovers/hr)
-/// - Filter media area: default biomedia scales with footprint area relative to
-///   the 1000 cm² reference tank unless the scenario/startup config supplies an
+/// - Filter media area: default biomedia scales with gross water volume
+///   relative to the default 22 L reference tank unless the scenario/startup
+///   config supplies an
 ///   explicit hardware-specific media area.
-/// - Heater max watts: `volume_l × HEATER_WATTS_PER_LITER` (0.75 W/L)
+/// - Heater max watts: `max(volume_l × HEATER_WATTS_PER_LITER,
+///   UA(geometry) × HEATER_DESIGN_DELTA_C)`, capped at
+///   `volume_l × HEATER_MAX_WATTS_PER_LITER`
 /// - Initial microbe biomass: scaled proportionally with footprint area relative
 ///   to the 1000 cm² reference, floored at 1.0× (tanks ≤ 1000 cm² keep defaults).
 ///   Bacteria colonize surfaces, so footprint (∝ size²) matches how carrying
@@ -531,19 +590,26 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
 /// - Aeration intensity (setting property; physical effect already scales via
 ///   the habitat registry's surface-area calculations)
 /// - Substrate depth (preset property, independent of tank footprint)
-fn scale_hardware_to_geometry(state: &mut TankState) {
+fn scale_hardware_to_geometry(state: &mut TankState, process_params: &ProcessParams) {
     let volume_l = state.geometry.gross_water_volume_l();
     let footprint_cm2 = state.geometry.footprint_area_cm2();
     let footprint_scale = (footprint_cm2 / MICROBE_REFERENCE_FOOTPRINT_CM2).max(0.0);
+    let reference_volume_l = TankGeometry::default().gross_water_volume_l();
+    let volume_scale = if reference_volume_l > f64::EPSILON {
+        volume_l / reference_volume_l
+    } else {
+        1.0
+    };
 
     // Filter: flow scales with volume (turnovers stay constant per hour)
     if state.hardware.filter.enabled {
         state.hardware.filter.flow_lph = volume_l * FILTER_FLOW_TURNOVERS_PER_HOUR;
     }
-    state.hardware.filter.media_area_cm2 *= footprint_scale;
+    state.hardware.filter.media_area_cm2 *= volume_scale.max(0.0);
 
-    // Heater: max wattage scales with volume (thermal mass)
-    state.hardware.heater.max_watts = volume_l * HEATER_WATTS_PER_LITER;
+    // Heater: recommendation combines the usual W/L sizing guideline with an
+    // exposed-area heat-loss floor derived from the current geometry.
+    state.hardware.heater.max_watts = recommended_heater_max_watts(&state.geometry, process_params);
 
     // Microbes: scale initial biomass with footprint area so that the biofilter
     // maturity ratio (nitrifier_g / carrying_capacity_g) stays consistent
@@ -652,7 +718,7 @@ fn materialize_scenario(
         notes: Some(scenario_name),
     };
     state.geometry = geometry;
-    scale_hardware_to_geometry(&mut state);
+    scale_hardware_to_geometry(&mut state, &process_params);
     if let Some(filter_media_area_cm2) = scenario.filter_media_area_cm2 {
         state.hardware.filter.media_area_cm2 =
             validate_filter_media_area_cm2(filter_media_area_cm2, "scenarios", &scenario_id)?;
@@ -847,9 +913,10 @@ fn apply_startup_overrides(
         // Explicit scenario-authored count always wins.
         state.animal = AnimalState::with_adults(initial_adult_shrimp_count);
     } else if auto_stock_shrimp {
-        // Conservative auto-stocking based on tank volume.
-        let volume_l = state.geometry.gross_water_volume_l();
-        let count = (volume_l * AUTO_STOCK_ADULTS_PER_LITER).round().max(1.0) as u32;
+        // Conservative auto-stocking based on current filled water volume.
+        let volume_l = state.water_volume_l();
+        let density = recommended_auto_stock_adults_per_liter(volume_l);
+        let count = (volume_l * density).round().max(1.0) as u32;
         state.animal = AnimalState::with_adults(count);
     }
 
@@ -915,6 +982,8 @@ fn build_substrate_layers(
             .derived_colonizable_area_cm2(footprint),
             low_oxygen_tendency_index: sub_preset.low_oxygen_tendency_index,
             grazing_surface_index: sub_preset.grazing_surface_index,
+            porosity: kind.default_porosity(),
+            o2_penetration_depth_cm: sub_preset.depth_cm.max(0.0),
         });
     }
     if substrate_layers.is_empty() {

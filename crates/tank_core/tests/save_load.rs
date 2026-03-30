@@ -1233,3 +1233,98 @@ fn current_schema_load_repairs_stale_carbonate_caches() -> Result<(), SimError> 
 
     Ok(())
 }
+
+// ---- oxic/suboxic zone state round-trip tests ----
+
+#[test]
+fn save_load_roundtrip_preserves_o2_penetration_depth() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(200));
+    // Set a non-default penetration depth on each layer.
+    for layer in &mut state.substrate_layers {
+        layer.o2_penetration_depth_cm = layer.depth_cm * 0.35;
+    }
+    state.refresh_habitat_registry();
+
+    let save = SaveFile {
+        schema_version: SCHEMA_VERSION,
+        app_version: APP_VERSION.to_string(),
+        state: state.clone(),
+        queued_actions: vec![],
+    };
+    let json = save.to_json_pretty()?;
+    let loaded = SaveFile::from_json(&json)?;
+
+    for (orig, loaded_layer) in state
+        .substrate_layers
+        .iter()
+        .zip(&loaded.state.substrate_layers)
+    {
+        assert!(
+            (orig.o2_penetration_depth_cm - loaded_layer.o2_penetration_depth_cm).abs() < 1e-12,
+            "o2_penetration_depth_cm should survive round-trip: original={}, loaded={}",
+            orig.o2_penetration_depth_cm,
+            loaded_layer.o2_penetration_depth_cm,
+        );
+        assert!(
+            (orig.porosity - loaded_layer.porosity).abs() < 1e-12,
+            "porosity should survive round-trip: original={}, loaded={}",
+            orig.porosity,
+            loaded_layer.porosity,
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
+fn legacy_save_without_o2_penetration_loads_with_computed_default(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let state = TankState::new(SimSeed(201));
+    let mut state_json = serde_json::to_value(&state).expect("serialize state");
+
+    // Strip the new fields from each substrate layer to simulate a legacy save.
+    if let Some(layers) = state_json
+        .get_mut("substrate_layers")
+        .and_then(|v| v.as_array_mut())
+    {
+        for layer in layers {
+            if let Some(obj) = layer.as_object_mut() {
+                obj.remove("o2_penetration_depth_cm");
+                obj.remove("porosity");
+            }
+        }
+    }
+
+    let save_json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    });
+
+    let loaded = SaveFile::from_json(&serde_json::to_string(&save_json)?)?;
+    let engine = loaded.into_engine()?;
+    let restored = engine.full_state();
+
+    // After from_parts, the engine should have recomputed penetration depths.
+    for layer in &restored.substrate_layers {
+        assert!(
+            layer.o2_penetration_depth_cm > 0.0,
+            "legacy load should compute a positive penetration depth, got {}",
+            layer.o2_penetration_depth_cm,
+        );
+        assert!(
+            layer.o2_penetration_depth_cm <= layer.depth_cm,
+            "penetration depth ({}) should not exceed layer depth ({})",
+            layer.o2_penetration_depth_cm,
+            layer.depth_cm,
+        );
+        assert!(
+            layer.resolved_porosity() > 0.0,
+            "legacy load should resolve porosity from substrate kind default, got {}",
+            layer.resolved_porosity(),
+        );
+    }
+
+    Ok(())
+}

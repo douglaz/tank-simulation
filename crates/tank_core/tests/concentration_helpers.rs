@@ -28,6 +28,7 @@ fn helper_state() -> TankState {
         colonizable_area_cm2: state.geometry.footprint_area_cm2(),
         low_oxygen_tendency_index: 0.2,
         grazing_surface_index: 0.4,
+        ..SubstrateLayerState::default()
     }];
     state.water = WaterState::default_for_volume_l(state.water_volume_l());
     state

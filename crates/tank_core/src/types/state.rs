@@ -128,6 +128,8 @@ impl TankState {
                 colonizable_area_cm2: 400.0,
                 low_oxygen_tendency_index: 0.5,
                 grazing_surface_index: 0.5,
+                porosity: SubstrateKind::ActivePlanted.default_porosity(),
+                o2_penetration_depth_cm: 2.0,
             },
             SubstrateLayerState {
                 kind: SubstrateKind::CoarsePorous,
@@ -141,6 +143,8 @@ impl TankState {
                 colonizable_area_cm2: 250.0,
                 low_oxygen_tendency_index: 0.6,
                 grazing_surface_index: 0.7,
+                porosity: SubstrateKind::CoarsePorous.default_porosity(),
+                o2_penetration_depth_cm: 1.0,
             },
         ];
         let volume_l = state.water_volume_l();

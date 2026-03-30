@@ -2,16 +2,18 @@
 //!
 //! These tests verify the scaling constants and formulas added in tanksim-6e5.5.6:
 //! - Filter flow = volume_l × 10 (turnovers/hr)
-//! - Heater watts = volume_l × 0.75
+//! - Heater watts = max(volume_l × 0.75, geometry_heat_loss)
 //! - Plant biomass = footprint_cm² × 3.0 / 1000 per guild
 //! - Auto-stocking = volume_l × 0.2 adults/L
 //! - Microbe scaling ∝ footprint area (floored at 1×)
 
-use tank_core::SimSeed;
+use tank_core::{Engine, ProcessParams, SimSeed, SimulationEngine, TankGeometry, TankState};
 use tank_scenarios::{
+    recommended_auto_stock_adults_per_liter, recommended_heater_max_watts,
     seeded_state_with_full_overrides, ScenarioGeometryOverrides, StartupHeaterPreset,
     StartupLightPreset, StartupOverrides, StartupPlantSelection, StartupSubstratePreset,
-    AUTO_STOCK_ADULTS_PER_LITER, FILTER_FLOW_TURNOVERS_PER_HOUR, HEATER_WATTS_PER_LITER,
+    AUTO_STOCK_MAX_ADULTS_PER_LITER, AUTO_STOCK_MIN_ADULTS_PER_LITER,
+    FILTER_FLOW_TURNOVERS_PER_HOUR, HEATER_MAX_WATTS_PER_LITER,
     PLANT_BIOMASS_G_PER_1000_CM2_FOOTPRINT,
 };
 
@@ -139,34 +141,82 @@ fn filter_flow_approximately_100_for_10l_tank() -> Result<(), Box<dyn std::error
 // ---------------------------------------------------------------------------
 
 #[test]
-fn heater_watts_scales_with_volume() -> Result<(), Box<dyn std::error::Error>> {
+fn heater_watts_follow_documented_geometry_formula() -> Result<(), Box<dyn std::error::Error>> {
     let state_1x = medium_planted_at_scale(1.0);
-    let volume_1x = state_1x.geometry.gross_water_volume_l();
-    let expected_watts_1x = volume_1x * HEATER_WATTS_PER_LITER;
+    let expected_watts_1x =
+        recommended_heater_max_watts(&state_1x.geometry, &state_1x.process_params);
 
     assert!(
         (state_1x.hardware.heater.max_watts - expected_watts_1x).abs() < 0.01,
-        "heater should be volume × 0.75: expected {expected_watts_1x:.1}W, got {:.1}W",
+        "heater should follow the documented geometry-aware formula: expected {expected_watts_1x:.1}W, got {:.1}W",
         state_1x.hardware.heater.max_watts
     );
 
-    // AC: 100L → ~75W, 10L → ~7.5W
+    // AC: 100L stays near the 0.75 W/L midpoint, while the 10L nano can climb
+    // toward the 1.0 W/L cap because its exposed-area heat loss per liter is higher.
     let scale_100l = (100.0_f64 / 57.6).cbrt();
     let state_100l = medium_planted_at_scale(scale_100l);
     assert!(
-        (state_100l.hardware.heater.max_watts - 75.0).abs() < 2.0,
-        "100L heater should be ~75W, got {:.1}W",
+        (state_100l.hardware.heater.max_watts - 75.0).abs() < 5.0,
+        "100L heater should stay near ~75W, got {:.1}W",
         state_100l.hardware.heater.max_watts
     );
 
     let state_nano = nano_at_scale(1.0);
     assert!(
-        (state_nano.hardware.heater.max_watts - 8.1).abs() < 1.0,
-        "10.8L heater should be ~8.1W, got {:.1}W",
+        state_nano.hardware.heater.max_watts >= 8.0 && state_nano.hardware.heater.max_watts <= 10.8,
+        "10.8L heater should remain in the conservative 0.75-1.0 W/L band, got {:.1}W",
         state_nano.hardware.heater.max_watts
     );
 
     Ok(())
+}
+
+#[test]
+fn heater_watts_increase_for_high_exposure_same_volume_geometry() {
+    let process_params = ProcessParams::default();
+    let tall_geometry = TankGeometry {
+        length_cm: 20.0,
+        width_cm: 20.0,
+        height_cm: 110.0,
+        fill_height_cm: 100.0,
+        glass_thickness_mm: 5.0,
+        open_top: true,
+        lid_exchange_factor: 0.25,
+        hardscape_area_cm2: 0.0,
+    };
+    let shallow_geometry = TankGeometry {
+        length_cm: 100.0,
+        width_cm: 40.0,
+        height_cm: 15.0,
+        fill_height_cm: 10.0,
+        glass_thickness_mm: 5.0,
+        open_top: true,
+        lid_exchange_factor: 0.25,
+        hardscape_area_cm2: 0.0,
+    };
+
+    assert!(
+        (tall_geometry.gross_water_volume_l() - shallow_geometry.gross_water_volume_l()).abs()
+            < 0.01,
+        "test geometries should have the same volume"
+    );
+
+    let tall_watts = recommended_heater_max_watts(&tall_geometry, &process_params);
+    let shallow_watts = recommended_heater_max_watts(&shallow_geometry, &process_params);
+
+    assert!(
+        shallow_watts > tall_watts,
+        "higher exposed-area geometry should need more heater headroom: tall={tall_watts:.1}W, shallow={shallow_watts:.1}W"
+    );
+    assert!(
+        shallow_watts <= shallow_geometry.gross_water_volume_l() * HEATER_MAX_WATTS_PER_LITER,
+        "heater should remain capped by the 1.0 W/L upper guideline"
+    );
+    assert!(
+        shallow_watts > shallow_geometry.gross_water_volume_l() * 0.75,
+        "high-exposure geometry should rise above the plain 0.75 W/L midpoint"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -290,7 +340,9 @@ fn explicit_overrides_preserved_over_auto_scaling() -> Result<(), Box<dyn std::e
 
 #[test]
 fn auto_stock_shrimp_scales_with_volume() -> Result<(), Box<dyn std::error::Error>> {
-    // auto_stock_shrimp = true, no explicit count → auto-stock at 0.2 adults/L
+    // auto_stock_shrimp = true, no explicit count → auto-stock in the
+    // conservative 0.15-0.25 adults/L band using actual filled water volume
+    // after substrate displacement.
     let state = seeded_state_with_full_overrides(
         SimSeed(300),
         "medium_planted",
@@ -306,12 +358,18 @@ fn auto_stock_shrimp_scales_with_volume() -> Result<(), Box<dyn std::error::Erro
         },
     )?;
 
-    let volume_l = state.geometry.gross_water_volume_l();
-    let expected_count = (volume_l * AUTO_STOCK_ADULTS_PER_LITER).round() as u32;
+    let volume_l = state.water_volume_l();
+    let expected_density = recommended_auto_stock_adults_per_liter(volume_l);
+    let expected_count = (volume_l * expected_density).round() as u32;
 
     assert_eq!(
         state.animal.adult.count, expected_count,
-        "auto-stocked count should be volume_l × 0.2 rounded: expected {expected_count} for {volume_l:.1}L"
+        "auto-stocked count should use the documented density ramp: expected {expected_count} for {volume_l:.1}L"
+    );
+    assert!(
+        expected_density >= AUTO_STOCK_MIN_ADULTS_PER_LITER
+            && expected_density <= AUTO_STOCK_MAX_ADULTS_PER_LITER,
+        "auto-stock density should stay in the conservative range, got {expected_density:.3}"
     );
 
     // With 2× geometry (8× volume), should get 8× as many shrimp
@@ -329,8 +387,9 @@ fn auto_stock_shrimp_scales_with_volume() -> Result<(), Box<dyn std::error::Erro
         },
     )?;
 
-    let volume_2x = state_2x.geometry.gross_water_volume_l();
-    let expected_2x = (volume_2x * AUTO_STOCK_ADULTS_PER_LITER).round() as u32;
+    let volume_2x = state_2x.water_volume_l();
+    let expected_2x =
+        (volume_2x * recommended_auto_stock_adults_per_liter(volume_2x)).round() as u32;
 
     assert_eq!(
         state_2x.animal.adult.count, expected_2x,
@@ -341,6 +400,39 @@ fn auto_stock_shrimp_scales_with_volume() -> Result<(), Box<dyn std::error::Erro
         "2× geometry should have >4× shrimp (8× volume): {} vs {}",
         state_2x.animal.adult.count,
         state.animal.adult.count
+    );
+
+    let scale_100l = (100.0_f64 / 57.6).cbrt();
+    let state_100l = seeded_state_with_full_overrides(
+        SimSeed(303),
+        "medium_planted",
+        StartupOverrides {
+            geometry: ScenarioGeometryOverrides {
+                size_scale: scale_100l,
+                fill_ratio: 1.0,
+            },
+            auto_stock_shrimp: true,
+            ..StartupOverrides::default()
+        },
+    )?;
+    assert!(
+        (15..=25).contains(&state_100l.animal.adult.count),
+        "100L-style setup should auto-stock in the conservative 15-25 adult range, got {}",
+        state_100l.animal.adult.count
+    );
+
+    let state_10l = seeded_state_with_full_overrides(
+        SimSeed(304),
+        "nano_cycle",
+        StartupOverrides {
+            auto_stock_shrimp: true,
+            ..StartupOverrides::default()
+        },
+    )?;
+    assert!(
+        (1..=3).contains(&state_10l.animal.adult.count),
+        "10L nano should auto-stock in the conservative 1-3 adult range, got {}",
+        state_10l.animal.adult.count
     );
 
     Ok(())
@@ -478,7 +570,7 @@ fn combined_100l_scaling_produces_expected_hardware_and_biomass(
 
     // Heater ≈ 75W
     assert!(
-        (state.hardware.heater.max_watts - 75.0).abs() < 2.0,
+        (state.hardware.heater.max_watts - 75.0).abs() < 5.0,
         "heater should be ~75W, got {:.1}W",
         state.hardware.heater.max_watts
     );
@@ -642,6 +734,77 @@ fn aeration_effect_scales_via_habitat_registry() -> Result<(), Box<dyn std::erro
     assert!(
         area_ratio > 3.0 && area_ratio < 5.0,
         "substrate colonizable area should scale ~4× with 2× geometry: ratio={area_ratio:.2}"
+    );
+
+    Ok(())
+}
+
+fn thermal_probe_state(geometry: TankGeometry, ambient_temp_c: f64) -> TankState {
+    let mut state = TankState::new(SimSeed(401));
+    let process_params = ProcessParams::default();
+    state.geometry = geometry;
+    state.water =
+        tank_core::WaterState::default_for_volume_l(state.geometry.gross_water_volume_l());
+    state.water.temperature_c = 24.0;
+    state.environment.ambient_temp_c = ambient_temp_c;
+    state.process_params = process_params.clone();
+    state.hardware.heater.enabled = false;
+    state.hardware.heater.max_watts =
+        recommended_heater_max_watts(&state.geometry, &process_params);
+    state.refresh_habitat_registry();
+    state
+}
+
+#[test]
+fn exposed_geometry_cools_faster_in_cool_ambient_conditions(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let tall_geometry = TankGeometry {
+        length_cm: 20.0,
+        width_cm: 20.0,
+        height_cm: 110.0,
+        fill_height_cm: 100.0,
+        glass_thickness_mm: 5.0,
+        open_top: true,
+        lid_exchange_factor: 0.25,
+        hardscape_area_cm2: 0.0,
+    };
+    let shallow_geometry = TankGeometry {
+        length_cm: 100.0,
+        width_cm: 40.0,
+        height_cm: 15.0,
+        fill_height_cm: 10.0,
+        glass_thickness_mm: 5.0,
+        open_top: true,
+        lid_exchange_factor: 0.25,
+        hardscape_area_cm2: 0.0,
+    };
+
+    let mut tall_engine = Engine::from_parts(thermal_probe_state(tall_geometry, 18.0), vec![]);
+    let mut shallow_engine =
+        Engine::from_parts(thermal_probe_state(shallow_geometry, 18.0), vec![]);
+
+    tall_engine.step_hours(6)?;
+    shallow_engine.step_hours(6)?;
+
+    let tall_temp = tall_engine.snapshot().water_temp_c;
+    let shallow_temp = shallow_engine.snapshot().water_temp_c;
+
+    assert!(
+        tall_temp > shallow_temp,
+        "same-volume shallow geometry should cool faster in a cool room: tall={tall_temp:.2}C, shallow={shallow_temp:.2}C"
+    );
+
+    let tall_watts = recommended_heater_max_watts(
+        &tall_engine.full_state().geometry,
+        &tall_engine.full_state().process_params,
+    );
+    let shallow_watts = recommended_heater_max_watts(
+        &shallow_engine.full_state().geometry,
+        &shallow_engine.full_state().process_params,
+    );
+    assert!(
+        shallow_watts > tall_watts,
+        "heater sizing should track the faster-cooling exposed geometry: tall={tall_watts:.1}W, shallow={shallow_watts:.1}W"
     );
 
     Ok(())

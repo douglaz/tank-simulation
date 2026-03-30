@@ -134,32 +134,32 @@ fn initial_plant_biomass_matches_scenario_footprint_density() {
 }
 
 #[test]
-fn default_filter_media_area_scales_with_scenario_footprint() {
+fn default_filter_media_area_scales_with_scenario_volume() {
     let nano = tank_scenarios::seeded_state(SimSeed(48), "nano_cycle")
         .expect("nano_cycle should materialize");
     let medium = tank_scenarios::seeded_state(SimSeed(49), "medium_planted")
         .expect("medium_planted should materialize");
 
-    let reference_footprint = tank_core::TankGeometry::default().footprint_area_cm2();
+    let reference_volume_l = tank_core::TankGeometry::default().gross_water_volume_l();
     let reference_media_area = tank_core::FilterHardware::default().media_area_cm2;
     let expected_nano =
-        reference_media_area * nano.geometry.footprint_area_cm2() / reference_footprint;
+        reference_media_area * nano.geometry.gross_water_volume_l() / reference_volume_l;
     let expected_medium =
-        reference_media_area * medium.geometry.footprint_area_cm2() / reference_footprint;
+        reference_media_area * medium.geometry.gross_water_volume_l() / reference_volume_l;
 
     assert!(
         (nano.hardware.filter.media_area_cm2 - expected_nano).abs() < 1e-9,
-        "nano_cycle filter media should scale with footprint: expected {expected_nano}, got {}",
+        "nano_cycle filter media should scale with volume: expected {expected_nano}, got {}",
         nano.hardware.filter.media_area_cm2
     );
     assert!(
         (medium.hardware.filter.media_area_cm2 - expected_medium).abs() < 1e-9,
-        "medium_planted filter media should scale with footprint: expected {expected_medium}, got {}",
+        "medium_planted filter media should scale with volume: expected {expected_medium}, got {}",
         medium.hardware.filter.media_area_cm2
     );
     assert!(
         medium.hardware.filter.media_area_cm2 > nano.hardware.filter.media_area_cm2,
-        "larger footprint should materialize more default biomedia"
+        "larger volume should materialize more default biomedia"
     );
 }
 

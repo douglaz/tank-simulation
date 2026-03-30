@@ -38,6 +38,7 @@ fn rosette_state(seed: SimSeed, substrate_kind: SubstrateKind) -> TankState {
             colonizable_area_cm2: 600.0,
             low_oxygen_tendency_index: 0.4,
             grazing_surface_index: 0.5,
+            ..SubstrateLayerState::default()
         },
         _ => SubstrateLayerState {
             kind: SubstrateKind::InertSand,
@@ -50,6 +51,7 @@ fn rosette_state(seed: SimSeed, substrate_kind: SubstrateKind) -> TankState {
             colonizable_area_cm2: 450.0,
             low_oxygen_tendency_index: 0.2,
             grazing_surface_index: 0.3,
+            ..SubstrateLayerState::default()
         },
     }];
     state

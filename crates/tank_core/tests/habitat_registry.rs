@@ -167,15 +167,19 @@ fn plant_surfaces_zero_without_plants() -> Result<(), Box<dyn std::error::Error>
 }
 
 #[test]
-fn substrate_surface_area_equals_footprint() -> Result<(), Box<dyn std::error::Error>> {
+fn substrate_surface_area_includes_oxic_interstitial() -> Result<(), Box<dyn std::error::Error>> {
     let mut state = default_state();
     state.substrate_layers = vec![SubstrateLayerState::default()];
-    let expected = state.geometry.footprint_area_cm2();
+    let footprint = state.geometry.footprint_area_cm2();
+    let layer = &state.substrate_layers[0];
+    // Default layer is fully oxic (o2_penetration_depth_cm == depth_cm),
+    // so SubstrateSurface = footprint + all interstitial area.
+    let expected = footprint + layer.oxic_colonizable_area_cm2(footprint);
     let registry = compute_habitat_registry(&state);
     let entry = find(&registry, HabitatKind::SubstrateSurface);
     assert!(
         (entry.colonizable_area_cm2 - expected).abs() < 0.01,
-        "SubstrateSurface should equal footprint: expected {expected}, got {}",
+        "SubstrateSurface should equal footprint + oxic interstitial: expected {expected}, got {}",
         entry.colonizable_area_cm2
     );
     Ok(())
@@ -226,22 +230,28 @@ fn substrate_surface_zero_without_substrate() -> Result<(), Box<dyn std::error::
 #[test]
 fn substrate_deep_area_scales_with_depth_and_kind() -> Result<(), Box<dyn std::error::Error>> {
     let mut state = bare_state();
+    // Set very shallow O2 penetration so nearly all substrate is suboxic
+    // (SubstrateDeep zone).
+    let pen = 1e-10;
     state.substrate_layers = vec![
         SubstrateLayerState {
             depth_cm: 2.0,
             colonizable_area_cm2: 1.0,
+            o2_penetration_depth_cm: pen,
             ..SubstrateLayerState::default()
         },
         SubstrateLayerState {
             kind: SubstrateKind::CoarsePorous,
             depth_cm: 1.5,
             colonizable_area_cm2: 9_999.0,
+            o2_penetration_depth_cm: pen,
             ..SubstrateLayerState::default()
         },
         SubstrateLayerState {
             kind: SubstrateKind::ActivePlanted,
             depth_cm: 0.0,
             colonizable_area_cm2: 9_999.0,
+            o2_penetration_depth_cm: pen,
             ..SubstrateLayerState::default()
         },
     ];
@@ -260,10 +270,13 @@ fn substrate_deep_area_scales_with_depth_and_kind() -> Result<(), Box<dyn std::e
 #[test]
 fn substrate_deep_area_uses_serialized_layer_factor() -> Result<(), Box<dyn std::error::Error>> {
     let mut state = bare_state();
+    // Set shallow O2 penetration so the suboxic zone covers nearly the
+    // full depth, making SubstrateDeep area ≈ full interstitial area.
     state.substrate_layers = vec![SubstrateLayerState {
         kind: SubstrateKind::InertSand,
         depth_cm: 2.0,
         colonizable_area_factor: 0.73,
+        o2_penetration_depth_cm: 1e-10,
         ..SubstrateLayerState::default()
     }];
     state.refresh_habitat_registry();

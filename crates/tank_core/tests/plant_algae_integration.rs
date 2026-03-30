@@ -82,6 +82,7 @@ fn guild_differentiated_uptake_prefers_expected_pools() -> Result<(), tank_core:
         colonizable_area_cm2: 500.0,
         low_oxygen_tendency_index: 0.3,
         grazing_surface_index: 0.4,
+        ..SubstrateLayerState::default()
     }];
 
     let mut rosette_state = fast_stem_state.clone();
@@ -340,6 +341,7 @@ fn plant_substrate_limitation_drops_when_areal_store_is_depleted() {
             colonizable_area_cm2: state.geometry.footprint_area_cm2(),
             low_oxygen_tendency_index: 0.4,
             grazing_surface_index: 0.5,
+            ..SubstrateLayerState::default()
         }];
         state.water.ammonia_total_mg_n_total = 0.08 * volume_l;
         state.water.nitrate_mg_n_total = 0.24 * volume_l;
@@ -393,6 +395,7 @@ fn algae_water_column_limitation_is_volume_invariant_at_fixed_concentration() {
             colonizable_area_cm2: 500.0,
             low_oxygen_tendency_index: 0.2,
             grazing_surface_index: 0.4,
+            ..SubstrateLayerState::default()
         }];
         let volume_l = state.water_volume_l();
         state.algae.suspended_biomass_g = 0.5;

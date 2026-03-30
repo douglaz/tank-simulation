@@ -31,6 +31,10 @@ fn growth_state(seed: SimSeed) -> TankState {
     // Ample DOC for decomposer growth.
     state.water.dissolved_organic_carbon_mg_c_total = 50.0;
     state.water.dissolved_organic_nitrogen_mg_n_total = 5.0;
+    // Simulate partial O2 penetration (biologically active substrate).
+    for layer in &mut state.substrate_layers {
+        layer.o2_penetration_depth_cm = (layer.depth_cm * 0.4).max(0.1);
+    }
     state.refresh_habitat_registry();
     state
 }
@@ -388,14 +392,18 @@ fn test_save_load_habitat_pools() -> Result<(), tank_core::SimError> {
     ]);
     state.microbe.sync_decomposer_total();
 
-    let engine = Engine::from_parts(state.clone(), vec![]);
+    let engine = Engine::from_parts(state, vec![]);
+    // Compare round-trip against the engine's materialized state (after
+    // from_parts reconciliation), not the raw input state, because
+    // from_parts recomputes substrate zone boundaries and habitat areas.
+    let engine_state = engine.full_state();
     let save = SaveFile::from_engine(&engine);
     let json = save.to_json_pretty()?;
     let loaded = SaveFile::from_json(&json)?;
 
     // Per-habitat values survive round-trip.
     for kind in HabitatKind::ALL {
-        let original = state
+        let original = engine_state
             .algae
             .periphyton_by_habitat
             .get(&kind)
@@ -414,7 +422,7 @@ fn test_save_load_habitat_pools() -> Result<(), tank_core::SimError> {
         );
     }
     for kind in HabitatKind::ALL {
-        let original = state
+        let original = engine_state
             .microbe
             .decomposer_by_habitat
             .get(&kind)
@@ -769,15 +777,23 @@ fn test_filter_cleaning_focuses_decomposer_setback_on_filter_media(
     ]);
     state.microbe.sync_decomposer_total();
 
-    let don_before = state.water.dissolved_organic_nitrogen_mg_n_total;
-    let doc_before = state.water.dissolved_organic_carbon_mg_c_total;
-    let total_before = state.microbe.decomposer_biomass_g;
-    let filter_before = state.microbe.decomposer_by_habitat[&HabitatKind::FilterMedia];
-    let surface_before = state.microbe.decomposer_by_habitat[&HabitatKind::SubstrateSurface];
-    let glass_before = state.microbe.decomposer_by_habitat[&HabitatKind::GlassHardscape];
-    let deep_before = state.microbe.decomposer_by_habitat[&HabitatKind::SubstrateDeep];
-
     let mut engine = Engine::from_parts(state, vec![]);
+    // Capture "before" values from the engine state (after from_parts
+    // reconciliation), because from_parts recomputes substrate zones and
+    // habitat areas, which may redistribute biomass.
+    let before = engine.full_state().clone();
+    let don_before = before.water.dissolved_organic_nitrogen_mg_n_total;
+    let doc_before = before.water.dissolved_organic_carbon_mg_c_total;
+    let total_before = before.microbe.decomposer_biomass_g;
+    let filter_before = before.microbe.decomposer_by_habitat[&HabitatKind::FilterMedia];
+    let surface_before = before.microbe.decomposer_by_habitat[&HabitatKind::SubstrateSurface];
+    let glass_before = before.microbe.decomposer_by_habitat[&HabitatKind::GlassHardscape];
+    let deep_before = *before
+        .microbe
+        .decomposer_by_habitat
+        .get(&HabitatKind::SubstrateDeep)
+        .unwrap_or(&0.0);
+
     engine.apply_action(PlayerAction::CleanFilter { intensity: 0.8 })?;
     engine.step_hours(1)?;
 
@@ -800,9 +816,14 @@ fn test_filter_cleaning_focuses_decomposer_setback_on_filter_media(
         filter_loss > surface_loss && surface_loss > glass_loss,
         "filter cleaning should hit filter media hardest, then exposed substrate, then glass"
     );
+    let deep_after = after
+        .microbe
+        .decomposer_by_habitat
+        .get(&HabitatKind::SubstrateDeep)
+        .copied()
+        .unwrap_or(0.0);
     assert!(
-        (after.microbe.decomposer_by_habitat[&HabitatKind::SubstrateDeep] - deep_before).abs()
-            < 1e-12,
+        (deep_after - deep_before).abs() < 1e-12,
         "deep substrate should be unaffected by filter cleaning"
     );
     assert!(

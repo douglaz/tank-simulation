@@ -43,6 +43,7 @@ fn base_state(seed: SimSeed, geometry: TankGeometry) -> TankState {
         colonizable_area_cm2: 500.0,
         low_oxygen_tendency_index: 0.2,
         grazing_surface_index: 0.4,
+        ..SubstrateLayerState::default()
     }];
     state.water = WaterState::default_for_volume_l(state.water_volume_l());
     state.environment.ambient_temp_c = 24.0;

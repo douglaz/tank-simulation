@@ -69,6 +69,7 @@ fn audit_tank_state() -> TankState {
         grazing_surface_index: 0.6,
         cation_exchange_capacity_index: 0.5,
         low_oxygen_tendency_index: 0.2,
+        ..SubstrateLayerState::default()
     }];
 
     // Active biology

@@ -123,6 +123,10 @@ impl Engine {
     }
 
     pub fn from_parts(mut state: TankState, queued_actions: Vec<PlayerAction>) -> Self {
+        // Recompute substrate zone boundaries so the habitat registry sees
+        // up-to-date oxic/suboxic splits (important for legacy saves that
+        // lack the o2_penetration_depth_cm field).
+        systems::substrate::step_substrate_zones(&mut state);
         state.refresh_habitat_registry();
         Self {
             state,
@@ -367,6 +371,16 @@ impl Engine {
                     ));
                 }
                 ((), delta)
+            },
+        );
+
+        // Step 11b: recompute substrate O₂ penetration depths from water-column
+        // DO and biological demand (Bouldin steady-state model).
+        self.maybe_record_stage(
+            &mut ctx,
+            "system:substrate_zones",
+            |engine, _stage_trace| {
+                systems::substrate::step_substrate_zones(&mut engine.state);
             },
         );
 

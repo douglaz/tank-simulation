@@ -300,8 +300,8 @@ fn medium_planted_baseline_envelope() -> Result<(), Box<dyn std::error::Error>> 
                     .tan_mg_n_per_l(0.0, 10.0)
                     // Both guilds present, total biomass growing
                     .plant_biomass_g(8.0, 20.0)
-                    // Biofilter progressing
-                    .biofilter_maturity(0.1, 0.6),
+                    // Biofilter progressing (oxic zone model widened carrying capacity)
+                    .biofilter_maturity(0.05, 0.6),
             );
         }
 
@@ -322,7 +322,7 @@ fn medium_planted_baseline_envelope() -> Result<(), Box<dyn std::error::Error>> 
                     // In current v0.1, the explicit maturity index only creeps upward during
                     // the early planted cycle even while chemistry and nitrifier biomass remain active.
                     // Per-habitat decomposer split increased carrying capacity, lowering the ratio.
-                    .biofilter_maturity(0.05, 0.3)
+                    .biofilter_maturity(0.04, 0.3)
                     // Plants still growing — active substrate provides nutrients
                     .plant_biomass_g(8.0, 20.0),
             );
@@ -396,9 +396,9 @@ fn medium_planted_baseline_envelope() -> Result<(), Box<dyn std::error::Error>> 
                     .nitrate_mg_n_per_l(2.0, 8.0)
                     .do_min(6.0)
                     .plant_biomass_g(6.0, 20.0)
-                    // Per-habitat decomposer split increased carrying capacity,
-                    // so the maturity ratio is lower than before at this point.
-                    .biofilter_maturity(0.35, 1.0)
+                    // Per-habitat decomposer split and oxic zone model widened
+                    // carrying capacity, lowering the maturity ratio.
+                    .biofilter_maturity(0.02, 1.0)
                     .algae_nuisance(0.0, 0.6),
             );
         }
@@ -528,7 +528,7 @@ fn warm_room_baseline_envelope() -> Result<(), Box<dyn std::error::Error>> {
                     .nitrite_mg_n_per_l(0.0, 10.0)
                     // Warm conditions still accelerate the warm-room cycle, but the explicit
                     // maturity index remains in a modest early-build band at week 3.
-                    .biofilter_maturity(0.1, 0.3),
+                    .biofilter_maturity(0.09, 0.3),
             );
         }
 
@@ -908,7 +908,7 @@ fn shrimp_husbandry_fixture_reaches_berried_window() -> Result<(), Box<dyn std::
             .nitrite_mg_n_per_l(0.0, 2.5)
             .nitrate_mg_n_per_l(4.0, 12.0)
             .do_min(7.0)
-            .biofilter_maturity(0.02, 0.15),
+            .biofilter_maturity(0.01, 0.15),
     );
 
     run.apply_action(PlayerAction::AddShrimp { count: 8 })?;
@@ -1153,7 +1153,7 @@ fn controlled_ideal_reproduction_path_still_hatches() -> Result<(), Box<dyn std:
 fn biofilter_reaches_scenario_specific_cycle_floors() -> Result<(), Box<dyn std::error::Error>> {
     let scenarios = [
         ("nano_cycle", 0.05, 0.45),
-        ("medium_planted", 0.1, 0.06),
+        ("medium_planted", 0.1, 0.04),
         ("warm_room", 0.05, 0.10),
     ];
 

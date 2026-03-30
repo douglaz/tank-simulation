@@ -7,5 +7,6 @@ pub mod microfauna;
 pub mod nitrogen_cycle;
 pub mod plant_growth;
 pub mod shrimp;
+pub mod substrate;
 pub mod temperature;
 pub mod water_change;
