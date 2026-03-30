@@ -120,12 +120,12 @@ fn equilibrium_tank(profile: &SourceWaterProfile, volume_l: f64, seed: SimSeed) 
 
     // Suppress all biology.
     state.plant_guilds.clear();
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     state.algae.suspended_biomass_g = 0.0;
     state.microbe.ammonia_oxidizer_biomass_g = 0.0;
     state.microbe.nitrite_oxidizer_biomass_g = 0.0;
     state.microbe.comammox_biomass_g = 0.0;
-    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.set_decomposer_total(0.0);
     state.animal.adult.count = 0;
     state.animal.sub_adult.count = 0;
     state.animal.juvenile.count = 0;
@@ -169,7 +169,7 @@ fn nitrifying_tank(
     state.microbe.ammonia_oxidizer_biomass_g = 2.5;
     state.microbe.nitrite_oxidizer_biomass_g = 1.5;
     state.microbe.comammox_biomass_g = 0.5;
-    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.set_decomposer_total(0.0);
 
     // Mature biofilter.
     state.filter_state.biofilter_maturity_index = 0.8;
@@ -212,7 +212,7 @@ fn nitrifying_tank(
         plant.biomass_g = 0.0;
     }
     state.algae.suspended_biomass_g = 0.0;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     state.animal.adult.count = 0;
     state.animal.sub_adult.count = 0;
     state.animal.juvenile.count = 0;
@@ -466,7 +466,7 @@ fn run_probe_day_night_ph_drift() -> Result<ProbeResult, tank_core::SimError> {
     // Well-planted tank for clear day/night signal.
     state.plant_guilds[0].biomass_g = 15.0;
     state.plant_guilds[1].biomass_g = 10.0;
-    state.algae.periphyton_biomass_g = 2.0;
+    state.algae.set_periphyton_total(2.0);
     state.algae.suspended_biomass_g = 0.5;
 
     // Moderate DIC and alkalinity for stable pH range.

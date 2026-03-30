@@ -10,7 +10,7 @@ fn oxygen_test_state(seed: SimSeed) -> TankState {
     state.hardware.aeration.enabled = false;
     state.hardware.aeration.intensity = 0.0;
     state.animal.adult.count = 30;
-    state.algae.periphyton_biomass_g = 3.0;
+    state.algae.set_periphyton_total(3.0);
     state.plant_guilds[0].biomass_g = 18.0;
     state.plant_guilds[1].biomass_g = 10.0;
     state.process_params = ProcessParams {
@@ -65,7 +65,7 @@ fn aeration_recovers_do_faster_than_passive_exchange() -> Result<(), tank_core::
     base_state
         .process_params
         .plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
-    base_state.algae.periphyton_biomass_g = 0.0;
+    base_state.algae.set_periphyton_total(0.0);
     for plant in &mut base_state.plant_guilds {
         plant.biomass_g = 0.0;
     }
@@ -105,7 +105,7 @@ fn reaeration_converges_toward_saturation() -> Result<(), tank_core::SimError> {
         .process_params
         .plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
     state.process_params.reaeration_kla_base = 0.5;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     for plant in &mut state.plant_guilds {
         plant.biomass_g = 0.0;
     }
@@ -162,7 +162,7 @@ fn tracing_shows_do_system_positive_deltas_during_reaeration() -> Result<(), tan
         .process_params
         .plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
     state.process_params.reaeration_kla_base = 0.5;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     for plant in &mut state.plant_guilds {
         plant.biomass_g = 0.0;
     }

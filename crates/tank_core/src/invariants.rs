@@ -136,6 +136,12 @@ fn validate_invariants_inner(state: &TankState) -> Result<(), SimError> {
         "algae.periphyton_biomass_g",
         state.algae.periphyton_biomass_g,
     )?;
+    for biomass in state.algae.periphyton_by_habitat.values() {
+        check_non_negative("algae.periphyton_by_habitat[*]", *biomass)?;
+    }
+    for biomass in state.microbe.decomposer_by_habitat.values() {
+        check_non_negative("microbe.decomposer_by_habitat[*]", *biomass)?;
+    }
     for layer in &state.substrate_layers {
         check_non_negative("substrate.depth_cm", layer.depth_cm)?;
         check_non_negative(

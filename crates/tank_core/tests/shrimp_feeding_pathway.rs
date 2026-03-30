@@ -41,7 +41,7 @@ fn feeding_test_state() -> TankState {
     state.water.bicarbonate_mg_total = 300.0 * vol;
 
     // Provide ample periphyton and detritus as food
-    state.algae.periphyton_biomass_g = 5.0;
+    state.algae.set_periphyton_total(5.0);
     state.detritus.fine_detritus_g_total = 2.0;
 
     // Stock shrimp
@@ -51,7 +51,7 @@ fn feeding_test_state() -> TankState {
     // Disable all other biological processes to isolate feeding
     state.plant_guilds.clear();
     state.algae.suspended_biomass_g = 0.0;
-    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.set_decomposer_total(0.0);
     state.microbe.ammonia_oxidizer_biomass_g = 0.0;
     state.microbe.nitrite_oxidizer_biomass_g = 0.0;
     state.microbe.comammox_biomass_g = 0.0;
@@ -70,6 +70,15 @@ fn feeding_test_state() -> TankState {
     state
         .process_params
         .background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
+    // Zero out background DIC respiration/photosynthesis so the carbon
+    // budget is truly closed (these rates create/destroy DIC without
+    // corresponding biomass changes in the chemistry system).
+    state
+        .process_params
+        .respiration_dic_rate_mg_c_per_g_per_hour = 0.0;
+    state
+        .process_params
+        .photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.0;
     // Zero out detritus dissolution so feeding is the only source of change
     state.process_params.fine_detritus_dissolution_rate_per_hour = 0.0;
     state.process_params.feed_leach_rate_per_hour = 0.0;

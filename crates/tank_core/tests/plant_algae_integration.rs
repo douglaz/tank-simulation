@@ -140,7 +140,7 @@ fn algae_bloom_conditions_emit_events_and_overfeeding_raises_nuisance(
     let mut bloom_state = base_growth_state(SimSeed(8102));
     bloom_state.plant_guilds.clear();
     bloom_state.algae.suspended_biomass_g = 2.5;
-    bloom_state.algae.periphyton_biomass_g = 0.5;
+    bloom_state.algae.set_periphyton_total(0.5);
     bloom_state.water.ammonia_total_mg_n_total = 12.0;
     bloom_state.water.nitrate_mg_n_total = 50.0;
     bloom_state.water.phosphate_mg_p_total = 8.0;
@@ -164,7 +164,7 @@ fn algae_bloom_conditions_emit_events_and_overfeeding_raises_nuisance(
     control.environment.ambient_temp_c = 28.0;
     control.water.temperature_c = 28.0;
     control.algae.suspended_biomass_g = 0.05;
-    control.algae.periphyton_biomass_g = 0.2;
+    control.algae.set_periphyton_total(0.2);
     control.water.ammonia_total_mg_n_total = 0.2;
     control.water.nitrate_mg_n_total = 1.0;
     control.water.phosphate_mg_p_total = 0.4;
@@ -396,7 +396,7 @@ fn algae_water_column_limitation_is_volume_invariant_at_fixed_concentration() {
         }];
         let volume_l = state.water_volume_l();
         state.algae.suspended_biomass_g = 0.5;
-        state.algae.periphyton_biomass_g = 0.4;
+        state.algae.set_periphyton_total(0.4);
         state.water.ammonia_total_mg_n_total = 0.5 * volume_l;
         state.water.nitrate_mg_n_total = 2.0 * volume_l;
         state.water.phosphate_mg_p_total = 0.3 * volume_l;
@@ -441,7 +441,7 @@ fn algae_size_independence_different_geometries() {
         state.microfauna.grazing_pressure_index = 0.0;
         let volume_l = state.water_volume_l();
         state.algae.suspended_biomass_g = 0.5;
-        state.algae.periphyton_biomass_g = 0.0;
+        state.algae.set_periphyton_total(0.0);
         state.water.ammonia_total_mg_n_total = 0.4 * volume_l;
         state.water.nitrate_mg_n_total = 1.5 * volume_l;
         state.water.phosphate_mg_p_total = 0.2 * volume_l;
@@ -502,7 +502,7 @@ fn algae_growth_matches_hand_computed_limitation_product() {
 
     let initial_biomass = 1.0;
     state.algae.suspended_biomass_g = initial_biomass;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
 
     state.hardware.light.enabled = true;
     state.hardware.light.intensity_index = 0.8;
@@ -559,7 +559,7 @@ fn algae_temperature_one_sigma_below_reduces_growth() {
         state.water.phosphate_mg_p_total = 0.5 * volume_l;
         state.water.dissolved_inorganic_carbon_mg_c_total = 25.0 * volume_l;
         state.algae.suspended_biomass_g = 1.0;
-        state.algae.periphyton_biomass_g = 0.0;
+        state.algae.set_periphyton_total(0.0);
         state.water.temperature_c = temperature_c;
         state.process_params.algae_temp_optimum_c = 27.0;
         state.process_params.algae_temp_sigma_c = 8.0;
@@ -610,7 +610,7 @@ fn algae_light_off_causes_biomass_decline() {
     state.water.phosphate_mg_p_total = 0.5 * volume_l;
     state.water.dissolved_inorganic_carbon_mg_c_total = 25.0 * volume_l;
     state.algae.suspended_biomass_g = 1.0;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     state.hardware.light.enabled = false;
     state.process_params.algae_respiration_fraction_per_day = 0.03;
 
@@ -642,7 +642,7 @@ fn algae_phosphorus_limits_growth_below_nitrogen_potential() {
         state.water.phosphate_mg_p_total = po4_conc * volume_l;
         state.water.dissolved_inorganic_carbon_mg_c_total = 25.0 * volume_l;
         state.algae.suspended_biomass_g = 1.0;
-        state.algae.periphyton_biomass_g = 0.0;
+        state.algae.set_periphyton_total(0.0);
         state.water.temperature_c = 27.0;
         state.process_params.algae_temp_optimum_c = 27.0;
         state

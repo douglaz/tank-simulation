@@ -424,6 +424,18 @@ impl Engine {
             systems::microfauna::step_daily_microfauna(&mut engine.state);
         });
 
+        // Microfauna consumer routing modifies DIC (respiration) without
+        // re-solving carbonate equilibrium. Resolve here so that the
+        // stability tracker and downstream daily systems read current pH.
+        self.maybe_record_stage(
+            ctx,
+            "system:daily_carbonate_resolve",
+            |engine, _stage_trace| {
+                let volume_l = engine.state.water_volume_l();
+                systems::chemistry::resolve_carbonate_state(&mut engine.state.water, volume_l);
+            },
+        );
+
         // Refresh plant-driven habitat surfaces before downstream daily systems
         // read the serialized registry.
         self.maybe_record_stage(ctx, "system:habitat_registry", |engine, _stage_trace| {
@@ -754,13 +766,17 @@ impl Engine {
                     .clamp(0.0, 1.0);
                 self.state.filter_state.biofilter_maturity_index *= 1.0 - (intensity * 0.5);
                 self.state.filter_state.clogging_index *= 1.0 - intensity;
-                // Proportional setback in active nitrifier and decomposer biomass
+                // Proportional setback in active nitrifier and decomposer biomass.
+                // Decomposer setback is distributed across per-habitat pools.
                 let setback = intensity * 0.5;
                 let removed_decomposer = self.state.microbe.decomposer_biomass_g * setback;
                 let removed_aob = self.state.microbe.ammonia_oxidizer_biomass_g * setback;
                 let removed_nob = self.state.microbe.nitrite_oxidizer_biomass_g * setback;
                 let removed_comammox = self.state.microbe.comammox_biomass_g * setback;
-                self.state.microbe.decomposer_biomass_g -= removed_decomposer;
+                for biomass in self.state.microbe.decomposer_by_habitat.values_mut() {
+                    *biomass = (*biomass * (1.0 - setback)).max(0.0);
+                }
+                self.state.microbe.sync_decomposer_total();
                 self.state.microbe.ammonia_oxidizer_biomass_g -= removed_aob;
                 self.state.microbe.nitrite_oxidizer_biomass_g -= removed_nob;
                 self.state.microbe.comammox_biomass_g -= removed_comammox;

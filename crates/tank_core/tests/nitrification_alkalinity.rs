@@ -62,7 +62,7 @@ fn nitrifying_state(seed: SimSeed, alkalinity_meq_per_l: f64) -> TankState {
         plant.biomass_g = 0.0;
     }
     state.algae.suspended_biomass_g = 0.0;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
 
     // Zero shrimp to eliminate feeding/excretion confounds
     state.animal.adult.count = 0;

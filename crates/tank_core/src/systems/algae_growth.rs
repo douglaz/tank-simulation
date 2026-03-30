@@ -2,7 +2,7 @@ use crate::{
     systems::chemistry::resolve_carbonate_state,
     systems::events,
     types::{
-        algae_carbon_mg, algae_detrital_mass_g, total_colonizable_area_cm2, TankState,
+        algae_carbon_mg, algae_detrital_mass_g, find_habitat, HabitatKind, TankState,
         ALGAE_N_MG_PER_G_BIOMASS,
     },
 };
@@ -170,98 +170,152 @@ pub fn step_daily_algae(state: &mut TankState) {
     // the separate hourly chemistry/DO passes own explicit respiration.
     route_algae_loss_to_fine_detritus(state, suspended_realized_loss_g, n_to_c_ratio);
 
-    // TODO(tanksim-6e5.5.3): replace this legacy aggregate with habitat-based
-    // periphyton capacity so configurable hardscape area contributes here too.
-    let colonizable_area_m2 =
-        total_colonizable_area_cm2(&state.substrate_layers, state.geometry.wall_area_cm2())
-            / 10_000.0;
-    let grazing_surface_factor =
-        0.7 + (0.3 * state.avg_substrate_index(|layer| layer.grazing_surface_index));
-    let periphyton_capacity_g = colonizable_area_m2.max(0.0)
-        * state.process_params.periphyton_capacity_g_per_m2
-        * grazing_surface_factor;
-    let surface_cap_factor = if periphyton_capacity_g <= f64::EPSILON {
-        0.0
-    } else {
-        (1.0 - (state.algae.periphyton_biomass_g / periphyton_capacity_g)).clamp(0.0, 1.0)
-    };
-    let periphyton_seed_g = state.algae.periphyton_biomass_g.max(0.05);
-    let periphyton_gross_growth_g = periphyton_seed_g
-        * state.process_params.periphyton_max_growth_rate_per_day
-        * light_factor
-        * plant_shading
-        * temp_factor
-        * nutrient_factor
-        * surface_cap_factor;
-    let periphyton_respiration_g =
-        state.algae.periphyton_biomass_g * state.process_params.algae_respiration_fraction_per_day;
-    let periphyton_grazing_g = state.algae.periphyton_biomass_g * 0.06 * microfauna_grazing;
-    let (peri_nh3_removed, peri_no3_removed, peri_p_removed) = consume_algae_nutrients(
-        state,
-        periphyton_gross_growth_g * ALGAE_N_MG_PER_G_BIOMASS,
-        periphyton_gross_growth_g * ALGAE_P_MG_PER_G_GROWTH,
-    );
-    let peri_n_removed = peri_nh3_removed + peri_no3_removed;
-    let peri_n_demand = periphyton_gross_growth_g * ALGAE_N_MG_PER_G_BIOMASS;
-    let peri_p_demand = periphyton_gross_growth_g * ALGAE_P_MG_PER_G_GROWTH;
-    let peri_cap_frac = if periphyton_gross_growth_g > f64::EPSILON {
-        let n_frac = if peri_n_demand > f64::EPSILON {
-            peri_n_removed / peri_n_demand
-        } else {
-            1.0
+    // ── Habitat-based periphyton growth ────────────────────────────────────
+    //
+    // Each habitat independently computes periphyton capacity, growth, loss,
+    // and excess shedding. The habitat registry provides colonizable area and
+    // light exposure; nutrients and temperature are shared (well-mixed water).
+    // Shrimp and microfauna grazing still operate on the total pool (habitat-
+    // aware grazing is deferred to a later phase).
+    let capacity_g_per_m2 = state.process_params.periphyton_capacity_g_per_m2;
+    let max_growth = state.process_params.periphyton_max_growth_rate_per_day;
+    let respiration_frac = state.process_params.algae_respiration_fraction_per_day;
+
+    // Aggregate accumulators across all habitats.
+    let mut _total_periphyton_gross_growth_g = 0.0_f64;
+    let mut total_periphyton_loss_g = 0.0_f64;
+    let mut total_periphyton_capacity_g = 0.0_f64;
+
+    // Snapshot current per-habitat biomass (we mutate the map in-place below).
+    let habitat_keys: Vec<HabitatKind> =
+        state.algae.periphyton_by_habitat.keys().copied().collect();
+
+    for kind in &habitat_keys {
+        let habitat = find_habitat(&state.habitat_registry, *kind);
+        let (area_cm2, habitat_light) = match habitat {
+            Some(h) => (h.colonizable_area_cm2, h.light_exposure),
+            None => continue,
         };
-        let p_frac = if peri_p_demand > f64::EPSILON {
-            peri_p_removed / peri_p_demand
+
+        let current_g = state
+            .algae
+            .periphyton_by_habitat
+            .get(kind)
+            .copied()
+            .unwrap_or(0.0);
+        let habitat_area_m2 = area_cm2 / 10_000.0;
+        let habitat_capacity_g = habitat_area_m2.max(0.0) * capacity_g_per_m2;
+        total_periphyton_capacity_g += habitat_capacity_g;
+
+        // Per-habitat light factor: the habitat's structural light exposure
+        // replaces the column-average factor used for suspended algae.
+        let habitat_light_factor = half_saturation(
+            habitat_light
+                * if state.hardware.light.enabled {
+                    state.hardware.light.intensity_index
+                } else {
+                    0.0
+                }
+                * (state.hardware.light.photoperiod_hours / 9.0).clamp(0.0, 1.0),
+            state.process_params.algae_light_half_saturation,
+        );
+
+        let surface_cap_factor = if habitat_capacity_g <= f64::EPSILON {
+            0.0
         } else {
-            1.0
+            (1.0 - (current_g / habitat_capacity_g)).clamp(0.0, 1.0)
         };
-        let c_demand = algae_carbon_mg(periphyton_gross_growth_g, n_to_c_ratio);
-        let c_frac = if c_demand > f64::EPSILON {
-            state.water.dissolved_inorganic_carbon_mg_c_total / c_demand
+
+        let seed_g = current_g.max(0.01 * habitat_area_m2.max(0.001));
+        let gross_growth_g = seed_g
+            * max_growth
+            * habitat_light_factor
+            * plant_shading
+            * temp_factor
+            * nutrient_factor
+            * surface_cap_factor;
+        _total_periphyton_gross_growth_g += gross_growth_g;
+
+        let respiration_g = current_g * respiration_frac;
+        let grazing_g = current_g * 0.06 * microfauna_grazing;
+
+        // Nutrient consumption for this habitat's growth.
+        let (hab_nh3_removed, hab_no3_removed, hab_p_removed) = consume_algae_nutrients(
+            state,
+            gross_growth_g * ALGAE_N_MG_PER_G_BIOMASS,
+            gross_growth_g * ALGAE_P_MG_PER_G_GROWTH,
+        );
+        let hab_n_removed = hab_nh3_removed + hab_no3_removed;
+        let hab_n_demand = gross_growth_g * ALGAE_N_MG_PER_G_BIOMASS;
+        let hab_p_demand = gross_growth_g * ALGAE_P_MG_PER_G_GROWTH;
+        let cap_frac = if gross_growth_g > f64::EPSILON {
+            let n_frac = if hab_n_demand > f64::EPSILON {
+                hab_n_removed / hab_n_demand
+            } else {
+                1.0
+            };
+            let p_frac = if hab_p_demand > f64::EPSILON {
+                hab_p_removed / hab_p_demand
+            } else {
+                1.0
+            };
+            let c_demand = algae_carbon_mg(gross_growth_g, n_to_c_ratio);
+            let c_frac = if c_demand > f64::EPSILON {
+                state.water.dissolved_inorganic_carbon_mg_c_total / c_demand
+            } else {
+                1.0
+            };
+            n_frac.min(p_frac).min(c_frac)
         } else {
-            1.0
+            0.0
         };
-        n_frac.min(p_frac).min(c_frac)
-    } else {
-        0.0
-    };
-    let peri_cap = periphyton_gross_growth_g * peri_cap_frac;
-    let peri_n_used = peri_n_demand * peri_cap_frac;
-    let peri_p_used = peri_p_demand * peri_cap_frac;
-    let peri_n_refund = (peri_n_removed - peri_n_used).max(0.0);
-    let peri_p_refund = (peri_p_removed - peri_p_used).max(0.0);
-    let peri_n_frac = if peri_n_removed > f64::EPSILON {
-        peri_n_refund / peri_n_removed
-    } else {
-        0.0
-    };
-    refund_algae_nutrients(
-        state,
-        peri_nh3_removed * peri_n_frac,
-        peri_no3_removed * peri_n_frac,
-        peri_p_refund,
-    );
-    state.water.dissolved_inorganic_carbon_mg_c_total =
-        (state.water.dissolved_inorganic_carbon_mg_c_total
-            - algae_carbon_mg(peri_cap, n_to_c_ratio))
-        .max(0.0);
-    let periphyton_available_after_growth_g =
-        (state.algae.periphyton_biomass_g + peri_cap).max(0.0);
-    let periphyton_realized_loss_g = (periphyton_respiration_g + periphyton_grazing_g)
-        .max(0.0)
-        .min(periphyton_available_after_growth_g);
-    let periphyton_post_loss_g =
-        (periphyton_available_after_growth_g - periphyton_realized_loss_g).max(0.0);
-    let excess_g = (periphyton_post_loss_g - periphyton_capacity_g.max(0.0)).max(0.0);
-    let periphyton_new_g = (periphyton_post_loss_g - excess_g).max(0.0);
-    state.algae.periphyton_biomass_g = periphyton_new_g;
-    route_algae_loss_to_fine_detritus(state, periphyton_realized_loss_g + excess_g, n_to_c_ratio);
+        let realized_growth_g = gross_growth_g * cap_frac;
+
+        // Refund excess nutrients.
+        let n_used = hab_n_demand * cap_frac;
+        let p_used = hab_p_demand * cap_frac;
+        let n_refund = (hab_n_removed - n_used).max(0.0);
+        let p_refund = (hab_p_removed - p_used).max(0.0);
+        let n_frac = if hab_n_removed > f64::EPSILON {
+            n_refund / hab_n_removed
+        } else {
+            0.0
+        };
+        refund_algae_nutrients(
+            state,
+            hab_nh3_removed * n_frac,
+            hab_no3_removed * n_frac,
+            p_refund,
+        );
+
+        // DIC consumption.
+        state.water.dissolved_inorganic_carbon_mg_c_total =
+            (state.water.dissolved_inorganic_carbon_mg_c_total
+                - algae_carbon_mg(realized_growth_g, n_to_c_ratio))
+            .max(0.0);
+
+        let available_after_growth = (current_g + realized_growth_g).max(0.0);
+        let realized_loss_g = (respiration_g + grazing_g)
+            .max(0.0)
+            .min(available_after_growth);
+        let post_loss_g = (available_after_growth - realized_loss_g).max(0.0);
+        let excess_g = (post_loss_g - habitat_capacity_g.max(0.0)).max(0.0);
+        let new_g = (post_loss_g - excess_g).max(0.0);
+
+        total_periphyton_loss_g += realized_loss_g + excess_g;
+        state.algae.periphyton_by_habitat.insert(*kind, new_g);
+    }
+
+    // Sync total from per-habitat pools.
+    state.algae.sync_periphyton_total();
+    route_algae_loss_to_fine_detritus(state, total_periphyton_loss_g, n_to_c_ratio);
 
     let suspended_pressure = (state.algae.suspended_biomass_g / volume_l)
         / state
             .process_params
             .algae_bloom_threshold_g_per_l
             .max(f64::MIN_POSITIVE);
+    let periphyton_capacity_g = total_periphyton_capacity_g;
     let periphyton_pressure = if periphyton_capacity_g <= f64::EPSILON {
         0.0
     } else {

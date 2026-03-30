@@ -1,6 +1,6 @@
 use crate::types::{
-    algae_carbon_mg, algae_nitrogen_mg, detritus_carbon_mg, detritus_nitrogen_mg, TankState,
-    MG_N_PER_MEQ_AMMONIA,
+    algae_carbon_mg, algae_nitrogen_mg, detritus_carbon_mg, detritus_nitrogen_mg, AlgaeState,
+    TankState, MG_N_PER_MEQ_AMMONIA,
 };
 
 /// Stoichiometric O2:C for organic matter oxidation (32/12 ≈ 2.67).
@@ -55,12 +55,13 @@ pub fn step_daily_microfauna(state: &mut TankState) {
     state.microfauna.grazing_pressure_index =
         (state.microfauna.population_index * resource_availability.sqrt()).clamp(0.0, 1.0);
 
-    // Microfauna consume some periphyton (without driving it negative)
+    // Microfauna consume some periphyton (without driving it negative).
+    // Consumption is drawn proportionally from all habitat pools.
+    // TODO(habitat-aware grazing): weight consumption toward accessible habitats.
     let consumption_fraction =
         pp.microfauna_periphyton_consumption * state.microfauna.population_index;
     let periphyton_consumed = state.algae.periphyton_biomass_g * consumption_fraction;
-    state.algae.periphyton_biomass_g =
-        (state.algae.periphyton_biomass_g - periphyton_consumed).max(0.0);
+    remove_periphyton_proportionally(&mut state.algae, periphyton_consumed);
 
     // Microfauna also process some fine detritus (modest)
     let detritus_consumed =
@@ -146,4 +147,17 @@ fn route_consumed_food(state: &mut TankState, consumed_n_mg: f64, consumed_c_mg:
     let retained_c_mg = assimilated_c_mg * growth_frac + (target_respired_c_mg - respired_c_mg);
     let retained_mass_g = (retained_n_mg + retained_c_mg) / 1000.0;
     state.microfauna.reserve_g += retained_mass_g;
+}
+
+/// Remove periphyton proportionally from all habitat pools and sync the total.
+pub(crate) fn remove_periphyton_proportionally(algae: &mut AlgaeState, amount_g: f64) {
+    let total = algae.periphyton_biomass_g;
+    if total <= f64::EPSILON || amount_g <= f64::EPSILON {
+        return;
+    }
+    let fraction = (amount_g / total).min(1.0);
+    for biomass in algae.periphyton_by_habitat.values_mut() {
+        *biomass = (*biomass * (1.0 - fraction)).max(0.0);
+    }
+    algae.sync_periphyton_total();
 }

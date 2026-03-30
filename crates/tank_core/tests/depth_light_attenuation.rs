@@ -115,9 +115,9 @@ fn algae_grows_more_in_shallow_tank() {
     let mut shallow = growth_state(SimSeed(9200), 10.0);
     let mut deep = growth_state(SimSeed(9200), 40.0);
     shallow.algae.suspended_biomass_g = 0.5;
-    shallow.algae.periphyton_biomass_g = 0.0;
+    shallow.algae.set_periphyton_total(0.0);
     deep.algae.suspended_biomass_g = 0.5;
-    deep.algae.periphyton_biomass_g = 0.0;
+    deep.algae.set_periphyton_total(0.0);
 
     step_daily_algae(&mut shallow);
     step_daily_algae(&mut deep);
@@ -174,7 +174,7 @@ fn plant_grows_more_in_shallow_tank() {
 fn turbidity_reduces_algae_growth() {
     let mut clear = growth_state(SimSeed(9400), 22.0);
     clear.algae.suspended_biomass_g = 0.5;
-    clear.algae.periphyton_biomass_g = 0.0;
+    clear.algae.set_periphyton_total(0.0);
     clear.detritus.fine_detritus_g_total = 0.0;
     clear.water.dissolved_organic_carbon_mg_c_total = 0.0;
 
@@ -274,7 +274,7 @@ fn shallow_vs_deep_algae_competition() -> Result<(), tank_core::SimError> {
         state.process_params.base_extinction_coeff_per_cm = 0.03;
         state.plant_guilds.clear();
         state.algae.suspended_biomass_g = 0.3;
-        state.algae.periphyton_biomass_g = 0.2;
+        state.algae.set_periphyton_total(0.2);
         state.refresh_habitat_registry();
         state
     };

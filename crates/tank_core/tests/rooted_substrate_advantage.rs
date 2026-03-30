@@ -23,7 +23,7 @@ fn rosette_state(seed: SimSeed, substrate_kind: SubstrateKind) -> TankState {
         substrate_uptake_bias: Some(0.9),
     }];
     state.algae.suspended_biomass_g = 0.0;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     state.microfauna.population_index = 0.1;
     state.microfauna.grazing_pressure_index = 0.1;
     state.substrate_layers = vec![match substrate_kind {

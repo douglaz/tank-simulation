@@ -33,10 +33,10 @@ fn stocked_scenario(seed: SimSeed, ambient_temp_c: f64) -> TankState {
     state.water.bicarbonate_mg_total = 400.0 * vol;
 
     // Very abundant periphyton so food is never limiting
-    state.algae.periphyton_biomass_g = 30.0;
+    state.algae.set_periphyton_total(30.0);
 
     // Very strong nitrification to prevent any ammonia buildup
-    state.microbe.decomposer_biomass_g = 0.3;
+    state.microbe.set_decomposer_total(0.3);
     state.microbe.ammonia_oxidizer_biomass_g = 2.0;
     state.microbe.nitrite_oxidizer_biomass_g = 1.5;
     state.microbe.comammox_biomass_g = 0.5;

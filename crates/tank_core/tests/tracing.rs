@@ -28,8 +28,8 @@ fn active_state(seed: SimSeed) -> TankState {
     state.detritus.particulate_organics_g_total = 0.7;
     state.detritus.fine_detritus_g_total = 0.45;
     state.algae.suspended_biomass_g = 0.35;
-    state.algae.periphyton_biomass_g = 0.55;
-    state.microbe.decomposer_biomass_g = 0.12;
+    state.algae.set_periphyton_total(0.55);
+    state.microbe.set_decomposer_total(0.12);
     state.microbe.ammonia_oxidizer_biomass_g = 0.08;
     state.microbe.nitrite_oxidizer_biomass_g = 0.07;
     state.microbe.comammox_biomass_g = 0.03;

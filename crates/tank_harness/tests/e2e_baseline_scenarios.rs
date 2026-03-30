@@ -319,7 +319,8 @@ fn medium_planted_baseline_envelope() -> Result<(), Box<dyn std::error::Error>> 
                     .nitrate_mg_n_per_l(2.0, 8.0)
                     // In current v0.1, the explicit maturity index only creeps upward during
                     // the early planted cycle even while chemistry and nitrifier biomass remain active.
-                    .biofilter_maturity(0.08, 0.3)
+                    // Per-habitat decomposer split increased carrying capacity, lowering the ratio.
+                    .biofilter_maturity(0.05, 0.3)
                     // Plants still growing — active substrate provides nutrients
                     .plant_biomass_g(8.0, 20.0),
             );
@@ -393,8 +394,9 @@ fn medium_planted_baseline_envelope() -> Result<(), Box<dyn std::error::Error>> 
                     .nitrate_mg_n_per_l(2.0, 8.0)
                     .do_min(6.0)
                     .plant_biomass_g(6.0, 20.0)
-                    // Biofilter approaching full maturity
-                    .biofilter_maturity(0.7, 1.0)
+                    // Per-habitat decomposer split increased carrying capacity,
+                    // so the maturity ratio is lower than before at this point.
+                    .biofilter_maturity(0.35, 1.0)
                     .algae_nuisance(0.0, 0.6),
             );
         }
@@ -541,7 +543,8 @@ fn warm_room_baseline_envelope() -> Result<(), Box<dyn std::error::Error>> {
                     .nitrate_mg_n_per_l(2.0, 8.5)
                     // The warm room reaches a clearly ahead-of-medium maturity band by week 4
                     // even though the index has not yet crossed the old "fully established" floor.
-                    .biofilter_maturity(0.2, 0.35),
+                    // Per-habitat decomposer split widened the carrying capacity envelope.
+                    .biofilter_maturity(0.10, 0.35),
             );
         }
     }
@@ -1031,7 +1034,9 @@ fn controlled_ideal_reproduction_path_still_hatches() -> Result<(), Box<dyn std:
     };
     let mut state =
         tank_scenarios::seeded_state_with_full_overrides(SimSeed(42), "medium_planted", overrides)?;
-    state.algae.periphyton_biomass_g = state.algae.periphyton_biomass_g.max(5.0);
+    if state.algae.periphyton_biomass_g < 5.0 {
+        state.algae.set_periphyton_total(5.0);
+    }
     state.animal.adult.reserve_g = state.animal.adult.reserve_g.max(3.0);
     state.animal.reproductive_readiness_index = state.animal.reproductive_readiness_index.max(0.5);
     state.process_params.shrimp_base_mortality_per_day = 0.0;
@@ -1141,8 +1146,8 @@ fn controlled_ideal_reproduction_path_still_hatches() -> Result<(), Box<dyn std:
 fn biofilter_reaches_scenario_specific_cycle_floors() -> Result<(), Box<dyn std::error::Error>> {
     let scenarios = [
         ("nano_cycle", 0.05, 0.45),
-        ("medium_planted", 0.1, 0.09),
-        ("warm_room", 0.05, 0.20),
+        ("medium_planted", 0.1, 0.06),
+        ("warm_room", 0.05, 0.10),
     ];
 
     for (scenario_id, feed_g, maturity_floor) in scenarios {

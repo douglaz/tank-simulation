@@ -190,7 +190,7 @@ fn grazing_fixture() -> TankState {
     state.water.bicarbonate_mg_total = 300.0 * vol;
 
     // Ample periphyton for grazing
-    state.algae.periphyton_biomass_g = 5.0;
+    state.algae.set_periphyton_total(5.0);
     // Start with no fine detritus so we can verify feces production
     state.detritus.particulate_organics_g_total = 0.0;
     state.detritus.fine_detritus_g_total = 0.0;
@@ -204,7 +204,7 @@ fn grazing_fixture() -> TankState {
     state.plant_guilds.clear();
     state.algae.suspended_biomass_g = 0.0;
     state.algae.nuisance_index = 0.0;
-    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.set_decomposer_total(0.0);
     state.microbe.ammonia_oxidizer_biomass_g = 0.0;
     state.microbe.nitrite_oxidizer_biomass_g = 0.0;
     state.microbe.comammox_biomass_g = 0.0;
@@ -310,9 +310,9 @@ fn feeding_fixture() -> TankState {
     state.water.bicarbonate_mg_total = 300.0 * vol;
 
     // Active biology
-    state.algae.periphyton_biomass_g = 2.0;
+    state.algae.set_periphyton_total(2.0);
     state.algae.suspended_biomass_g = 0.1;
-    state.microbe.decomposer_biomass_g = 0.15;
+    state.microbe.set_decomposer_total(0.15);
     state.microbe.ammonia_oxidizer_biomass_g = 0.1;
     state.microbe.nitrite_oxidizer_biomass_g = 0.08;
     state.microbe.comammox_biomass_g = 0.03;
@@ -466,12 +466,12 @@ fn mortality_senescence_fixture() -> TankState {
     state.shrimp_params.base_spawn_rate = 0.0;
 
     // Decomposers and nitrifiers for downstream processing
-    state.microbe.decomposer_biomass_g = 0.15;
+    state.microbe.set_decomposer_total(0.15);
     state.microbe.ammonia_oxidizer_biomass_g = 0.1;
     state.microbe.nitrite_oxidizer_biomass_g = 0.08;
     state.microbe.comammox_biomass_g = 0.03;
 
-    state.algae.periphyton_biomass_g = 1.0;
+    state.algae.set_periphyton_total(1.0);
     state.algae.suspended_biomass_g = 0.4;
     state.process_params.algae_respiration_fraction_per_day = 0.25;
     state.microfauna.population_index = 0.0;
@@ -578,9 +578,9 @@ fn trim_fixture() -> TankState {
     state.plant_guilds[1].biomass_g = 3.5;
 
     state.algae.suspended_biomass_g = 0.0;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     state.algae.nuisance_index = 0.0;
-    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.set_decomposer_total(0.0);
     state.microbe.ammonia_oxidizer_biomass_g = 0.0;
     state.microbe.nitrite_oxidizer_biomass_g = 0.0;
     state.microbe.comammox_biomass_g = 0.0;
@@ -797,9 +797,9 @@ fn water_change_fixture() -> TankState {
 
     state.plant_guilds.clear();
     state.algae.suspended_biomass_g = 0.0;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     state.algae.nuisance_index = 0.0;
-    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.set_decomposer_total(0.0);
     state.microbe.ammonia_oxidizer_biomass_g = 0.0;
     state.microbe.nitrite_oxidizer_biomass_g = 0.0;
     state.microbe.comammox_biomass_g = 0.0;

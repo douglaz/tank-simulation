@@ -1,6 +1,7 @@
 use crate::types::{
-    concentration_from_total, live_biomass_carbon_mg, live_biomass_nitrogen_mg, TankState,
-    ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G, SUB_ADULT_SHRIMP_BIOMASS_G,
+    concentration_from_total, find_habitat, live_biomass_carbon_mg, live_biomass_nitrogen_mg,
+    HabitatKind, TankState, ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G,
+    SUB_ADULT_SHRIMP_BIOMASS_G,
 };
 
 const FEED_P_TO_N_MASS_RATIO: f64 = 0.10;
@@ -142,6 +143,12 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
 
     // ---- 3. Decomposer mineralization: DOC/DON -> TAN + DIC ----
     //
+    // Habitat-based decomposer activity: each habitat's decomposer biomass
+    // contributes to DOC/DON consumption weighted by its local oxygen and
+    // flow exposure. Growth and decay are distributed proportionally back
+    // to per-habitat pools. The net chemistry effect is identical to the
+    // pre-split model when exposure modifiers are uniform.
+    //
     // Simplification: decomposer remineralization does not debit dissolved
     // oxygen stoichiometrically.  DO modulates the rate via a Monod factor
     // (f_do_decomp) but is not consumed.  Background BOD in the DO system
@@ -152,26 +159,66 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let doc_mg_c_per_l = state.water.doc_mg_c_per_l(volume_l);
     let do_mg_per_l = state.water.do_mg_per_l(volume_l);
 
-    // Environmental factors for decomposers
+    // Shared environmental factors for decomposers.
     let temp = state.water.temperature_c;
     let f_temp_decomp = temperature_factor(temp);
     let decomposer_k_do_mg_per_l = pp.decomposer_k_do_mg_per_l.max(0.01);
     let decomposer_k_doc_mg_c_per_l = pp.decomposer_k_doc_mg_c_per_l.max(0.01);
-    let f_do_decomp = monod_factor(do_mg_per_l, decomposer_k_do_mg_per_l);
+    let monod_doc = monod_factor(doc_mg_c_per_l, decomposer_k_doc_mg_c_per_l);
 
-    // Microfauna modestly improve mineralization efficiency
+    // Microfauna modestly improve mineralization efficiency.
     let microfauna_boost =
         1.0 + pp.microfauna_mineralization_boost * state.microfauna.population_index;
     let decomp_vmax = safe_rate(pp.decomposer_vmax_per_hour) * microfauna_boost;
-    let monod_doc = monod_factor(doc_mg_c_per_l, decomposer_k_doc_mg_c_per_l);
 
-    let potential_doc_consumed_mg = decomp_vmax * decomposer_biomass * 1000.0 // g->mg conversion for biomass effect
-        * f_temp_decomp * f_do_decomp * monod_doc;
+    // Compute per-habitat effective decomposer activity (biomass × local
+    // oxygen modifier). Habitats with higher O2 exposure have more active
+    // aerobic decomposers; SubstrateDeep still contributes via its baseline.
+    //
+    // The habitat weights determine growth/decay distribution only; aggregate
+    // DOC consumption uses the bulk-water DO factor to avoid amplifying the
+    // total rate when high-O2 habitats (FilterMedia) carry biomass.
+    let f_do_decomp = monod_factor(do_mg_per_l, decomposer_k_do_mg_per_l);
+    let habitat_keys: Vec<HabitatKind> = state
+        .microbe
+        .decomposer_by_habitat
+        .keys()
+        .copied()
+        .collect();
+    let mut habitat_effective: Vec<(HabitatKind, f64)> = Vec::with_capacity(habitat_keys.len());
+    let mut total_effective_biomass = 0.0_f64;
+    for kind in &habitat_keys {
+        let biomass_g = state
+            .microbe
+            .decomposer_by_habitat
+            .get(kind)
+            .copied()
+            .unwrap_or(0.0);
+        // Per-habitat oxygen modulation: lookup the habitat entry's oxygen
+        // exposure and use it to scale the base Monod DO factor.
+        let habitat_o2_factor = find_habitat(&state.habitat_registry, *kind)
+            .map(|h| {
+                // Blend bulk-water DO Monod with habitat-specific O2 exposure.
+                // Filter media gets near-full DO benefit; SubstrateDeep gets
+                // only its (low) oxygen_exposure fraction.
+                f_do_decomp * (0.3 + 0.7 * h.oxygen_exposure)
+            })
+            .unwrap_or(f_do_decomp);
+
+        let effective = biomass_g * habitat_o2_factor;
+        total_effective_biomass += effective;
+        habitat_effective.push((*kind, effective));
+    }
+
+    // Aggregate DOC consumption uses bulk-water DO factor × total biomass
+    // (habitat weights only influence growth/decay distribution below).
+    let potential_doc_consumed_mg =
+        decomp_vmax * decomposer_biomass * f_do_decomp * 1000.0 * f_temp_decomp * monod_doc;
     let potential_doc_consumed_mg = safe_rate(potential_doc_consumed_mg);
 
-    // Clamp: cannot consume more DOC than exists
+    // Clamp: cannot consume more DOC than exists.
     let doc_consumed_mg = potential_doc_consumed_mg.min(doc_total);
-    // Proportional DON consumed
+    // Proportional DON consumed.
     let don_consumed_mg = if doc_total > f64::EPSILON {
         doc_consumed_mg * (don_total / doc_total)
     } else {
@@ -181,13 +228,13 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
 
     state.water.dissolved_organic_carbon_mg_c_total -= doc_consumed_mg;
     state.water.dissolved_organic_nitrogen_mg_n_total -= don_consumed_mg;
-    // Track residue pool depletion
+    // Track residue pool depletion.
     let residue_consumed_g = (doc_consumed_mg + don_consumed_mg) / 1000.0;
     state.detritus.dissolved_feed_residue_g_total =
         (state.detritus.dissolved_feed_residue_g_total - residue_consumed_g).max(0.0);
 
-    // Decomposer growth/decay
-    let decomp_growth_potential = safe_rate(pp.decomposer_growth_yield) * doc_consumed_mg / 1000.0; // mg->g
+    // Decomposer growth/decay on the aggregate level (chemistry is well-mixed).
+    let decomp_growth_potential = safe_rate(pp.decomposer_growth_yield) * doc_consumed_mg / 1000.0;
     let decomp_growth = constrained_live_growth_g(
         decomp_growth_potential,
         don_consumed_mg,
@@ -204,8 +251,36 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     );
     let decomp_decay = safe_rate(pp.decomposer_decay_rate_per_hour) * decomposer_biomass;
     route_live_biomass_to_dissolved_organics(state, decomp_decay, n_to_c);
-    state.microbe.decomposer_biomass_g =
-        (state.microbe.decomposer_biomass_g + decomp_growth - decomp_decay).max(0.0);
+
+    // Distribute growth and decay back to per-habitat pools proportionally
+    // to each habitat's effective contribution.
+    if total_effective_biomass > f64::EPSILON {
+        for (kind, effective) in &habitat_effective {
+            let fraction = effective / total_effective_biomass;
+            let current = state
+                .microbe
+                .decomposer_by_habitat
+                .get(kind)
+                .copied()
+                .unwrap_or(0.0);
+            let new_g = (current + decomp_growth * fraction - decomp_decay * fraction).max(0.0);
+            state.microbe.decomposer_by_habitat.insert(*kind, new_g);
+        }
+    } else {
+        // All habitats have zero effective biomass; apply uniform decay.
+        for kind in &habitat_keys {
+            let current = state
+                .microbe
+                .decomposer_by_habitat
+                .get(kind)
+                .copied()
+                .unwrap_or(0.0);
+            let n = habitat_keys.len().max(1) as f64;
+            let new_g = (current - decomp_decay / n).max(0.0);
+            state.microbe.decomposer_by_habitat.insert(*kind, new_g);
+        }
+    }
+    state.microbe.sync_decomposer_total();
 
     // ---- 4. Nitrification: TAN -> nitrite -> nitrate (+ comammox TAN -> nitrate) ----
     //

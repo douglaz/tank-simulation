@@ -115,7 +115,7 @@ fn event_generation_warm_overfed_weak_aeration() -> Result<(), tank_core::SimErr
     state.hardware.light.enabled = false;
     state.plant_guilds.clear();
     state.algae.suspended_biomass_g = 0.0;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     // Low reaeration and elevated BOD allow oxygen to sag while feed mineralizes.
     state.process_params = ProcessParams {
         reaeration_kla_base: 0.0,
@@ -124,7 +124,7 @@ fn event_generation_warm_overfed_weak_aeration() -> Result<(), tank_core::SimErr
         ..ProcessParams::default()
     };
     // Strong decomposer biomass to mineralize feed quickly into TAN
-    state.microbe.decomposer_biomass_g = 0.5;
+    state.microbe.set_decomposer_total(0.5);
     // Minimal nitrification so TAN accumulates
     state.microbe.ammonia_oxidizer_biomass_g = 0.0;
     state.microbe.nitrite_oxidizer_biomass_g = 0.0;
@@ -185,7 +185,7 @@ fn shrimp_berried_event_has_cause_codes() -> Result<(), tank_core::SimError> {
     state.water.alkalinity_meq_total = 3.0 * vol;
     state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * vol;
     state.water.dissolved_oxygen_mg_total = 8.0 * vol;
-    state.algae.periphyton_biomass_g = 3.0;
+    state.algae.set_periphyton_total(3.0);
     state.hardware.aeration.enabled = true;
     state.hardware.aeration.intensity = 0.3;
     state.hardware.light.enabled = true;
@@ -195,7 +195,7 @@ fn shrimp_berried_event_has_cause_codes() -> Result<(), tank_core::SimError> {
     state.animal.adult.count = 10;
     state.animal.adult.condition_index = 0.8;
     state.animal.reproductive_readiness_index = 0.8;
-    state.microbe.decomposer_biomass_g = 0.2;
+    state.microbe.set_decomposer_total(0.2);
     state.microbe.ammonia_oxidizer_biomass_g = 0.15;
     state.microbe.nitrite_oxidizer_biomass_g = 0.1;
     state.filter_state.biofilter_maturity_index = 0.5;
@@ -291,7 +291,7 @@ fn molt_stress_warning_has_cause_codes() -> Result<(), tank_core::SimError> {
     state.animal.molt_stress_index = 0.5;
     state.hardware.aeration.enabled = true;
     state.hardware.aeration.intensity = 0.2;
-    state.algae.periphyton_biomass_g = 0.1;
+    state.algae.set_periphyton_total(0.1);
 
     let mut engine = Engine::from_parts(state, vec![]);
 

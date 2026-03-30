@@ -11,7 +11,7 @@ const ROOT_ROSETTE_SPECIFIC_LEAF_AREA_CM2_PER_G: f64 = 25.0;
 
 /// Ecological zones where biofilm can colonize, decomposition can occur,
 /// or redox conditions differ from the bulk water column.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum HabitatKind {
     /// Biological filter media inside the filter housing.
     FilterMedia,

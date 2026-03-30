@@ -30,9 +30,9 @@ fn isolated_water_change_state(seed: SimSeed) -> TankState {
 
     state.plant_guilds.clear();
     state.algae.suspended_biomass_g = 0.0;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     state.algae.nuisance_index = 0.0;
-    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.set_decomposer_total(0.0);
     state.microbe.ammonia_oxidizer_biomass_g = 0.0;
     state.microbe.nitrite_oxidizer_biomass_g = 0.0;
     state.microbe.comammox_biomass_g = 0.0;

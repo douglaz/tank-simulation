@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use tank_core::systems::chemistry::solve_carbonate_equilibrium;
 use tank_core::systems::shrimp::update_stability_tracker;
 use tank_core::{
@@ -346,6 +347,9 @@ fn save_load_with_active_cycle_state() -> Result<(), tank_core::SimError> {
         nitrite_oxidizer_biomass_g: 0.12,
         comammox_biomass_g: 0.03,
         maturity_index: 0.5,
+        // Empty map: ensure_habitat_pools() will distribute using registry
+        // weights on engine creation, keeping scalar and map in sync.
+        decomposer_by_habitat: BTreeMap::new(),
     };
     state.filter_state.biofilter_maturity_index = 0.5;
 

@@ -243,12 +243,12 @@ fn test_differentiated_source_waters_produce_different_ph() -> Result<(), SimErr
     // driving both tanks toward the same alkaline ceiling.
     for state in [&mut soft_state, &mut hard_state] {
         state.plant_guilds.clear();
-        state.algae.periphyton_biomass_g = 0.0;
+        state.algae.set_periphyton_total(0.0);
         state.algae.suspended_biomass_g = 0.0;
         state.microbe.ammonia_oxidizer_biomass_g = 0.0;
         state.microbe.nitrite_oxidizer_biomass_g = 0.0;
         state.microbe.comammox_biomass_g = 0.0;
-        state.microbe.decomposer_biomass_g = 0.0;
+        state.microbe.set_decomposer_total(0.0);
         state.animal.adult.count = 0;
         state.animal.juvenile.count = 0;
         // Suppress CO2 gas exchange so DIC stays at source-water levels.

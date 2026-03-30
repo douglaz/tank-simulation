@@ -63,8 +63,8 @@ fn known_budget_state() -> TankState {
     state.plant_guilds[0].biomass_g = 2.5;
     state.plant_guilds[1].biomass_g = 3.25;
     state.algae.suspended_biomass_g = 0.8;
-    state.algae.periphyton_biomass_g = 1.4;
-    state.microbe.decomposer_biomass_g = 0.6;
+    state.algae.set_periphyton_total(1.4);
+    state.microbe.set_decomposer_total(0.6);
     state.microbe.ammonia_oxidizer_biomass_g = 0.2;
     state.microbe.nitrite_oxidizer_biomass_g = 0.15;
     state.microbe.comammox_biomass_g = 0.05;
@@ -90,8 +90,8 @@ fn active_budget_state(seed: SimSeed) -> TankState {
     state.detritus.fine_detritus_g_total = 0.45;
     state.detritus.dissolved_feed_residue_g_total = 0.2;
     state.algae.suspended_biomass_g = 0.35;
-    state.algae.periphyton_biomass_g = 0.55;
-    state.microbe.decomposer_biomass_g = 0.12;
+    state.algae.set_periphyton_total(0.55);
+    state.microbe.set_decomposer_total(0.12);
     state.microbe.ammonia_oxidizer_biomass_g = 0.08;
     state.microbe.nitrite_oxidizer_biomass_g = 0.07;
     state.microbe.comammox_biomass_g = 0.03;
@@ -112,9 +112,9 @@ fn quiescent_budget_state(seed: SimSeed) -> TankState {
     state.hardware.light.enabled = false;
     state.plant_guilds.clear();
     state.algae.suspended_biomass_g = 0.0;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     state.algae.nuisance_index = 0.0;
-    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.set_decomposer_total(0.0);
     state.microbe.ammonia_oxidizer_biomass_g = 0.0;
     state.microbe.nitrite_oxidizer_biomass_g = 0.0;
     state.microbe.comammox_biomass_g = 0.0;
@@ -151,7 +151,7 @@ fn trim_plants_budget_state(seed: SimSeed) -> TankState {
 
 fn clean_filter_budget_state(seed: SimSeed) -> TankState {
     let mut state = quiescent_budget_state(seed);
-    state.microbe.decomposer_biomass_g = 0.45;
+    state.microbe.set_decomposer_total(0.45);
     state.microbe.ammonia_oxidizer_biomass_g = 0.18;
     state.microbe.nitrite_oxidizer_biomass_g = 0.12;
     state.microbe.comammox_biomass_g = 0.10;
@@ -205,9 +205,9 @@ fn shrimp_reproduction_budget_state(seed: SimSeed) -> TankState {
     state.water.dissolved_inorganic_carbon_mg_c_total = 420.0;
     state.water.dissolved_organic_carbon_mg_c_total = 260.0;
     state.water.dissolved_organic_nitrogen_mg_n_total = 48.0;
-    state.algae.periphyton_biomass_g = 5.0;
+    state.algae.set_periphyton_total(5.0);
     state.algae.suspended_biomass_g = 0.2;
-    state.microbe.decomposer_biomass_g = 0.1;
+    state.microbe.set_decomposer_total(0.1);
     state.microbe.ammonia_oxidizer_biomass_g = 0.8;
     state.microbe.nitrite_oxidizer_biomass_g = 1.2;
     state.microbe.comammox_biomass_g = 0.4;
@@ -547,7 +547,7 @@ fn test_periphyton_capacity_excess_routes_to_fine_detritus() {
     let mut state = quiescent_budget_state(SimSeed(9_016));
     state.hardware.light.enabled = false;
     state.algae.suspended_biomass_g = 0.0;
-    state.algae.periphyton_biomass_g = 5.0;
+    state.algae.set_periphyton_total(5.0);
     state.microfauna.population_index = 0.0;
     state.microfauna.grazing_pressure_index = 0.0;
     state.process_params.periphyton_capacity_g_per_m2 = 0.0;
@@ -580,7 +580,7 @@ fn test_algae_loss_routing_is_clamped_to_available_biomass_and_stays_particulate
     let mut state = quiescent_budget_state(SimSeed(9_017));
     state.hardware.light.enabled = false;
     state.algae.suspended_biomass_g = 0.4;
-    state.algae.periphyton_biomass_g = 0.5;
+    state.algae.set_periphyton_total(0.5);
     state.microfauna.population_index = 1.0;
     state.microfauna.grazing_pressure_index = 1.0;
     state.process_params.algae_respiration_fraction_per_day = 1.4;
@@ -1149,7 +1149,7 @@ fn high_mortality_shrimp_state(seed: SimSeed) -> TankState {
     state.water.bicarbonate_mg_total = 300.0 * vol;
 
     // Food sources for shrimp feeding (so the daily cycle runs normally)
-    state.algae.periphyton_biomass_g = 5.0;
+    state.algae.set_periphyton_total(5.0);
     state.detritus.fine_detritus_g_total = 2.0;
 
     // Stock shrimp: adults and juveniles
@@ -1167,7 +1167,7 @@ fn high_mortality_shrimp_state(seed: SimSeed) -> TankState {
     // Disable all other biological processes to isolate shrimp
     state.plant_guilds.clear();
     state.algae.suspended_biomass_g = 0.0;
-    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.set_decomposer_total(0.0);
     state.microbe.ammonia_oxidizer_biomass_g = 0.0;
     state.microbe.nitrite_oxidizer_biomass_g = 0.0;
     state.microbe.comammox_biomass_g = 0.0;
@@ -1244,7 +1244,7 @@ fn test_shrimp_death_detritus_amount_matches_expected_body_mass() {
     state.water.bicarbonate_mg_total = 300.0 * vol;
 
     // No food → no feeding → detritus changes only from death
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     state.detritus.fine_detritus_g_total = 0.0;
 
     // 10 adults, no juveniles, no reserve (simplifies accounting)
@@ -1261,7 +1261,7 @@ fn test_shrimp_death_detritus_amount_matches_expected_body_mass() {
     // Disable everything else
     state.plant_guilds.clear();
     state.algae.suspended_biomass_g = 0.0;
-    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.set_decomposer_total(0.0);
     state.microbe.ammonia_oxidizer_biomass_g = 0.0;
     state.microbe.nitrite_oxidizer_biomass_g = 0.0;
     state.microbe.comammox_biomass_g = 0.0;
@@ -1349,7 +1349,7 @@ fn test_high_mortality_200_hours_conserves_n_c_and_accumulates_detritus() -> Res
     state.water.bicarbonate_mg_total = 150.0 * vol;
     state.water.phosphate_mg_p_total = 2.0;
 
-    state.algae.periphyton_biomass_g = 3.0;
+    state.algae.set_periphyton_total(3.0);
     state.algae.suspended_biomass_g = 0.5;
     state.detritus.fine_detritus_g_total = 1.0;
     state.detritus.particulate_organics_g_total = 0.5;
@@ -1363,7 +1363,7 @@ fn test_high_mortality_200_hours_conserves_n_c_and_accumulates_detritus() -> Res
     // Disable plants to simplify (they have their own conservation tests)
     state.plant_guilds.clear();
     // Keep microbes running at moderate levels for realism
-    state.microbe.decomposer_biomass_g = 0.1;
+    state.microbe.set_decomposer_total(0.1);
     state.microbe.ammonia_oxidizer_biomass_g = 0.3;
     state.microbe.nitrite_oxidizer_biomass_g = 0.2;
     state.microbe.comammox_biomass_g = 0.1;
@@ -1503,7 +1503,7 @@ fn test_weekly_trim_and_remove_exports_nutrients_over_500_hours() -> Result<(), 
     state.animal.adult.count = 5;
     state.animal.juvenile.count = 0;
     state.animal.berried_females_count = 0;
-    state.algae.periphyton_biomass_g = 1.0;
+    state.algae.set_periphyton_total(1.0);
     state.algae.suspended_biomass_g = 0.2;
     state.detritus.fine_detritus_g_total = 0.5;
     state.detritus.particulate_organics_g_total = 0.2;

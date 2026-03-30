@@ -877,6 +877,7 @@ pub fn cycling_fixture_pair(seed: SimSeed) -> (TankState, TankState) {
         nitrite_oxidizer_biomass_g: 0.15,
         comammox_biomass_g: 0.05,
         maturity_index: 0.6,
+        ..MicrobeState::default()
     };
     seeded.filter_state = FilterState {
         biofilter_maturity_index: 0.6,
@@ -893,6 +894,7 @@ pub fn cycling_fixture_pair(seed: SimSeed) -> (TankState, TankState) {
         nitrite_oxidizer_biomass_g: 0.005,
         comammox_biomass_g: 0.001,
         maturity_index: 0.05,
+        ..MicrobeState::default()
     };
     unseeded.filter_state = FilterState {
         biofilter_maturity_index: 0.05,

@@ -72,9 +72,9 @@ fn audit_tank_state() -> TankState {
     }];
 
     // Active biology
-    state.algae.periphyton_biomass_g = 2.0;
+    state.algae.set_periphyton_total(2.0);
     state.algae.suspended_biomass_g = 0.1;
-    state.microbe.decomposer_biomass_g = 0.15;
+    state.microbe.set_decomposer_total(0.15);
     state.microbe.ammonia_oxidizer_biomass_g = 0.1;
     state.microbe.nitrite_oxidizer_biomass_g = 0.08;
     state.microbe.comammox_biomass_g = 0.03;
@@ -143,7 +143,7 @@ fn doc_pathway_state() -> TankState {
     state.detritus.dissolved_feed_residue_g_total = 0.0;
 
     // Active decomposers
-    state.microbe.decomposer_biomass_g = 0.2;
+    state.microbe.set_decomposer_total(0.2);
 
     // Disable everything else
     state.microbe.ammonia_oxidizer_biomass_g = 0.0;
@@ -154,7 +154,7 @@ fn doc_pathway_state() -> TankState {
     state.animal.adult.count = 0;
     state.animal.juvenile.count = 0;
     state.plant_guilds.clear();
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     state.algae.suspended_biomass_g = 0.0;
 
     state.hardware.light.enabled = false;
@@ -348,7 +348,7 @@ fn doc_pathway_feed_leaching_produces_doc() -> Result<(), SimError> {
     state.detritus.fine_detritus_g_total = 0.0;
     state.detritus.particulate_organics_g_total = 1.0;
     // Disable decomposer so DOC accumulates without consumption
-    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.set_decomposer_total(0.0);
 
     let initial_doc = state.water.dissolved_organic_carbon_mg_c_total;
 
@@ -523,7 +523,7 @@ fn doc_pathway_quantitative_rates() -> Result<(), SimError> {
     let mut state_a = doc_pathway_state();
     state_a.detritus.fine_detritus_g_total = 2.0;
     state_a.detritus.particulate_organics_g_total = 0.0;
-    state_a.microbe.decomposer_biomass_g = 0.0; // no consumption
+    state_a.microbe.set_decomposer_total(0.0); // no consumption
     state_a.water.dissolved_organic_carbon_mg_c_total = 0.0;
     state_a.water.dissolved_organic_nitrogen_mg_n_total = 0.0;
 
@@ -566,7 +566,7 @@ fn doc_pathway_quantitative_rates() -> Result<(), SimError> {
     state_b.detritus.particulate_organics_g_total = 0.0;
     state_b.water.dissolved_organic_carbon_mg_c_total = 50.0; // pre-loaded DOC
     state_b.water.dissolved_organic_nitrogen_mg_n_total = 50.0 * n_to_c;
-    state_b.microbe.decomposer_biomass_g = 0.2;
+    state_b.microbe.set_decomposer_total(0.2);
 
     let initial_doc_b = state_b.water.dissolved_organic_carbon_mg_c_total;
 
@@ -625,7 +625,7 @@ fn algae_loss_enters_detritus_and_conserves() -> Result<(), SimError> {
     let mut state = audit_tank_state();
     // Large algae for visible loss
     state.algae.suspended_biomass_g = 3.0;
-    state.algae.periphyton_biomass_g = 4.0;
+    state.algae.set_periphyton_total(4.0);
     // No shrimp to avoid interaction noise
     state.animal.adult.count = 0;
 

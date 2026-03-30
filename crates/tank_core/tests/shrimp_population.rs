@@ -30,9 +30,9 @@ fn shrimp_test_state(seed: SimSeed) -> TankState {
     state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * vol;
     state.water.dissolved_oxygen_mg_total = 8.0 * vol;
     state.water.bicarbonate_mg_total = 300.0 * vol;
-    state.algae.periphyton_biomass_g = 5.0;
+    state.algae.set_periphyton_total(5.0);
 
-    state.microbe.decomposer_biomass_g = 0.1;
+    state.microbe.set_decomposer_total(0.1);
     state.microbe.ammonia_oxidizer_biomass_g = 0.8;
     state.microbe.nitrite_oxidizer_biomass_g = 1.2;
     state.microbe.comammox_biomass_g = 0.4;
@@ -627,6 +627,10 @@ fn shrimp_removal_validation() -> Result<(), SimError> {
     let mut state = shrimp_test_state(SimSeed(7500));
     state.animal.adult.count = 5;
     state.animal.berried_females_count = 2;
+    state.animal.egg_cohorts = vec![EggCohort {
+        count: 2,
+        progress_days: 5.0,
+    }];
 
     let mut engine = Engine::from_parts(state, vec![]);
 

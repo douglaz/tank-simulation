@@ -67,7 +67,7 @@ fn configured_state(seed: SimSeed) -> tank_core::TankState {
         .background_bod_mg_o2_per_g_biomass_per_hour = 0.15;
     state.environment.ambient_temp_c = 29.5;
     state.algae.suspended_biomass_g = 0.08;
-    state.algae.periphyton_biomass_g = 0.6;
+    state.algae.set_periphyton_total(0.6);
     // Zero out turbidity-driven extinction so self-shading doesn't mask
     // the nutrient-driven algae response this test is designed to verify.
     state

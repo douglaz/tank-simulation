@@ -1,5 +1,8 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
+use crate::types::habitat::HabitatKind;
 use crate::types::substrate::SubstrateLayerState;
 
 /// A cohort of berried females that became berried on the same day.
@@ -35,17 +38,33 @@ pub struct PlantGuildState {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AlgaeState {
     pub suspended_biomass_g: f64,
+    /// Total periphyton biomass (grams). Kept in sync as the sum of
+    /// `periphyton_by_habitat` values by [`AlgaeState::sync_periphyton_total`].
     pub periphyton_biomass_g: f64,
     pub nuisance_index: f64,
+    /// Per-habitat periphyton biomass pools (grams).
+    /// Habitats with meaningful periphyton: GlassHardscape, PlantSurfaces,
+    /// SubstrateSurface. FilterMedia carries minimal periphyton (dark).
+    /// SubstrateDeep carries none (no light).
+    #[serde(default)]
+    pub periphyton_by_habitat: BTreeMap<HabitatKind, f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MicrobeState {
+    /// Total decomposer biomass (grams). Kept in sync as the sum of
+    /// `decomposer_by_habitat` values by [`MicrobeState::sync_decomposer_total`].
     pub decomposer_biomass_g: f64,
     pub ammonia_oxidizer_biomass_g: f64,
     pub nitrite_oxidizer_biomass_g: f64,
     pub comammox_biomass_g: f64,
     pub maturity_index: f64,
+    /// Per-habitat decomposer biomass pools (grams).
+    /// Decomposers thrive in FilterMedia (high flow/O2), SubstrateSurface
+    /// (detritus processing), SubstrateDeep (anaerobic/suboxic).
+    /// GlassHardscape and PlantSurfaces carry modest decomposer biofilm.
+    #[serde(default)]
+    pub decomposer_by_habitat: BTreeMap<HabitatKind, f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -287,24 +306,159 @@ impl Default for PlantGuildState {
     }
 }
 
+impl AlgaeState {
+    /// Recalculate `periphyton_biomass_g` as the sum of per-habitat pools.
+    pub fn sync_periphyton_total(&mut self) {
+        self.periphyton_biomass_g = self.periphyton_by_habitat.values().sum();
+    }
+
+    /// Set the total periphyton and redistribute to habitat pools proportionally.
+    /// Use this instead of writing `periphyton_biomass_g` directly when habitat
+    /// pools are already populated, to keep the two in sync.
+    pub fn set_periphyton_total(&mut self, total_g: f64) {
+        let old_sum: f64 = self.periphyton_by_habitat.values().sum();
+        if old_sum > f64::EPSILON && total_g >= 0.0 {
+            let scale = total_g / old_sum;
+            for biomass in self.periphyton_by_habitat.values_mut() {
+                *biomass *= scale;
+            }
+        } else if total_g > f64::EPSILON && !self.periphyton_by_habitat.is_empty() {
+            // Map is zeroed out; distribute uniformly across existing keys.
+            let n = self.periphyton_by_habitat.len() as f64;
+            let share = total_g / n;
+            for biomass in self.periphyton_by_habitat.values_mut() {
+                *biomass = share;
+            }
+        }
+        self.periphyton_biomass_g = total_g;
+    }
+
+    /// Distribute the lumped periphyton biomass into habitat pools using
+    /// light-exposure-weighted fractions from the habitat registry.
+    /// Called during migration or when per-habitat pools are empty.
+    pub fn distribute_periphyton_to_habitats(&mut self, registry: &[super::habitat::HabitatEntry]) {
+        let total = self.periphyton_biomass_g;
+        self.periphyton_by_habitat =
+            distribute_biomass_by_weight(total, registry, periphyton_habitat_affinity);
+    }
+}
+
+impl MicrobeState {
+    /// Recalculate `decomposer_biomass_g` as the sum of per-habitat pools.
+    pub fn sync_decomposer_total(&mut self) {
+        self.decomposer_biomass_g = self.decomposer_by_habitat.values().sum();
+    }
+
+    /// Set the total decomposer biomass and redistribute to habitat pools
+    /// proportionally. Use this instead of writing `decomposer_biomass_g`
+    /// directly when habitat pools are already populated.
+    pub fn set_decomposer_total(&mut self, total_g: f64) {
+        let old_sum: f64 = self.decomposer_by_habitat.values().sum();
+        if old_sum > f64::EPSILON && total_g >= 0.0 {
+            let scale = total_g / old_sum;
+            for biomass in self.decomposer_by_habitat.values_mut() {
+                *biomass *= scale;
+            }
+        } else if total_g > f64::EPSILON && !self.decomposer_by_habitat.is_empty() {
+            // Map is zeroed out; distribute uniformly across existing keys.
+            let n = self.decomposer_by_habitat.len() as f64;
+            let share = total_g / n;
+            for biomass in self.decomposer_by_habitat.values_mut() {
+                *biomass = share;
+            }
+        }
+        self.decomposer_biomass_g = total_g;
+    }
+
+    /// Distribute the lumped decomposer biomass into habitat pools using
+    /// flow+oxygen-weighted fractions from the habitat registry.
+    /// Called during migration or when per-habitat pools are empty.
+    pub fn distribute_decomposer_to_habitats(&mut self, registry: &[super::habitat::HabitatEntry]) {
+        let total = self.decomposer_biomass_g;
+        self.decomposer_by_habitat =
+            distribute_biomass_by_weight(total, registry, decomposer_habitat_affinity);
+    }
+}
+
+/// Ecological affinity weight for periphyton colonization of a habitat.
+/// Periphyton is light-driven: high affinity on lit surfaces, near-zero
+/// in dark habitats. Area is factored in separately.
+fn periphyton_habitat_affinity(entry: &super::habitat::HabitatEntry) -> f64 {
+    // Light is the primary driver; a small baseline (0.01) allows trace
+    // colonization even in dim habitats like FilterMedia.
+    (entry.light_exposure + 0.01) * entry.colonizable_area_cm2
+}
+
+/// Ecological affinity weight for decomposer colonization of a habitat.
+/// Decomposers are flow- and oxygen-driven: they thrive on filter media
+/// and substrate surfaces where organic matter accumulates.
+fn decomposer_habitat_affinity(entry: &super::habitat::HabitatEntry) -> f64 {
+    // Weighted combination: flow and oxygen promote aerobic decomposers.
+    // SubstrateDeep gets a baseline for anaerobic decomposers even at low O2.
+    let o2_factor = entry.oxygen_exposure + 0.05;
+    let flow_factor = entry.flow_exposure + 0.05;
+    (o2_factor * 0.6 + flow_factor * 0.4) * entry.colonizable_area_cm2
+}
+
+/// Generic helper: distribute a total biomass across habitats weighted
+/// by an affinity function.
+fn distribute_biomass_by_weight(
+    total_g: f64,
+    registry: &[super::habitat::HabitatEntry],
+    affinity: fn(&super::habitat::HabitatEntry) -> f64,
+) -> BTreeMap<HabitatKind, f64> {
+    let weights: Vec<(HabitatKind, f64)> = registry
+        .iter()
+        .map(|entry| (entry.kind, affinity(entry).max(0.0)))
+        .collect();
+    let total_weight: f64 = weights.iter().map(|(_, w)| w).sum();
+    if total_weight <= f64::EPSILON || total_g <= f64::EPSILON {
+        return weights.into_iter().map(|(kind, _)| (kind, 0.0)).collect();
+    }
+    weights
+        .into_iter()
+        .map(|(kind, w)| (kind, total_g * w / total_weight))
+        .collect()
+}
+
 impl Default for AlgaeState {
     fn default() -> Self {
+        // Default habitat distribution for 0.2 g total periphyton:
+        // mostly on glass (lit), some on substrate surface, trace elsewhere.
+        let periphyton_by_habitat = BTreeMap::from([
+            (HabitatKind::GlassHardscape, 0.10),
+            (HabitatKind::SubstrateSurface, 0.06),
+            (HabitatKind::PlantSurfaces, 0.03),
+            (HabitatKind::FilterMedia, 0.01),
+            (HabitatKind::SubstrateDeep, 0.0),
+        ]);
         Self {
             suspended_biomass_g: 0.0,
             periphyton_biomass_g: 0.2,
             nuisance_index: 0.1,
+            periphyton_by_habitat,
         }
     }
 }
 
 impl Default for MicrobeState {
     fn default() -> Self {
+        // Default habitat distribution for 0.1 g total decomposers:
+        // concentrated on filter media and substrate.
+        let decomposer_by_habitat = BTreeMap::from([
+            (HabitatKind::FilterMedia, 0.04),
+            (HabitatKind::SubstrateSurface, 0.03),
+            (HabitatKind::SubstrateDeep, 0.015),
+            (HabitatKind::GlassHardscape, 0.01),
+            (HabitatKind::PlantSurfaces, 0.005),
+        ]);
         Self {
             decomposer_biomass_g: 0.1,
             ammonia_oxidizer_biomass_g: 0.05,
             nitrite_oxidizer_biomass_g: 0.05,
             comammox_biomass_g: 0.01,
             maturity_index: 0.1,
+            decomposer_by_habitat,
         }
     }
 }

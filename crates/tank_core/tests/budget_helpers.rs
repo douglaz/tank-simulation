@@ -51,8 +51,8 @@ fn active_budget_state(seed: SimSeed) -> TankState {
     state.detritus.fine_detritus_g_total = 0.45;
     state.detritus.dissolved_feed_residue_g_total = 0.2;
     state.algae.suspended_biomass_g = 0.35;
-    state.algae.periphyton_biomass_g = 0.55;
-    state.microbe.decomposer_biomass_g = 0.12;
+    state.algae.set_periphyton_total(0.55);
+    state.microbe.set_decomposer_total(0.12);
     state.microbe.ammonia_oxidizer_biomass_g = 0.08;
     state.microbe.nitrite_oxidizer_biomass_g = 0.07;
     state.microbe.comammox_biomass_g = 0.03;
@@ -73,9 +73,9 @@ fn quiescent_budget_state(seed: SimSeed) -> TankState {
     state.hardware.light.enabled = false;
     state.plant_guilds.clear();
     state.algae.suspended_biomass_g = 0.0;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     state.algae.nuisance_index = 0.0;
-    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.set_decomposer_total(0.0);
     state.microbe.ammonia_oxidizer_biomass_g = 0.0;
     state.microbe.nitrite_oxidizer_biomass_g = 0.0;
     state.microbe.comammox_biomass_g = 0.0;

@@ -161,11 +161,16 @@ fn shrimp_feeding(state: &mut TankState) {
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let food_demand_route_g = algae_detrital_mass_g(food_demand_biomass_g, n_to_c_ratio);
 
-    // Shrimp graze periphyton (at most 50% of available per day)
+    // Shrimp graze periphyton (at most 50% of available per day).
+    // Grazing is drawn proportionally from all habitat pools for now.
+    // TODO(habitat-aware grazing): weight toward accessible habitats
+    // (glass, substrate surface) and away from FilterMedia.
     let max_periph = state.algae.periphyton_biomass_g * 0.5;
     let periph_consumed_biomass_g = food_demand_biomass_g.min(max_periph).max(0.0);
-    state.algae.periphyton_biomass_g =
-        (state.algae.periphyton_biomass_g - periph_consumed_biomass_g).max(0.0);
+    super::microfauna::remove_periphyton_proportionally(
+        &mut state.algae,
+        periph_consumed_biomass_g,
+    );
     let periph_consumed_route_g = algae_detrital_mass_g(periph_consumed_biomass_g, n_to_c_ratio);
 
     // Fine detritus only fills the remaining appetite on the same routing
@@ -1037,7 +1042,7 @@ mod tests {
         state.water.alkalinity_meq_total = 0.3 * volume_l;
         state.water.calcium_mg_total = 40.0 * volume_l;
         state.water.magnesium_mg_total = 10.0 * volume_l;
-        state.algae.periphyton_biomass_g = 5.0;
+        state.algae.set_periphyton_total(5.0);
 
         state.animal.adult.count = 10;
         state.animal.adult.condition_index = 0.0;
@@ -1060,7 +1065,7 @@ mod tests {
     #[test]
     fn shrimp_feeding_tracks_daily_food_on_routing_mass_basis() {
         let mut state = TankState::new(SimSeed(9999));
-        state.algae.periphyton_biomass_g = 5.0;
+        state.algae.set_periphyton_total(5.0);
         state.detritus.fine_detritus_g_total = 0.0;
         state.animal.adult.count = 10;
 
@@ -1088,7 +1093,7 @@ mod tests {
     #[test]
     fn shrimp_feeding_caps_total_intake_on_routing_mass_basis() {
         let mut state = TankState::new(SimSeed(10_003));
-        state.algae.periphyton_biomass_g = 0.08;
+        state.algae.set_periphyton_total(0.08);
         state.detritus.fine_detritus_g_total = 5.0;
         state.animal.adult.count = 10;
         state.animal.juvenile.count = 0;
@@ -1133,7 +1138,7 @@ mod tests {
         low_access.water = WaterState::default_for_volume_l(low_access.water_volume_l());
         low_access.water.temperature_c = 24.0;
         low_access.environment.ambient_temp_c = 24.0;
-        low_access.algae.periphyton_biomass_g = 10.0;
+        low_access.algae.set_periphyton_total(10.0);
         low_access.animal.adult.count = 10;
         low_access.animal.adult.condition_index = 0.0;
         low_access.process_params.shrimp_condition_smoothing = 1.0;

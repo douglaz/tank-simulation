@@ -53,7 +53,7 @@ fn base_state(seed: SimSeed, geometry: TankGeometry) -> TankState {
     state.hardware.light.enabled = false;
     state.plant_guilds.clear();
     state.algae.suspended_biomass_g = 0.0;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     state.algae.nuisance_index = 0.0;
     state.microfauna.population_index = 0.0;
     state.microfauna.grazing_pressure_index = 0.0;
@@ -67,7 +67,7 @@ fn base_state(seed: SimSeed, geometry: TankGeometry) -> TankState {
     state.water.bicarbonate_mg_total = 183.0 * volume_l;
     tank_core::systems::chemistry::resolve_carbonate_state(&mut state.water, volume_l);
 
-    state.microbe.decomposer_biomass_g = 0.12;
+    state.microbe.set_decomposer_total(0.12);
     state.microbe.ammonia_oxidizer_biomass_g = 0.05;
     state.microbe.nitrite_oxidizer_biomass_g = 0.04;
     state.microbe.comammox_biomass_g = 0.01;
@@ -147,7 +147,7 @@ fn substrate_grazing_divergence() -> Result<(), tank_core::SimError> {
     low_grazing.water.ammonia_total_mg_n_total = 0.0;
     low_grazing.water.nitrate_mg_n_total = 3.0 * low_grazing.water_volume_l();
     low_grazing.water.phosphate_mg_p_total = 0.6 * low_grazing.water_volume_l();
-    low_grazing.algae.periphyton_biomass_g = 25.0;
+    low_grazing.algae.set_periphyton_total(25.0);
     low_grazing.detritus.fine_detritus_g_total = 18.0;
     low_grazing.animal.adult.count = 8;
     low_grazing.animal.adult.condition_index = 0.55;
@@ -220,13 +220,18 @@ fn filter_enabled_vs_disabled() -> Result<(), tank_core::SimError> {
         filtered_nitrite < unfiltered_nitrite,
         "enabled filter should reach lower nitrite after 30 days: filtered={filtered_nitrite:.3} mg/L, disabled={unfiltered_nitrite:.3} mg/L"
     );
+    // An enabled filter provides additional surface area and flow, so the
+    // total nitrifier biomass should be higher even though the *maturity index*
+    // (biomass / capacity) may not be, because capacity also increases.
+    let filtered_nitrifiers = filtered.full_state().microbe.ammonia_oxidizer_biomass_g
+        + filtered.full_state().microbe.nitrite_oxidizer_biomass_g
+        + filtered.full_state().microbe.comammox_biomass_g;
+    let unfiltered_nitrifiers = unfiltered.full_state().microbe.ammonia_oxidizer_biomass_g
+        + unfiltered.full_state().microbe.nitrite_oxidizer_biomass_g
+        + unfiltered.full_state().microbe.comammox_biomass_g;
     assert!(
-        filtered.full_state().filter_state.biofilter_maturity_index
-            > unfiltered
-                .full_state()
-                .filter_state
-                .biofilter_maturity_index,
-        "enabled filter should build more biofilter maturity"
+        filtered_nitrifiers > unfiltered_nitrifiers,
+        "enabled filter should grow more total nitrifier biomass: filtered={filtered_nitrifiers:.6} g, unfiltered={unfiltered_nitrifiers:.6} g"
     );
 
     Ok(())

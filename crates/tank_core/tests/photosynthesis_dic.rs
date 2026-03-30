@@ -77,7 +77,7 @@ fn planted_dic_state(seed: SimSeed) -> TankState {
     // Generous plant biomass to produce clear day/night signal.
     state.plant_guilds[0].biomass_g = 15.0;
     state.plant_guilds[1].biomass_g = 10.0;
-    state.algae.periphyton_biomass_g = 2.0;
+    state.algae.set_periphyton_total(2.0);
     state.algae.suspended_biomass_g = 0.5;
 
     // Moderate DIC and alkalinity for stable pH range.
@@ -292,7 +292,7 @@ fn test_no_plants_minimal_ph_swing() -> Result<(), tank_core::SimError> {
         guild.biomass_g = 0.0;
     }
     state.algae.suspended_biomass_g = 0.0;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     let volume_l = state.water_volume_l();
     tank_core::systems::chemistry::resolve_carbonate_state(&mut state.water, volume_l);
 

@@ -14,7 +14,7 @@ fn feed_daily(engine: &mut Engine, days: u32, grams: f64) -> Result<(), tank_cor
 
 fn nitrifier_growth_state(seed: SimSeed) -> TankState {
     let mut state = TankState::new(seed);
-    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.set_decomposer_total(0.0);
     state.filter_state.biofilter_maturity_index = 1.0;
     state.process_params.reaeration_kla_base = 0.0;
     state.process_params.aeration_kla_boost = 0.0;
@@ -158,7 +158,7 @@ fn limiter_correctness_no_negative_pools() -> Result<(), tank_core::SimError> {
     let mut state = TankState::new(SimSeed(9200));
 
     // Zero out microbes
-    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.set_decomposer_total(0.0);
     state.microbe.ammonia_oxidizer_biomass_g = 0.0;
     state.microbe.nitrite_oxidizer_biomass_g = 0.0;
     state.microbe.comammox_biomass_g = 0.0;
@@ -461,7 +461,7 @@ fn comammox_growth_reserves_tan_for_assimilation_when_tan_would_otherwise_hit_ze
 fn decomposer_do_half_saturation_is_tunable() {
     let build_state = |k_do_mg: f64| {
         let mut state = TankState::new(SimSeed(9700));
-        state.microbe.decomposer_biomass_g = 0.5;
+        state.microbe.set_decomposer_total(0.5);
         state.microbe.ammonia_oxidizer_biomass_g = 0.0;
         state.microbe.nitrite_oxidizer_biomass_g = 0.0;
         state.microbe.comammox_biomass_g = 0.0;
@@ -499,7 +499,7 @@ fn decomposer_monod_uses_concentration_instead_of_total_mass() {
         state.geometry.fill_height_cm = fill_height_cm;
         state.substrate_layers.clear();
         let volume_l = state.water_volume_l();
-        state.microbe.decomposer_biomass_g = 0.5;
+        state.microbe.set_decomposer_total(0.5);
         state.microbe.ammonia_oxidizer_biomass_g = 0.0;
         state.microbe.nitrite_oxidizer_biomass_g = 0.0;
         state.microbe.comammox_biomass_g = 0.0;
@@ -574,7 +574,7 @@ fn concentration_kinetics_are_volume_independent() {
 
         // Biomass proportional to volume (same "biomass density" per liter).
         let density_g_per_l = 0.02;
-        state.microbe.decomposer_biomass_g = density_g_per_l * vol;
+        state.microbe.set_decomposer_total(density_g_per_l * vol);
         state.microbe.ammonia_oxidizer_biomass_g = density_g_per_l * vol;
         state.microbe.nitrite_oxidizer_biomass_g = density_g_per_l * vol;
         state.microbe.comammox_biomass_g = density_g_per_l * vol;
@@ -802,7 +802,7 @@ fn concentration_kinetics_volume_independent_extreme_scales() {
         state.water.alkalinity_meq_total = 50.0 * vol;
 
         let density = 0.02;
-        state.microbe.decomposer_biomass_g = density * vol;
+        state.microbe.set_decomposer_total(density * vol);
         state.microbe.ammonia_oxidizer_biomass_g = density * vol;
         state.microbe.nitrite_oxidizer_biomass_g = density * vol;
         state.microbe.comammox_biomass_g = density * vol;
@@ -1092,7 +1092,7 @@ fn per_guild_monod_uses_concentration_not_total() -> Result<(), tank_core::SimEr
         state.water.alkalinity_meq_total = 40.0;
 
         // Identical biomass (not scaled to volume) to isolate Monod effect.
-        state.microbe.decomposer_biomass_g = 0.1;
+        state.microbe.set_decomposer_total(0.1);
         state.microbe.ammonia_oxidizer_biomass_g = 0.1;
         state.microbe.nitrite_oxidizer_biomass_g = 0.1;
         state.microbe.comammox_biomass_g = 0.1;

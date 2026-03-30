@@ -143,8 +143,8 @@ fn feed_pulse_tan_concentration_scales_with_volume() -> Result<(), tank_core::Si
     let mut state_100l = state_with_volume(SimSeed(2200), 100.0);
 
     // Give both tanks some decomposer biomass to mineralize feed into TAN
-    state_10l.microbe.decomposer_biomass_g = 0.1;
-    state_100l.microbe.decomposer_biomass_g = 0.1;
+    state_10l.microbe.set_decomposer_total(0.1);
+    state_100l.microbe.set_decomposer_total(0.1);
     // Same maturity so nitrification doesn't dominate the result
     state_10l.filter_state.biofilter_maturity_index = 0.1;
     state_100l.filter_state.biofilter_maturity_index = 0.1;

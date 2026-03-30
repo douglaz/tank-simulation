@@ -40,7 +40,7 @@ fn microfauna_test_state() -> TankState {
     state.water.bicarbonate_mg_total = 300.0 * vol;
 
     // Provide ample periphyton and detritus as food for microfauna
-    state.algae.periphyton_biomass_g = 4.0;
+    state.algae.set_periphyton_total(4.0);
     state.detritus.fine_detritus_g_total = 3.0;
 
     // Active microfauna population
@@ -53,7 +53,7 @@ fn microfauna_test_state() -> TankState {
     state.animal.juvenile.count = 0;
     state.plant_guilds.clear();
     state.algae.suspended_biomass_g = 0.0;
-    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.set_decomposer_total(0.0);
     state.microbe.ammonia_oxidizer_biomass_g = 0.0;
     state.microbe.nitrite_oxidizer_biomass_g = 0.0;
     state.microbe.comammox_biomass_g = 0.0;

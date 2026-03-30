@@ -14,7 +14,7 @@ use crate::{
 ///
 /// When you bump from N to N+1, you **must** also append a migration function
 /// to [`MIGRATIONS`]. See the migration contract below.
-pub const SCHEMA_VERSION: u32 = 10;
+pub const SCHEMA_VERSION: u32 = 11;
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Oldest schema version that the migration chain can handle.
@@ -122,6 +122,12 @@ const MIGRATIONS: &[MigrationFn] = &[
     // names to concentration-based names and convert saved values by dividing
     // by the 20 L reference volume.
     migrate_v9_to_v10,
+    // Index 8: schema 10 → 11
+    // Add per-habitat periphyton and decomposer biomass pools. New fields
+    // use #[serde(default)] (empty BTreeMaps). The post-load
+    // refresh_habitat_registry call populates them from the lumped totals
+    // via ensure_habitat_pools().
+    migrate_v10_to_v11,
 ];
 
 // Compile-time check: MIGRATIONS length must equal SCHEMA_VERSION - MIN_SUPPORTED_SCHEMA.
@@ -772,6 +778,17 @@ fn migrate_v9_to_v10(value: &mut Value) -> Result<(), SimError> {
         }
     }
 
+    Ok(())
+}
+
+/// Schema 10 → 11: per-habitat periphyton/decomposer pools.
+///
+/// New fields `algae.periphyton_by_habitat` and `microbe.decomposer_by_habitat`
+/// use `#[serde(default)]` so they deserialize as empty BTreeMaps. The
+/// post-load `refresh_habitat_registry` → `ensure_habitat_pools` call
+/// distributes the lumped totals into habitat-weighted pools.
+fn migrate_v10_to_v11(_value: &mut Value) -> Result<(), SimError> {
+    // No-op: serde defaults + ensure_habitat_pools handle the transition.
     Ok(())
 }
 
