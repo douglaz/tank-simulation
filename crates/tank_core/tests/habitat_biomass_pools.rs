@@ -4,8 +4,8 @@
 use std::collections::BTreeMap;
 
 use tank_core::{
-    live_biomass_carbon_mg, live_biomass_nitrogen_mg, Engine, HabitatKind, SaveFile, SimSeed,
-    SimulationEngine, SubstrateKind, SubstrateLayerState, TankState,
+    live_biomass_carbon_mg, live_biomass_nitrogen_mg, Engine, HabitatKind, PlayerAction, SaveFile,
+    SimSeed, SimulationEngine, SubstrateKind, SubstrateLayerState, TankState,
 };
 
 // ---------------------------------------------------------------------------
@@ -737,7 +737,95 @@ fn test_decomposer_decay_conserved_when_do_zero_and_habitats_uneven(
 }
 
 // ---------------------------------------------------------------------------
-// 13. Habitat diversity supports more microbes
+// 13. Filter cleaning primarily resets filter-media decomposers
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_filter_cleaning_focuses_decomposer_setback_on_filter_media(
+) -> Result<(), tank_core::SimError> {
+    let mut state = growth_state(SimSeed(5014));
+    state.animal.adult.count = 0;
+    state.animal.sub_adult.count = 0;
+    state.animal.juvenile.count = 0;
+    state.microfauna.population_index = 0.0;
+    state.microfauna.grazing_pressure_index = 0.0;
+    state.process_params.decomposer_vmax_per_hour = 0.0;
+    state.process_params.decomposer_decay_rate_per_hour = 0.0;
+    state.process_params.aob_vmax_mg_n_per_g_per_hour = 0.0;
+    state.process_params.aob_decay_rate_per_hour = 0.0;
+    state.process_params.nob_vmax_mg_n_per_g_per_hour = 0.0;
+    state.process_params.nob_decay_rate_per_hour = 0.0;
+    state.process_params.comammox_vmax_fraction = 0.0;
+    state.process_params.comammox_decay_rate_per_hour = 0.0;
+    state.microbe.ammonia_oxidizer_biomass_g = 0.0;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.0;
+    state.microbe.comammox_biomass_g = 0.0;
+    state.microbe.decomposer_by_habitat = BTreeMap::from([
+        (HabitatKind::FilterMedia, 0.30),
+        (HabitatKind::SubstrateSurface, 0.20),
+        (HabitatKind::GlassHardscape, 0.10),
+        (HabitatKind::PlantSurfaces, 0.08),
+        (HabitatKind::SubstrateDeep, 0.06),
+    ]);
+    state.microbe.sync_decomposer_total();
+
+    let don_before = state.water.dissolved_organic_nitrogen_mg_n_total;
+    let doc_before = state.water.dissolved_organic_carbon_mg_c_total;
+    let total_before = state.microbe.decomposer_biomass_g;
+    let filter_before = state.microbe.decomposer_by_habitat[&HabitatKind::FilterMedia];
+    let surface_before = state.microbe.decomposer_by_habitat[&HabitatKind::SubstrateSurface];
+    let glass_before = state.microbe.decomposer_by_habitat[&HabitatKind::GlassHardscape];
+    let deep_before = state.microbe.decomposer_by_habitat[&HabitatKind::SubstrateDeep];
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.apply_action(PlayerAction::CleanFilter { intensity: 0.8 })?;
+    engine.step_hours(1)?;
+
+    let after = engine.full_state();
+    let removed_total = total_before - after.microbe.decomposer_biomass_g;
+    let filter_loss =
+        filter_before - after.microbe.decomposer_by_habitat[&HabitatKind::FilterMedia];
+    let surface_loss =
+        surface_before - after.microbe.decomposer_by_habitat[&HabitatKind::SubstrateSurface];
+    let glass_loss =
+        glass_before - after.microbe.decomposer_by_habitat[&HabitatKind::GlassHardscape];
+
+    assert!(
+        (after.microbe.decomposer_by_habitat[&HabitatKind::FilterMedia] - (filter_before * 0.6))
+            .abs()
+            < 1e-12,
+        "filter media should take the full cleaning setback"
+    );
+    assert!(
+        filter_loss > surface_loss && surface_loss > glass_loss,
+        "filter cleaning should hit filter media hardest, then exposed substrate, then glass"
+    );
+    assert!(
+        (after.microbe.decomposer_by_habitat[&HabitatKind::SubstrateDeep] - deep_before).abs()
+            < 1e-12,
+        "deep substrate should be unaffected by filter cleaning"
+    );
+    assert!(
+        (after.water.dissolved_organic_nitrogen_mg_n_total
+            - (don_before
+                + live_biomass_nitrogen_mg(removed_total, after.process_params.feed_n_to_c_ratio)))
+        .abs()
+            < 1e-9,
+        "DON increase should match the decomposer biomass actually removed"
+    );
+    assert!(
+        (after.water.dissolved_organic_carbon_mg_c_total
+            - (doc_before
+                + live_biomass_carbon_mg(removed_total, after.process_params.feed_n_to_c_ratio)))
+        .abs()
+            < 1e-9,
+        "DOC increase should match the decomposer biomass actually removed"
+    );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// 14. Habitat diversity supports more microbes
 // ---------------------------------------------------------------------------
 
 #[test]

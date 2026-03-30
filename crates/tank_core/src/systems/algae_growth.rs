@@ -40,9 +40,9 @@ const ALGAE_P_MG_PER_G_GROWTH: f64 = 5.0;
 ///
 /// # Intentionally abstracted
 ///
-/// - Planktonic and periphyton algae share the same nutrient/light/temperature
-///   limitation factors.  Phase 3 (tanksim-6e5.5.3) will split them with
-///   habitat-specific light exposure and nutrient access.
+/// - Planktonic and periphyton algae still share nutrient and temperature
+///   limitation factors, but periphyton now uses habitat-specific light
+///   exposure and carrying capacity while nutrient access remains bulk-water.
 /// - P cycling is not fully closed; the model over-indexes on N limitation.
 ///   This is acceptable until the P cycle is closed in a later phase.
 /// - CO₂/DIC interaction with photosynthesis and pH is deferred to
@@ -175,8 +175,8 @@ pub fn step_daily_algae(state: &mut TankState) {
     // Each habitat independently computes periphyton capacity, growth, loss,
     // and excess shedding. The habitat registry provides colonizable area and
     // light exposure; nutrients and temperature are shared (well-mixed water).
-    // Shrimp and microfauna grazing still operate on the total pool (habitat-
-    // aware grazing is deferred to a later phase).
+    // Dedicated shrimp and microfauna feeding passes later in the tick remove
+    // periphyton with habitat-aware accessibility weighting.
     let capacity_g_per_m2 = state.process_params.periphyton_capacity_g_per_m2;
     let max_growth = state.process_params.periphyton_max_growth_rate_per_day;
     let respiration_frac = state.process_params.algae_respiration_fraction_per_day;
@@ -210,13 +210,7 @@ pub fn step_daily_algae(state: &mut TankState) {
         // Per-habitat light factor: the habitat's structural light exposure
         // replaces the column-average factor used for suspended algae.
         let habitat_light_factor = half_saturation(
-            habitat_light
-                * if state.hardware.light.enabled {
-                    state.hardware.light.intensity_index
-                } else {
-                    0.0
-                }
-                * (state.hardware.light.photoperiod_hours / 9.0).clamp(0.0, 1.0),
+            habitat_light * (state.hardware.light.photoperiod_hours / 9.0).clamp(0.0, 1.0),
             state.process_params.algae_light_half_saturation,
         );
 

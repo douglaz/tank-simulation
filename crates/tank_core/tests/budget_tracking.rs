@@ -729,13 +729,10 @@ fn test_trim_plants_and_remove_exports_n_and_c() -> Result<(), SimError> {
 fn test_clean_filter_routes_removed_microbes_to_dissolved_organics() -> Result<(), SimError> {
     let state = clean_filter_budget_state(SimSeed(9_019));
     let ratio = state.process_params.feed_n_to_c_ratio;
-    let removed_biomass_g = (state.microbe.decomposer_biomass_g
-        + state.microbe.ammonia_oxidizer_biomass_g
-        + state.microbe.nitrite_oxidizer_biomass_g
-        + state.microbe.comammox_biomass_g)
-        * 0.4;
-    let expected_don_increase = manual_live_biomass_nitrogen_mg(removed_biomass_g, ratio);
-    let expected_doc_increase = manual_live_biomass_carbon_mg(removed_biomass_g, ratio);
+    let decomposer_before = state.microbe.decomposer_biomass_g;
+    let aob_before = state.microbe.ammonia_oxidizer_biomass_g;
+    let nob_before = state.microbe.nitrite_oxidizer_biomass_g;
+    let comammox_before = state.microbe.comammox_biomass_g;
     let initial_total_n = state.total_nitrogen();
     let initial_total_c = state.total_carbon();
     let initial_don = state.water.dissolved_organic_nitrogen_mg_n_total;
@@ -745,6 +742,13 @@ fn test_clean_filter_routes_removed_microbes_to_dissolved_organics() -> Result<(
     engine.apply_action(PlayerAction::CleanFilter { intensity: 0.8 })?;
 
     engine.step_hours(1)?;
+
+    let removed_biomass_g = (decomposer_before - engine.full_state().microbe.decomposer_biomass_g)
+        + (aob_before - engine.full_state().microbe.ammonia_oxidizer_biomass_g)
+        + (nob_before - engine.full_state().microbe.nitrite_oxidizer_biomass_g)
+        + (comammox_before - engine.full_state().microbe.comammox_biomass_g);
+    let expected_don_increase = manual_live_biomass_nitrogen_mg(removed_biomass_g, ratio);
+    let expected_doc_increase = manual_live_biomass_carbon_mg(removed_biomass_g, ratio);
 
     assert_close(engine.full_state().total_nitrogen(), initial_total_n, 1e-6);
     assert_close(engine.full_state().total_carbon(), initial_total_c, 1e-6);

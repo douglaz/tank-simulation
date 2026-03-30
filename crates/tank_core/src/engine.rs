@@ -8,7 +8,8 @@ use crate::{
     types::{
         live_biomass_carbon_mg, live_biomass_nitrogen_mg, BudgetDelta, BudgetEntry, BudgetLedger,
         BudgetMetric, BudgetRecordingKind, BudgetSnapshot, ElementBudget, EventCause, EventKind,
-        EventSeverity, PlayerAction, SimError, SimEvent, TankSnapshot, TankState, TickBudgetRecord,
+        EventSeverity, HabitatKind, PlayerAction, SimError, SimEvent, TankSnapshot, TankState,
+        TickBudgetRecord,
     },
 };
 
@@ -766,15 +767,20 @@ impl Engine {
                     .clamp(0.0, 1.0);
                 self.state.filter_state.biofilter_maturity_index *= 1.0 - (intensity * 0.5);
                 self.state.filter_state.clogging_index *= 1.0 - intensity;
-                // Proportional setback in active nitrifier and decomposer biomass.
-                // Decomposer setback is distributed across per-habitat pools.
+                // Proportional setback in active nitrifier biomass. Decomposer
+                // setback is concentrated on filter media and only lightly
+                // spills over to exposed nearby habitats.
                 let setback = intensity * 0.5;
-                let removed_decomposer = self.state.microbe.decomposer_biomass_g * setback;
+                let mut removed_decomposer = 0.0;
                 let removed_aob = self.state.microbe.ammonia_oxidizer_biomass_g * setback;
                 let removed_nob = self.state.microbe.nitrite_oxidizer_biomass_g * setback;
                 let removed_comammox = self.state.microbe.comammox_biomass_g * setback;
-                for biomass in self.state.microbe.decomposer_by_habitat.values_mut() {
-                    *biomass = (*biomass * (1.0 - setback)).max(0.0);
+                for (kind, biomass) in &mut self.state.microbe.decomposer_by_habitat {
+                    let habitat_setback =
+                        setback * filter_cleaning_decomposer_setback_factor(*kind);
+                    let before = *biomass;
+                    *biomass = (*biomass * (1.0 - habitat_setback)).max(0.0);
+                    removed_decomposer += (before - *biomass).max(0.0);
                 }
                 self.state.microbe.sync_decomposer_total();
                 self.state.microbe.ammonia_oxidizer_biomass_g -= removed_aob;
@@ -965,6 +971,16 @@ fn route_live_biomass_to_dissolved_organics(state: &mut TankState, biomass_g: f6
         live_biomass_nitrogen_mg(biomass_g, n_to_c_ratio);
     state.water.dissolved_organic_carbon_mg_c_total +=
         live_biomass_carbon_mg(biomass_g, n_to_c_ratio);
+}
+
+fn filter_cleaning_decomposer_setback_factor(kind: HabitatKind) -> f64 {
+    match kind {
+        HabitatKind::FilterMedia => 1.0,
+        HabitatKind::SubstrateSurface => 0.2,
+        HabitatKind::GlassHardscape => 0.05,
+        HabitatKind::PlantSurfaces => 0.05,
+        HabitatKind::SubstrateDeep => 0.0,
+    }
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
