@@ -326,6 +326,8 @@ mod tests {
         state.water.dissolved_oxygen_mg_total = 2.0 * volume_l;
         // High decomposer biomass → strong substrate O2 demand
         state.microbe.decomposer_biomass_g = 10.0;
+        // Clear plants so ROL bonus doesn't add to penetration
+        state.plant_guilds.clear();
         step_substrate_zones(&mut state);
 
         for layer in &state.substrate_layers {
@@ -640,6 +642,8 @@ mod tests {
         let mut state = make_state();
         state.water.dissolved_oxygen_mg_total = 0.0;
         state.microbe.decomposer_biomass_g = 2.0;
+        // Clear plants so ROL bonus doesn't create penetration under anoxic water
+        state.plant_guilds.clear();
 
         step_substrate_zones(&mut state);
         state.refresh_habitat_registry();
