@@ -795,6 +795,21 @@ fn shrimp_preset_to_params(
     if let Some(value) = shrimp_preset.min_clutch_condition {
         params.min_clutch_condition = value;
     }
+    if let Some(value) = shrimp_preset.ca_min_mg_per_l {
+        params.ca_min_mg_per_l = value;
+    }
+    if let Some(value) = shrimp_preset.mg_min_mg_per_l {
+        params.mg_min_mg_per_l = value;
+    }
+    if let Some(value) = shrimp_preset.juvenile_molt_interval_days {
+        params.juvenile_molt_interval_days = value;
+    }
+    if let Some(value) = shrimp_preset.sub_adult_molt_interval_days {
+        params.sub_adult_molt_interval_days = value;
+    }
+    if let Some(value) = shrimp_preset.molt_success_threshold {
+        params.molt_success_threshold = value;
+    }
 
     params
 }
@@ -1251,6 +1266,11 @@ mod tests {
         preset.sub_adult_sensitivity = Some(1.9);
         preset.base_clutch_size = Some(17);
         preset.min_clutch_condition = Some(0.44);
+        preset.ca_min_mg_per_l = Some(18.0);
+        preset.mg_min_mg_per_l = Some(4.0);
+        preset.juvenile_molt_interval_days = Some(11.0);
+        preset.sub_adult_molt_interval_days = Some(17.0);
+        preset.molt_success_threshold = Some(0.61);
 
         let params = shrimp_preset_to_params(&preset, 40.0);
         assert_eq!(params.body_nitrogen_mg_per_g_wet_mass, 31.0);
@@ -1264,6 +1284,11 @@ mod tests {
         assert_eq!(params.sub_adult_sensitivity, 1.9);
         assert_eq!(params.base_clutch_size, 17);
         assert_eq!(params.min_clutch_condition, 0.44);
+        assert_eq!(params.ca_min_mg_per_l, 18.0);
+        assert_eq!(params.mg_min_mg_per_l, 4.0);
+        assert_eq!(params.juvenile_molt_interval_days, 11.0);
+        assert_eq!(params.sub_adult_molt_interval_days, 17.0);
+        assert_eq!(params.molt_success_threshold, 0.61);
 
         preset.juvenile_to_subadult_days = Some(15.0);
         preset.subadult_to_adult_days = Some(9.0);
