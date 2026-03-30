@@ -356,6 +356,16 @@ fn step_hours_rejects_invalid_molt_mineral_parameters_before_simulation() {
         ("shrimp_params.failed_molt_stress_blend", 1.2),
         ("shrimp_params.molt_failure_poor_condition_threshold", 1.2),
         ("shrimp_params.molt_failure_instability_threshold", -0.1),
+        ("shrimp_params.molt_stress_warning_threshold", 1.2),
+        ("shrimp_params.molt_stress_mortality_threshold", 1.2),
+        ("shrimp_params.molt_stress_mineral_gh_weight", 1.2),
+        ("shrimp_params.molt_stress_mineral_ca_weight", -0.1),
+        ("shrimp_params.molt_stress_mineral_mg_weight", 1.2),
+        ("shrimp_params.molt_stress_pressure_hourly_weight", 1.2),
+        ("shrimp_params.molt_stress_rise_smoothing", 1.2),
+        ("shrimp_params.molt_stress_decay_smoothing", -0.1),
+        ("shrimp_params.molt_gh_excess_penalty_divisor", 0.0),
+        ("shrimp_params.molt_mineral_factor_floor", 1.2),
         ("shrimp_params.juvenile_molt_interval_days", 0.0),
         ("shrimp_params.sub_adult_molt_interval_days", 0.0),
         ("shrimp_params.molt_success_threshold", 1.2),
@@ -395,6 +405,36 @@ fn step_hours_rejects_invalid_molt_mineral_parameters_before_simulation() {
             }
             "shrimp_params.molt_failure_instability_threshold" => {
                 state.shrimp_params.molt_failure_instability_threshold = value;
+            }
+            "shrimp_params.molt_stress_warning_threshold" => {
+                state.shrimp_params.molt_stress_warning_threshold = value;
+            }
+            "shrimp_params.molt_stress_mortality_threshold" => {
+                state.shrimp_params.molt_stress_mortality_threshold = value;
+            }
+            "shrimp_params.molt_stress_mineral_gh_weight" => {
+                state.shrimp_params.molt_stress_mineral_gh_weight = value;
+            }
+            "shrimp_params.molt_stress_mineral_ca_weight" => {
+                state.shrimp_params.molt_stress_mineral_ca_weight = value;
+            }
+            "shrimp_params.molt_stress_mineral_mg_weight" => {
+                state.shrimp_params.molt_stress_mineral_mg_weight = value;
+            }
+            "shrimp_params.molt_stress_pressure_hourly_weight" => {
+                state.shrimp_params.molt_stress_pressure_hourly_weight = value;
+            }
+            "shrimp_params.molt_stress_rise_smoothing" => {
+                state.shrimp_params.molt_stress_rise_smoothing = value;
+            }
+            "shrimp_params.molt_stress_decay_smoothing" => {
+                state.shrimp_params.molt_stress_decay_smoothing = value;
+            }
+            "shrimp_params.molt_gh_excess_penalty_divisor" => {
+                state.shrimp_params.molt_gh_excess_penalty_divisor = value;
+            }
+            "shrimp_params.molt_mineral_factor_floor" => {
+                state.shrimp_params.molt_mineral_factor_floor = value;
             }
             "shrimp_params.juvenile_molt_interval_days" => {
                 state.shrimp_params.juvenile_molt_interval_days = value;
@@ -438,6 +478,27 @@ fn step_hours_rejects_invalid_molt_condition_weight_sum_before_simulation() {
         Err(SimError::InvariantViolation {
             field: "shrimp_params.molt_condition_weight + shrimp_params.molt_reserve_weight",
             value: 1.1,
+        })
+    );
+    assert_eq!(engine.full_state(), &expected);
+}
+
+#[test]
+fn step_hours_rejects_invalid_molt_stress_mineral_weight_sum_before_simulation() {
+    let mut state = tank_core::TankState::new(SimSeed(45));
+    state.shrimp_params.molt_stress_mineral_gh_weight = 0.6;
+    state.shrimp_params.molt_stress_mineral_ca_weight = 0.3;
+    state.shrimp_params.molt_stress_mineral_mg_weight = 0.3;
+    let expected = state.clone();
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    let result = engine.step_hours(1);
+
+    assert_eq!(
+        result,
+        Err(SimError::InvariantViolation {
+            field: "shrimp_params.molt_stress_mineral_gh_weight + shrimp_params.molt_stress_mineral_ca_weight + shrimp_params.molt_stress_mineral_mg_weight",
+            value: 1.2,
         })
     );
     assert_eq!(engine.full_state(), &expected);

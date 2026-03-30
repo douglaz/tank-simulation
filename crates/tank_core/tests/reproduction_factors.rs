@@ -691,6 +691,38 @@ fn test_density_suppression_applies_immediately_to_spawning() -> Result<(), SimE
 }
 
 #[test]
+fn test_mineral_suppression_is_applied_once_in_spawning() {
+    let mut state = breeding_fixture_with_volume(SimSeed(8018), 120.0);
+    state.animal.adult.count = 100;
+    state.animal.adult.reserve_g = 50.0;
+    state.animal.adult.condition_index = 1.0;
+    state.animal.molt_stress_index = 0.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.shrimp_params.base_spawn_rate = 1.0;
+    state.algae.set_periphyton_total(400.0);
+    state.water.calcium_mg_total = 10.0 * state.water_volume_l();
+    state.water.magnesium_mg_total = 2.0 * state.water_volume_l();
+
+    let mineral_factor = (state.gh_d() / state.shrimp_params.gh_min_d.max(0.01)).clamp(0.3, 1.0);
+    state.animal.reproductive_readiness_index = mineral_factor;
+
+    let eligible = ((0.5 * f64::from(state.animal.adult.count))
+        - f64::from(state.animal.berried_females_count))
+    .max(0.0);
+
+    step_daily_shrimp(&mut state);
+
+    let spawn_per_capita = f64::from(state.animal.berried_females_count) / eligible.max(1.0);
+    let readiness = state.animal.reproductive_readiness_index;
+
+    assert!(
+        (spawn_per_capita - readiness).abs() < 0.03,
+        "Low-GH spawning should track the readiness EMA once, not apply a second mineral penalty: readiness={readiness:.4}, spawned_per_capita={spawn_per_capita:.4}"
+    );
+}
+
+#[test]
 fn test_multiple_stressors_compound() -> Result<(), SimError> {
     // Two moderate stressors produce greater suppression than either alone.
 

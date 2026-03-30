@@ -477,7 +477,10 @@ fn update_molt_stress(state: &mut TankState) {
     } else {
         0.0
     };
-    let mineral_stress = (0.5 * gh_stress + 0.3 * ca_stress + 0.2 * mg_stress).clamp(0.0, 1.0);
+    let mineral_stress = (params.molt_stress_mineral_gh_weight * gh_stress
+        + params.molt_stress_mineral_ca_weight * ca_stress
+        + params.molt_stress_mineral_mg_weight * mg_stress)
+        .clamp(0.0, 1.0);
 
     let instability_stress = state.stability_tracker.instability_index;
     let condition_stress = (0.5 - state.animal.population_condition_index()).max(0.0);
@@ -490,18 +493,20 @@ fn update_molt_stress(state: &mut TankState) {
     let hourly_pressure =
         state.animal.hourly_heat_stress_accum + state.animal.hourly_instability_stress_accum;
 
-    let stress_pressure = (mineral_stress * 0.3
-        + instability_stress * 0.3
-        + condition_stress * 0.2
-        + thermal_stress * 0.2
-        + hourly_pressure * 0.3)
+    let stress_pressure = (mineral_stress * params.molt_stress_pressure_mineral_weight
+        + instability_stress * params.molt_stress_pressure_instability_weight
+        + condition_stress * params.molt_stress_pressure_condition_weight
+        + thermal_stress * params.molt_stress_pressure_thermal_weight
+        + hourly_pressure * params.molt_stress_pressure_hourly_weight)
         .clamp(0.0, 1.0);
 
     // Rises quickly, decays slowly
     if stress_pressure > state.animal.molt_stress_index {
-        state.animal.molt_stress_index += 0.2 * (stress_pressure - state.animal.molt_stress_index);
+        state.animal.molt_stress_index +=
+            params.molt_stress_rise_smoothing * (stress_pressure - state.animal.molt_stress_index);
     } else {
-        state.animal.molt_stress_index += 0.05 * (stress_pressure - state.animal.molt_stress_index);
+        state.animal.molt_stress_index +=
+            params.molt_stress_decay_smoothing * (stress_pressure - state.animal.molt_stress_index);
     }
     state.animal.molt_stress_index = state.animal.molt_stress_index.clamp(0.0, 1.0);
 }
@@ -712,8 +717,6 @@ fn spawning(state: &mut TankState) {
     }
 
     let params = &state.shrimp_params;
-    let gh_d = state.concentrations().gh_d();
-    let f_mineral = gh_mineral_factor(gh_d, params);
     let volume_l = state.water_volume_l();
     let density_per_l = if volume_l > f64::EPSILON {
         f64::from(state.animal.total_count()) / volume_l
@@ -728,7 +731,7 @@ fn spawning(state: &mut TankState) {
         .animal
         .reproductive_readiness_index
         .min(density_factor);
-    let spawn_rate = (params.base_spawn_rate * spawn_readiness * f_mineral).clamp(0.0, 1.0);
+    let spawn_rate = (params.base_spawn_rate * spawn_readiness).clamp(0.0, 1.0);
     let new_berried =
         deterministic_transfer_count(eligible, spawn_rate, &mut state.animal.spawn_progress_accum);
 
@@ -1193,7 +1196,8 @@ fn compute_mortality_probabilities(state: &TankState) -> MortalityProbabilities 
         + state.animal.hourly_nitrite_stress_accum
         + state.animal.hourly_low_do_stress_accum
         + state.animal.hourly_heat_stress_accum
-        + (state.animal.molt_stress_index - 0.5).max(0.0)
+        + (state.animal.molt_stress_index - state.shrimp_params.molt_stress_mortality_threshold)
+            .max(0.0)
         + (0.5 - pop_condition).max(0.0);
 
     // Keep a direct lethality channel from failed molts in addition to the
@@ -1408,7 +1412,7 @@ fn emit_molt_failure(
 }
 
 fn emit_molt_stress_warning(state: &mut TankState) {
-    if state.animal.molt_stress_index <= 0.6 {
+    if state.animal.molt_stress_index <= state.shrimp_params.molt_stress_warning_threshold {
         return;
     }
 
@@ -1670,23 +1674,26 @@ pub fn molt_mineral_modifier(
     let gh_min_d = params.gh_min_d.max(0.01);
     let ca_min_mg_per_l = params.ca_min_mg_per_l.max(0.01);
     let mg_min_mg_per_l = params.mg_min_mg_per_l.max(0.01);
+    let gh_excess_penalty_divisor = params.molt_gh_excess_penalty_divisor.max(0.01);
+    let mineral_factor_floor = params.molt_mineral_factor_floor.clamp(0.0, 1.0);
     let gh_factor = if gh_d >= params.gh_min_d && gh_d <= params.gh_max_d {
         1.0
     } else if gh_d < params.gh_min_d {
         let gh_ratio = (gh_d / gh_min_d).clamp(0.0, 1.0);
         gh_ratio * gh_ratio
     } else {
-        (1.0 - (gh_d - params.gh_max_d) / 10.0).clamp(0.3, 1.0)
+        (1.0 - (gh_d - params.gh_max_d) / gh_excess_penalty_divisor)
+            .clamp(mineral_factor_floor, 1.0)
     };
     let ca_factor = if params.ca_min_mg_per_l <= 0.0 {
         1.0
     } else {
-        (ca_mg_per_l / ca_min_mg_per_l).clamp(0.3, 1.0)
+        (ca_mg_per_l / ca_min_mg_per_l).clamp(mineral_factor_floor, 1.0)
     };
     let mg_factor = if params.mg_min_mg_per_l <= 0.0 {
         1.0
     } else {
-        (mg_mg_per_l / mg_min_mg_per_l).clamp(0.3, 1.0)
+        (mg_mg_per_l / mg_min_mg_per_l).clamp(mineral_factor_floor, 1.0)
     };
 
     (gh_factor * ca_factor.sqrt() * mg_factor.sqrt()).clamp(0.0, 1.0)

@@ -110,6 +110,24 @@ fn shrimp_runtime_default_param_value(name: &str) -> Option<f64> {
             Some(defaults.molt_failure_poor_condition_threshold)
         }
         "molt_failure_instability_threshold" => Some(defaults.molt_failure_instability_threshold),
+        "molt_stress_warning_threshold" => Some(defaults.molt_stress_warning_threshold),
+        "molt_stress_mortality_threshold" => Some(defaults.molt_stress_mortality_threshold),
+        "molt_stress_mineral_gh_weight" => Some(defaults.molt_stress_mineral_gh_weight),
+        "molt_stress_mineral_ca_weight" => Some(defaults.molt_stress_mineral_ca_weight),
+        "molt_stress_mineral_mg_weight" => Some(defaults.molt_stress_mineral_mg_weight),
+        "molt_stress_pressure_mineral_weight" => Some(defaults.molt_stress_pressure_mineral_weight),
+        "molt_stress_pressure_instability_weight" => {
+            Some(defaults.molt_stress_pressure_instability_weight)
+        }
+        "molt_stress_pressure_condition_weight" => {
+            Some(defaults.molt_stress_pressure_condition_weight)
+        }
+        "molt_stress_pressure_thermal_weight" => Some(defaults.molt_stress_pressure_thermal_weight),
+        "molt_stress_pressure_hourly_weight" => Some(defaults.molt_stress_pressure_hourly_weight),
+        "molt_stress_rise_smoothing" => Some(defaults.molt_stress_rise_smoothing),
+        "molt_stress_decay_smoothing" => Some(defaults.molt_stress_decay_smoothing),
+        "molt_gh_excess_penalty_divisor" => Some(defaults.molt_gh_excess_penalty_divisor),
+        "molt_mineral_factor_floor" => Some(defaults.molt_mineral_factor_floor),
         "juvenile_molt_interval_days" => Some(defaults.juvenile_molt_interval_days),
         "sub_adult_molt_interval_days" => Some(defaults.sub_adult_molt_interval_days),
         "molt_success_threshold" => Some(defaults.molt_success_threshold),
@@ -514,6 +532,34 @@ pub struct ShrimpPreset {
     #[serde(default)]
     pub molt_failure_instability_threshold: Option<f64>,
     #[serde(default)]
+    pub molt_stress_warning_threshold: Option<f64>,
+    #[serde(default)]
+    pub molt_stress_mortality_threshold: Option<f64>,
+    #[serde(default)]
+    pub molt_stress_mineral_gh_weight: Option<f64>,
+    #[serde(default)]
+    pub molt_stress_mineral_ca_weight: Option<f64>,
+    #[serde(default)]
+    pub molt_stress_mineral_mg_weight: Option<f64>,
+    #[serde(default)]
+    pub molt_stress_pressure_mineral_weight: Option<f64>,
+    #[serde(default)]
+    pub molt_stress_pressure_instability_weight: Option<f64>,
+    #[serde(default)]
+    pub molt_stress_pressure_condition_weight: Option<f64>,
+    #[serde(default)]
+    pub molt_stress_pressure_thermal_weight: Option<f64>,
+    #[serde(default)]
+    pub molt_stress_pressure_hourly_weight: Option<f64>,
+    #[serde(default)]
+    pub molt_stress_rise_smoothing: Option<f64>,
+    #[serde(default)]
+    pub molt_stress_decay_smoothing: Option<f64>,
+    #[serde(default)]
+    pub molt_gh_excess_penalty_divisor: Option<f64>,
+    #[serde(default)]
+    pub molt_mineral_factor_floor: Option<f64>,
+    #[serde(default)]
     pub juvenile_molt_interval_days: Option<f64>,
     #[serde(default)]
     pub sub_adult_molt_interval_days: Option<f64>,
@@ -672,6 +718,59 @@ impl ShrimpPreset {
                 self.molt_failure_instability_threshold,
             ),
             (
+                "molt_stress_warning_threshold",
+                self.molt_stress_warning_threshold,
+            ),
+            (
+                "molt_stress_mortality_threshold",
+                self.molt_stress_mortality_threshold,
+            ),
+            (
+                "molt_stress_mineral_gh_weight",
+                self.molt_stress_mineral_gh_weight,
+            ),
+            (
+                "molt_stress_mineral_ca_weight",
+                self.molt_stress_mineral_ca_weight,
+            ),
+            (
+                "molt_stress_mineral_mg_weight",
+                self.molt_stress_mineral_mg_weight,
+            ),
+            (
+                "molt_stress_pressure_mineral_weight",
+                self.molt_stress_pressure_mineral_weight,
+            ),
+            (
+                "molt_stress_pressure_instability_weight",
+                self.molt_stress_pressure_instability_weight,
+            ),
+            (
+                "molt_stress_pressure_condition_weight",
+                self.molt_stress_pressure_condition_weight,
+            ),
+            (
+                "molt_stress_pressure_thermal_weight",
+                self.molt_stress_pressure_thermal_weight,
+            ),
+            (
+                "molt_stress_pressure_hourly_weight",
+                self.molt_stress_pressure_hourly_weight,
+            ),
+            (
+                "molt_stress_rise_smoothing",
+                self.molt_stress_rise_smoothing,
+            ),
+            (
+                "molt_stress_decay_smoothing",
+                self.molt_stress_decay_smoothing,
+            ),
+            (
+                "molt_gh_excess_penalty_divisor",
+                self.molt_gh_excess_penalty_divisor,
+            ),
+            ("molt_mineral_factor_floor", self.molt_mineral_factor_floor),
+            (
                 "juvenile_molt_interval_days",
                 self.juvenile_molt_interval_days,
             ),
@@ -712,6 +811,10 @@ impl ShrimpPreset {
             ("mg_min_mg_per_l", self.mg_min_mg_per_l),
             ("molt_reserve_fraction", self.molt_reserve_fraction),
             (
+                "molt_gh_excess_penalty_divisor",
+                self.molt_gh_excess_penalty_divisor,
+            ),
+            (
                 "juvenile_molt_interval_days",
                 self.juvenile_molt_interval_days,
             ),
@@ -748,6 +851,55 @@ impl ShrimpPreset {
                 "molt_failure_instability_threshold",
                 self.molt_failure_instability_threshold,
             ),
+            (
+                "molt_stress_warning_threshold",
+                self.molt_stress_warning_threshold,
+            ),
+            (
+                "molt_stress_mortality_threshold",
+                self.molt_stress_mortality_threshold,
+            ),
+            (
+                "molt_stress_mineral_gh_weight",
+                self.molt_stress_mineral_gh_weight,
+            ),
+            (
+                "molt_stress_mineral_ca_weight",
+                self.molt_stress_mineral_ca_weight,
+            ),
+            (
+                "molt_stress_mineral_mg_weight",
+                self.molt_stress_mineral_mg_weight,
+            ),
+            (
+                "molt_stress_pressure_mineral_weight",
+                self.molt_stress_pressure_mineral_weight,
+            ),
+            (
+                "molt_stress_pressure_instability_weight",
+                self.molt_stress_pressure_instability_weight,
+            ),
+            (
+                "molt_stress_pressure_condition_weight",
+                self.molt_stress_pressure_condition_weight,
+            ),
+            (
+                "molt_stress_pressure_thermal_weight",
+                self.molt_stress_pressure_thermal_weight,
+            ),
+            (
+                "molt_stress_pressure_hourly_weight",
+                self.molt_stress_pressure_hourly_weight,
+            ),
+            (
+                "molt_stress_rise_smoothing",
+                self.molt_stress_rise_smoothing,
+            ),
+            (
+                "molt_stress_decay_smoothing",
+                self.molt_stress_decay_smoothing,
+            ),
+            ("molt_mineral_factor_floor", self.molt_mineral_factor_floor),
             ("molt_success_threshold", self.molt_success_threshold),
             ("critical_molt_gh_ratio", self.critical_molt_gh_ratio),
         ] {
@@ -785,6 +937,26 @@ impl ShrimpPreset {
         if (molt_condition_weight + molt_reserve_weight - 1.0).abs() > 1.0e-9 {
             return Err(format!(
                 "molt_condition_weight ({molt_condition_weight}) + molt_reserve_weight ({molt_reserve_weight}) must sum to 1.0"
+            ));
+        }
+        let molt_stress_mineral_gh_weight = self
+            .molt_stress_mineral_gh_weight
+            .unwrap_or(ShrimpRuntimeParams::default().molt_stress_mineral_gh_weight);
+        let molt_stress_mineral_ca_weight = self
+            .molt_stress_mineral_ca_weight
+            .unwrap_or(ShrimpRuntimeParams::default().molt_stress_mineral_ca_weight);
+        let molt_stress_mineral_mg_weight = self
+            .molt_stress_mineral_mg_weight
+            .unwrap_or(ShrimpRuntimeParams::default().molt_stress_mineral_mg_weight);
+        if (molt_stress_mineral_gh_weight
+            + molt_stress_mineral_ca_weight
+            + molt_stress_mineral_mg_weight
+            - 1.0)
+            .abs()
+            > 1.0e-9
+        {
+            return Err(format!(
+                "molt_stress_mineral_gh_weight ({molt_stress_mineral_gh_weight}) + molt_stress_mineral_ca_weight ({molt_stress_mineral_ca_weight}) + molt_stress_mineral_mg_weight ({molt_stress_mineral_mg_weight}) must sum to 1.0"
             ));
         }
         if let Some(base_clutch_size) = self.base_clutch_size {
@@ -880,6 +1052,48 @@ impl ParamMetaPreset for ShrimpPreset {
             "molt_failure_instability_threshold" => self
                 .molt_failure_instability_threshold
                 .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_stress_warning_threshold" => self
+                .molt_stress_warning_threshold
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_stress_mortality_threshold" => self
+                .molt_stress_mortality_threshold
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_stress_mineral_gh_weight" => self
+                .molt_stress_mineral_gh_weight
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_stress_mineral_ca_weight" => self
+                .molt_stress_mineral_ca_weight
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_stress_mineral_mg_weight" => self
+                .molt_stress_mineral_mg_weight
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_stress_pressure_mineral_weight" => self
+                .molt_stress_pressure_mineral_weight
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_stress_pressure_instability_weight" => self
+                .molt_stress_pressure_instability_weight
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_stress_pressure_condition_weight" => self
+                .molt_stress_pressure_condition_weight
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_stress_pressure_thermal_weight" => self
+                .molt_stress_pressure_thermal_weight
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_stress_pressure_hourly_weight" => self
+                .molt_stress_pressure_hourly_weight
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_stress_rise_smoothing" => self
+                .molt_stress_rise_smoothing
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_stress_decay_smoothing" => self
+                .molt_stress_decay_smoothing
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_gh_excess_penalty_divisor" => self
+                .molt_gh_excess_penalty_divisor
+                .or_else(|| shrimp_runtime_default_param_value(name)),
+            "molt_mineral_factor_floor" => self
+                .molt_mineral_factor_floor
+                .or_else(|| shrimp_runtime_default_param_value(name)),
             "juvenile_molt_interval_days" => self
                 .juvenile_molt_interval_days
                 .or_else(|| shrimp_runtime_default_param_value(name)),
@@ -934,6 +1148,20 @@ impl ParamMetaPreset for ShrimpPreset {
                 | "molt_reserve_weight"
                 | "molt_failure_poor_condition_threshold"
                 | "molt_failure_instability_threshold"
+                | "molt_stress_warning_threshold"
+                | "molt_stress_mortality_threshold"
+                | "molt_stress_mineral_gh_weight"
+                | "molt_stress_mineral_ca_weight"
+                | "molt_stress_mineral_mg_weight"
+                | "molt_stress_pressure_mineral_weight"
+                | "molt_stress_pressure_instability_weight"
+                | "molt_stress_pressure_condition_weight"
+                | "molt_stress_pressure_thermal_weight"
+                | "molt_stress_pressure_hourly_weight"
+                | "molt_stress_rise_smoothing"
+                | "molt_stress_decay_smoothing"
+                | "molt_gh_excess_penalty_divisor"
+                | "molt_mineral_factor_floor"
                 | "juvenile_molt_interval_days"
                 | "sub_adult_molt_interval_days"
                 | "molt_success_threshold"

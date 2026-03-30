@@ -451,6 +451,68 @@ fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), Si
         "shrimp_params.molt_failure_instability_threshold",
         params.molt_failure_instability_threshold,
     )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_warning_threshold",
+        params.molt_stress_warning_threshold,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_mortality_threshold",
+        params.molt_stress_mortality_threshold,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_mineral_gh_weight",
+        params.molt_stress_mineral_gh_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_mineral_ca_weight",
+        params.molt_stress_mineral_ca_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_mineral_mg_weight",
+        params.molt_stress_mineral_mg_weight,
+    )?;
+    check_sum_close_to_one(
+        "shrimp_params.molt_stress_mineral_gh_weight + shrimp_params.molt_stress_mineral_ca_weight + shrimp_params.molt_stress_mineral_mg_weight",
+        params.molt_stress_mineral_gh_weight
+            + params.molt_stress_mineral_ca_weight
+            + params.molt_stress_mineral_mg_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_pressure_mineral_weight",
+        params.molt_stress_pressure_mineral_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_pressure_instability_weight",
+        params.molt_stress_pressure_instability_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_pressure_condition_weight",
+        params.molt_stress_pressure_condition_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_pressure_thermal_weight",
+        params.molt_stress_pressure_thermal_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_pressure_hourly_weight",
+        params.molt_stress_pressure_hourly_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_rise_smoothing",
+        params.molt_stress_rise_smoothing,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_decay_smoothing",
+        params.molt_stress_decay_smoothing,
+    )?;
+    check_positive(
+        "shrimp_params.molt_gh_excess_penalty_divisor",
+        params.molt_gh_excess_penalty_divisor,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_mineral_factor_floor",
+        params.molt_mineral_factor_floor,
+    )?;
     check_sum_close_to_one(
         "shrimp_params.molt_condition_weight + shrimp_params.molt_reserve_weight",
         params.molt_condition_weight + params.molt_reserve_weight,

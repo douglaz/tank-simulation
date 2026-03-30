@@ -515,7 +515,7 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling(
 /// **What we validate:**
 /// - Same-footprint tanks with different fill heights (shallow ~15 cm vs
 ///   deep ~52 cm above substrate) produce different growth patterns
-/// - Shallow tank produces more plant biomass growth after 14 days
+/// - Shallow tank achieves net plant biomass gain while the deeper run lags
 /// - Substrate-surface habitat light exposure is lower in the deep tank
 /// - Both tanks remain within basic stability envelopes
 #[test]
@@ -539,18 +539,26 @@ fn run_probe_light_depth_shallow_vs_deep_growth() -> Result<ProbeResult, Box<dyn
             .rescale_totals_for_volume(old_volume_l, volume_l);
         state.environment.ambient_temp_c = 25.0;
         state.water.temperature_c = 25.0;
+        state
+            .plant_guilds
+            .retain(|plant| plant.guild == PlantGuild::FastStem);
+        if let Some(plant) = state.plant_guilds.first_mut() {
+            plant.biomass_g = 6.0;
+            plant.health_index = 0.95;
+        }
         state.hardware.light.enabled = true;
-        state.hardware.light.intensity_index = 0.9;
+        state.hardware.light.intensity_index = 1.0;
         state.hardware.light.photoperiod_hours = 12.0;
         state.hardware.filter.enabled = true;
         state.hardware.aeration.enabled = true;
         state.water.ammonia_total_mg_n_total = 0.5 * volume_l;
-        state.water.nitrate_mg_n_total = 5.0 * volume_l;
-        state.water.phosphate_mg_p_total = 0.4 * volume_l;
-        state.water.dissolved_inorganic_carbon_mg_c_total = 20.0 * volume_l;
+        state.water.nitrate_mg_n_total = 12.0 * volume_l;
+        state.water.phosphate_mg_p_total = 0.8 * volume_l;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 30.0 * volume_l;
         state.water.dissolved_oxygen_mg_total = 8.0 * volume_l;
-        // Boost base extinction so depth difference is significant
-        state.process_params.base_extinction_coeff_per_cm = 0.03;
+        // Keep attenuation strong enough to separate shallow vs deep runs
+        // while still letting the shallow water column support net growth.
+        state.process_params.base_extinction_coeff_per_cm = 0.025;
         state.animal.adult.count = 0;
         state.animal.sub_adult.count = 0;
         state.animal.juvenile.count = 0;
@@ -654,6 +662,15 @@ fn run_probe_light_depth_shallow_vs_deep_growth() -> Result<ProbeResult, Box<dyn
             growth_shallow > growth_deep,
             format!(
                 "shallow tank should have more plant growth (more light at canopy): \
+                 shallow_growth={growth_shallow:.4} g, deep_growth={growth_deep:.4} g"
+            ),
+        );
+        record_check(
+            &mut runs,
+            "light_depth_positive_growth",
+            growth_shallow > 0.0,
+            format!(
+                "shallow tank should achieve net positive plant growth under the brighter water column: \
                  shallow_growth={growth_shallow:.4} g, deep_growth={growth_deep:.4} g"
             ),
         );
@@ -1206,7 +1223,7 @@ fn run_probe_equipment_scaling_1x_vs_2x() -> Result<ProbeResult, Box<dyn std::er
     let duration_hours: u32 = 500;
     let feed_per_adult_per_day: f64 = 0.001;
     let base_adult_count: u32 = 10;
-    let concentration_tolerance: f64 = 0.55;
+    let concentration_tolerance: f64 = 0.40;
 
     let build_run =
         |size_scale: f64, label: &str| -> Result<HarnessRun, Box<dyn std::error::Error>> {

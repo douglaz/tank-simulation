@@ -325,6 +325,59 @@ pub struct ShrimpRuntimeParams {
     /// `ChemistryInstability` diagnostic on molt failure/stress events.
     #[serde(default = "default_molt_failure_instability_threshold")]
     pub molt_failure_instability_threshold: f64,
+    /// Molt-stress index threshold above which a `MoltStressWarning` event
+    /// should fire.
+    #[serde(default = "default_molt_stress_warning_threshold")]
+    pub molt_stress_warning_threshold: f64,
+    /// Molt-stress index threshold above which molt stress contributes to the
+    /// generic mortality stress total.
+    #[serde(default = "default_molt_stress_mortality_threshold")]
+    pub molt_stress_mortality_threshold: f64,
+    /// Relative GH contribution within the mineral-stress blend used to update
+    /// `molt_stress_index`.
+    #[serde(default = "default_molt_stress_mineral_gh_weight")]
+    pub molt_stress_mineral_gh_weight: f64,
+    /// Relative calcium contribution within the mineral-stress blend used to
+    /// update `molt_stress_index`.
+    #[serde(default = "default_molt_stress_mineral_ca_weight")]
+    pub molt_stress_mineral_ca_weight: f64,
+    /// Relative magnesium contribution within the mineral-stress blend used to
+    /// update `molt_stress_index`.
+    #[serde(default = "default_molt_stress_mineral_mg_weight")]
+    pub molt_stress_mineral_mg_weight: f64,
+    /// Weight of mineral stress in the overall molt-stress pressure blend.
+    #[serde(default = "default_molt_stress_pressure_mineral_weight")]
+    pub molt_stress_pressure_mineral_weight: f64,
+    /// Weight of chemistry instability in the overall molt-stress pressure
+    /// blend.
+    #[serde(default = "default_molt_stress_pressure_instability_weight")]
+    pub molt_stress_pressure_instability_weight: f64,
+    /// Weight of low condition in the overall molt-stress pressure blend.
+    #[serde(default = "default_molt_stress_pressure_condition_weight")]
+    pub molt_stress_pressure_condition_weight: f64,
+    /// Weight of thermal stress in the overall molt-stress pressure blend.
+    #[serde(default = "default_molt_stress_pressure_thermal_weight")]
+    pub molt_stress_pressure_thermal_weight: f64,
+    /// Weight of short-horizon hourly stress accumulation in the overall
+    /// molt-stress pressure blend.
+    #[serde(default = "default_molt_stress_pressure_hourly_weight")]
+    pub molt_stress_pressure_hourly_weight: f64,
+    /// EMA smoothing factor applied when `molt_stress_index` is rising toward
+    /// today's pressure.
+    #[serde(default = "default_molt_stress_rise_smoothing")]
+    pub molt_stress_rise_smoothing: f64,
+    /// EMA smoothing factor applied when `molt_stress_index` is decaying toward
+    /// today's pressure.
+    #[serde(default = "default_molt_stress_decay_smoothing")]
+    pub molt_stress_decay_smoothing: f64,
+    /// Degrees GH above `gh_max_d` required to apply the full high-mineral
+    /// penalty in `molt_mineral_modifier`.
+    #[serde(default = "default_molt_gh_excess_penalty_divisor")]
+    pub molt_gh_excess_penalty_divisor: f64,
+    /// Floor applied to GH/Ca/Mg factors inside `molt_mineral_modifier` so
+    /// mineral shortfalls degrade molt success without forcing a hard zero.
+    #[serde(default = "default_molt_mineral_factor_floor")]
+    pub molt_mineral_factor_floor: f64,
     /// Base inter-molt period for juveniles (days). Shorter than adults.
     #[serde(default = "default_juvenile_molt_interval_days")]
     pub juvenile_molt_interval_days: f64,
@@ -758,6 +811,21 @@ impl Default for ShrimpRuntimeParams {
             molt_reserve_weight: default_molt_reserve_weight(),
             molt_failure_poor_condition_threshold: default_molt_failure_poor_condition_threshold(),
             molt_failure_instability_threshold: default_molt_failure_instability_threshold(),
+            molt_stress_warning_threshold: default_molt_stress_warning_threshold(),
+            molt_stress_mortality_threshold: default_molt_stress_mortality_threshold(),
+            molt_stress_mineral_gh_weight: default_molt_stress_mineral_gh_weight(),
+            molt_stress_mineral_ca_weight: default_molt_stress_mineral_ca_weight(),
+            molt_stress_mineral_mg_weight: default_molt_stress_mineral_mg_weight(),
+            molt_stress_pressure_mineral_weight: default_molt_stress_pressure_mineral_weight(),
+            molt_stress_pressure_instability_weight:
+                default_molt_stress_pressure_instability_weight(),
+            molt_stress_pressure_condition_weight: default_molt_stress_pressure_condition_weight(),
+            molt_stress_pressure_thermal_weight: default_molt_stress_pressure_thermal_weight(),
+            molt_stress_pressure_hourly_weight: default_molt_stress_pressure_hourly_weight(),
+            molt_stress_rise_smoothing: default_molt_stress_rise_smoothing(),
+            molt_stress_decay_smoothing: default_molt_stress_decay_smoothing(),
+            molt_gh_excess_penalty_divisor: default_molt_gh_excess_penalty_divisor(),
+            molt_mineral_factor_floor: default_molt_mineral_factor_floor(),
             juvenile_molt_interval_days: default_juvenile_molt_interval_days(),
             sub_adult_molt_interval_days: default_sub_adult_molt_interval_days(),
             molt_success_threshold: default_molt_success_threshold(),
@@ -883,6 +951,62 @@ fn default_molt_failure_poor_condition_threshold() -> f64 {
 }
 
 fn default_molt_failure_instability_threshold() -> f64 {
+    0.3
+}
+
+fn default_molt_stress_warning_threshold() -> f64 {
+    0.6
+}
+
+fn default_molt_stress_mortality_threshold() -> f64 {
+    0.5
+}
+
+fn default_molt_stress_mineral_gh_weight() -> f64 {
+    0.5
+}
+
+fn default_molt_stress_mineral_ca_weight() -> f64 {
+    0.3
+}
+
+fn default_molt_stress_mineral_mg_weight() -> f64 {
+    0.2
+}
+
+fn default_molt_stress_pressure_mineral_weight() -> f64 {
+    0.3
+}
+
+fn default_molt_stress_pressure_instability_weight() -> f64 {
+    0.3
+}
+
+fn default_molt_stress_pressure_condition_weight() -> f64 {
+    0.2
+}
+
+fn default_molt_stress_pressure_thermal_weight() -> f64 {
+    0.2
+}
+
+fn default_molt_stress_pressure_hourly_weight() -> f64 {
+    0.3
+}
+
+fn default_molt_stress_rise_smoothing() -> f64 {
+    0.2
+}
+
+fn default_molt_stress_decay_smoothing() -> f64 {
+    0.05
+}
+
+fn default_molt_gh_excess_penalty_divisor() -> f64 {
+    10.0
+}
+
+fn default_molt_mineral_factor_floor() -> f64 {
     0.3
 }
 

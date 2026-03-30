@@ -835,6 +835,48 @@ fn shrimp_preset_to_params(
     if let Some(value) = shrimp_preset.molt_failure_instability_threshold {
         params.molt_failure_instability_threshold = value;
     }
+    if let Some(value) = shrimp_preset.molt_stress_warning_threshold {
+        params.molt_stress_warning_threshold = value;
+    }
+    if let Some(value) = shrimp_preset.molt_stress_mortality_threshold {
+        params.molt_stress_mortality_threshold = value;
+    }
+    if let Some(value) = shrimp_preset.molt_stress_mineral_gh_weight {
+        params.molt_stress_mineral_gh_weight = value;
+    }
+    if let Some(value) = shrimp_preset.molt_stress_mineral_ca_weight {
+        params.molt_stress_mineral_ca_weight = value;
+    }
+    if let Some(value) = shrimp_preset.molt_stress_mineral_mg_weight {
+        params.molt_stress_mineral_mg_weight = value;
+    }
+    if let Some(value) = shrimp_preset.molt_stress_pressure_mineral_weight {
+        params.molt_stress_pressure_mineral_weight = value;
+    }
+    if let Some(value) = shrimp_preset.molt_stress_pressure_instability_weight {
+        params.molt_stress_pressure_instability_weight = value;
+    }
+    if let Some(value) = shrimp_preset.molt_stress_pressure_condition_weight {
+        params.molt_stress_pressure_condition_weight = value;
+    }
+    if let Some(value) = shrimp_preset.molt_stress_pressure_thermal_weight {
+        params.molt_stress_pressure_thermal_weight = value;
+    }
+    if let Some(value) = shrimp_preset.molt_stress_pressure_hourly_weight {
+        params.molt_stress_pressure_hourly_weight = value;
+    }
+    if let Some(value) = shrimp_preset.molt_stress_rise_smoothing {
+        params.molt_stress_rise_smoothing = value;
+    }
+    if let Some(value) = shrimp_preset.molt_stress_decay_smoothing {
+        params.molt_stress_decay_smoothing = value;
+    }
+    if let Some(value) = shrimp_preset.molt_gh_excess_penalty_divisor {
+        params.molt_gh_excess_penalty_divisor = value;
+    }
+    if let Some(value) = shrimp_preset.molt_mineral_factor_floor {
+        params.molt_mineral_factor_floor = value;
+    }
     if let Some(value) = shrimp_preset.juvenile_molt_interval_days {
         params.juvenile_molt_interval_days = value;
     }
@@ -1313,6 +1355,20 @@ mod tests {
         preset.mg_min_mg_per_l = Some(4.0);
         preset.molt_failure_poor_condition_threshold = Some(0.7);
         preset.molt_failure_instability_threshold = Some(0.24);
+        preset.molt_stress_warning_threshold = Some(0.58);
+        preset.molt_stress_mortality_threshold = Some(0.42);
+        preset.molt_stress_mineral_gh_weight = Some(0.4);
+        preset.molt_stress_mineral_ca_weight = Some(0.35);
+        preset.molt_stress_mineral_mg_weight = Some(0.25);
+        preset.molt_stress_pressure_mineral_weight = Some(0.28);
+        preset.molt_stress_pressure_instability_weight = Some(0.27);
+        preset.molt_stress_pressure_condition_weight = Some(0.19);
+        preset.molt_stress_pressure_thermal_weight = Some(0.18);
+        preset.molt_stress_pressure_hourly_weight = Some(0.22);
+        preset.molt_stress_rise_smoothing = Some(0.44);
+        preset.molt_stress_decay_smoothing = Some(0.12);
+        preset.molt_gh_excess_penalty_divisor = Some(12.0);
+        preset.molt_mineral_factor_floor = Some(0.18);
         preset.juvenile_molt_interval_days = Some(11.0);
         preset.sub_adult_molt_interval_days = Some(17.0);
         preset.molt_success_threshold = Some(0.61);
@@ -1337,6 +1393,20 @@ mod tests {
         assert_eq!(params.mg_min_mg_per_l, 4.0);
         assert_eq!(params.molt_failure_poor_condition_threshold, 0.7);
         assert_eq!(params.molt_failure_instability_threshold, 0.24);
+        assert_eq!(params.molt_stress_warning_threshold, 0.58);
+        assert_eq!(params.molt_stress_mortality_threshold, 0.42);
+        assert_eq!(params.molt_stress_mineral_gh_weight, 0.4);
+        assert_eq!(params.molt_stress_mineral_ca_weight, 0.35);
+        assert_eq!(params.molt_stress_mineral_mg_weight, 0.25);
+        assert_eq!(params.molt_stress_pressure_mineral_weight, 0.28);
+        assert_eq!(params.molt_stress_pressure_instability_weight, 0.27);
+        assert_eq!(params.molt_stress_pressure_condition_weight, 0.19);
+        assert_eq!(params.molt_stress_pressure_thermal_weight, 0.18);
+        assert_eq!(params.molt_stress_pressure_hourly_weight, 0.22);
+        assert_eq!(params.molt_stress_rise_smoothing, 0.44);
+        assert_eq!(params.molt_stress_decay_smoothing, 0.12);
+        assert_eq!(params.molt_gh_excess_penalty_divisor, 12.0);
+        assert_eq!(params.molt_mineral_factor_floor, 0.18);
         assert_eq!(params.juvenile_molt_interval_days, 11.0);
         assert_eq!(params.sub_adult_molt_interval_days, 17.0);
         assert_eq!(params.molt_success_threshold, 0.61);
