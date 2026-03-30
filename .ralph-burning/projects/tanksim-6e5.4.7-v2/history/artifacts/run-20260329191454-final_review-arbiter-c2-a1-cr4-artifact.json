@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260329191454-final_review-arbiter-c2-a1-cr4-artifact",
+  "payload_id": "run-20260329191454-final_review-arbiter-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-29T21:11:09.390121632Z",
+  "content": "# Final Review Arbiter\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nReject the disputed amendment. The save/load determinism regression exists, but the evidence points to load-time carbonate normalization rather than habitat-registry refresh, so the amendment’s proposed remedy is not supported and would undermine an intentional stale-registry repair path.\n\n## Rulings\n\n- `fr-4-4f43dda9`: Reject\n  The failing test is real, but the amendment’s diagnosis and proposed fix target the wrong code path. In `SaveFile::from_value` the loaded state is mutated before engine construction by `normalize_loaded_carbonate_state()` and only then passed through the habitat refresh path. Immediate post-load comparison shows the first drift in carbonate cache fields (`water.ph` and `water.bicarbonate_mg_total`), while the habitat-refresh inputs and derived habitat terms stay aligned; that makes the carbonate normalization path the supported cause, not `Engine::from_parts`. The proposed fix to skip or special-case `state.refresh_habitat_registry()` is also at odds with the explicit current-schema test that load must rebuild stale habitat registries (`current_schema_load_rebuilds_stale_habitat_registry`). Because the amendment prescribes the wrong fix surface and risks breaking intentional load repair behavior, it should be rejected.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

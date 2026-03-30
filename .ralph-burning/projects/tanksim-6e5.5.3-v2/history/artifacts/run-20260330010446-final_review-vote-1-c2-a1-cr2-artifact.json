@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330010446-final_review-vote-1-c2-a1-cr2-artifact",
+  "payload_id": "run-20260330010446-final_review-vote-1-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T02:27:44.964409756Z",
+  "content": "# Final Review Votes\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nReject the direct filter-media de-scaling change and the speculative habitat-weighted shading tweak. Accept the amendments that preserve the happy-path plant-growth guard and the one that identifies the missing scenario/startup parameterization for filter media area.\n\n## Votes\n\n- `fr-2-56410374`: Reject\n  The maturity stall is real, but removing geometry scaling is not a complete fix. `FilterHardware::default()` hard-codes 2000 cm² and neither `ScenarioPreset` nor `StartupOverrides` can supply `media_area_cm2`, so this change would make every seeded tank inherit the same filter-media area and just replace one implicit derivation with another incorrect default.\n- `fr-2-7b7aa6d2`: Reject\n  Habitat light is already habitat-specific in the registry: glass, plant surfaces, and substrate each apply different crowding attenuation before `algae_growth.rs` sees `light_exposure`. Adding another habitat-weighted plant-shading layer here is not a demonstrated bug fix and risks double-counting crowding without a failing case or calibration target.\n- `fr-2-b79c3c25`: Accept\n  The failing behavior points to the startup biomass assumption, not the test contract. On `medium_planted`, `build_plant_guilds()` with the old 6.0 g/1000 cm² density seeds 21.6 g total biomass across two guilds, and the happy-path test then drops to about 19.2 g after 30 days, so the constant/self-shading model should be validated or retuned before weakening the assertion.\n- `fr-2-c9744d27`: Accept\n  This identifies a real hole in the current filter-media change. Once `scale_hardware_to_geometry()` stops setting `media_area_cm2`, every seeded scenario falls back to the same 2000 cm² default even though flow still scales with volume, and that directly changes habitat area and nitrifier carrying capacity with no way for scenarios or startup overrides to author the hardware.\n- `fr-2-3782b77a`: Accept\n  The test name and doc comment still promise growth under good conditions, so changing it to an 80% survivability check hides a user-visible regression instead of fixing it. That weakens end-to-end coverage exactly where the suite should catch plant decline in a happy-path scenario.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

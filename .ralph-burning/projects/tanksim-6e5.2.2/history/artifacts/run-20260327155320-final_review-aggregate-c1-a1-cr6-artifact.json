@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260327155320-final_review-aggregate-c1-a1-cr6-artifact",
+  "payload_id": "run-20260327155320-final_review-aggregate-c1-a1-cr6-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-27T19:14:41.232955285Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 1 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 2\n**Final Review Restarts:** 6/20\n\n## Accepted\n\n- `fr-6-1af96a54`\n\n## Rejected\n\n- `fr-6-2ac10d07`\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-6-1af96a54`\n\nIn `crates/tank_core/src/systems/plant_growth.rs:9-23`, the water-column concentrations are captured once before the plant loop and then reused at `crates/tank_core/src/systems/plant_growth.rs:59-69`, even though each iteration mutates the shared water pools via `remove_plant_nutrients()` at `crates/tank_core/src/systems/plant_growth.rs:93-134`. Later guilds therefore compute nutrient limitation and health from stale TAN/nitrate/phosphate values after earlier guilds have already depleted the water column. Recompute the water-column factors inside the loop (or after each guild’s removals) so guild-to-guild competition uses current chemistry.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 6
+}

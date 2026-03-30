@@ -1,0 +1,29 @@
+{
+  "payload_id": "run-20260330014558-final_review-arbiter-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T05:26:59.013278122Z",
+  "payload": {
+    "rulings": [
+      {
+        "amendment_id": "fr-3-17e84003",
+        "decision": "reject",
+        "rationale": "In the actual review worktree (`.claude/worktrees/tanksim-6e5.4.7`), `molt_cycle` still uses one shared timer and fixed accumulator adjustments: success applies `-0.35` and failure applies `+0.3` at `crates/tank_core/src/systems/shrimp.rs:398-403`. There are no `failed_stage_count` or `successful_stage_count` variables in this branch. The amendment’s premise comes from a different code version, so it does not identify a real issue in the code under review."
+      },
+      {
+        "amendment_id": "fr-3-2df09666",
+        "decision": "reject",
+        "rationale": "`update_molt_stress` does contain an unguarded `/ params.gh_min_d` at `crates/tank_core/src/systems/shrimp.rs:336-338`, and invariants allow `gh_min_d == 0.0` via `check_non_negative` at `crates/tank_core/src/invariants.rs:291-298`. But `gh_d()` is clamped non-negative in `crates/tank_core/src/types/water.rs:203-210`, so when `gh_min_d == 0.0` the branch condition `gh_d < params.gh_min_d` cannot be satisfied. That leaves no reachable divide-by-zero defect. The amendment’s additional consistency argument also depends on `molt_mineral_modifier`, which is not present in this review branch. On balance this is a defensive cleanup suggestion, not a required amendment."
+      }
+    ],
+    "summary": "Both disputed amendments are rejected. In the review worktree, `fr-3-17e84003` is based on code that is not present, and `fr-3-2df09666` points to an unreachable defensive edge case rather than a concrete correctness defect."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

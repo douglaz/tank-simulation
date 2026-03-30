@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260327225238-final_review-aggregate-c1-a1-cr1-artifact",
+  "payload_id": "run-20260327225238-final_review-aggregate-c1-a1-cr1-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-27T23:15:16.053760266Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 3 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 4\n**Final Review Restarts:** 1/20\n\n## Accepted\n\n- `fr-1-47383507`\n- `fr-1-9fa711df`\n- `fr-1-fe78d820`\n\n## Rejected\n\nNone.\n\n## Disputed\n\n- `fr-1-540a2c8b`\n\n## Final Accepted Amendments\n\n### `fr-1-47383507`\n\nIn `crates/tank_api/src/handlers/save.rs:23-24`, `post_load` accepts `Json<Value>`, serializes it to a String with `serde_json::to_string`, then `SaveFile::from_json` immediately parses that String back into a `Value`. This is a redundant round-trip (Value → String → Value). Add a `SaveFile::from_value(value: Value)` method that contains the migration/deserialization logic, and have `from_json` call it after the initial parse. Then `post_load` can call `from_value` directly, avoiding the unnecessary serialization step.\n\n### `fr-1-9fa711df`\n\nThe `SimError::SchemaVersionMismatch { expected, actual }` variant in `crates/tank_core/src/types/actions.rs:72-73` is now dead code — no code path constructs it after the migration to `SchemaVersionTooNew` / `SchemaVersionTooOld`. It should be removed to prevent future contributors from accidentally using the wrong error variant.\n\n### `fr-1-fe78d820`\n\n`crates/tank_core/src/save.rs:117-121` truncates `schema_version` with `as u32` after reading it as `u64`. A save declaring a version larger than `u32::MAX` will wrap (for example `4294967296` becomes `0`) and `SaveFile::from_json` will report `SchemaVersionTooOld` instead of the required future-version error. Parse with `u32::try_from(...)` and reject out-of-range values explicitly so unknown future saves cannot be misclassified.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 1
+}

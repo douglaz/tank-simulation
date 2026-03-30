@@ -1,0 +1,27 @@
+{
+  "payload_id": "run-20260328125529-final_review-reviewer-0-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T14:06:40.202514098Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "Fix failing test `canonical_helpers_use_net_water_volume` in `crates/tank_core/tests/concentration_helpers.rs:41-43`. The test helper `expected_gh_d` uses hardcoded rounded constants (2.497, 4.118) that no longer match the implementation's precise molar-mass ratios (`MOLAR_MASS_CACO3_G_PER_MOL / MOLAR_MASS_CALCIUM_G_PER_MOL` = 2.4973..., `MOLAR_MASS_CACO3_G_PER_MOL / MOLAR_MASS_MAGNESIUM_G_PER_MOL` = 4.1180...). The test expected GH of 3.9517 but implementation computes 3.9520 — confirmed failing via `cargo test`. Fix by importing the actual constants from water.rs into the test helper, or widening the tolerance to ~1e-3 (still well within aquarium measurement precision).",
+        "rationale": "This is a real test failure that will block CI. The implementation (using exact molar mass ratios) is more correct than the test (using rounded constants). The test must be updated to match."
+      },
+      {
+        "body": "In `crates/tank_core/src/save.rs`, the `migrate_v2_to_v3` function (lines ~310-340) rescales dissolved-chemistry totals by multiplying stored values by a volume ratio, but does not validate that the source values are finite before rescaling. A NaN or infinity in a legacy save file would silently propagate through `num * scale` rather than producing a descriptive migration error. Add a `num.is_finite()` guard with a `SchemaMigration` error for non-finite chemistry values.",
+        "rationale": "While unlikely in practice, malformed or corrupted save files could introduce NaN into post-migration state without any error message, making the root cause very hard to diagnose. Defensive validation at the migration boundary is cheap and consistent with the migration contract's requirement to 'fail explicitly on malformed legacy payloads.'"
+      }
+    ],
+    "summary": "Reviewed all changes for the tanksim-6e5.2.7 bead (snapshot/API chemistry semantics, display conversions, TDS/conductivity labeling). The implementation is well-structured overall: conversion constants are centralized and correct in conversions.rs with round-trip tests, snapshot fields are renamed to be basis-explicit (e.g. tan_mg_n_per_l), TDS/conductivity are honestly labeled as estimates in TUI/API, ConcentrationView centralizes total-to-concentration math, and the API provides legacy aliases for backward compatibility. One confirmed test failure exists. The NH3 speciation formula (pKa - pH exponent) is correct despite appearing reversed — verified against known aquarium chemistry values at pH 7/25°C giving ~0.56% NH3."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}

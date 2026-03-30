@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260327225238-final_review-aggregate-c1-a1-cr2-artifact",
+  "payload_id": "run-20260327225238-final_review-aggregate-c1-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-27T23:37:11.890901575Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 2 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 3\n**Final Review Restarts:** 2/20\n\n## Accepted\n\n- `fr-2-a8d59226`\n- `fr-2-e30f07ff`\n\n## Rejected\n\nNone.\n\n## Disputed\n\n- `fr-2-8bd2540e`\n\n## Final Accepted Amendments\n\n### `fr-2-a8d59226`\n\nIn `crates/tank_core/src/systems/nitrogen_cycle.rs`, after the comammox step (around line 270-275), `alk_budget` is not decremented by `comammox_alk_cost`, even though the code comment says \"Debit shared budgets for comammox\" and `do_budget` is properly decremented. This is inconsistent with the DO budget pattern. While currently harmless (NOB does not check `alk_budget`), if a future guild is inserted after comammox that also requires alkalinity-limited rate ceilings, it would see a stale `alk_budget` that overstates available alkalinity, allowing over-consumption. Add `alk_budget = (alk_budget - comammox_alk_cost).max(0.0);` after line 273 for consistency.\n\n### `fr-2-e30f07ff`\n\n`crates/tank_tui/src/lib.rs:234-240` still loads on-disk saves with `serde_json::from_str::<SaveFile>()`, while the new schema checks and migration chain only run in `SaveFile::from_json` / `SaveFile::from_value` (`crates/tank_core/src/save.rs:86-176`). This means the TUI file-load path can still bypass version validation and migrations: a legacy save can fail before migration once a new required field is added, and a v2 save that omitted `stability_tracker` will be deserialized with default zeros and then reserialized back to the API instead of getting the reseeded baseline that `from_json` applies. Route disk loads through the migration-aware constructor, or make `SaveFile`'s `Deserialize` impl delegate to that path so every consumer gets the same behavior.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 2
+}

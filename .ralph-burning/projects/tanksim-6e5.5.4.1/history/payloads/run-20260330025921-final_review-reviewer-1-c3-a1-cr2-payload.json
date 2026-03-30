@@ -1,0 +1,31 @@
+{
+  "payload_id": "run-20260330025921-final_review-reviewer-1-c3-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 3,
+  "attempt": 1,
+  "created_at": "2026-03-30T04:33:21.626370678Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "Legacy timer migration now runs on brand-new states, not just old saves. `StageCohort` still defaults `molt_timer_days` to `0.0` and `AnimalState::default()` still seeds `inter_molt_timer_days` to `14.0` (`crates/tank_core/src/types/biology.rs:105-114`, `crates/tank_core/src/types/biology.rs:594-617`). On the first daily tick, the migration branch in `molt_cycle` copies that legacy timer into every stage timer whenever they are all zero (`crates/tank_core/src/systems/shrimp.rs:409-419`). That means a fresh juvenile cohort starts effectively 14 days into a 14-day cycle and can molt immediately, while adults start halfway through their 28-day cycle. The new per-stage cadence therefore does not actually start cleanly for fresh simulations.",
+        "rationale": "This changes first-day behavior for every new tank with shrimp and makes the new stage-specific timers behave like migrated legacy state instead of true fresh timers."
+      },
+      {
+        "body": "The per-stage molt loop undercounts failure pressure whenever multiple stages resolve on the same day. Default intervals are 14/21/28 days (`crates/tank_core/src/systems/shrimp.rs:433-438`), so overlaps are guaranteed at days 42 and 84, but the accumulator logic only tracks `any_failed`/`any_succeeded` booleans (`crates/tank_core/src/systems/shrimp.rs:440-442`, `crates/tank_core/src/systems/shrimp.rs:467-472`, `crates/tank_core/src/systems/shrimp.rs:495-506`). Two or three failed stages still add only one `+0.3`, and a mixed day (one failure plus one success) actually lowers `failed_molt_accum` because both branches run. That makes mortality pressure weakest exactly on the days when more of the population is molting.",
+        "rationale": "This is a correctness bug introduced by the new per-stage scheduling: the aggregate failure state no longer scales with the number of failed stage molts and can even move in the wrong direction."
+      },
+      {
+        "body": "The new shrimp preset knobs added in `crates/tank_data/data/shrimp/neocaridina_davidi.toml:23-27` are currently dead configuration. `ShrimpPreset` does not declare `ca_min_mg_per_l`, `mg_min_mg_per_l`, `juvenile_molt_interval_days`, `sub_adult_molt_interval_days`, or `molt_success_threshold` (`crates/tank_data/src/presets.rs:430-472`), its metadata helpers do not recognize those names (`crates/tank_data/src/presets.rs:658-733`), and `shrimp_preset_to_params` never copies them into `ShrimpRuntimeParams` (`crates/tank_scenarios/src/lib.rs:746-799`). Because TOML deserialization here ignores unknown keys, the file still loads but silently drops all five values.",
+        "rationale": "The data file now advertises species-tunable molt parameters that the runtime cannot actually read, which is a silent configuration bug and a trap for future tuning."
+      }
+    ],
+    "summary": "Reviewed the diff plus the shrimp runtime/preset plumbing end-to-end. Found three substantive issues: fresh states incorrectly trigger the legacy timer migration path, same-day multi-stage molts undercount or even reverse `failed_molt_accum`, and the new TOML preset fields are silently ignored because the preset/schema mapping was not updated. Targeted tests passed for existing `shrimp_population`, and `cargo test -p tank_core --test molt_mineral_budget` exposed failures consistent with the timer-cadence problems."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

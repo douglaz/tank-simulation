@@ -1,0 +1,31 @@
+{
+  "payload_id": "run-20260330010446-final_review-reviewer-0-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T02:09:11.188986297Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "In `crates/tank_scenarios/src/lib.rs`, the committed constant `FILTER_MEDIA_CM2_PER_LITER = 200.0` scales filter media area proportionally to tank volume in `scale_hardware_to_geometry()`. For a 2× size_scale tank (8× volume ≈ 160L), media_area jumps from 2000 to 32000 cm², diluting nitrifier density and causing biofilter maturation to stall (maturity 0.017 vs expected 0.06+). The working tree already has an uncommitted fix removing this scaling — commit and apply that fix. Filter media area should remain a hardware specification (default 2000 cm²), not auto-scale with volume.",
+        "rationale": "Scaling media area with volume while ammonia production scales with bioload (shrimp count) creates an ecologically incorrect proportional dilution of nitrifier density. This is the root cause of the biofilter maturity collapse in scaled scenarios and is already recognized as a problem (uncommitted fix exists). The committed code contradicts the behavior the tests and simulation dynamics require."
+      },
+      {
+        "body": "In `crates/tank_core/src/systems/algae_growth.rs` line 227, `plant_shading` is applied uniformly to all periphyton habitats including GlassHardscape. Glass wall periphyton receives direct lateral light and should be less affected by plant canopy shading than substrate-surface periphyton. Consider making plant_shading habitat-weighted (e.g., full effect on SubstrateSurface, reduced on GlassHardscape/PlantSurfaces) to avoid artificially suppressing glass biofilm growth in planted tanks.",
+        "rationale": "The habitat split's purpose is to let different surfaces develop distinct biofilm communities. Applying the same plant_shading multiplier to all habitats undermines this by treating glass walls (which receive lateral light through the glass) identically to substrate surfaces (which sit directly below the plant canopy). This will produce unrealistically low glass periphyton in heavily planted tanks."
+      },
+      {
+        "body": "In `crates/tank_core/tests/end_to_end.rs` lines 276-289 (uncommitted working change), the `happy_plants_grow_with_light_and_nutrients` assertion was relaxed from `>= initial_biomass` to `>= initial_biomass * 0.80`. If geometry-scaled initial biomass causes plants to self-shade and decline by 20% under 'happy' conditions (good light, good nutrients), this suggests the PLANT_BIOMASS_G_PER_1000_CM2_FOOTPRINT constant (6.0 g/1000cm²) may overshoot for smaller tanks or the self-shading model is too aggressive. Validate the constant against actual scenario footprints before committing the relaxed assertion.",
+        "rationale": "A test named 'happy_plants_grow_with_light_and_nutrients' that permits a 20% biomass decline under ideal conditions is a semantic contradiction. Either the initial density is too high (fix the constant) or the growth model is incorrectly penalizing reasonable densities. Relaxing the assertion without calibrating the underlying parameters masks a potential issue."
+      }
+    ],
+    "summary": "Reviewed the diff for tanksim-6e5.5.3 (habitat-split periphyton/decomposer pools). The core habitat-split logic, decomposer setback changes in engine.rs, and per-habitat periphyton growth in algae_growth.rs are structurally sound with correct conservation accounting. The light-factor simplification in algae_growth.rs (removing intensity_index/enabled check) is correct since habitat_light already incorporates these via the habitat registry. The StartupOverrides Default derive and ..Default usage are correct. The 5 e2e_baseline_scenarios test failures are pre-existing and not regressions from this diff. However, I found several issues worth addressing."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}

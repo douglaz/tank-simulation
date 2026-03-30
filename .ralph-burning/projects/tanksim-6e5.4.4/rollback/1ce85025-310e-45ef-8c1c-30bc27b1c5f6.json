@@ -1,0 +1,88 @@
+{
+  "rollback_id": "1ce85025-310e-45ef-8c1c-30bc27b1c5f6",
+  "created_at": "2026-03-29T22:48:16.568692452Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "8bae87bb228336faa724996fd73729dda5580d4d",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260329213438",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 2
+      },
+      "started_at": "2026-03-29T21:34:38.607148035Z",
+      "prompt_hash_at_cycle_start": "dab1b2a4a27f250e",
+      "prompt_hash_at_stage_start": "dab1b2a4a27f250e",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 1
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-29T22:07:58.626462057Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 2,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-1-3cee9db3",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "The `hourly_photosynthesis_dic_enabled` flag gates daily DIC withdrawal on whether the hourly photosynthesis rate is > f64::EPSILON, but the hourly chemistry path operates on a fixed rate×biomass model that is independent of actual daily growth demand. When the hourly path is enabled, daily plant/algae growth still consumes nutrients and adds biomass, but the carbon for that growth is never explicitly withdrawn from DIC (it's assumed to be covered by the hourly path). If the hourly DIC consumption rate is miscalibrated relative to actual daily C demand (e.g., plants grow faster due to abundant nutrients but the DIC rate doesn't scale with growth rate), biomass can grow without paying its carbon cost from DIC. Consider adding a comment or assertion documenting that the hourly rate must be calibrated to cover daily C demand, or add a reconciliation step at daily rollover.",
+          "created_at": "2026-03-29T22:48:16.498601432Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "cfd6c1c8a334c6007712d119865373d564c52bedc999738cd7eb2b42387fde0b"
+        },
+        {
+          "amendment_id": "fr-1-0006127f",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "The pre-existing test `nitrification_lowers_alkalinity_and_ph` in `crates/tank_core/tests/chemistry.rs:191` is failing (pH 8.258 vs control 8.250). While not introduced by this changeset, it is now failing on the current HEAD and the TODO comment at line 188-190 suggests it was known to be marginal. This should be tracked/fixed rather than left as a broken test in the suite.",
+          "created_at": "2026-03-29T22:48:16.498605760Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "ea6269afa0c7c3e8effb1c258cf9a45d8c569d5848a5652879aea3347bd83162"
+        }
+      ],
+      "processed_count": 0
+    },
+    "status_summary": "running: final review restart round 2 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-29T22:30:08.069355629Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}
