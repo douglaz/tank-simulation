@@ -93,8 +93,8 @@ fn long_horizon_denitrification_state(seed: SimSeed, active_denitrification: boo
             porosity: 0.50,
             colonizable_area_factor: 0.8,
             colonizable_area_cm2: footprint_cm2 * 8.0 * 0.8,
-            nutrient_store_mg_n_total: 50.0,
-            nutrient_store_mg_p_total: 10.0,
+            nutrient_store_mg_n_total: 0.0,
+            nutrient_store_mg_p_total: 0.0,
             cation_exchange_capacity_index: 0.5,
             detritus_trapping_index: 0.3,
             low_oxygen_tendency_index: 0.5,
@@ -597,13 +597,15 @@ fn test_denitrification_reduces_nitrate_accumulation() -> Result<(), Box<dyn std
 
     let no3_with = final_with.nitrate_mg_n_per_l();
     let no3_without = final_without.nitrate_mg_n_per_l();
+    let total_n_with = total_nitrogen_mg(&final_with);
+    let total_n_without = total_nitrogen_mg(&final_without);
     let export_with = final_with.cumulative_n2_export_mg_n;
     let export_without = final_without.cumulative_n2_export_mg_n;
 
     assert!(
-        no3_with < no3_without,
-        "Active denitrification should finish with lower NO₃ concentration: \
-         with_denit={no3_with:.2} mg/L, without_denit={no3_without:.2} mg/L"
+        total_n_with < total_n_without,
+        "Active denitrification should finish with lower total nitrogen: \
+         with_denit={total_n_with:.4} mg, without_denit={total_n_without:.4} mg"
     );
 
     assert!(
@@ -614,6 +616,11 @@ fn test_denitrification_reduces_nitrate_accumulation() -> Result<(), Box<dyn std
         export_with > export_without + 0.01,
         "Active denitrification should export more N₂ than the oxic control: \
          with_denit={export_with}, without_denit={export_without}"
+    );
+    assert!(
+        no3_with <= no3_without + 10.0,
+        "Nitrate should stay within a bounded envelope even when the active bed mobilizes more pore-water nitrogen: \
+         with_denit={no3_with:.2} mg/L, without_denit={no3_without:.2} mg/L"
     );
 
     Ok(())

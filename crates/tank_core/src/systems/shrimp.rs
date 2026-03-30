@@ -727,7 +727,10 @@ fn spawning(state: &mut TankState) {
             EventSeverity::Info,
             EventKind::ShrimpBerried,
             vec![EventCause::RoutineAction],
-            format!("{new_berried} female(s) became berried"),
+            format!(
+                "{new_berried} female(s) became berried (readiness {:.2})",
+                state.animal.reproductive_readiness_index,
+            ),
         );
     }
 }
@@ -922,6 +925,12 @@ fn egg_development(state: &mut TankState) {
         }
         if f_stability < 0.6 {
             causes.push(EventCause::ChemistryInstability);
+        }
+        if f_tan < 0.6 {
+            causes.push(EventCause::HighAmmonia);
+        }
+        if f_no2 < 0.6 {
+            causes.push(EventCause::HighNitrite);
         }
         if total_resource_limited > 0 {
             causes.push(EventCause::Starvation);
@@ -1409,6 +1418,11 @@ fn reset_hourly_accumulators(state: &mut TankState) {
 
 // ── Factor functions ────────────────────────────────────────────────────────
 
+/// Public accessor for the temperature reproduction factor (used by snapshot).
+pub fn temp_repro_factor_pub(temp: f64, params: &ShrimpRuntimeParams) -> f64 {
+    temp_repro_factor(temp, params)
+}
+
 /// Temperature factor for reproduction.
 /// Best 22-26 C, clearly worse by 30 C, near-zero by 33 C.
 fn temp_repro_factor(temp: f64, params: &ShrimpRuntimeParams) -> f64 {
@@ -1442,6 +1456,47 @@ fn temp_condition_factor(temp: f64, params: &ShrimpRuntimeParams) -> f64 {
         (1.0 - (params.optimal_temp_min_c - temp) / 10.0).clamp(0.2, 1.0)
     } else {
         (1.0 - (temp - params.optimal_temp_max_c) / 8.0).clamp(0.2, 1.0)
+    }
+}
+
+/// Density-dependent per-capita reproduction suppression.
+/// Returns 1.0 below the threshold, then declines hyperbolically toward the
+/// half-suppression point.
+fn density_repro_factor(total_count: u32, volume_l: f64, params: &ShrimpRuntimeParams) -> f64 {
+    if volume_l <= f64::EPSILON || total_count == 0 {
+        return 1.0;
+    }
+    let density = f64::from(total_count) / volume_l;
+    if density <= params.density_repro_threshold_per_l {
+        1.0
+    } else {
+        let excess = density - params.density_repro_threshold_per_l;
+        let half = (params.density_repro_half_suppression_per_l
+            - params.density_repro_threshold_per_l)
+            .max(0.01);
+        (1.0 / (1.0 + excess / half)).clamp(0.05, 1.0)
+    }
+}
+
+/// TAN-dependent reproduction suppression.
+/// Returns 1.0 below the threshold, then linearly declines.
+fn tan_repro_factor(tan_mg_n_per_l: f64, params: &ShrimpRuntimeParams) -> f64 {
+    if tan_mg_n_per_l <= params.tan_repro_threshold_mg_n_per_l {
+        1.0
+    } else {
+        let excess = tan_mg_n_per_l - params.tan_repro_threshold_mg_n_per_l;
+        (1.0 - excess / (params.tan_repro_threshold_mg_n_per_l.max(0.01) * 2.0)).clamp(0.05, 1.0)
+    }
+}
+
+/// NO2-dependent reproduction suppression.
+/// Returns 1.0 below the threshold, then linearly declines.
+fn no2_repro_factor(no2_mg_n_per_l: f64, params: &ShrimpRuntimeParams) -> f64 {
+    if no2_mg_n_per_l <= params.no2_repro_threshold_mg_n_per_l {
+        1.0
+    } else {
+        let excess = no2_mg_n_per_l - params.no2_repro_threshold_mg_n_per_l;
+        (1.0 - excess / (params.no2_repro_threshold_mg_n_per_l.max(0.01) * 2.0)).clamp(0.05, 1.0)
     }
 }
 
