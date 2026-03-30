@@ -1,7 +1,0 @@
-id = "tanksim-6e5.7.2"
-name = "Parameter provenance metadata"
-flow = "quick_dev"
-prompt_reference = "prompt.md"
-prompt_hash = "e9143ec0782506f9"
-created_at = "2026-03-30T10:41:28.359816632Z"
-status_summary = "created"
