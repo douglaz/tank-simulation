@@ -176,6 +176,75 @@ pub struct ScenarioRow {
     pub artifacts: Vec<ScenarioArtifact>,
 }
 
+impl FieldCheck {
+    /// Record an observed value without scoring it against an envelope.
+    pub fn observed_only(field: impl Into<String>, observed: f64) -> Self {
+        Self {
+            field: field.into(),
+            observed: finite_or_none(observed),
+            envelope_min: None,
+            envelope_max: None,
+            status: CheckStatus::Pass,
+            detail: None,
+        }
+    }
+}
+
+impl CheckpointRow {
+    /// Build a checkpoint row from explicit field checks.
+    pub fn from_fields(
+        label: impl Into<String>,
+        day: u32,
+        hour: u8,
+        fields: Vec<FieldCheck>,
+        artifact_path: Option<String>,
+    ) -> Self {
+        let status = overall_status(fields.iter().map(|field| field.status));
+        Self {
+            label: label.into(),
+            day,
+            hour,
+            checkpoint_hours: day * 24 + u32::from(hour),
+            status,
+            fields,
+            artifact_path,
+        }
+    }
+}
+
+impl ScenarioRow {
+    /// Construct a fully-populated scenario row from checkpoint data.
+    pub fn from_checkpoints(
+        scenario_id: impl Into<String>,
+        scenario_name: impl Into<String>,
+        seed: u64,
+        parameter_variant: impl Into<String>,
+        domain: impl Into<String>,
+        confidence: ValidationConfidence,
+        provenance_status: ProvenanceStatus,
+        checkpoints: Vec<CheckpointRow>,
+        observed_summary: impl Into<String>,
+        artifacts: Vec<ScenarioArtifact>,
+    ) -> Self {
+        let status = overall_status(checkpoints.iter().map(|checkpoint| checkpoint.status));
+        let artifact_path = artifacts.first().map(|artifact| artifact.path.clone());
+        Self {
+            scenario_id: scenario_id.into(),
+            scenario_name: scenario_name.into(),
+            seed,
+            parameter_variant: parameter_variant.into(),
+            domain: domain.into(),
+            confidence,
+            provenance_status,
+            status,
+            observed_summary: observed_summary.into(),
+            checkpoints,
+            artifact_path,
+            artifacts,
+        }
+    }
+}
+
 /// Paths written by [`CalibrationReport::write_bundle`].
 #[derive(Debug, Clone)]
 pub struct CalibrationReportArtifacts {
@@ -269,6 +338,81 @@ impl CalibrationReport {
             changes,
         }
     }
+
+    /// Render a concise, review-oriented text summary.
+    pub fn render_text_summary(&self) -> String {
+        let mut out = String::new();
+        out.push_str("============================================================\n");
+        out.push_str("  CALIBRATION REPORT — Tank Simulator\n");
+        out.push_str("============================================================\n");
+        out.push_str(&format!("Generated: {}\n", self.generated_at));
+        out.push_str(&format!("Parameter set: {}\n", self.parameter_set));
+        out.push_str(&format!(
+            "Summary: total={} pass={} marginal={} fail={}\n\n",
+            self.summary.total, self.summary.passed, self.summary.marginal, self.summary.failed
+        ));
+
+        for scenario in &self.scenarios {
+            out.push_str(&format!(
+                "[{}] {} ({})\n",
+                scenario.status, scenario.scenario_name, scenario.scenario_id
+            ));
+            out.push_str(&format!(
+                "  Domain: {} | Confidence: {} | Provenance: {}\n",
+                scenario.domain, scenario.confidence, scenario.provenance_status
+            ));
+            out.push_str(&format!(
+                "  Seed: {} | Variant: {}\n",
+                scenario.seed, scenario.parameter_variant
+            ));
+            if !scenario.observed_summary.is_empty() {
+                out.push_str(&format!("  Observed: {}\n", scenario.observed_summary));
+            }
+            if !scenario.checkpoints.is_empty() {
+                out.push_str("  Checkpoints:\n");
+                for checkpoint in &scenario.checkpoints {
+                    out.push_str(&format!(
+                        "    - {} @ {}h [{}] {}\n",
+                        checkpoint.label,
+                        checkpoint.checkpoint_hours,
+                        checkpoint.status,
+                        summarize_fields(&checkpoint.fields)
+                    ));
+                    if let Some(path) = &checkpoint.artifact_path {
+                        out.push_str(&format!("      artifact: {path}\n"));
+                    }
+                }
+            }
+            if !scenario.artifacts.is_empty() {
+                out.push_str("  Artifacts:\n");
+                for artifact in &scenario.artifacts {
+                    out.push_str(&format!("    - {}: {}\n", artifact.label, artifact.path));
+                }
+            }
+            out.push('\n');
+        }
+
+        out
+    }
+
+    /// Persist both the JSON report and a human-readable summary.
+    pub fn write_bundle<P: AsRef<Path>>(
+        &self,
+        output_dir: P,
+    ) -> Result<CalibrationReportArtifacts, std::io::Error> {
+        let output_dir = output_dir.as_ref();
+        std::fs::create_dir_all(output_dir)?;
+
+        let report_json = output_dir.join("calibration_report.json");
+        let summary_txt = output_dir.join("calibration_summary.txt");
+        write_pretty_json(&report_json, self)?;
+        std::fs::write(&summary_txt, self.render_text_summary())?;
+
+        Ok(CalibrationReportArtifacts {
+            report_json,
+            summary_txt,
+        })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -281,6 +425,50 @@ pub struct ComparisonReport {
     pub before_parameter_set: String,
     pub after_parameter_set: String,
     pub changes: Vec<StatusChange>,
+}
+
+impl ComparisonReport {
+    /// Render a concise summary of scenario status changes between runs.
+    pub fn render_text_summary(&self) -> String {
+        let mut out = String::new();
+        out.push_str("============================================================\n");
+        out.push_str("  CALIBRATION COMPARISON\n");
+        out.push_str("============================================================\n");
+        out.push_str(&format!(
+            "Before: {} | After: {}\n",
+            self.before_parameter_set, self.after_parameter_set
+        ));
+        if self.changes.is_empty() {
+            out.push_str("No status changes.\n");
+            return out;
+        }
+        for change in &self.changes {
+            out.push_str(&format!(
+                "- {}: {} -> {}\n",
+                change.scenario_id, change.before, change.after
+            ));
+        }
+        out
+    }
+
+    /// Persist both JSON and text summaries for a comparison run.
+    pub fn write_bundle<P: AsRef<Path>>(
+        &self,
+        output_dir: P,
+    ) -> Result<ComparisonReportArtifacts, std::io::Error> {
+        let output_dir = output_dir.as_ref();
+        std::fs::create_dir_all(output_dir)?;
+
+        let comparison_json = output_dir.join("calibration_comparison.json");
+        let comparison_txt = output_dir.join("calibration_comparison.txt");
+        write_pretty_json(&comparison_json, self)?;
+        std::fs::write(&comparison_txt, self.render_text_summary())?;
+
+        Ok(ComparisonReportArtifacts {
+            comparison_json,
+            comparison_txt,
+        })
+    }
 }
 
 /// A single scenario's status change between two calibration runs.
@@ -353,10 +541,7 @@ impl CalibrationRun {
         let hour = state.environment.hour_of_day;
 
         let fields = check_classified(&snap, envelope);
-        let status = fields
-            .iter()
-            .map(|f| f.status)
-            .fold(CheckStatus::Pass, CheckStatus::worst);
+        let status = overall_status(fields.iter().map(|f| f.status));
 
         // Record checkpoint in harness for artifact capture.
         self.inner.checkpoint(label);
@@ -401,10 +586,7 @@ impl CalibrationRun {
 
         let scenario_id = inner.scenario_id().to_owned();
         let seed = inner.seed().0;
-        let checkpoint_status = checkpoint_rows
-            .iter()
-            .map(|c| c.status)
-            .fold(CheckStatus::Pass, CheckStatus::worst);
+        let checkpoint_status = overall_status(checkpoint_rows.iter().map(|c| c.status));
         let harness_has_failures = !inner.failures().is_empty();
         let artifact_path = if checkpoint_status != CheckStatus::Pass || harness_has_failures {
             Some(inner.artifact_dir().display().to_string())
@@ -428,11 +610,17 @@ impl CalibrationRun {
 
         ScenarioRow {
             scenario_id,
+            scenario_name: String::new(),
             seed,
             parameter_variant,
+            domain: String::new(),
+            confidence: ValidationConfidence::High,
+            provenance_status: ProvenanceStatus::ValidatedDirectionally,
             status: overall_status,
+            observed_summary: String::new(),
             checkpoints: checkpoint_rows,
             artifact_path,
+            artifacts: Vec::new(),
         }
     }
 }
@@ -569,6 +757,16 @@ pub fn check_classified(snap: &TankSnapshot, envelope: &Envelope) -> Vec<FieldCh
     checks
 }
 
+/// Classify a floating-point observation against explicit bounds.
+pub fn classify_field_f64(field: &str, observed: f64, min: f64, max: f64) -> FieldCheck {
+    classify_f64(field, observed, min, max)
+}
+
+/// Classify an integer observation against explicit bounds.
+pub fn classify_field_u32(field: &str, observed: u32, min: u32, max: u32) -> FieldCheck {
+    classify_u32(field, observed, min, max)
+}
+
 // ---------------------------------------------------------------------------
 // Classification helpers
 // ---------------------------------------------------------------------------
@@ -638,6 +836,12 @@ fn classify_u32(field: &str, value: u32, min: u32, max: u32) -> FieldCheck {
     classify_f64(field, f64::from(value), f64::from(min), f64::from(max))
 }
 
+fn overall_status(statuses: impl IntoIterator<Item = CheckStatus>) -> CheckStatus {
+    statuses
+        .into_iter()
+        .fold(CheckStatus::Pass, CheckStatus::worst)
+}
+
 /// Compute the marginal-zone width for a given envelope range.
 ///
 /// Finite ranges: 10% of (max - min).
@@ -687,6 +891,48 @@ fn format_epoch_utc(epoch_secs: u64) -> String {
     let y = if m <= 2 { y + 1 } else { y };
 
     format!("{y:04}-{m:02}-{d:02}T{hh:02}:{mm:02}:{ss:02}Z")
+}
+
+fn summarize_fields(fields: &[FieldCheck]) -> String {
+    fields
+        .iter()
+        .map(|field| {
+            let observed = field
+                .observed
+                .map(|value| format!("{value:.3}"))
+                .unwrap_or_else(|| "n/a".to_string());
+            match (field.envelope_min, field.envelope_max) {
+                (Some(min), Some(max)) if max.is_finite() => {
+                    format!("{}={} [{}..{}]", field.field, observed, trim_float(min), trim_float(max))
+                }
+                (Some(min), Some(max)) if max.is_infinite() => {
+                    format!("{}={} [>= {}]", field.field, observed, trim_float(min))
+                }
+                _ => format!("{}={}", field.field, observed),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn trim_float(value: f64) -> String {
+    let mut text = format!("{value:.3}");
+    while text.contains('.') && text.ends_with('0') {
+        text.pop();
+    }
+    if text.ends_with('.') {
+        text.pop();
+    }
+    text
+}
+
+fn write_pretty_json<P: AsRef<Path>, T: Serialize>(
+    path: P,
+    value: &T,
+) -> Result<(), std::io::Error> {
+    let json = serde_json::to_string_pretty(value)
+        .map_err(|err| std::io::Error::other(err.to_string()))?;
+    std::fs::write(path, json)
 }
 
 // ---------------------------------------------------------------------------
