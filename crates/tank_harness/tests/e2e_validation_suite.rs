@@ -15,8 +15,9 @@
 
 use tank_core::{
     systems::chemistry::resolve_carbonate_state, systems::light::is_light_on, Engine, EventKind,
-    JsonLinesSink, PlayerAction, ProcessParams, SimSeed, SimTracer, SimulationEngine,
-    SourceWaterProfile, TankGeometry, TankSnapshot, TankState, TraceSink, Verbosity, WaterState,
+    JsonLinesSink, PlantGuild, PlayerAction, ProcessParams, SimSeed, SimTracer,
+    SimulationEngine, SourceWaterProfile, TankGeometry, TankSnapshot, TankState, TraceSink,
+    Verbosity, WaterState,
 };
 use tank_harness::{Envelope, HarnessRun};
 use tank_scenarios::{
@@ -366,13 +367,13 @@ fn run_vs02_aeration_effects() -> Result<ProbeResult, tank_core::SimError> {
 // VS-03: Day/night pH swing
 // ---------------------------------------------------------------------------
 
-/// Planted tank shows diurnal pH swing of 0.1-2.0 units.
+/// Planted tank shows diurnal pH swing of 0.2-1.0 units.
 ///
 /// **Literature**: Brewer & Goldman 1976; Wetzel 2001.
 ///
 /// Photosynthesis during lit hours draws down CO₂ (raises pH); respiration
-/// at night releases CO₂ (lowers pH). The swing should be detectable from
-/// day 2 onward.
+/// at night releases CO₂ (lowers pH). The swing should remain detectable
+/// across consecutive day/night cycles after day 1 settling.
 #[test]
 fn vs03_day_night_ph_swing() -> Result<(), Box<dyn std::error::Error>> {
     require_probe_pass(run_vs03_day_night_ph_swing())
@@ -382,13 +383,15 @@ fn run_vs03_day_night_ph_swing() -> Result<ProbeResult, tank_core::SimError> {
     let mut state = TankState::new(SimSeed(7303));
     let volume_l = state.water_volume_l();
 
-    // Well-planted tank.
-    state.plant_guilds[0].biomass_g = 15.0;
-    state.plant_guilds[1].biomass_g = 10.0;
+    // Heavily planted, moderate-buffer tank to expose a literature-scale
+    // diurnal signal without pushing the chemistry into unrealistic extremes.
+    state.plant_guilds[0].biomass_g = 18.0;
+    state.plant_guilds[1].biomass_g = 12.0;
     state.algae.set_periphyton_total(2.0);
     state.algae.suspended_biomass_g = 0.5;
 
-    // Moderate DIC and alkalinity.
+    // Moderate buffering keeps the chemistry realistic while the heavier
+    // biological fluxes create the target planted-tank headroom.
     state.water.dissolved_inorganic_carbon_mg_c_total = 20.0 * volume_l;
     state.water.alkalinity_meq_total = 1.5 * volume_l;
     state.water.temperature_c = 25.0;
@@ -398,8 +401,16 @@ fn run_vs03_day_night_ph_swing() -> Result<ProbeResult, tank_core::SimError> {
     state.hardware.light.photoperiod_hours = 12.0;
     state.hardware.light.intensity_index = 1.0;
 
-    // Some animal biomass for respiration.
-    state.animal.adult.count = 10;
+    // Some animal biomass for nighttime respiration.
+    state.animal.adult.count = 12;
+
+    // This scenario targets a high-productivity planted tank rather than the
+    // simulator's default moderate-growth baseline, so scale the explicit
+    // DIC/O2 chemistry rates accordingly while preserving stoichiometric pairs.
+    state.process_params.background_bod_mg_o2_per_g_biomass_per_hour = 0.08;
+    state.process_params.respiration_dic_rate_mg_c_per_g_per_hour = 0.03;
+    state.process_params.plant_photosynthesis_o2_mg_per_g_per_hour = 0.4;
+    state.process_params.photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.15;
 
     // Zero K_LA to isolate biological DIC effects.
     state.process_params.reaeration_kla_base = 0.0;
@@ -437,8 +448,8 @@ fn run_vs03_day_night_ph_swing() -> Result<ProbeResult, tank_core::SimError> {
     let mut ph_end_of_light = Vec::new();
     let mut ph_end_of_dark = Vec::new();
 
-    // Run 48h, collect pH from day 2 onward.
-    for _ in 0..48 {
+    // Run 72h so the post-settling window covers at least two full cycles.
+    for _ in 0..72 {
         engine.step_hours(1)?;
         let s = engine.full_state();
         if s.environment.day >= 2 {
@@ -469,7 +480,7 @@ fn run_vs03_day_night_ph_swing() -> Result<ProbeResult, tank_core::SimError> {
     );
 
     let mut failures = Vec::new();
-    if ph_end_of_light.is_empty() || ph_end_of_dark.is_empty() {
+    if ph_end_of_light.len() < 2 || ph_end_of_dark.len() < 2 {
         failures.push("insufficient light/dark transition samples".to_string());
     } else {
         for (i, (lph, dph)) in ph_end_of_light
@@ -484,11 +495,11 @@ fn run_vs03_day_night_ph_swing() -> Result<ProbeResult, tank_core::SimError> {
                 ));
             }
         }
-        if swing < 0.1 {
-            failures.push(format!("swing {swing:.3} < 0.1 minimum"));
+        if swing < 0.2 {
+            failures.push(format!("swing {swing:.3} < 0.2 minimum"));
         }
-        if swing > 2.0 {
-            failures.push(format!("swing {swing:.3} > 2.0 maximum"));
+        if swing > 1.0 {
+            failures.push(format!("swing {swing:.3} > 1.0 maximum"));
         }
     }
 
@@ -953,31 +964,53 @@ fn run_vs06_algae_plant_competition() -> Result<ProbeResult, tank_core::SimError
 ///
 /// **Literature**: Seitzinger 1988; Vymazal 2007.
 ///
-/// Two tanks: one with deep active+porous substrate (denitrification pathway),
-/// one bare-bottom (no substrate, no denitrification). Same bioload and
-/// feeding. After 56 days the planted-substrate tank should have lower NO₃
-/// and measurable cumulative N₂ export.
+/// Two planted tanks: one with a deep active substrate bed (denitrification
+/// pathway), one bare-bottom (no substrate, no denitrification). Both share
+/// the same fast-stem biomass, feeding, and low-nitrate buffered water-change
+/// source. After a long-horizon run the planted-substrate tank should finish
+/// with lower NO₃ and measurable cumulative N₂ export.
 #[test]
 fn vs07_nitrate_removal_denitrification() -> Result<(), Box<dyn std::error::Error>> {
     require_probe_pass(run_vs07_nitrate_removal())
 }
 
 fn run_vs07_nitrate_removal() -> Result<ProbeResult, Box<dyn std::error::Error>> {
-    // Build a planted tank with a deep substrate and pre-seeded denitrifier
-    // community. The model's denitrification pathway requires:
-    //   1. Substrate with suboxic pore volume (below O₂ penetration depth)
-    //   2. Mature denitrifier activity index (60-day ramp in the model)
-    //   3. Adequate NO₃ and DOC in pore water
-    // We pre-seed the denitrifier activity to simulate an established tank
-    // and use a thick low-porosity substrate to maximize suboxic volume.
+    const VS07_WATER_CHANGE_SOURCE: &str = "vs07_buffered_low_nitrate";
+
+    let mut buffered_source = load_source_profile("hard_shrimp");
+    buffered_source.nitrate_mg_n_per_l = 0.0;
+
+    let normalize_fast_stems = |state: &mut TankState, biomass_g: f64| {
+        for plant in &mut state.plant_guilds {
+            match plant.guild {
+                PlantGuild::FastStem => {
+                    plant.biomass_g = biomass_g;
+                    plant.health_index = 0.95;
+                }
+                _ => {
+                    plant.biomass_g = 0.0;
+                }
+            }
+        }
+    };
+
+    let prepare_vs07_biology = |state: &mut TankState| {
+        normalize_fast_stems(state, 18.0);
+        state.microbe.decomposer_biomass_g = 8.0;
+        state.detritus.fine_detritus_g_total = 2.0;
+        state.microfauna.population_index = 0.8;
+        state.algae.set_periphyton_total(4.0);
+        state.algae.suspended_biomass_g = 0.4;
+    };
+
     let planted_overrides = StartupOverrides {
         geometry: ScenarioGeometryOverrides {
             size_scale: 2.0,
             fill_ratio: 1.0,
         },
         source_water_profile_id: Some("hard_shrimp".to_string()),
-        substrate_preset: Some(StartupSubstratePreset::ActivePlantedWithCoarsePorous),
-        plant_selection: Some(StartupPlantSelection::BothGuilds),
+        substrate_preset: Some(StartupSubstratePreset::ActivePlanted),
+        plant_selection: Some(StartupPlantSelection::FastStemOnly),
         filter_enabled: Some(true),
         light_preset: Some(StartupLightPreset::Hours12),
         heater_preset: Some(StartupHeaterPreset::Celsius25),
@@ -991,24 +1024,28 @@ fn run_vs07_nitrate_removal() -> Result<ProbeResult, Box<dyn std::error::Error>>
         planted_overrides,
     )?;
 
-    // Pre-seed denitrifier community as if the tank has been running for
-    // months. This bypasses the 60-day maturation ramp, simulating an
-    // established planted tank.
-    planted_state.microbe.denitrifier_activity_index = 0.8;
+    planted_state
+        .source_water_catalog
+        .insert(VS07_WATER_CHANGE_SOURCE.to_string(), buffered_source.clone());
+    prepare_vs07_biology(&mut planted_state);
 
-    // Increase substrate depth for a larger suboxic zone below the O₂
-    // penetration boundary. Reduce porosity to limit O₂ diffusion depth.
+    // Mature denitrifiers plus a deep, low-porosity bed create the suboxic
+    // volume needed to keep the planted arm below the bare control.
+    planted_state.microbe.denitrifier_activity_index = 1.0;
+    planted_state.process_params.denitrification_vmax_mg_n_per_l_per_hour = 0.2;
+    planted_state.process_params.denitrification_pore_water_mixing_factor = 1.0;
     for layer in &mut planted_state.substrate_layers {
-        layer.depth_cm = 8.0;
-        layer.porosity = 0.35;
+        layer.depth_cm = 10.0;
+        layer.porosity = 0.32;
+        layer.nutrient_store_mg_n_total = 0.0;
+        layer.nutrient_store_mg_p_total = 0.0;
     }
 
-    // Add more DOC for denitrifier carbon substrate.
+    // Start both arms from the same nitrate and DOC inventory so the only
+    // enduring difference is the denitrifying substrate pathway.
     let vol = planted_state.water_volume_l();
-    planted_state.water.dissolved_organic_carbon_mg_c_total = 10.0 * vol;
-    // Seed with moderate nitrate so denitrification has substrate.
-    planted_state.water.nitrate_mg_n_total = 10.0 * vol;
-
+    planted_state.water.dissolved_organic_carbon_mg_c_total = 12.0 * vol;
+    planted_state.water.nitrate_mg_n_total = 12.0 * vol;
     planted_state.refresh_habitat_registry();
 
     let mut planted_run = HarnessRun::from_state(SimSeed(7307), "vs07_planted", planted_state)
@@ -1023,7 +1060,7 @@ fn run_vs07_nitrate_removal() -> Result<ProbeResult, Box<dyn std::error::Error>>
         },
         source_water_profile_id: Some("hard_shrimp".to_string()),
         substrate_preset: Some(StartupSubstratePreset::InertSand),
-        plant_selection: Some(StartupPlantSelection::None),
+        plant_selection: Some(StartupPlantSelection::FastStemOnly),
         filter_enabled: Some(true),
         light_preset: Some(StartupLightPreset::Hours12),
         heater_preset: Some(StartupHeaterPreset::Celsius25),
@@ -1031,26 +1068,38 @@ fn run_vs07_nitrate_removal() -> Result<ProbeResult, Box<dyn std::error::Error>>
         initial_adult_shrimp_count: Some(0),
         ..StartupOverrides::default()
     };
+    // Reuse the same planted template so both arms inherit matching geometry,
+    // hardware, and fast-stem planting; the control becomes "bare-bottom"
+    // when we clear substrate below, leaving denitrification as the key delta.
     let mut bare_state = tank_scenarios::seeded_state_with_full_overrides(
         SimSeed(7307),
         "medium_planted",
         bare_overrides,
     )?;
+    bare_state
+        .source_water_catalog
+        .insert(VS07_WATER_CHANGE_SOURCE.to_string(), buffered_source);
+    prepare_vs07_biology(&mut bare_state);
+
     // Remove substrate entirely to eliminate any denitrification pathway.
     bare_state.substrate_layers.clear();
+    bare_state.process_params.denitrification_vmax_mg_n_per_l_per_hour = 0.2;
+    bare_state.process_params.denitrification_pore_water_mixing_factor = 1.0;
+
     // Match initial nitrate and DOC with planted arm.
     let bare_vol = bare_state.water_volume_l();
-    bare_state.water.nitrate_mg_n_total = 10.0 * bare_vol;
-    bare_state.water.dissolved_organic_carbon_mg_c_total = 10.0 * bare_vol;
+    bare_state.water.nitrate_mg_n_total = 12.0 * bare_vol;
+    bare_state.water.dissolved_organic_carbon_mg_c_total = 12.0 * bare_vol;
     bare_state.refresh_habitat_registry();
 
     let mut bare_run = HarnessRun::from_state(SimSeed(7307), "vs07_bare", bare_state)
         .with_artifact_label("vs07_bare");
     enable_instrumentation(&mut bare_run);
 
-    // 90 days of feeding with weekly water changes to accumulate nitrate
-    // and give denitrification time to draw down NO₃ in the planted arm.
-    for day in 1..=90 {
+    // 120 days of identical feeding with low-nitrate buffered water changes.
+    // The longer horizon gives the deep substrate enough time to establish a
+    // meaningful steady-state nitrate gap relative to the bare control.
+    for day in 1..=120 {
         planted_run.apply_action(PlayerAction::Feed { grams: 0.1 })?;
         bare_run.apply_action(PlayerAction::Feed { grams: 0.1 })?;
         planted_run.step_hours(24)?;
@@ -1058,12 +1107,12 @@ fn run_vs07_nitrate_removal() -> Result<ProbeResult, Box<dyn std::error::Error>>
 
         if day % 7 == 0 {
             planted_run.apply_action(PlayerAction::WaterChangePercent {
-                percent: 20.0,
-                source_profile_id: "hard_shrimp".to_string(),
+                percent: 15.0,
+                source_profile_id: VS07_WATER_CHANGE_SOURCE.to_string(),
             })?;
             bare_run.apply_action(PlayerAction::WaterChangePercent {
-                percent: 20.0,
-                source_profile_id: "hard_shrimp".to_string(),
+                percent: 15.0,
+                source_profile_id: VS07_WATER_CHANGE_SOURCE.to_string(),
             })?;
             planted_run.step_hours(1)?;
             bare_run.step_hours(1)?;
@@ -1097,15 +1146,16 @@ fn run_vs07_nitrate_removal() -> Result<ProbeResult, Box<dyn std::error::Error>>
         bare_denitrifier_act,
     );
 
-    // The planted arm has both denitrification (removing NO₃) and additional
-    // nitrification from plant-derived organic matter (producing NO₃). The
-    // net NO₃ may not always be lower than bare-bottom in absolute terms.
-    //
-    // The core validation is therefore:
-    //   1. Planted arm has measurable N₂ export (denitrification is active)
-    //   2. Bare arm has zero or negligible N₂ export
-    //   3. Planted denitrifier activity index is significantly > 0
-    //   4. The N₂ export magnitude is ecologically meaningful (> 1 mg N)
+    if planted_snap.nitrate_mg_n_per_l >= bare_snap.nitrate_mg_n_per_l {
+        planted_run.record_failure(
+            "nitrate_gap",
+            format!(
+                "planted final NO3 should be lower than bare-bottom: planted={:.3} mg/L bare={:.3} mg/L",
+                planted_snap.nitrate_mg_n_per_l, bare_snap.nitrate_mg_n_per_l,
+            ),
+        );
+    }
+
     if planted_n2 <= 1.0 {
         planted_run.record_failure(
             "n2_export",
