@@ -1129,6 +1129,10 @@ fn malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected() -> 
         ("shrimp_params.chloride_protection_factor", -1.0),
         ("shrimp_params.nh3_stress_threshold_mg_n_per_l", -0.1),
         ("shrimp_params.nh3_stress_response_scale", -0.1),
+        ("shrimp_params.condition_do_reference_mg_l", 0.0),
+        ("shrimp_params.condition_nh3_sensitivity", -0.1),
+        ("shrimp_params.condition_nitrite_sensitivity", -0.1),
+        ("shrimp_params.condition_hourly_stress_penalty_weight", 1.2),
         ("shrimp_params.low_temp_repro_ramp_width_c", 0.0),
         ("shrimp_params.tan_repro_full_suppression_mg_n_per_l", 0.0),
         ("shrimp_params.no2_repro_full_suppression_mg_n_per_l", 0.0),
@@ -1233,6 +1237,18 @@ fn malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected() -> 
             }
             "shrimp_params.nh3_stress_response_scale" => {
                 state.shrimp_params.nh3_stress_response_scale = value;
+            }
+            "shrimp_params.condition_do_reference_mg_l" => {
+                state.shrimp_params.condition_do_reference_mg_l = value;
+            }
+            "shrimp_params.condition_nh3_sensitivity" => {
+                state.shrimp_params.condition_nh3_sensitivity = value;
+            }
+            "shrimp_params.condition_nitrite_sensitivity" => {
+                state.shrimp_params.condition_nitrite_sensitivity = value;
+            }
+            "shrimp_params.condition_hourly_stress_penalty_weight" => {
+                state.shrimp_params.condition_hourly_stress_penalty_weight = value;
             }
             "shrimp_params.low_temp_repro_ramp_width_c" => {
                 state.shrimp_params.low_temp_repro_ramp_width_c = value;

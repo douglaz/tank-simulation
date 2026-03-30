@@ -898,10 +898,7 @@ impl ShrimpPreset {
                 "condition_do_reference_mg_l",
                 self.condition_do_reference_mg_l,
             ),
-            (
-                "condition_nh3_sensitivity",
-                self.condition_nh3_sensitivity,
-            ),
+            ("condition_nh3_sensitivity", self.condition_nh3_sensitivity),
             (
                 "condition_nitrite_sensitivity",
                 self.condition_nitrite_sensitivity,

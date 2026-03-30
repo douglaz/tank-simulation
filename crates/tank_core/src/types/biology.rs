@@ -916,8 +916,8 @@ impl Default for ShrimpRuntimeParams {
             condition_do_reference_mg_l: default_condition_do_reference_mg_l(),
             condition_nh3_sensitivity: default_condition_nh3_sensitivity(),
             condition_nitrite_sensitivity: default_condition_nitrite_sensitivity(),
-            condition_hourly_stress_penalty_weight:
-                default_condition_hourly_stress_penalty_weight(),
+            condition_hourly_stress_penalty_weight: default_condition_hourly_stress_penalty_weight(
+            ),
             density_repro_threshold_per_l: default_density_repro_threshold_per_l(),
             density_repro_half_suppression_per_l: default_density_repro_half_suppression_per_l(),
             tan_repro_threshold_mg_n_per_l: default_tan_repro_threshold_mg_n_per_l(),

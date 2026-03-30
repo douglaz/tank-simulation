@@ -423,9 +423,9 @@ fn update_condition(state: &mut TankState) {
         chloride_mg_l,
         params.chloride_protection_factor,
     );
-    let nitrite_factor =
-        (1.0 - nitrite_diagnostics.effective_hazard_mg_l * params.condition_nitrite_sensitivity)
-            .clamp(0.0, 1.0);
+    let nitrite_factor = (1.0
+        - nitrite_diagnostics.effective_hazard_mg_l * params.condition_nitrite_sensitivity)
+        .clamp(0.0, 1.0);
     let temp_factor = temp_condition_factor(temp, params);
     let gh_factor = gh_mineral_factor(gh_d, params);
     let instability_factor = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
@@ -2067,10 +2067,14 @@ mod tests {
         low_weight.animal.hourly_low_do_stress_accum = 0.15;
         low_weight.animal.hourly_heat_stress_accum = 0.1;
         low_weight.animal.hourly_instability_stress_accum = 0.1;
-        low_weight.shrimp_params.condition_hourly_stress_penalty_weight = 0.1;
+        low_weight
+            .shrimp_params
+            .condition_hourly_stress_penalty_weight = 0.1;
 
         let mut high_weight = low_weight.clone();
-        high_weight.shrimp_params.condition_hourly_stress_penalty_weight = 0.9;
+        high_weight
+            .shrimp_params
+            .condition_hourly_stress_penalty_weight = 0.9;
 
         update_condition(&mut low_weight);
         update_condition(&mut high_weight);

@@ -556,8 +556,8 @@ fn test_egg_dropping_from_sudden_change() -> Result<(), SimError> {
     // A 4°C swing against a 2°C threshold yields the capped drop probability
     // of 0.6. With 10 berried females, getting 0 drops is (1-0.6)^10 ≈ 0.0001.
     assert!(
-        !drop_events.is_empty() || berried_after < 10 || egg_count < 10,
-        "Sudden instability should cause egg dropping. \
+        !drop_events.is_empty() && berried_after < 10 && egg_count < 10,
+        "Sudden instability should emit egg-drop events and reduce both berried females and egg counts. \
          Drop events: {}, berried: {berried_after}/10, eggs: {egg_count}/10",
         drop_events.len()
     );
@@ -796,6 +796,10 @@ fn test_all_reproduction_factors_are_named_parameters() -> Result<(), SimError> 
         "egg_drop_instability_threshold",
         "egg_drop_max_probability",
         "egg_oxygen_reference_mg_l",
+        "condition_do_reference_mg_l",
+        "condition_nh3_sensitivity",
+        "condition_nitrite_sensitivity",
+        "condition_hourly_stress_penalty_weight",
         "reproductive_readiness_smoothing",
         "full_clutch_condition_threshold",
         "instability_temp_swing_c",
@@ -1499,9 +1503,9 @@ fn test_neglected_tank_breeding_stalls() -> Result<(), SimError> {
          peak instability={neglected_peak_instability:.3}"
     );
     assert!(
-        neglected_snap.total_shrimp_count <= initial_total + 5
+        neglected_snap.total_shrimp_count <= initial_total
             || neglected_snap.total_shrimp_count + 3 <= neglected_peak_population,
-        "Neglected tank should stall or reverse population growth. \
+        "Neglected tank should finish at or below the starting population, or show a meaningful decline from its peak. \
          initial={initial_total}, peak={}, final={}",
         neglected_peak_population,
         neglected_snap.total_shrimp_count,
