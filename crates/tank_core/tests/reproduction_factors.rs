@@ -1,6 +1,6 @@
 use tank_core::{
-    EggCohort, Engine, EventKind, PlayerAction, ProcessParams, SimError, SimSeed, SimulationEngine,
-    TankState, WaterState,
+    EggCohort, Engine, EventCause, EventKind, PlayerAction, ProcessParams, SimError, SimSeed,
+    SimulationEngine, TankState, WaterState,
 };
 
 // ── Test fixture ───────────────────────────────────────────────────────────
@@ -385,15 +385,13 @@ fn test_chemistry_stress_suppresses_breeding() -> Result<(), SimError> {
 fn test_egg_dropping_from_sudden_change() -> Result<(), SimError> {
     // A berried female in an unstable environment (high instability_index from
     // a recent temp/chemistry swing) should experience egg dropping.
-    // The stability tracker runs before the shrimp pipeline, so a large
-    // temperature swing feeds into instability_index which egg_dropping reads.
+    // The stability tracker runs before the shrimp pipeline, so a same-day
+    // temperature shock should be preserved via `last_temp_swing_c` even while
+    // the smoothed instability index is still below the broader threshold.
 
-    // Setup: simulate a tank where a 4°C swing just occurred.
-    // The stability tracker will compute raw_instability from |28-24|/3 ≈ 1.33
-    // → clamped to 1.0. If previous instability was 0, the smoothed value
-    // rises quickly: 0 + 0.3*(1.0 - 0) = 0.3. That's below default threshold
-    // of 0.5. So we pre-seed instability to simulate the swing already in
-    // progress from the prior day.
+    // Setup: simulate a tank where today's water temperature jumped 4°C.
+    // The smoothed instability index only rises to 0.3 on day one, so this
+    // regression proves the direct swing parameter is wired into egg dropping.
     let mut state = breeding_fixture(SimSeed(8006));
     state.animal.berried_females_count = 10;
     state.animal.adult.count = 20;
@@ -401,12 +399,10 @@ fn test_egg_dropping_from_sudden_change() -> Result<(), SimError> {
         count: 10,
         progress_days: 10.0,
     }];
-    // Pre-seed high instability as if temp swing already started yesterday
-    state.stability_tracker.instability_index = 0.8;
-    // Keep the temperature swing active so stability tracker doesn't decay it
     state.water.temperature_c = 28.0;
     state.environment.ambient_temp_c = 28.0;
     state.stability_tracker.prev_temp_c = 24.0;
+    state.hardware.heater.enabled = false;
 
     let mut engine = Engine::from_parts(state, vec![]);
 
@@ -427,14 +423,37 @@ fn test_egg_dropping_from_sudden_change() -> Result<(), SimError> {
         .iter()
         .map(|c| c.count)
         .sum();
+    let tracker = &engine.full_state().stability_tracker;
+    let threshold = engine
+        .full_state()
+        .shrimp_params
+        .egg_drop_instability_threshold;
 
-    // With instability ~0.8+ and threshold 0.5, drop_prob should be ~0.6.
-    // With 10 berried females, getting 0 drops is (1-0.6)^10 ≈ 0.0001
+    assert!(
+        tracker.last_temp_swing_c >= 3.9,
+        "Daily stability tracking should preserve the direct temp shock, got {:.3}°C",
+        tracker.last_temp_swing_c,
+    );
+    assert!(
+        tracker.instability_index < threshold,
+        "Day-one instability should stay below the generic threshold so this test exercises the direct temp-swing path: instability {:.3}, threshold {:.3}",
+        tracker.instability_index,
+        threshold,
+    );
+
+    // A 4°C swing against a 2°C threshold yields the capped drop probability
+    // of 0.6. With 10 berried females, getting 0 drops is (1-0.6)^10 ≈ 0.0001.
     assert!(
         !drop_events.is_empty() || berried_after < 10 || egg_count < 10,
         "Sudden instability should cause egg dropping. \
          Drop events: {}, berried: {berried_after}/10, eggs: {egg_count}/10",
         drop_events.len()
+    );
+    assert!(
+        drop_events
+            .iter()
+            .any(|event| event.summary.contains("temp swing")),
+        "Egg-dropping diagnostics should report the direct temp swing trigger"
     );
 
     // Also verify that a stable tank does NOT drop eggs.
@@ -460,6 +479,49 @@ fn test_egg_dropping_from_sudden_change() -> Result<(), SimError> {
     assert_eq!(
         stable_drops, 0,
         "Stable tank should not have egg dropping events"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_high_density_berried_events_report_density_cause() -> Result<(), SimError> {
+    let mut state = breeding_fixture(SimSeed(8010));
+    state.animal.adult.count = 20;
+    state.animal.adult.reserve_g = 10.0;
+    state.animal.adult.condition_index = 0.9;
+    state.animal.reproductive_readiness_index = 1.0;
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.3;
+    state.shrimp_params.density_repro_threshold_per_l = 0.1;
+    state.shrimp_params.density_repro_half_suppression_per_l = 0.2;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.apply_action(PlayerAction::Feed { grams: 0.1 })?;
+    engine.step_hours(24)?;
+
+    let berried_events: Vec<_> = engine
+        .full_state()
+        .event_log
+        .iter()
+        .filter(|event| event.kind == EventKind::ShrimpBerried)
+        .collect();
+
+    assert!(
+        !berried_events.is_empty(),
+        "High-density test should still produce at least one berried event"
+    );
+    assert!(
+        berried_events
+            .iter()
+            .any(|event| event.cause_codes.contains(&EventCause::HighDensity)),
+        "High-density berried events should surface the HighDensity cause code"
+    );
+    assert!(
+        berried_events
+            .iter()
+            .any(|event| event.summary.contains("density")),
+        "High-density berried events should include density diagnostics in the summary"
     );
 
     Ok(())

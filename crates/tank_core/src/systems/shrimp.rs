@@ -761,7 +761,9 @@ fn egg_dropping(state: &mut TankState) {
 
     let instability_pressure = egg_drop_instability_pressure(instability, params);
     let temp_swing_pressure = egg_drop_temp_swing_pressure(temp_swing_c, params);
-    let drop_prob = instability_pressure.max(temp_swing_pressure).clamp(0.0, 0.6);
+    let drop_prob = instability_pressure
+        .max(temp_swing_pressure)
+        .clamp(0.0, 0.6);
 
     if drop_prob <= f64::EPSILON {
         return;
@@ -1550,9 +1552,8 @@ fn egg_drop_instability_pressure(instability: f64, params: &ShrimpRuntimeParams)
 
 fn egg_drop_temp_swing_pressure(temp_swing_c: f64, params: &ShrimpRuntimeParams) -> f64 {
     if temp_swing_c > params.egg_drop_temp_swing_c {
-        ((temp_swing_c - params.egg_drop_temp_swing_c)
-            / params.egg_drop_temp_swing_c.max(0.01))
-        .clamp(0.0, 1.0)
+        ((temp_swing_c - params.egg_drop_temp_swing_c) / params.egg_drop_temp_swing_c.max(0.01))
+            .clamp(0.0, 1.0)
     } else {
         0.0
     }
