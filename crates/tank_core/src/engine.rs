@@ -388,8 +388,42 @@ impl Engine {
         );
 
         // Step 12: hourly shrimp stress accumulation.
-        self.maybe_record_stage(&mut ctx, "system:shrimp_stress", |engine, _stage_trace| {
+        self.maybe_record_stage(&mut ctx, "system:shrimp_stress", |engine, stage_trace| {
+            let nitrite_stress_before = engine.state.animal.hourly_nitrite_stress_accum;
+            let nitrite_diagnostics = stage_trace.is_enabled().then(|| {
+                let chemistry = engine.state.concentrations();
+                systems::shrimp::compute_nitrite_stress_diagnostics(
+                    chemistry.nitrite_mg_n_per_l(),
+                    chemistry.chloride_mg_per_l(),
+                    engine.state.shrimp_params.chloride_protection_factor,
+                )
+            });
             systems::shrimp::step_hourly_shrimp_stress(&mut engine.state);
+            if let Some(nitrite_diagnostics) = nitrite_diagnostics {
+                stage_trace.note(format!(
+                    "shrimp_stress.nitrite_mg_n_per_l={:.6}",
+                    nitrite_diagnostics.nitrite_mg_l
+                ));
+                stage_trace.note(format!(
+                    "shrimp_stress.chloride_mg_per_l={:.6}",
+                    nitrite_diagnostics.chloride_mg_l
+                ));
+                stage_trace.note(format!(
+                    "shrimp_stress.effective_nitrite_hazard_mg_n_per_l={:.6}",
+                    nitrite_diagnostics.effective_hazard_mg_l
+                ));
+                stage_trace.note(format!(
+                    "shrimp_stress.nitrite_stress_increment={:.6}",
+                    nitrite_diagnostics.hourly_stress_increment
+                ));
+                stage_trace.note(format!(
+                    "shrimp_stress.nitrite_stress_accum.before={nitrite_stress_before:.6}"
+                ));
+                stage_trace.note(format!(
+                    "shrimp_stress.nitrite_stress_accum.after={:.6}",
+                    engine.state.animal.hourly_nitrite_stress_accum
+                ));
+            }
         });
 
         // Step 13: emit threshold-based chemistry warnings.

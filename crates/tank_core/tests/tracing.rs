@@ -40,6 +40,21 @@ fn active_state(seed: SimSeed) -> TankState {
     state
 }
 
+fn shrimp_stress_trace_state(seed: SimSeed) -> TankState {
+    let mut state = active_state(seed);
+    let volume_l = state.water_volume_l();
+    state.water.nitrite_mg_n_total = 3.0 * volume_l;
+    state.water.chloride_mg_total = 20.0 * volume_l;
+    state.water.dissolved_oxygen_mg_total = 8.0 * volume_l;
+    state.animal.adult.count = 12;
+    state.animal.adult.condition_index = 0.8;
+    state.animal.sub_adult.count = 0;
+    state.animal.juvenile.count = 0;
+    state.animal.berried_females_count = 0;
+    state.reseed_stability_tracker();
+    state
+}
+
 struct CountingSink {
     emitted_ticks: Arc<AtomicUsize>,
 }
@@ -191,6 +206,36 @@ fn trace_verbosity_records_intermediate_notes_and_post_stage_events(
             .any(|note| note == "biofilter_maturity.emitted.cycle_progressing=true"),
         "trace notes should record whether the cycle-progressing event fired"
     );
+
+    Ok(())
+}
+
+#[test]
+fn trace_verbosity_reports_chloride_adjusted_nitrite_stress_diagnostics(
+) -> Result<(), tank_core::SimError> {
+    let mut engine = Engine::from_parts(shrimp_stress_trace_state(SimSeed(360)), vec![]);
+    engine.enable_tracing(SimTracer::new(Verbosity::Trace));
+    engine.step_hours(1)?;
+
+    let tracer = engine.tracer().unwrap();
+    let tick = &tracer.ticks()[0];
+    let shrimp_stress = tick
+        .system("system:shrimp_stress")
+        .expect("shrimp stress stage should be traced");
+
+    for prefix in [
+        "shrimp_stress.nitrite_mg_n_per_l=",
+        "shrimp_stress.chloride_mg_per_l=",
+        "shrimp_stress.effective_nitrite_hazard_mg_n_per_l=",
+        "shrimp_stress.nitrite_stress_increment=",
+        "shrimp_stress.nitrite_stress_accum.after=",
+    ] {
+        assert!(
+            shrimp_stress.notes.iter().any(|note| note.starts_with(prefix)),
+            "trace notes should include {prefix:?}. Notes: {:?}",
+            shrimp_stress.notes
+        );
+    }
 
     Ok(())
 }

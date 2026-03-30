@@ -73,6 +73,34 @@ fn threshold_event_summaries_use_explicit_chemistry_units() -> Result<(), tank_c
 }
 
 #[test]
+fn nitrite_warning_summary_reports_effective_hazard_and_stress_increment(
+) -> Result<(), tank_core::SimError> {
+    let mut state = threshold_state(SimSeed(5075));
+    let volume_l = state.water_volume_l();
+    state.water.nitrite_mg_n_total = 3.0 * volume_l;
+    state.water.chloride_mg_total = 30.0 * volume_l;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.step_hours(1)?;
+
+    let nitrite = engine
+        .full_state()
+        .event_log
+        .iter()
+        .find(|event| event.kind == EventKind::NitriteWarning)
+        .expect("expected nitrite warning");
+
+    assert!(
+        nitrite.summary.contains("effective hazard")
+            && nitrite.summary.contains("nitrite stress +"),
+        "nitrite warning should report effective hazard and stress increment: {}",
+        nitrite.summary
+    );
+
+    Ok(())
+}
+
+#[test]
 fn threshold_events_are_deduplicated_per_day() -> Result<(), tank_core::SimError> {
     let mut engine = Engine::from_parts(threshold_state(SimSeed(5100)), vec![]);
 

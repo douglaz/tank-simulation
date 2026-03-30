@@ -1,6 +1,6 @@
 use crate::{
     systems::chemistry::compute_nh3_mg_n_per_l,
-    systems::shrimp::compute_effective_nitrite_hazard,
+    systems::shrimp::compute_nitrite_stress_diagnostics,
     types::{EventCause, EventKind, EventSeverity, SimEvent, TankState},
 };
 
@@ -27,7 +27,7 @@ pub fn emit_hourly_threshold_events(state: &mut TankState) {
         );
     }
     if nitrite_mg_l >= 0.5 {
-        let effective_hazard = compute_effective_nitrite_hazard(
+        let nitrite_diagnostics = compute_nitrite_stress_diagnostics(
             nitrite_mg_l,
             chloride_mg_l,
             state.shrimp_params.chloride_protection_factor,
@@ -44,7 +44,11 @@ pub fn emit_hourly_threshold_events(state: &mut TankState) {
             vec![EventCause::HighNitrite],
             format!(
                 "Nitrite-N {nitrite_mg_l:.2} mg N/L, Cl {chloride_mg_l:.1} mg/L \
-                 (Cl:NO2 {cl_no2_ratio:.1}:1), effective hazard {effective_hazard:.3}"
+                 (Cl:NO2 {cl_no2_ratio:.1}:1), effective hazard \
+                 {effective_hazard:.3}, nitrite stress +{stress_increment:.4}/h"
+                ,
+                effective_hazard = nitrite_diagnostics.effective_hazard_mg_l,
+                stress_increment = nitrite_diagnostics.hourly_stress_increment,
             ),
         );
     }
