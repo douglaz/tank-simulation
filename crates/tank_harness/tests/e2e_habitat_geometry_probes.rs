@@ -461,6 +461,12 @@ fn run_probe_biofilter_scaling_bigger_media_higher_capacity_with_suffix(
     let nitrifier_large = nitrifier_biomass(run_large.engine().full_state());
     let clearance_summary =
         format_clearance_summary(reduced_n_clearance_small, reduced_n_clearance_large);
+    let exposure_context =
+        if reduced_n_clearance_small.is_none() && reduced_n_clearance_large.is_none() {
+            " (non-gating fallback context)"
+        } else {
+            ""
+        };
 
     dump_habitat_debug("biofilter_small", run_small.engine().full_state());
     dump_habitat_debug("biofilter_large", run_large.engine().full_state());
@@ -469,7 +475,8 @@ fn run_probe_biofilter_scaling_bigger_media_higher_capacity_with_suffix(
     eprintln!(
         "Biofilter metrics: filter_area small={filter_area_small:.1} cm² large={filter_area_large:.1} cm²; \
          capacity small={capacity_small:.4}g large={capacity_large:.4}g; \
-         reduced-N exposure small={reduced_n_exposure_small:.2} large={reduced_n_exposure_large:.2}; \
+         reduced-N exposure small={reduced_n_exposure_small:.2} large={reduced_n_exposure_large:.2}{exposure_context}; \
+         nitrifier biomass small={nitrifier_small:.4} large={nitrifier_large:.4}; \
          final TAN small={:.3} large={:.3}; final NO₂ small={:.3} large={:.3}; \
          final reduced-N small={final_reduced_n_small:.3} large={final_reduced_n_large:.3}; \
          clearance {clearance_summary}",
@@ -575,18 +582,37 @@ fn run_probe_biofilter_scaling_bigger_media_higher_capacity_with_suffix(
             .tan_mg_n_per_l(0.0, 8.0),
     );
 
-    Ok(finish_probe(
-        "biofilter_scaling",
-        format!(
-            "area {filter_area_small:.0}->{filter_area_large:.0} cm², capacity {capacity_small:.3}->{capacity_large:.3} g, \
-             reduced-N exposure {reduced_n_exposure_small:.2}->{reduced_n_exposure_large:.2}, \
-             final TAN {tan_small:.3}->{tan_large:.3}, final NO₂ {no2_small:.3}->{no2_large:.3}, \
-             final reduced-N {final_reduced_n_small:.3}->{final_reduced_n_large:.3}, clearance {clearance_summary}",
+    let observed = match (reduced_n_clearance_small, reduced_n_clearance_large) {
+        (None, None) => format!(
+            "area {filter_area_small:.0}->{filter_area_large:.0} cm², capacity \
+             {capacity_small:.3}->{capacity_large:.3} g, nitrifier biomass \
+             {nitrifier_small:.3}->{nitrifier_large:.3} g, final TAN \
+             {tan_small:.3}->{tan_large:.3}, final NO₂ {no2_small:.3}->{no2_large:.3}, \
+             final reduced-N {final_reduced_n_small:.3}->{final_reduced_n_large:.3}, \
+             clearance {clearance_summary}",
             tan_small = snap_small.tan_mg_n_per_l,
             tan_large = snap_large.tan_mg_n_per_l,
             no2_small = snap_small.nitrite_mg_n_per_l,
             no2_large = snap_large.nitrite_mg_n_per_l,
         ),
+        _ => format!(
+            "area {filter_area_small:.0}->{filter_area_large:.0} cm², capacity \
+             {capacity_small:.3}->{capacity_large:.3} g, reduced-N exposure \
+             {reduced_n_exposure_small:.2}->{reduced_n_exposure_large:.2}, nitrifier biomass \
+             {nitrifier_small:.3}->{nitrifier_large:.3} g, final TAN \
+             {tan_small:.3}->{tan_large:.3}, final NO₂ {no2_small:.3}->{no2_large:.3}, \
+             final reduced-N {final_reduced_n_small:.3}->{final_reduced_n_large:.3}, \
+             clearance {clearance_summary}",
+            tan_small = snap_small.tan_mg_n_per_l,
+            tan_large = snap_large.tan_mg_n_per_l,
+            no2_small = snap_small.nitrite_mg_n_per_l,
+            no2_large = snap_large.nitrite_mg_n_per_l,
+        ),
+    };
+
+    Ok(finish_probe(
+        "biofilter_scaling",
+        observed,
         vec![run_small, run_large],
     ))
 }
