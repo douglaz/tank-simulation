@@ -11,20 +11,70 @@ fn state_with_ro_like(seed: SimSeed) -> TankState {
     state
 }
 
+fn isolated_water_change_state(seed: SimSeed) -> TankState {
+    let mut state = state_with_ro_like(seed);
+
+    state.environment.ambient_temp_c = state.water.temperature_c;
+    state.hardware.light.enabled = false;
+    state.hardware.aeration.enabled = false;
+    state.hardware.aeration.intensity = 0.0;
+    state.hardware.filter.enabled = false;
+    state.hardware.filter.flow_lph = 0.0;
+    state.process_params.reaeration_kla_base = 0.0;
+    state.process_params.aeration_kla_boost = 0.0;
+    state
+        .process_params
+        .background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
+    state.process_params.fine_detritus_dissolution_rate_per_hour = 0.0;
+    state.process_params.feed_leach_rate_per_hour = 0.0;
+
+    state.plant_guilds.clear();
+    state.algae.suspended_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
+    state.algae.nuisance_index = 0.0;
+    state.microbe.set_decomposer_total(0.0);
+    state.microbe.ammonia_oxidizer_biomass_g = 0.0;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.0;
+    state.microbe.comammox_biomass_g = 0.0;
+    state.microfauna.population_index = 0.0;
+    state.microfauna.grazing_pressure_index = 0.0;
+    state.animal.adult.count = 0;
+    state.animal.juvenile.count = 0;
+    state.animal.berried_females_count = 0;
+    state.detritus.particulate_organics_g_total = 0.0;
+    state.detritus.fine_detritus_g_total = 0.0;
+    state.detritus.dissolved_feed_residue_g_total = 0.0;
+    for layer in &mut state.substrate_layers {
+        layer.nutrient_store_mg_n_total = 0.0;
+        layer.nutrient_store_mg_p_total = 0.0;
+    }
+
+    state.water.ammonia_total_mg_n_total = 8.0;
+    state.water.nitrite_mg_n_total = 3.0;
+    state.water.nitrate_mg_n_total = 18.0;
+    state.water.phosphate_mg_p_total = 7.0;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 240.0;
+    state.water.dissolved_organic_carbon_mg_c_total = 16.0;
+    state.water.dissolved_organic_nitrogen_mg_n_total = 5.0;
+
+    state.reseed_stability_tracker();
+    state
+}
+
 #[test]
 fn water_change_50_percent_ro_like_halves_dissolved_totals() -> Result<(), tank_core::SimError> {
-    let state = state_with_ro_like(SimSeed(100));
+    let state = isolated_water_change_state(SimSeed(100));
+    let before = state.water.clone();
     let mut engine = Engine::from_parts(state, vec![]);
-
-    // Record pre-change totals
-    let before = engine.full_state().water.clone();
-
-    // Apply 50% water change with zero-nutrient source
     engine.apply_action(PlayerAction::WaterChangePercent {
         percent: 50.0,
         source_profile_id: "ro_like".to_string(),
     })?;
     engine.step_hours(1)?;
+    assert!(
+        engine.queued_actions().is_empty(),
+        "queued water-change action should be drained during the tick"
+    );
 
     let after = &engine.full_state().water;
 
@@ -59,6 +109,21 @@ fn water_change_50_percent_ro_like_halves_dissolved_totals() -> Result<(), tank_
             after.dissolved_inorganic_carbon_mg_c_total,
         ),
         (
+            "dissolved_organic_carbon_mg_c_total",
+            before.dissolved_organic_carbon_mg_c_total,
+            after.dissolved_organic_carbon_mg_c_total,
+        ),
+        (
+            "dissolved_organic_nitrogen_mg_n_total",
+            before.dissolved_organic_nitrogen_mg_n_total,
+            after.dissolved_organic_nitrogen_mg_n_total,
+        ),
+        (
+            "alkalinity_meq_total",
+            before.alkalinity_meq_total,
+            after.alkalinity_meq_total,
+        ),
+        (
             "calcium_mg_total",
             before.calcium_mg_total,
             after.calcium_mg_total,
@@ -77,11 +142,6 @@ fn water_change_50_percent_ro_like_halves_dissolved_totals() -> Result<(), tank_
             "potassium_mg_total",
             before.potassium_mg_total,
             after.potassium_mg_total,
-        ),
-        (
-            "bicarbonate_mg_total",
-            before.bicarbonate_mg_total,
-            after.bicarbonate_mg_total,
         ),
         (
             "chloride_mg_total",
@@ -326,6 +386,70 @@ fn invalid_resolved_profile_negative_chemistry_returns_error() -> Result<(), Sim
         ),
         "Expected InvalidSourceProfile error for negative chemistry during apply_action"
     );
+    assert!(engine.queued_actions().is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn invalid_resolved_profile_out_of_calibrated_carbonate_range_returns_error() -> Result<(), SimError>
+{
+    let mut state = TankState::new(SimSeed(850));
+    let mut bad_profile = SourceWaterProfile::zero();
+    bad_profile.dic_mg_c_per_l = 24.0;
+    bad_profile.alkalinity_meq_per_l = 0.0;
+    state
+        .source_water_catalog
+        .insert("acid_only".to_string(), bad_profile);
+
+    let mut engine = Engine::from_parts(state, vec![]);
+
+    assert!(
+        matches!(
+            engine.apply_action(PlayerAction::WaterChangePercent {
+                percent: 25.0,
+                source_profile_id: "acid_only".to_string(),
+            }),
+            Err(SimError::InvalidSourceProfile {
+                field: "carbonate_derived_ph",
+                ..
+            })
+        ),
+        "Expected InvalidSourceProfile error for carbonate-derived pH during apply_action"
+    );
+    assert!(engine.queued_actions().is_empty());
+
+    Ok(())
+}
+
+#[test]
+fn invalid_resolved_profile_nonfinite_carbonate_fallback_returns_error() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(851));
+    let mut bad_profile = SourceWaterProfile::zero();
+    bad_profile.dic_mg_c_per_l = 1.0e308;
+    bad_profile.alkalinity_meq_per_l = 1.0;
+    state
+        .source_water_catalog
+        .insert("overflowed".to_string(), bad_profile);
+
+    let mut engine = Engine::from_parts(state, vec![]);
+
+    match engine.apply_action(PlayerAction::WaterChangePercent {
+        percent: 25.0,
+        source_profile_id: "overflowed".to_string(),
+    }) {
+        Err(SimError::InvalidSourceProfile {
+            field: "carbonate_derived_ph",
+            value,
+            ..
+        }) => assert!(
+            value.is_nan(),
+            "non-finite carbonate fallback should surface as NaN, got {value}"
+        ),
+        other => {
+            panic!("Expected InvalidSourceProfile for non-finite carbonate fallback, got {other:?}")
+        }
+    }
     assert!(engine.queued_actions().is_empty());
 
     Ok(())

@@ -1,0 +1,43 @@
+{
+  "payload_id": "run-20260327225238-review-c2-a1-cr5",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T00:25:23.239635292Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All 18 save_load tests pass, including the 3 new malformed-geometry regression tests (negative fill height, negative substrate depth, substrate depth exceeding fill height) and the shared assertion helper.",
+        "`cargo clippy -p tank_core --tests -- -D warnings` passes cleanly with no warnings.",
+        "`cargo fmt -p tank_core -- --check` passes with no formatting issues.",
+        "MigrationFn signature is `fn(&mut Value) -> Result<(), SimError>` (save.rs:33) with dedicated `SimError::SchemaMigration { from, to, message }` variant (actions.rs:82-83).",
+        "Compile-time assertion at save.rs:89-92 prevents MIGRATIONS length from drifting from SCHEMA_VERSION - MIN_SUPPORTED_SCHEMA.",
+        "Migration contract is well-documented at save.rs:41-76 with 5 numbered steps, 'what migrations can do' section, and 'ordering guarantees' section.",
+        "migrate_v2_to_v3 now uses `required_positive_f64_at` for length, width, and fill_height (save.rs:214-216), rejects negative substrate depths explicitly (save.rs:244-252), validates substrate_depth <= fill_height with tolerance (save.rs:256-264), and requires positive net water volume (save.rs:268-276).",
+        "The `required_positive_f64_at` helper (save.rs:386-401) correctly rejects values <= 0.0 with descriptive error messages including the path and actual value.",
+        "Scale computation is now a clean division `net_volume_l / gross_volume_l` (save.rs:278) with no silent clamping or zero fallback — all invalid cases are rejected before reaching this point.",
+        "Schema version is restamped after each migration step (save.rs:169), so a crash mid-chain leaves the save at a consistent intermediate version.",
+        "The `assert_schema_v2_migration_failure` helper (save_load.rs:304-325) is shared across all malformed-v2 tests, reducing duplication.",
+        "The only test failure in the full tank_core suite is `hatch_produces_juveniles` — a pre-existing regression from chemistry/nitrogen cycle changes, documented as outstanding risk in every prior stage output."
+      ],
+      "findings_or_gaps": [
+        "The `hatch_produces_juveniles` shrimp population test still fails (adults=2, juveniles=0, TAN=2.169 mg/L). This is a pre-existing regression unrelated to the save-schema work, consistently documented across all prior stage outputs.",
+        "The pre-step `enforce_invariants(&mut self.state)` mutation-on-error architectural issue remains (pre-existing, unrelated to this deliverable).",
+        "The `substrate_depth > fill_height + 1e-9` tolerance check at save.rs:256 uses a hardcoded epsilon rather than a relative tolerance. For typical aquarium dimensions (cm-scale) this is perfectly adequate, but worth noting as a design choice."
+      ],
+      "follow_up_or_amendments": [
+        "The `hatch_produces_juveniles` regression should be addressed in a separate task — either retune the test fixture or investigate excess ammonia accumulation in the nitrogen cycle.",
+        "The pre-step enforce_invariants mutation-on-error issue should be addressed separately by validating against a clone or splitting pure validation from normalization."
+      ],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 5
+}

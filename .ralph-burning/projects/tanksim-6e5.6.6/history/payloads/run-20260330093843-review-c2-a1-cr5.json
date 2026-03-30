@@ -1,0 +1,42 @@
+{
+  "payload_id": "run-20260330093843-review-c2-a1-cr5",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T12:16:23.623429933Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All 6 tests pass: `test result: ok. 6 passed; 0 failed` — 5 individual probes + all_shrimp_probes_summary runner.",
+        "AC1 (5 named tests with doc comments): Confirmed — probe_successful_breeding (line 194), probe_thermal_suppression (line 443), probe_chemistry_stress (line 711), probe_chloride_protection (line 904), probe_crash_mode (line 1177) each have multi-line doc comments explaining the husbandry story being validated.",
+        "AC2 (failure dumps per-stage shrimp state and water chemistry per tick): Confirmed — emit_tick_snapshot (engine.rs:116-212) emits per-tick structured notes for adult/sub_adult/juvenile counts, condition, and reserve_g individually, plus berried_females, molt_stress, molt_readiness, failed_molt_accum, last_molt_success, reproductive_readiness, and water chemistry (GH, pH, NO2, Cl, DO, temp) gated at Verbosity::Trace. shrimp_diag() (lines 156-188) formats all per-stage data into failure messages with counts, condition, reserve per stage, plus key chemistry.",
+        "AC3 (e2e script with summary, structured traces, non-zero exit on envelope violation): Confirmed — all_shrimp_probes_summary (line 1352) runs all 5 probes via catch_unwind, prints PASS/FAIL per probe with observed metrics, persists trace.jsonl artifacts for summary runs, and panics (non-zero exit) via line 1413 on any failure.",
+        "AC4 (directional/envelope assertions, no frozen exact counts): Confirmed — all probes use directional comparisons (<, >, >=, <=) and Envelope ranges (pH 6.8-8.6, temp 23-26.5, TAN 0-0.6, NO2 0-0.6, DO min 7.0, etc.). No exact count assertions anywhere.",
+        "AC5 (breeding 1000+ hours with 2+ cycles): Confirmed — 60 days x 24h = 1440 hours, complete_cycle_count >= 2 assertion at line 294 using event-backed ShrimpBerried/ShrimpHatched counting. Test output shows cycles=10, population 10->260.",
+        "Clippy reports zero warnings: `cargo clippy -p tank_harness --test e2e_shrimp_scenario_probes -- -D warnings` passes cleanly.",
+        "`cargo fmt -- --check` passes with no formatting issues.",
+        "All 23 tracing tests pass including tick_snapshot_for_shrimp_probe_debugging coverage.",
+        "Breeding probe: event-driven cycle counting via BTreeSet of berried_days and hatch_days from EventKind events (lines 270-282), with complete_cycle_count = berried_days.len().min(hatch_days.len()). Output: cycles=10, berried_days=18, hatch_days=10, population 10->260.",
+        "Thermal suppression: cool arm (25°C) reuses breeding_success_state fixture, warm arm (31°C) starts with seeded berried females and prev_temp_c=25 for heat shock. Cool arm finishes healthy (cond=0.926, molt_stress=0.009, 218 juveniles, 9 hatches), warm arm shows suppression (readiness=0.017, 0 juveniles, 0 hatches, 1 egg drop). Cool-control health guard at lines 663-676.",
+        "Chemistry stress: low GH (Ca 5 mg/L, Mg 2 mg/L) + high NO2 (4 mg N/L), adults seeded at end of intermolt cycle (lines 777-781) to ensure molt resolution within 21-day window. Colony collapses 20->0, molt_failures=1, failed_molt_accum=0.300.",
+        "Chloride protection: real 3-phase branched design — 3 days pre-treatment crisis, state cloned into salt-treated (NaCl 200 mg/L Cl) and matched-control branches with 50% water changes, 3-day recovery. Output: treated_deaths=0 < control_deaths=3, treated_hazard=0.3518 < control_hazard=4.3736.",
+        "Crash mode: 40 shrimp in ~15L, 1g/day overfeeding, no water changes for 30 days. Colony crashes 40->0 (100% mortality), TAN=77.085, NO2=12.771, condition=0.000.",
+        "Summary runner persists trace.jsonl artifacts with deterministic paths for all 8 runs (breeding, 2 thermal arms, chemistry, 3 chloride branches, crash)."
+      ],
+      "findings_or_gaps": [
+        "The VS-07 denitrification test in e2e_validation_suite.rs fails (planted arm reports N2_export=0.00mg_N), as noted in the final plan_and_implement pass. This is a pre-existing issue in a different test file outside this deliverable's scope — the shrimp probe suite itself is fully green.",
+        "Two pre-existing test failures in tank_data::presets (from unstaged tanksim-6e5.7.2 param_meta changes to default.toml) remain outside this deliverable's scope."
+      ],
+      "follow_up_or_amendments": [],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 5
+}

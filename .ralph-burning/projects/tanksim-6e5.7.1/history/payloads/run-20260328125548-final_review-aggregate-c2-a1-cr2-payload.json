@@ -1,0 +1,159 @@
+{
+  "payload_id": "run-20260328125548-final_review-aggregate-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T14:14:14.855315177Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-2-965c5a37",
+      "fr-2-0f26a053",
+      "fr-2-b6ef0732",
+      "fr-2-e1a4e39a",
+      "fr-2-50ee4385"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-2-965c5a37",
+        "normalized_body": "In check_param_range (provenance.rs:116-127), NaN values silently pass the range check because IEEE 754 comparisons with NaN always return false. Add a !value.is_finite() guard that produces a RangeWarning (or a distinct diagnostic) when the value is NaN or infinity, and add a test for this edge case.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-0f26a053",
+        "normalized_body": "The preset-level Provenance struct (presets.rs:14-19) uses confidence: Option<String>, allowing arbitrary strings like 'medium' (present in shipped TOML files default.toml:99 and soft_acidic.toml:23). The per-parameter ParamMeta uses the validated ConfidenceLevel enum. Either: (a) change Provenance.confidence to Option<ConfidenceLevel> and update the shipped TOML files to use valid enum values, or (b) document the intentional difference and add a note explaining that preset-level confidence is freeform while per-parameter confidence is validated.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-b6ef0732",
+        "normalized_body": "Add validation that valid_range[0] <= valid_range[1] during deserialization or in check_param_range. An inverted range like [5.0, 0.1] would cause every value to trigger a spurious warning. A simple assertion or early return with a descriptive warning would prevent silent misconfiguration.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-fa8b3a06",
+        "normalized_body": "Fix the schema-v4 save migration so legacy `TrimPlants` actions map to `TrimPlantsAndLeaveCuttings`, not `TrimPlantsAndRemove` (`crates/tank_core/src/save.rs:555-565`). The old `TrimPlants` behavior matched the detritus-routing path that now lives in `crates/tank_core/src/engine.rs:620-631`, while `TrimPlantsAndRemove` at `crates/tank_core/src/engine.rs:600-618` exports biomass from the system. As written, loading an old save silently changes queued action semantics and mass balance.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-e1a4e39a",
+        "normalized_body": "Normalize provenance display/range-check values for legacy total-style process parameters before feeding them to `format_param()` / `check_ranges()` (`crates/tank_data/src/presets.rs:400-509`, `crates/tank_core/src/types/provenance.rs:148-158`). Several of the parameters being documented are explicitly stored in legacy total units and converted by the runtime to concentration units (`crates/tank_core/src/types/process.rs:56-63`, `crates/tank_core/src/types/process.rs:72-109`, `crates/tank_core/src/systems/nitrogen_cycle.rs:169-174`). Right now a value like `aob_k_tan_mg = 0.5` is displayed and range-checked as `0.5 mg N/L`, even though the engine actually uses `0.025 mg N/L`, so the new provenance output and `valid_range` diagnostics are scientifically wrong for these fields.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-50ee4385",
+        "normalized_body": "Add a provenance path for the active code-defined process defaults that are still hardcoded during scenario materialization. `ProcessParams` includes `death_biomass_to_detritus_fraction` and the microfauna routing fractions (`crates/tank_core/src/types/process.rs:211-247`), but `ProcessParamsPreset` has no fields/`param_meta` support for them and rejects unknown metadata keys (`crates/tank_data/src/presets.rs:351-388`, `crates/tank_data/src/presets.rs:392-500`, `crates/tank_data/src/presets.rs:723-731`). `process_preset_to_params()` then injects literal values for them (`crates/tank_scenarios/src/lib.rs:433-443`) and drops provenance entirely. Those runtime parameters still cannot carry source/confidence/range metadata.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-2-965c5a37",
+        "normalized_body": "In check_param_range (provenance.rs:116-127), NaN values silently pass the range check because IEEE 754 comparisons with NaN always return false. Add a !value.is_finite() guard that produces a RangeWarning (or a distinct diagnostic) when the value is NaN or infinity, and add a test for this edge case.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-0f26a053",
+        "normalized_body": "The preset-level Provenance struct (presets.rs:14-19) uses confidence: Option<String>, allowing arbitrary strings like 'medium' (present in shipped TOML files default.toml:99 and soft_acidic.toml:23). The per-parameter ParamMeta uses the validated ConfidenceLevel enum. Either: (a) change Provenance.confidence to Option<ConfidenceLevel> and update the shipped TOML files to use valid enum values, or (b) document the intentional difference and add a note explaining that preset-level confidence is freeform while per-parameter confidence is validated.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-b6ef0732",
+        "normalized_body": "Add validation that valid_range[0] <= valid_range[1] during deserialization or in check_param_range. An inverted range like [5.0, 0.1] would cause every value to trigger a spurious warning. A simple assertion or early return with a descriptive warning would prevent silent misconfiguration.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-e1a4e39a",
+        "normalized_body": "Normalize provenance display/range-check values for legacy total-style process parameters before feeding them to `format_param()` / `check_ranges()` (`crates/tank_data/src/presets.rs:400-509`, `crates/tank_core/src/types/provenance.rs:148-158`). Several of the parameters being documented are explicitly stored in legacy total units and converted by the runtime to concentration units (`crates/tank_core/src/types/process.rs:56-63`, `crates/tank_core/src/types/process.rs:72-109`, `crates/tank_core/src/systems/nitrogen_cycle.rs:169-174`). Right now a value like `aob_k_tan_mg = 0.5` is displayed and range-checked as `0.5 mg N/L`, even though the engine actually uses `0.025 mg N/L`, so the new provenance output and `valid_range` diagnostics are scientifically wrong for these fields.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-50ee4385",
+        "normalized_body": "Add a provenance path for the active code-defined process defaults that are still hardcoded during scenario materialization. `ProcessParams` includes `death_biomass_to_detritus_fraction` and the microfauna routing fractions (`crates/tank_core/src/types/process.rs:211-247`), but `ProcessParamsPreset` has no fields/`param_meta` support for them and rejects unknown metadata keys (`crates/tank_data/src/presets.rs:351-388`, `crates/tank_data/src/presets.rs:392-500`, `crates/tank_data/src/presets.rs:723-731`). `process_preset_to_params()` then injects literal values for them (`crates/tank_scenarios/src/lib.rs:433-443`) and drops provenance entirely. Those runtime parameters still cannot carry source/confidence/range metadata.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 2,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-2-fa8b3a06"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 5 amendment(s); restart required.",
+    "total_proposed_amendments": 6,
+    "total_reviewers": 2,
+    "unique_amendment_count": 6
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 2
+}

@@ -1,0 +1,39 @@
+{
+  "payload_id": "run-20260330040229-final_review-vote-0-c2-a1-cr11-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T12:10:16.793847265Z",
+  "payload": {
+    "summary": "Three amendments identify real correctness/consistency bugs and should be accepted. The cold-stress amendment (fr-11-b5914abc) proposes a model behavior change rather than fixing a defect, since cold already influences molt stress indirectly through the condition pathway.",
+    "votes": [
+      {
+        "amendment_id": "fr-11-d6025c3e",
+        "decision": "accept",
+        "rationale": "Verified at shrimp.rs:554: when gh_min_d=0.0 (semantically disabled), the .max(0.01) guard converts it to 0.01 and any GH below 0.01*critical_molt_gh_ratio falsely triggers critical deficit. Meanwhile molt_mineral_modifier (line 1753) correctly treats gh_min_d=0.0 as 'no minimum' via the gh_d >= params.gh_min_d check. The inconsistency is clear — the critical_gh_deficit path lacks the same disabled-minimum guard. The proposed fix (adding params.gh_min_d > 0.0 &&) is correct and minimal. The test gap is also real."
+      },
+      {
+        "amendment_id": "fr-11-b5914abc",
+        "decision": "reject",
+        "rationale": "Verified at shrimp.rs:498-504: thermal_stress only tracks heat. However, cold already affects the model through temp_condition_factor (line 1611-1622), which uses temp_condition_min_factor and temp_condition_low_divisor_c. This feeds into condition_stress (line 495-497) via population_condition_index. Adding a direct cold thermal_stress branch would create a second cold-penalty pathway alongside the existing condition-mediated one, risking double-counting and materially rebalancing the simulation. This is a model design choice, not a wiring bug."
+      },
+      {
+        "amendment_id": "fr-11-987ddf4e",
+        "decision": "accept",
+        "rationale": "Verified at shrimp.rs:556: `let temp_factor = raw_temp_factor.max(0.25)` hardcodes a cadence floor, while temp_condition_factor (line 1612) already uses the configurable params.temp_condition_min_factor. Setting temp_condition_min_factor below 0.25 changes condition/success scoring but has zero effect on molt cadence timing because the hardcoded 0.25 floor overrides it. This makes the new species-configurable parameter only partially effective and hides an implicit thermal timing constant. The hardcoded value should either be parameterized separately or replaced with the named floor."
+      },
+      {
+        "amendment_id": "fr-11-a1e5f0d8",
+        "decision": "accept",
+        "rationale": "Verified: presets.rs:1005 places temp_condition_min_factor in the strictly-positive list (lines 1044-1046: value <= 0.0 rejected), while invariants.rs:466-469 uses check_unit_interval which accepts 0.0..=1.0 (line 725). A runtime/save-state config with temp_condition_min_factor=0.0 passes invariant validation but cannot be authored as a species preset. This creates a real round-trip inconsistency. The bounds should be aligned — either both accept 0.0 or both reject it."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 11
+}

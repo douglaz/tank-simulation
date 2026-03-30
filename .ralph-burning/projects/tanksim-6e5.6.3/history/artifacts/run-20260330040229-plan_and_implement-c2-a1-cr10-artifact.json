@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330040229-plan_and_implement-c2-a1-cr10-artifact",
+  "payload_id": "run-20260330040229-plan_and_implement-c2-a1-cr10",
+  "stage_id": "plan_and_implement",
+  "created_at": "2026-03-30T11:02:07.260974025Z",
+  "content": "# Plan and Implement\n\n## Change Summary\n\nImplemented both pending amendments on the current branch. I restored the TAN/NO2 reproduction full-suppression defaults to preserve the legacy `excess / (threshold * 2.0)` curve shape by changing the runtime defaults and shipped `neocaridina_davidi` preset to TAN `3.0` and NO2 `1.5`, and documented that choice in the shrimp parameter docs/data. I also made molt-failure `PoorCondition` diagnostics consistent with the existing blended-condition semantics by tracking the minimum blended condition factor plus its paired raw condition/reserve factor and reporting that blended factor instead of emitting impossible raw-condition comparisons. Regression coverage now locks both contracts down with a new legacy-span test and a reserve-driven poor-condition diagnostic test.\n\n## Steps\n\n1. [Completed] Inspected the current reproduction-suppression defaults and molt-failure diagnostic path, then chose to preserve the legacy TAN/NO2 suppression curve shape explicitly rather than widening test expectations around the steeper defaults.\n2. [Completed] Patched `ShrimpRuntimeParams`, the shipped shrimp preset, and the molt failure diagnostics path so reproduction defaults use the legacy full-suppression spans and `PoorCondition` events report the blended condition factor with raw/reserve context.\n3. [Completed] Extended regression coverage for the restored toxic-suppression spans and reserve-driven poor-condition reporting, then reran focused and broad validation across core, data, scenarios, and harness surfaces.\n\n## Validation Evidence\n\n- `cargo fmt --all`\n- `cargo test -p tank_core --test molt_mineral_budget -- --nocapture`\n- `cargo test -p tank_core --test reproduction_factors -- --nocapture`\n- `cargo test -p tank_harness controlled_ideal_reproduction_path_still_hatches -- --nocapture`\n- `cargo test -p tank_data -- --nocapture`\n- `cargo test -p tank_scenarios -- --nocapture`\n- `cargo test -p tank_core -- --nocapture`\n\n## Outstanding Risks\n\nNone identified.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 10
+}

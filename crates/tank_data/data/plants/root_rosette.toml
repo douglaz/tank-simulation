@@ -9,5 +9,11 @@ substrate_uptake_bias = 0.9
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "Root-heavy rosette responding strongly to substrate quality."
+notes = """
+Root-heavy rosette responding strongly to substrate quality. \
+substrate_uptake_bias (0.9) means 90% of nutrient uptake draws from areal \
+substrate density (Ks in mg/m²), 10% from water column (Ks in mg/L). \
+Post-normalization (6e5.2.4) rosettes decline in medium_planted once the \
+active_planted substrate charge depletes — this is the expected "substrate \
+exhaustion" story where fast stems outcompete for water-column nutrients."""
 

@@ -10,7 +10,10 @@ pub enum PlayerAction {
         percent: f64,
         source_profile_id: String,
     },
-    TrimPlants {
+    TrimPlantsAndRemove {
+        fraction: f64,
+    },
+    TrimPlantsAndLeaveCuttings {
         fraction: f64,
     },
     SiphonDetritus {
@@ -61,6 +64,13 @@ pub enum SimError {
     EmptySourceProfileId,
     #[error("invariant violation for `{field}` with value {value}")]
     InvariantViolation { field: &'static str, value: f64 },
+    #[error("`{lower_field}` ({lower_value}) must be less than `{upper_field}` ({upper_value})")]
+    OrderingViolation {
+        lower_field: &'static str,
+        lower_value: f64,
+        upper_field: &'static str,
+        upper_value: f64,
+    },
     #[error("unknown source water profile: `{id}`")]
     UnknownSourceProfile { id: String },
     #[error("invalid source water profile `{id}`: field `{field}` has invalid value {value}")]
@@ -69,14 +79,35 @@ pub enum SimError {
         field: &'static str,
         value: f64,
     },
-    #[error("schema version mismatch: expected {expected}, got {actual}")]
-    SchemaVersionMismatch { expected: u32, actual: u32 },
+    #[error(
+        "save file version {actual} is newer than supported version {max_supported}; \
+         upgrade the application to load this save"
+    )]
+    SchemaVersionTooNew { actual: u32, max_supported: u32 },
+    #[error(
+        "save file version {actual} is too old; \
+         minimum supported version is {min_supported}; \
+         re-create this save with a newer version of the application"
+    )]
+    SchemaVersionTooOld { actual: u32, min_supported: u32 },
+    #[error("save migration {from} -> {to} failed: {message}")]
+    SchemaMigration { from: u32, to: u32, message: String },
     #[error("serialization error: {0}")]
     Serialization(String),
     #[error("deserialization error: {0}")]
     Deserialization(String),
     #[error("cannot remove {requested} shrimp, only {available} available")]
     ShrimpRemovalExceedsAvailable { requested: u32, available: u32 },
+    #[error(
+        "budget tracking detected unexplained {element} drift of {delta_mg} mg at tick {tick_index} (day {day}, hour {hour})"
+    )]
+    BudgetImbalance {
+        element: &'static str,
+        delta_mg: f64,
+        tick_index: usize,
+        day: u32,
+        hour: u32,
+    },
 }
 
 impl PlayerAction {
@@ -94,7 +125,8 @@ impl PlayerAction {
                     Ok(())
                 }
             }
-            Self::TrimPlants { fraction }
+            Self::TrimPlantsAndRemove { fraction }
+            | Self::TrimPlantsAndLeaveCuttings { fraction }
             | Self::SiphonDetritus { fraction }
             | Self::CleanFilter {
                 intensity: fraction,
@@ -123,11 +155,23 @@ impl PlayerAction {
             Self::ChangeAeration { intensity, .. } => validate_fraction("intensity", *intensity),
         }
     }
+
+    pub fn affects_habitat_registry(&self) -> bool {
+        matches!(
+            self,
+            Self::TrimPlantsAndRemove { .. }
+                | Self::TrimPlantsAndLeaveCuttings { .. }
+                | Self::CleanFilter { .. }
+                | Self::ChangeLightIntensity { .. }
+                | Self::ChangeAeration { .. }
+        )
+    }
 }
 
 fn field_name(action: &PlayerAction) -> &'static str {
     match action {
-        PlayerAction::TrimPlants { .. } => "fraction",
+        PlayerAction::TrimPlantsAndRemove { .. }
+        | PlayerAction::TrimPlantsAndLeaveCuttings { .. } => "fraction",
         PlayerAction::SiphonDetritus { .. } => "fraction",
         PlayerAction::CleanFilter { .. } => "intensity",
         _ => "value",

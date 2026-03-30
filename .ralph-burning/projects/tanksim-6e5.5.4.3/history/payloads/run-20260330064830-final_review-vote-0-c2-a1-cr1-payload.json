@@ -1,0 +1,34 @@
+{
+  "payload_id": "run-20260330064830-final_review-vote-0-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T07:45:29.747080283Z",
+  "payload": {
+    "summary": "Accept the redundant-computation refactor (fr-1-f5cd3c88) and the interstitial-area invariant comment (fr-1-15dd3c0b). Reject the root-demand comment (fr-1-1c7ab74f) because the existing docstring at lines 197-198 already documents this design choice clearly, and the proposed wording introduces an unsubstantiated calibration claim about rol_rate_cm_per_g.",
+    "votes": [
+      {
+        "amendment_id": "fr-1-f5cd3c88",
+        "decision": "accept",
+        "rationale": "Confirmed in the code: engine.rs calls `substrate_oxygenation_breakdown(&engine.state)` for tracing metrics, then immediately calls `step_substrate_zones(&mut engine.state)` which internally calls `substrate_oxygenation_breakdown(state)` again at substrate.rs:46. Each call rebuilds the full habitat registry via `compute_habitat_registry()`. This is pure redundant work on identical state. Refactoring `step_substrate_zones` to accept (or return) a pre-computed breakdown is straightforward, eliminates the duplicate computation, and ensures the traced values are guaranteed identical to the applied values rather than merely expected to be."
+      },
+      {
+        "amendment_id": "fr-1-1c7ab74f",
+        "decision": "reject",
+        "rationale": "The existing docstring at substrate.rs:197-198 already clearly documents the design intent: 'Root-zone plant oxygenation is modeled as a separate additive ROL bonus, so rooted biomass does not also alter the base diffusive penetration term.' This is a neutral, accurate statement of the model architecture. The proposed amendment would add an unsupported claim that `rol_rate_cm_per_g` is a 'literature-calibrated' net parameter absorbing root respiration — nothing in the code, parameter docs (process.rs:176-189 documents it as a configurable rate with a wide species-dependent range), or existing comments establishes this. Adding such a claim would mislead maintainers into thinking the parameter has been validated against literature for net-of-respiration behavior when it has not. The existing comment is sufficient."
+      },
+      {
+        "amendment_id": "fr-1-15dd3c0b",
+        "decision": "accept",
+        "rationale": "The computation at substrate.rs:348 `(surface_area_cm2 - footprint_area_cm2).max(0.0)` relies on the implicit invariant that `SubstrateSurface` colonizable area includes both the footprint top surface and the interstitial grain-matrix area. This invariant is defined in the habitat registry code, not locally. If the habitat registry formula changes — e.g., to report only interstitial area — this subtraction would silently zero out the rootable matrix area. An inline comment documenting the physical meaning and the dependency on the habitat registry's area composition makes this coupling explicit and protects against silent breakage during future refactors."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

@@ -13,5 +13,21 @@ nutrient_charge_mg_p_total = 18.0
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "Nutrient-charged substrate for rooted plants."
+notes = """
+Nutrient-charged substrate for rooted plants. nutrient_charge values are \
+absolute mg totals deposited into the substrate layer at startup, not \
+concentrations. Post-normalization (6e5.2.4), root-feeding rosettes access \
+these via areal Ks (mg/m²) rather than volumetric Ks, so the charge \
+depletes proportionally to footprint area. 60 mg N + 18 mg P provides \
+several weeks of root-feeding headroom in the medium_planted scenario."""
 
+[param_meta.colonizable_area_factor]
+unit = "dimensionless factor"
+source = "Starter preset pack habitat-scaling heuristic"
+confidence = "heuristic"
+valid_range = [0.6, 0.95]
+notes = """\
+Scales footprint into colonizable area for biofilm/periphyton carrying \
+capacity. 0.8 places active planted soil above inert gravel but below coarse \
+porous media: rooted granules offer substantial attachment area without the \
+extreme void space of dedicated biomedia."""

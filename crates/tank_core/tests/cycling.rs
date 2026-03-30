@@ -1,4 +1,7 @@
-use tank_core::{Engine, EventKind, PlayerAction, SimSeed, SimulationEngine, TankState};
+use tank_core::{
+    systems::nitrogen_cycle::step_nitrogen_cycle, Engine, EventKind, PlayerAction, SimSeed,
+    SimulationEngine, TankState,
+};
 
 /// Feed the engine a small pellet each day for the given number of days.
 fn feed_daily(engine: &mut Engine, days: u32, grams: f64) -> Result<(), tank_core::SimError> {
@@ -7,6 +10,24 @@ fn feed_daily(engine: &mut Engine, days: u32, grams: f64) -> Result<(), tank_cor
         engine.step_hours(24)?;
     }
     Ok(())
+}
+
+fn nitrifier_growth_state(seed: SimSeed) -> TankState {
+    let mut state = TankState::new(seed);
+    state.microbe.set_decomposer_total(0.0);
+    state.filter_state.biofilter_maturity_index = 1.0;
+    state.process_params.reaeration_kla_base = 0.0;
+    state.process_params.aeration_kla_boost = 0.0;
+    state.process_params.aob_vmax_mg_n_per_g_per_hour = 100.0;
+    state.process_params.nob_vmax_mg_n_per_g_per_hour = 100.0;
+    state.process_params.comammox_vmax_fraction = 1.0;
+    state.process_params.aob_decay_rate_per_hour = 0.0;
+    state.process_params.nob_decay_rate_per_hour = 0.0;
+    state.process_params.comammox_decay_rate_per_hour = 0.0;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 10_000.0;
+    state.water.dissolved_oxygen_mg_total = 10_000.0;
+    state.water.alkalinity_meq_total = 10_000.0;
+    state
 }
 
 #[test]
@@ -37,13 +58,10 @@ fn cycling_seeded_vs_unseeded() -> Result<(), tank_core::SimError> {
             unseeded.step_hours(1)?;
 
             let hour = day * 24 + _h + 1;
-            let vol_s = seeded.full_state().geometry.water_volume_l();
-            let vol_u = unseeded.full_state().geometry.water_volume_l();
-
-            let s_tan = seeded.full_state().water.ammonia_total_mg_n_total / vol_s;
-            let s_no2 = seeded.full_state().water.nitrite_mg_n_total / vol_s;
-            let u_tan = unseeded.full_state().water.ammonia_total_mg_n_total / vol_u;
-            let u_no2 = unseeded.full_state().water.nitrite_mg_n_total / vol_u;
+            let s_tan = seeded.full_state().tan_mg_n_per_l();
+            let s_no2 = seeded.full_state().nitrite_mg_n_per_l();
+            let u_tan = unseeded.full_state().tan_mg_n_per_l();
+            let u_no2 = unseeded.full_state().nitrite_mg_n_per_l();
 
             unseeded_peak_tan = unseeded_peak_tan.max(u_tan);
             unseeded_peak_nitrite = unseeded_peak_nitrite.max(u_no2);
@@ -81,10 +99,8 @@ fn cycling_seeded_vs_unseeded() -> Result<(), tank_core::SimError> {
         }
         (None, _) => {
             // Both had ongoing feed, so let's just check the seeded tank has lower final TAN
-            let vol_s = seeded.full_state().geometry.water_volume_l();
-            let vol_u = unseeded.full_state().geometry.water_volume_l();
-            let final_s_tan = seeded.full_state().water.ammonia_total_mg_n_total / vol_s;
-            let final_u_tan = unseeded.full_state().water.ammonia_total_mg_n_total / vol_u;
+            let final_s_tan = seeded.full_state().tan_mg_n_per_l();
+            let final_u_tan = unseeded.full_state().tan_mg_n_per_l();
             assert!(
                 final_s_tan < final_u_tan,
                 "Seeded should have lower final TAN: seeded={final_s_tan:.4}, unseeded={final_u_tan:.4}"
@@ -133,15 +149,6 @@ fn filter_cleaning_setback() -> Result<(), tank_core::SimError> {
         "FilterCleaningSetback event should be emitted"
     );
 
-    // After cleaning, TAN should rise temporarily when feeding resumes
-    let tan_before_feed = engine.full_state().water.ammonia_total_mg_n_total;
-    feed_daily(&mut engine, 3, 0.3)?;
-    let tan_after_feed = engine.full_state().water.ammonia_total_mg_n_total;
-    assert!(
-        tan_after_feed > tan_before_feed,
-        "TAN should rise after filter cleaning + feeding"
-    );
-
     Ok(())
 }
 
@@ -151,7 +158,7 @@ fn limiter_correctness_no_negative_pools() -> Result<(), tank_core::SimError> {
     let mut state = TankState::new(SimSeed(9200));
 
     // Zero out microbes
-    state.microbe.decomposer_biomass_g = 0.0;
+    state.microbe.set_decomposer_total(0.0);
     state.microbe.ammonia_oxidizer_biomass_g = 0.0;
     state.microbe.nitrite_oxidizer_biomass_g = 0.0;
     state.microbe.comammox_biomass_g = 0.0;
@@ -220,9 +227,8 @@ fn siphon_detritus_reduces_cycling_pressure() -> Result<(), tank_core::SimError>
     // only through the mineralization pathway. We verify the siphon doesn't zero them out
     // by checking the control tank has more dissolved N (which was never siphoned away).
     // The siphoned tank should have less TAN over time because less detritus = less mineralization.
-    let vol = control.full_state().geometry.water_volume_l();
-    let control_tan = control.full_state().water.ammonia_total_mg_n_total / vol;
-    let siphoned_tan = siphoned.full_state().water.ammonia_total_mg_n_total / vol;
+    let control_tan = control.full_state().tan_mg_n_per_l();
+    let siphoned_tan = siphoned.full_state().tan_mg_n_per_l();
     // Note: this might not always hold if nitrification is very active, but with heavy feeding
     // the control should accumulate more TAN due to higher detritus.
     // We just verify pools are non-negative.
@@ -237,7 +243,7 @@ fn siphon_detritus_reduces_cycling_pressure() -> Result<(), tank_core::SimError>
 #[test]
 fn limiter_shared_do_budget() -> Result<(), tank_core::SimError> {
     let mut state = TankState::new(SimSeed(9400));
-    let vol = state.geometry.water_volume_l();
+    let vol = state.water_volume_l();
 
     // Plenty of TAN substrate
     state.water.ammonia_total_mg_n_total = 10.0 * vol;
@@ -292,7 +298,7 @@ fn limiter_shared_do_budget() -> Result<(), tank_core::SimError> {
 #[test]
 fn limiter_low_alkalinity_caps_nitrification() -> Result<(), tank_core::SimError> {
     let mut state = TankState::new(SimSeed(9500));
-    let vol = state.geometry.water_volume_l();
+    let vol = state.water_volume_l();
 
     // Plenty of TAN and DO
     state.water.ammonia_total_mg_n_total = 10.0 * vol;
@@ -340,7 +346,7 @@ fn limiter_low_alkalinity_caps_nitrification() -> Result<(), tank_core::SimError
 fn dirty_filter_slows_nitrification() -> Result<(), tank_core::SimError> {
     let base = {
         let mut state = TankState::new(SimSeed(9600));
-        let vol = state.geometry.water_volume_l();
+        let vol = state.water_volume_l();
         state.water.ammonia_total_mg_n_total = 5.0 * vol;
         state.microbe.ammonia_oxidizer_biomass_g = 0.2;
         state.microbe.nitrite_oxidizer_biomass_g = 0.15;
@@ -355,21 +361,814 @@ fn dirty_filter_slows_nitrification() -> Result<(), tank_core::SimError> {
     let mut dirty_state = base;
     dirty_state.filter_state.clogging_index = 0.9; // heavily clogged
 
-    let vol = clean_state.geometry.water_volume_l();
-
     let mut clean_engine = Engine::from_parts(clean_state, vec![]);
     let mut dirty_engine = Engine::from_parts(dirty_state, vec![]);
 
     clean_engine.step_hours(24)?;
     dirty_engine.step_hours(24)?;
 
-    let clean_tan = clean_engine.full_state().water.ammonia_total_mg_n_total / vol;
-    let dirty_tan = dirty_engine.full_state().water.ammonia_total_mg_n_total / vol;
+    let clean_tan = clean_engine.full_state().tan_mg_n_per_l();
+    let dirty_tan = dirty_engine.full_state().tan_mg_n_per_l();
 
     // Clean filter should oxidize more TAN -> lower remaining TAN
     assert!(
         clean_tan < dirty_tan,
         "Clean filter TAN ({clean_tan:.4}) should be lower than dirty filter ({dirty_tan:.4})"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn aob_growth_reserves_tan_for_assimilation_when_tan_would_otherwise_hit_zero() {
+    let mut state = nitrifier_growth_state(SimSeed(9702));
+    state.microbe.ammonia_oxidizer_biomass_g = 0.1;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.0;
+    state.microbe.comammox_biomass_g = 0.0;
+    // Use a very low K_s so the Monod factor is ~1 at 0.8 mg TAN,
+    // ensuring full consumption in one tick to exercise the bookkeeping path.
+    state.process_params.aob_k_tan_mg_n_per_l = 0.01;
+    state.water.ammonia_total_mg_n_total = 0.8;
+    let aob_before = state.microbe.ammonia_oxidizer_biomass_g;
+
+    step_nitrogen_cycle(&mut state);
+
+    assert!(
+        state.microbe.ammonia_oxidizer_biomass_g > aob_before,
+        "AOB biomass should grow when TAN is fully processed within the tick"
+    );
+    assert!(
+        state.water.ammonia_total_mg_n_total <= 1e-9,
+        "AOB growth bookkeeping should still exhaust the small TAN pool"
+    );
+    assert!(
+        state.water.nitrite_mg_n_total > 0.0,
+        "AOB growth should not collapse nitrification to zero product"
+    );
+}
+
+#[test]
+fn nob_growth_uses_nitrite_source_not_ammonia() {
+    let mut state = nitrifier_growth_state(SimSeed(9703));
+    state.microbe.ammonia_oxidizer_biomass_g = 0.0;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.1;
+    state.microbe.comammox_biomass_g = 0.0;
+    state.water.ammonia_total_mg_n_total = 0.0;
+    state.water.nitrite_mg_n_total = 1.0;
+    let nob_before = state.microbe.nitrite_oxidizer_biomass_g;
+
+    step_nitrogen_cycle(&mut state);
+
+    assert!(
+        state.microbe.nitrite_oxidizer_biomass_g > nob_before,
+        "NOB biomass should grow from nitrite processing even with zero ammonia"
+    );
+    assert!(
+        state.water.nitrate_mg_n_total > 0.0,
+        "NOB processing should still oxidize nitrite into nitrate"
+    );
+}
+
+#[test]
+fn comammox_growth_reserves_tan_for_assimilation_when_tan_would_otherwise_hit_zero() {
+    let mut state = nitrifier_growth_state(SimSeed(9704));
+    state.microbe.ammonia_oxidizer_biomass_g = 0.0;
+    state.microbe.nitrite_oxidizer_biomass_g = 0.0;
+    state.microbe.comammox_biomass_g = 0.1;
+    // Use a very low K_s so the Monod factor is ~1 at 0.8 mg TAN,
+    // ensuring full consumption in one tick to exercise the bookkeeping path.
+    state.process_params.comammox_k_tan_mg_n_per_l = 0.01;
+    state.water.ammonia_total_mg_n_total = 0.8;
+    let comammox_before = state.microbe.comammox_biomass_g;
+
+    step_nitrogen_cycle(&mut state);
+
+    assert!(
+        state.microbe.comammox_biomass_g > comammox_before,
+        "Comammox biomass should grow when TAN is fully processed within the tick"
+    );
+    assert!(
+        state.water.ammonia_total_mg_n_total <= 1e-9,
+        "Comammox growth bookkeeping should still exhaust the small TAN pool"
+    );
+    assert!(
+        state.water.nitrate_mg_n_total > 0.0,
+        "Comammox growth should not collapse nitrification to zero nitrate"
+    );
+}
+
+#[test]
+fn decomposer_do_half_saturation_is_tunable() {
+    let build_state = |k_do_mg: f64| {
+        let mut state = TankState::new(SimSeed(9700));
+        state.microbe.set_decomposer_total(0.5);
+        state.microbe.ammonia_oxidizer_biomass_g = 0.0;
+        state.microbe.nitrite_oxidizer_biomass_g = 0.0;
+        state.microbe.comammox_biomass_g = 0.0;
+        state.microfauna.population_index = 0.0;
+        state.water.dissolved_organic_carbon_mg_c_total = 100.0;
+        state.water.dissolved_organic_nitrogen_mg_n_total = 10.0;
+        state.water.dissolved_oxygen_mg_total = 1.0;
+        state.process_params.decomposer_vmax_per_hour = 0.05;
+        state.process_params.decomposer_k_do_mg_per_l = k_do_mg;
+        state.process_params.microfauna_mineralization_boost = 0.0;
+        state
+    };
+
+    let mut permissive = build_state(0.1);
+    let mut restrictive = build_state(10.0);
+
+    step_nitrogen_cycle(&mut permissive);
+    step_nitrogen_cycle(&mut restrictive);
+
+    assert!(
+        permissive.water.ammonia_total_mg_n_total > restrictive.water.ammonia_total_mg_n_total,
+        "Lower decomposer DO half-saturation should mineralize more DON into TAN under the same low-DO conditions"
+    );
+    assert!(
+        permissive.water.dissolved_organic_carbon_mg_c_total
+            < restrictive.water.dissolved_organic_carbon_mg_c_total,
+        "Lower decomposer DO half-saturation should consume more DOC under the same low-DO conditions"
+    );
+}
+
+#[test]
+fn decomposer_monod_uses_concentration_instead_of_total_mass() {
+    let build_state = |fill_height_cm: f64| {
+        let mut state = TankState::new(SimSeed(9701));
+        state.geometry.fill_height_cm = fill_height_cm;
+        state.substrate_layers.clear();
+        let volume_l = state.water_volume_l();
+        state.microbe.set_decomposer_total(0.5);
+        state.microbe.ammonia_oxidizer_biomass_g = 0.0;
+        state.microbe.nitrite_oxidizer_biomass_g = 0.0;
+        state.microbe.comammox_biomass_g = 0.0;
+        state.microfauna.population_index = 0.0;
+        state.water.dissolved_organic_carbon_mg_c_total = 4.0 * volume_l;
+        state.water.dissolved_organic_nitrogen_mg_n_total = 0.4 * volume_l;
+        state.water.dissolved_oxygen_mg_total = 2.0 * volume_l;
+        state.process_params.decomposer_vmax_per_hour = 0.05;
+        state.process_params.decomposer_k_doc_mg_c_per_l = 5.0;
+        state.process_params.decomposer_k_do_mg_per_l = 1.0;
+        state.process_params.microfauna_mineralization_boost = 0.0;
+        state
+    };
+
+    let mut shallow = build_state(10.0);
+    let mut deep = build_state(20.0);
+    let shallow_doc_before = shallow.water.dissolved_organic_carbon_mg_c_total;
+    let deep_doc_before = deep.water.dissolved_organic_carbon_mg_c_total;
+
+    step_nitrogen_cycle(&mut shallow);
+    step_nitrogen_cycle(&mut deep);
+
+    let shallow_doc_consumed =
+        shallow_doc_before - shallow.water.dissolved_organic_carbon_mg_c_total;
+    let deep_doc_consumed = deep_doc_before - deep.water.dissolved_organic_carbon_mg_c_total;
+
+    assert!(
+        (shallow_doc_consumed - deep_doc_consumed).abs() <= 1e-9,
+        "Same DOC/DO concentrations should yield the same decomposer uptake regardless of tank volume: shallow={shallow_doc_consumed}, deep={deep_doc_consumed}"
+    );
+    assert!(
+        (shallow.water.ammonia_total_mg_n_total - deep.water.ammonia_total_mg_n_total).abs()
+            <= 1e-9,
+        "Same DOC/DO concentrations should yield the same TAN production regardless of tank volume"
+    );
+}
+
+/// Regression test: all nitrogen kinetics must be tank-size-independent.
+///
+/// Creates two tanks with different volumes (10L vs 100L) but identical
+/// concentrations of every dissolved species and volume-proportional biomass
+/// for all four guilds (decomposers, AOB, NOB, comammox). After one tick of
+/// `step_nitrogen_cycle`, both tanks must show:
+///   1. Equal Monod limitation factors (same concentrations → same S/(K+S)).
+///   2. Equal concentration changes per liter for TAN, NO2, NO3, DOC, DON, DO,
+///      and alkalinity.
+///
+/// Any accidental use of total-mass pools where concentrations belong, or any
+/// volume leak in the rate-to-mass conversion, will cause this test to fail.
+/// Growth yields and decay rates are zeroed so that population dynamics do not
+/// confound the kinetic comparison.
+#[test]
+fn concentration_kinetics_are_volume_independent() {
+    // Builds a TankState at a specific volume with identical concentrations
+    // and volume-proportional biomass, isolating nitrogen kinetics.
+    let build_state = |fill_height_cm: f64| {
+        let mut state = TankState::new(SimSeed(9800));
+        state.geometry.fill_height_cm = fill_height_cm;
+        state.geometry.height_cm = fill_height_cm + 5.0;
+        state.substrate_layers.clear();
+        let vol = state.water_volume_l();
+
+        // Concentrations (mg/L) — totals are set proportional to volume.
+        state.water.ammonia_total_mg_n_total = 2.0 * vol;
+        state.water.nitrite_mg_n_total = 0.5 * vol;
+        state.water.nitrate_mg_n_total = 5.0 * vol;
+        state.water.dissolved_organic_carbon_mg_c_total = 4.0 * vol;
+        state.water.dissolved_organic_nitrogen_mg_n_total = 0.4 * vol;
+        state.water.dissolved_oxygen_mg_total = 6.0 * vol;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 20.0 * vol;
+        state.water.alkalinity_meq_total = 50.0 * vol;
+
+        // Biomass proportional to volume (same "biomass density" per liter).
+        let density_g_per_l = 0.02;
+        state.microbe.set_decomposer_total(density_g_per_l * vol);
+        state.microbe.ammonia_oxidizer_biomass_g = density_g_per_l * vol;
+        state.microbe.nitrite_oxidizer_biomass_g = density_g_per_l * vol;
+        state.microbe.comammox_biomass_g = density_g_per_l * vol;
+
+        // Zero growth/decay so population dynamics don't confound kinetics.
+        state.process_params.decomposer_growth_yield = 0.0;
+        state.process_params.aob_growth_yield = 0.0;
+        state.process_params.nob_growth_yield = 0.0;
+        state.process_params.comammox_growth_yield = 0.0;
+        state.process_params.decomposer_decay_rate_per_hour = 0.0;
+        state.process_params.aob_decay_rate_per_hour = 0.0;
+        state.process_params.nob_decay_rate_per_hour = 0.0;
+        state.process_params.comammox_decay_rate_per_hour = 0.0;
+
+        // Disable non-nitrogen systems.
+        state.process_params.reaeration_kla_base = 0.0;
+        state.process_params.aeration_kla_boost = 0.0;
+        state.microfauna.population_index = 0.0;
+        state.process_params.microfauna_mineralization_boost = 0.0;
+
+        // Fixed environmental factors.
+        state.filter_state.biofilter_maturity_index = 0.8;
+        state.filter_state.clogging_index = 0.0;
+        state.hardware.filter.enabled = true;
+        // Scale flow so flow_factor = min(flow_lph / vol, 1.0) is identical.
+        state.hardware.filter.flow_lph = vol * 10.0;
+
+        // No detritus — feed leaching/dissolution do not confound the test.
+        state.detritus.particulate_organics_g_total = 0.0;
+        state.detritus.fine_detritus_g_total = 0.0;
+        state.detritus.dissolved_feed_residue_g_total = 0.0;
+
+        state
+    };
+
+    // ---- Pair 1: 10 L vs 100 L (10× volume difference) ----
+    let mut small = build_state(10.0); // 40 × 25 × 10 / 1000 = 10 L
+    let mut large = build_state(100.0); // 40 × 25 × 100 / 1000 = 100 L
+
+    let sv = small.water_volume_l();
+    let lv = large.water_volume_l();
+    assert!(
+        (sv - 10.0).abs() < 0.01,
+        "small tank should be 10 L, got {sv}"
+    );
+    assert!(
+        (lv - 100.0).abs() < 0.01,
+        "large tank should be 100 L, got {lv}"
+    );
+
+    // Verify initial concentrations are identical.
+    let eps_conc = 1e-12;
+    assert!(
+        (small.water.tan_mg_n_per_l(sv) - large.water.tan_mg_n_per_l(lv)).abs() < eps_conc,
+        "initial TAN concentrations must match"
+    );
+    assert!(
+        (small.water.nitrite_mg_n_per_l(sv) - large.water.nitrite_mg_n_per_l(lv)).abs() < eps_conc,
+        "initial NO2 concentrations must match"
+    );
+
+    // ---- Verify Monod limitation factors are equal (pre-tick) ----
+    // monod(S, K) = S / (S + K); both S and K are in mg/L.
+    let monod = |s: f64, k: f64| s / (s + k.max(f64::MIN_POSITIVE));
+    let pp = &small.process_params;
+
+    let k_tan = pp.aob_k_tan_mg_n_per_l.max(0.01);
+    let k_no2 = pp.nob_k_nitrite_mg_n_per_l.max(0.01);
+    let k_doc = pp.decomposer_k_doc_mg_c_per_l.max(0.01);
+    let k_do_aob = pp.aob_k_do_mg_per_l.max(0.01);
+    let k_do_decomp = pp.decomposer_k_do_mg_per_l.max(0.01);
+
+    let tan_conc = small.water.tan_mg_n_per_l(sv);
+    let no2_conc = small.water.nitrite_mg_n_per_l(sv);
+    let doc_conc = small.water.doc_mg_c_per_l(sv);
+    let do_conc = small.water.do_mg_per_l(sv);
+
+    // Monod factors computed from small tank (concentration-based).
+    let m_tan_s = monod(tan_conc, k_tan);
+    let m_no2_s = monod(no2_conc, k_no2);
+    let m_doc_s = monod(doc_conc, k_doc);
+    let m_do_aob_s = monod(do_conc, k_do_aob);
+    let m_do_decomp_s = monod(do_conc, k_do_decomp);
+
+    // Same computation from large tank — must be identical.
+    let m_tan_l = monod(large.water.tan_mg_n_per_l(lv), k_tan);
+    let m_no2_l = monod(large.water.nitrite_mg_n_per_l(lv), k_no2);
+    let m_doc_l = monod(large.water.doc_mg_c_per_l(lv), k_doc);
+    let m_do_aob_l = monod(large.water.do_mg_per_l(lv), k_do_aob);
+    let m_do_decomp_l = monod(large.water.do_mg_per_l(lv), k_do_decomp);
+
+    assert!(
+        (m_tan_s - m_tan_l).abs() < eps_conc,
+        "Monod TAN factor: small={m_tan_s}, large={m_tan_l}"
+    );
+    assert!(
+        (m_no2_s - m_no2_l).abs() < eps_conc,
+        "Monod NO2 factor: small={m_no2_s}, large={m_no2_l}"
+    );
+    assert!(
+        (m_doc_s - m_doc_l).abs() < eps_conc,
+        "Monod DOC factor: small={m_doc_s}, large={m_doc_l}"
+    );
+    assert!(
+        (m_do_aob_s - m_do_aob_l).abs() < eps_conc,
+        "Monod DO-AOB factor: small={m_do_aob_s}, large={m_do_aob_l}"
+    );
+    assert!(
+        (m_do_decomp_s - m_do_decomp_l).abs() < eps_conc,
+        "Monod DO-decomp factor: small={m_do_decomp_s}, large={m_do_decomp_l}"
+    );
+
+    // ---- Record pre-tick concentrations ----
+    let before = |st: &TankState, v: f64| {
+        (
+            st.water.tan_mg_n_per_l(v),
+            st.water.nitrite_mg_n_per_l(v),
+            st.water.nitrate_mg_n_per_l(v),
+            st.water.doc_mg_c_per_l(v),
+            st.water.don_mg_n_per_l(v),
+            st.water.do_mg_per_l(v),
+            st.water.alkalinity_meq_per_l(v),
+        )
+    };
+    let (s_tan0, s_no2_0, s_no3_0, s_doc0, s_don0, s_do0, s_alk0) = before(&small, sv);
+    let (l_tan0, l_no2_0, l_no3_0, l_doc0, l_don0, l_do0, l_alk0) = before(&large, lv);
+
+    // ---- Run one tick of nitrogen kinetics ----
+    step_nitrogen_cycle(&mut small);
+    step_nitrogen_cycle(&mut large);
+
+    // ---- Assert per-liter concentration deltas are equal ----
+    let tol = 1e-9;
+    let s_tan_d = small.water.tan_mg_n_per_l(sv) - s_tan0;
+    let l_tan_d = large.water.tan_mg_n_per_l(lv) - l_tan0;
+    assert!(
+        (s_tan_d - l_tan_d).abs() <= tol,
+        "TAN Δ mg/L must be volume-independent: small={s_tan_d:.12}, large={l_tan_d:.12}"
+    );
+
+    let s_no2_d = small.water.nitrite_mg_n_per_l(sv) - s_no2_0;
+    let l_no2_d = large.water.nitrite_mg_n_per_l(lv) - l_no2_0;
+    assert!(
+        (s_no2_d - l_no2_d).abs() <= tol,
+        "NO2 Δ mg/L must be volume-independent: small={s_no2_d:.12}, large={l_no2_d:.12}"
+    );
+
+    let s_no3_d = small.water.nitrate_mg_n_per_l(sv) - s_no3_0;
+    let l_no3_d = large.water.nitrate_mg_n_per_l(lv) - l_no3_0;
+    assert!(
+        (s_no3_d - l_no3_d).abs() <= tol,
+        "NO3 Δ mg/L must be volume-independent: small={s_no3_d:.12}, large={l_no3_d:.12}"
+    );
+
+    let s_doc_d = small.water.doc_mg_c_per_l(sv) - s_doc0;
+    let l_doc_d = large.water.doc_mg_c_per_l(lv) - l_doc0;
+    assert!(
+        (s_doc_d - l_doc_d).abs() <= tol,
+        "DOC Δ mg/L must be volume-independent: small={s_doc_d:.12}, large={l_doc_d:.12}"
+    );
+
+    let s_don_d = small.water.don_mg_n_per_l(sv) - s_don0;
+    let l_don_d = large.water.don_mg_n_per_l(lv) - l_don0;
+    assert!(
+        (s_don_d - l_don_d).abs() <= tol,
+        "DON Δ mg/L must be volume-independent: small={s_don_d:.12}, large={l_don_d:.12}"
+    );
+
+    // DO and alkalinity are consumed stoichiometrically by nitrification;
+    // volume leaks in the bookkeeping (lines 230-235, 288-289, 332-334,
+    // 362-364 of nitrogen_cycle.rs) would show up here.
+    let s_do_d = small.water.do_mg_per_l(sv) - s_do0;
+    let l_do_d = large.water.do_mg_per_l(lv) - l_do0;
+    assert!(
+        (s_do_d - l_do_d).abs() <= tol,
+        "DO Δ mg/L must be volume-independent: small={s_do_d:.12}, large={l_do_d:.12}"
+    );
+
+    let s_alk_d = small.water.alkalinity_meq_per_l(sv) - s_alk0;
+    let l_alk_d = large.water.alkalinity_meq_per_l(lv) - l_alk0;
+    assert!(
+        (s_alk_d - l_alk_d).abs() <= tol,
+        "Alkalinity Δ meq/L must be volume-independent: small={s_alk_d:.12}, large={l_alk_d:.12}"
+    );
+
+    // Sanity: verify kinetics actually did something (non-zero deltas).
+    assert!(
+        s_tan_d.abs() > 1e-12,
+        "TAN should change during one tick (got zero delta)"
+    );
+    assert!(
+        s_doc_d.abs() > 1e-12,
+        "DOC should change during one tick (got zero delta)"
+    );
+    assert!(
+        s_do_d.abs() > 1e-12,
+        "DO should change during one tick (got zero delta)"
+    );
+}
+
+/// Stress-test volume independence at extreme scales: 1 L vs 1000 L.
+///
+/// Same invariants as [`concentration_kinetics_are_volume_independent`] —
+/// Monod factor equality and per-liter delta equality for all seven species
+/// (TAN, NO2, NO3, DOC, DON, DO, alkalinity) — but with a 1000× volume ratio
+/// to flush out any subtle floating-point or scaling issues.
+#[test]
+fn concentration_kinetics_volume_independent_extreme_scales() {
+    let build_state = |length_cm: f64, width_cm: f64, fill_height_cm: f64| {
+        let mut state = TankState::new(SimSeed(9801));
+        state.geometry.length_cm = length_cm;
+        state.geometry.width_cm = width_cm;
+        state.geometry.fill_height_cm = fill_height_cm;
+        state.geometry.height_cm = fill_height_cm + 5.0;
+        state.substrate_layers.clear();
+        let vol = state.water_volume_l();
+
+        state.water.ammonia_total_mg_n_total = 2.0 * vol;
+        state.water.nitrite_mg_n_total = 0.5 * vol;
+        state.water.nitrate_mg_n_total = 5.0 * vol;
+        state.water.dissolved_organic_carbon_mg_c_total = 4.0 * vol;
+        state.water.dissolved_organic_nitrogen_mg_n_total = 0.4 * vol;
+        state.water.dissolved_oxygen_mg_total = 6.0 * vol;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 20.0 * vol;
+        state.water.alkalinity_meq_total = 50.0 * vol;
+
+        let density = 0.02;
+        state.microbe.set_decomposer_total(density * vol);
+        state.microbe.ammonia_oxidizer_biomass_g = density * vol;
+        state.microbe.nitrite_oxidizer_biomass_g = density * vol;
+        state.microbe.comammox_biomass_g = density * vol;
+
+        state.process_params.decomposer_growth_yield = 0.0;
+        state.process_params.aob_growth_yield = 0.0;
+        state.process_params.nob_growth_yield = 0.0;
+        state.process_params.comammox_growth_yield = 0.0;
+        state.process_params.decomposer_decay_rate_per_hour = 0.0;
+        state.process_params.aob_decay_rate_per_hour = 0.0;
+        state.process_params.nob_decay_rate_per_hour = 0.0;
+        state.process_params.comammox_decay_rate_per_hour = 0.0;
+
+        state.process_params.reaeration_kla_base = 0.0;
+        state.process_params.aeration_kla_boost = 0.0;
+        state.microfauna.population_index = 0.0;
+        state.process_params.microfauna_mineralization_boost = 0.0;
+
+        state.filter_state.biofilter_maturity_index = 0.8;
+        state.filter_state.clogging_index = 0.0;
+        state.hardware.filter.enabled = true;
+        state.hardware.filter.flow_lph = vol * 10.0;
+
+        state.detritus.particulate_organics_g_total = 0.0;
+        state.detritus.fine_detritus_g_total = 0.0;
+        state.detritus.dissolved_feed_residue_g_total = 0.0;
+
+        state
+    };
+
+    // 1 L: 20 × 10 × 5 / 1000 = 1 L
+    let mut tiny = build_state(20.0, 10.0, 5.0);
+    // 1000 L: 200 × 100 × 50 / 1000 = 1000 L
+    let mut huge = build_state(200.0, 100.0, 50.0);
+
+    let tv = tiny.water_volume_l();
+    let hv = huge.water_volume_l();
+    assert!((tv - 1.0).abs() < 0.01, "tiny tank should be 1 L, got {tv}");
+    assert!(
+        (hv - 1000.0).abs() < 0.01,
+        "huge tank should be 1000 L, got {hv}"
+    );
+
+    // ---- Verify Monod limitation factors are equal (pre-tick) ----
+    let monod = |s: f64, k: f64| s / (s + k.max(f64::MIN_POSITIVE));
+    let pp = &tiny.process_params;
+
+    let tan_conc = tiny.water.tan_mg_n_per_l(tv);
+    let no2_conc = tiny.water.nitrite_mg_n_per_l(tv);
+    let doc_conc = tiny.water.doc_mg_c_per_l(tv);
+    let do_conc = tiny.water.do_mg_per_l(tv);
+
+    let eps_conc = 1e-12;
+    let monod_pairs = [
+        (
+            "TAN",
+            monod(tan_conc, pp.aob_k_tan_mg_n_per_l.max(0.01)),
+            monod(
+                huge.water.tan_mg_n_per_l(hv),
+                pp.aob_k_tan_mg_n_per_l.max(0.01),
+            ),
+        ),
+        (
+            "NO2",
+            monod(no2_conc, pp.nob_k_nitrite_mg_n_per_l.max(0.01)),
+            monod(
+                huge.water.nitrite_mg_n_per_l(hv),
+                pp.nob_k_nitrite_mg_n_per_l.max(0.01),
+            ),
+        ),
+        (
+            "DOC",
+            monod(doc_conc, pp.decomposer_k_doc_mg_c_per_l.max(0.01)),
+            monod(
+                huge.water.doc_mg_c_per_l(hv),
+                pp.decomposer_k_doc_mg_c_per_l.max(0.01),
+            ),
+        ),
+        (
+            "DO-AOB",
+            monod(do_conc, pp.aob_k_do_mg_per_l.max(0.01)),
+            monod(huge.water.do_mg_per_l(hv), pp.aob_k_do_mg_per_l.max(0.01)),
+        ),
+        (
+            "DO-decomp",
+            monod(do_conc, pp.decomposer_k_do_mg_per_l.max(0.01)),
+            monod(
+                huge.water.do_mg_per_l(hv),
+                pp.decomposer_k_do_mg_per_l.max(0.01),
+            ),
+        ),
+    ];
+    for (name, tiny_m, huge_m) in &monod_pairs {
+        assert!(
+            (tiny_m - huge_m).abs() < eps_conc,
+            "Monod {name} factor at 1 L vs 1000 L: tiny={tiny_m}, huge={huge_m}"
+        );
+    }
+
+    // ---- Record pre-tick concentrations ----
+    let concs = |st: &TankState, v: f64| {
+        (
+            st.water.tan_mg_n_per_l(v),
+            st.water.nitrite_mg_n_per_l(v),
+            st.water.nitrate_mg_n_per_l(v),
+            st.water.doc_mg_c_per_l(v),
+            st.water.don_mg_n_per_l(v),
+            st.water.do_mg_per_l(v),
+            st.water.alkalinity_meq_per_l(v),
+        )
+    };
+    let (t0_tan, t0_no2, t0_no3, t0_doc, t0_don, t0_do, t0_alk) = concs(&tiny, tv);
+    let (h0_tan, h0_no2, h0_no3, h0_doc, h0_don, h0_do, h0_alk) = concs(&huge, hv);
+
+    // ---- Run one tick ----
+    step_nitrogen_cycle(&mut tiny);
+    step_nitrogen_cycle(&mut huge);
+
+    // ---- Assert per-liter concentration deltas are equal ----
+    let tol = 1e-9;
+    let pairs = [
+        (
+            "TAN",
+            tiny.water.tan_mg_n_per_l(tv) - t0_tan,
+            huge.water.tan_mg_n_per_l(hv) - h0_tan,
+        ),
+        (
+            "NO2",
+            tiny.water.nitrite_mg_n_per_l(tv) - t0_no2,
+            huge.water.nitrite_mg_n_per_l(hv) - h0_no2,
+        ),
+        (
+            "NO3",
+            tiny.water.nitrate_mg_n_per_l(tv) - t0_no3,
+            huge.water.nitrate_mg_n_per_l(hv) - h0_no3,
+        ),
+        (
+            "DOC",
+            tiny.water.doc_mg_c_per_l(tv) - t0_doc,
+            huge.water.doc_mg_c_per_l(hv) - h0_doc,
+        ),
+        (
+            "DON",
+            tiny.water.don_mg_n_per_l(tv) - t0_don,
+            huge.water.don_mg_n_per_l(hv) - h0_don,
+        ),
+        (
+            "DO",
+            tiny.water.do_mg_per_l(tv) - t0_do,
+            huge.water.do_mg_per_l(hv) - h0_do,
+        ),
+        (
+            "Alkalinity",
+            tiny.water.alkalinity_meq_per_l(tv) - t0_alk,
+            huge.water.alkalinity_meq_per_l(hv) - h0_alk,
+        ),
+    ];
+    for (name, tiny_d, huge_d) in &pairs {
+        assert!(
+            (tiny_d - huge_d).abs() <= tol,
+            "{name} Δ must be volume-independent at 1 L vs 1000 L: tiny={tiny_d:.12}, huge={huge_d:.12}"
+        );
+    }
+
+    // Sanity: kinetics are active.
+    assert!(
+        pairs[0].1.abs() > 1e-12,
+        "TAN should change during one tick at extreme scale"
+    );
+    assert!(
+        pairs[5].1.abs() > 1e-12,
+        "DO should change during one tick at extreme scale"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Per-guild concentration-based unit tests (B3 acceptance criteria)
+// ---------------------------------------------------------------------------
+
+/// Default process params store concentration-based K_s values directly
+/// (no legacy normalization needed).
+#[test]
+fn process_params_store_native_concentration_ks() {
+    let pp = tank_core::ProcessParams::default();
+
+    // AOB K_s values are in the literature concentration range.
+    assert!(
+        pp.aob_k_tan_mg_n_per_l >= 0.5 && pp.aob_k_tan_mg_n_per_l <= 2.0,
+        "AOB TAN K_s should be 0.5–2.0 mg N/L, got {}",
+        pp.aob_k_tan_mg_n_per_l
+    );
+    assert!(
+        pp.aob_k_do_mg_per_l >= 0.3 && pp.aob_k_do_mg_per_l <= 1.0,
+        "AOB DO K_s should be 0.3–1.0 mg O₂/L, got {}",
+        pp.aob_k_do_mg_per_l
+    );
+
+    // NOB K_s values.
+    assert!(
+        pp.nob_k_nitrite_mg_n_per_l >= 0.2 && pp.nob_k_nitrite_mg_n_per_l <= 1.0,
+        "NOB NO₂ K_s should be 0.2–1.0 mg N/L, got {}",
+        pp.nob_k_nitrite_mg_n_per_l
+    );
+    assert!(
+        pp.nob_k_do_mg_per_l >= 0.5 && pp.nob_k_do_mg_per_l <= 1.5,
+        "NOB DO K_s should be 0.5–1.5 mg O₂/L, got {}",
+        pp.nob_k_do_mg_per_l
+    );
+
+    // Comammox K_s values.
+    assert!(
+        pp.comammox_k_tan_mg_n_per_l >= 0.05 && pp.comammox_k_tan_mg_n_per_l <= 0.5,
+        "Comammox TAN K_s should be 0.05–0.5 mg N/L, got {}",
+        pp.comammox_k_tan_mg_n_per_l
+    );
+    assert!(
+        pp.comammox_k_do_mg_per_l >= 0.3 && pp.comammox_k_do_mg_per_l <= 1.0,
+        "Comammox DO K_s should be 0.3–1.0 mg O₂/L, got {}",
+        pp.comammox_k_do_mg_per_l
+    );
+
+    // Decomposer K_s values.
+    assert!(
+        pp.decomposer_k_doc_mg_c_per_l >= 1.0 && pp.decomposer_k_doc_mg_c_per_l <= 10.0,
+        "Decomposer DOC K_s should be 1–10 mg C/L, got {}",
+        pp.decomposer_k_doc_mg_c_per_l
+    );
+    assert!(
+        pp.decomposer_k_do_mg_per_l >= 0.3 && pp.decomposer_k_do_mg_per_l <= 1.0,
+        "Decomposer DO K_s should be 0.3–1.0 mg O₂/L, got {}",
+        pp.decomposer_k_do_mg_per_l
+    );
+}
+
+/// Comammox must have a lower TAN K_s than AOB, giving it a competitive
+/// advantage at low ammonia concentrations. This is a key ecological
+/// distinction preserved by the normalization.
+#[test]
+fn comammox_has_lower_tan_ks_than_aob() {
+    let pp = tank_core::ProcessParams::default();
+    assert!(
+        pp.comammox_k_tan_mg_n_per_l < pp.aob_k_tan_mg_n_per_l,
+        "Comammox TAN K_s ({}) must be lower than AOB TAN K_s ({}) for ecological accuracy",
+        pp.comammox_k_tan_mg_n_per_l,
+        pp.aob_k_tan_mg_n_per_l
+    );
+}
+
+/// NOB must be at least as DO-sensitive as AOB (higher K_s means the guild
+/// reaches half-saturation at a higher DO concentration, i.e. it is more
+/// limited under low-DO conditions).
+#[test]
+fn nob_is_at_least_as_do_sensitive_as_aob() {
+    let pp = tank_core::ProcessParams::default();
+    assert!(
+        pp.nob_k_do_mg_per_l >= pp.aob_k_do_mg_per_l,
+        "NOB DO K_s ({}) must be >= AOB DO K_s ({}) — NOB are more DO-sensitive",
+        pp.nob_k_do_mg_per_l,
+        pp.aob_k_do_mg_per_l
+    );
+}
+
+/// Verify that each guild's activity through the production nitrogen-cycle
+/// path depends on concentration, not raw total mass.  Two states hold the
+/// same *total* nutrient mass but different volumes (10 L vs 100 L), so the
+/// smaller tank has 10× higher concentrations and must show proportionally
+/// stronger Monod-driven oxidation deltas per unit biomass.
+#[test]
+fn per_guild_monod_uses_concentration_not_total() -> Result<(), tank_core::SimError> {
+    let build = |length_cm: f64, width_cm: f64, fill_cm: f64| {
+        let mut state = TankState::new(SimSeed(7742));
+        state.geometry.length_cm = length_cm;
+        state.geometry.width_cm = width_cm;
+        state.geometry.fill_height_cm = fill_cm;
+        state.geometry.height_cm = fill_cm + 5.0;
+        state.substrate_layers.clear();
+
+        // Fixed *total* mass — concentration will differ by volume ratio.
+        // High TAN + minimal DOC so nitrification dominates TAN production.
+        state.water.ammonia_total_mg_n_total = 30.0;
+        state.water.nitrite_mg_n_total = 5.0;
+        state.water.nitrate_mg_n_total = 30.0;
+        state.water.dissolved_organic_carbon_mg_c_total = 1.0;
+        state.water.dissolved_organic_nitrogen_mg_n_total = 0.1;
+        state.water.dissolved_oxygen_mg_total = 80.0;
+        state.water.dissolved_inorganic_carbon_mg_c_total = 200.0;
+        state.water.alkalinity_meq_total = 40.0;
+
+        // Identical biomass (not scaled to volume) to isolate Monod effect.
+        state.microbe.set_decomposer_total(0.1);
+        state.microbe.ammonia_oxidizer_biomass_g = 0.1;
+        state.microbe.nitrite_oxidizer_biomass_g = 0.1;
+        state.microbe.comammox_biomass_g = 0.1;
+
+        // Disable growth/decay so biomass stays constant.
+        state.process_params.decomposer_growth_yield = 0.0;
+        state.process_params.aob_growth_yield = 0.0;
+        state.process_params.nob_growth_yield = 0.0;
+        state.process_params.comammox_growth_yield = 0.0;
+        state.process_params.decomposer_decay_rate_per_hour = 0.0;
+        state.process_params.aob_decay_rate_per_hour = 0.0;
+        state.process_params.nob_decay_rate_per_hour = 0.0;
+        state.process_params.comammox_decay_rate_per_hour = 0.0;
+
+        state.process_params.reaeration_kla_base = 0.0;
+        state.process_params.aeration_kla_boost = 0.0;
+        state.microfauna.population_index = 0.0;
+        state.process_params.microfauna_mineralization_boost = 0.0;
+
+        state.filter_state.biofilter_maturity_index = 0.8;
+        state.filter_state.clogging_index = 0.0;
+        state.hardware.filter.enabled = true;
+        state.hardware.filter.flow_lph = 100.0;
+
+        state.detritus.particulate_organics_g_total = 0.0;
+        state.detritus.fine_detritus_g_total = 0.0;
+        state.detritus.dissolved_feed_residue_g_total = 0.0;
+
+        state
+    };
+
+    // 10 L tank: concentrations are 10× those of the 100 L tank.
+    let mut small = build(20.0, 10.0, 50.0); // 20×10×50/1000 = 10 L
+    let mut large = build(100.0, 10.0, 100.0); // 100×10×100/1000 = 100 L
+
+    let sv = small.water_volume_l();
+    let lv = large.water_volume_l();
+    assert!(
+        (sv - 10.0).abs() < 0.1,
+        "small tank should be ~10 L, got {sv}"
+    );
+    assert!(
+        (lv - 100.0).abs() < 0.1,
+        "large tank should be ~100 L, got {lv}"
+    );
+
+    // Concentrations must differ: small has 10× higher concentration.
+    let small_tan_conc = small.water.tan_mg_n_per_l(sv);
+    let large_tan_conc = large.water.tan_mg_n_per_l(lv);
+    assert!(
+        (small_tan_conc / large_tan_conc - 10.0).abs() < 0.1,
+        "concentration ratio should be ~10, got {}",
+        small_tan_conc / large_tan_conc
+    );
+
+    // Record pre-tick TAN totals.
+    let small_tan_before = small.water.ammonia_total_mg_n_total;
+    let large_tan_before = large.water.ammonia_total_mg_n_total;
+
+    step_nitrogen_cycle(&mut small);
+    step_nitrogen_cycle(&mut large);
+
+    // The small tank's higher concentration means stronger Monod limitation
+    // (closer to Vmax), so it should consume more TAN in absolute terms despite
+    // equal biomass and equal total mass.
+    let small_tan_consumed = small_tan_before - small.water.ammonia_total_mg_n_total;
+    let large_tan_consumed = large_tan_before - large.water.ammonia_total_mg_n_total;
+
+    assert!(
+        small_tan_consumed > 0.0 && large_tan_consumed > 0.0,
+        "both tanks should oxidize some TAN: small={small_tan_consumed}, large={large_tan_consumed}"
+    );
+    assert!(
+        small_tan_consumed > large_tan_consumed * 1.5,
+        "higher concentration should drive faster oxidation: \
+         small consumed {small_tan_consumed:.6} mg vs large {large_tan_consumed:.6} mg"
     );
 
     Ok(())

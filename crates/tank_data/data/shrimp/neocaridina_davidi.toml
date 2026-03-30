@@ -11,9 +11,328 @@ hatch_success_base = 0.7
 juvenile_sensitivity = 1.5
 high_temp_repro_penalty_start_c = 28.0
 high_temp_repro_penalty_full_c = 33.0
+low_temp_repro_ramp_width_c = 4.0
+body_nitrogen_mg_per_g_wet_mass = 27.586206896551722
+body_carbon_mg_per_g_wet_mass = 172.41379310344828
+juvenile_maturation_condition_threshold = 0.3
+subadult_maturation_condition_threshold = 0.4
+base_molt_interval_days = 28.0
+failed_molt_mortality_scale = 0.15
+failed_molt_accum_increase_per_failed_stage = 0.3
+failed_molt_accum_recovery_per_successful_stage = 0.35
+failed_molt_stress_blend = 0.5
+sub_adult_sensitivity = 1.2
+base_clutch_size = 25
+min_clutch_condition = 0.3
+full_clutch_condition_threshold = 0.7
+ca_min_mg_per_l = 20.0
+mg_min_mg_per_l = 5.0
+molt_reserve_fraction = 0.1
+molt_reserve_factor_floor = 0.4
+molt_condition_weight = 0.75
+molt_reserve_weight = 0.25
+molt_failure_poor_condition_threshold = 0.65
+molt_failure_instability_threshold = 0.3
+temp_condition_low_divisor_c = 10.0
+temp_condition_high_divisor_c = 8.0
+temp_condition_min_factor = 0.2
+molt_stress_warning_threshold = 0.6
+molt_stress_mortality_threshold = 0.5
+molt_stress_mineral_gh_weight = 0.5
+molt_stress_mineral_ca_weight = 0.3
+molt_stress_mineral_mg_weight = 0.2
+molt_stress_pressure_mineral_weight = 0.3
+molt_stress_pressure_instability_weight = 0.3
+molt_stress_pressure_condition_weight = 0.2
+molt_stress_condition_midpoint = 0.5
+molt_stress_pressure_thermal_weight = 0.2
+molt_stress_thermal_cap = 0.5
+molt_stress_pressure_hourly_weight = 0.3
+molt_stress_rise_smoothing = 0.2
+molt_stress_decay_smoothing = 0.05
+molt_gh_excess_penalty_divisor = 10.0
+molt_mineral_factor_floor = 0.3
+juvenile_molt_interval_days = 14.0
+sub_adult_molt_interval_days = 21.0
+molt_success_threshold = 0.55
+critical_molt_gh_ratio = 0.3
+chloride_protection_factor = 0.5
+nh3_stress_threshold_mg_n_per_l = 0.02
+nh3_stress_response_scale = 2.0
+condition_do_reference_mg_l = 6.0
+condition_nh3_sensitivity = 3.0
+condition_nitrite_sensitivity = 0.5
+condition_hourly_stress_penalty_weight = 0.5
+
+# Reproduction suppression parameters
+density_repro_threshold_per_l = 10.0
+density_repro_half_suppression_per_l = 20.0
+tan_repro_threshold_mg_n_per_l = 1.0
+# Keep the legacy `excess / (threshold * 2.0)` decline span after suppression onset.
+tan_repro_full_suppression_mg_n_per_l = 3.0
+no2_repro_threshold_mg_n_per_l = 0.5
+no2_repro_full_suppression_mg_n_per_l = 1.5
+egg_drop_temp_swing_c = 2.0
+egg_drop_instability_threshold = 0.5
+egg_drop_max_probability = 0.6
+egg_oxygen_reference_mg_l = 6.0
+reproductive_readiness_smoothing = 0.1
+instability_temp_swing_c = 3.0
+instability_ph_swing = 0.5
+instability_gh_swing_d = 3.0
+instability_do_swing_mg_l = 3.0
+instability_rise_smoothing = 0.3
+instability_decay_smoothing = 0.1
 
 [provenance]
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "Neocaridina davidi reproduction and thermal sensitivity profile."
+notes = """
+Neocaridina davidi reproduction and thermal sensitivity profile. \
+body_nitrogen (27.6 mg N/g wet) and body_carbon (172.4 mg C/g wet) are \
+stoichiometric constants used for N/C budget accounting when shrimp die — \
+they are not affected by the kinetics normalization. Thermal penalty starts \
+at 28°C, which drives the warm_room scenario's shrimp mortality story. \
+chloride_protection_factor (0.5) models Cl- competition with NO2- at gill \
+uptake sites; calibrated so Cl:NO2 > 10:1 yields < 20% of unprotected \
+nitrite hazard. Directionally supported by freshwater crustacean literature; \
+scalar is medium-confidence. \
+Unchanged in 6e5.2.6 retuning — no kinetic Ks values here."""
+
+# ── Per-parameter provenance metadata ────────────────────────────────
+# Priority parameters annotated per tanksim-6e5.7.2.
+# Confidence levels: literature | expert | heuristic | placeholder
+
+# ── Reproduction temperature curve ───────────────────────────────────
+[param_meta.high_temp_repro_penalty_start_c]
+unit = "°C"
+source = "Tropea et al. 2015; Weber & Traunspurger 2016; hobbyist consensus"
+confidence = "expert"
+valid_range = [26.0, 30.0]
+notes = """\
+Temperature at which Neocaridina reproduction begins declining. 28°C is a \
+widely-cited threshold in shrimp husbandry literature and hobbyist guides. \
+Peer-reviewed data on exact inflection points is sparse; most studies report \
+binary outcomes (breeds / does not breed) rather than graded curves."""
+
+[param_meta.high_temp_repro_penalty_full_c]
+unit = "°C"
+source = "Tropea et al. 2015; inference from thermal mortality studies"
+confidence = "heuristic"
+valid_range = [30.0, 35.0]
+notes = """\
+Temperature at which reproduction is fully suppressed. 33°C is near the \
+upper lethal limit for Neocaridina davidi. The exact reproduction-cessation \
+point is not well-documented; 33°C is set conservatively below the ~35°C \
+acute lethal threshold."""
+
+[param_meta.low_temp_repro_ramp_width_c]
+unit = "°C"
+source = "Calibration heuristic; no direct literature measurement"
+confidence = "placeholder"
+valid_range = [2.0, 8.0]
+notes = """\
+Width of the low-temperature ramp below optimal_temp_min_c where reproduction \
+gradually ramps up. 4.0°C means reproduction starts at 18°C (22-4) and reaches \
+full rate at 22°C. This is a tuning parameter without direct literature support; \
+Neocaridina are known to breed in the 18-22°C range at reduced rates."""
+
+# ── Condition and thermal stress curve tuning ───────────────────────
+[param_meta.temp_condition_low_divisor_c]
+unit = "°C"
+source = "Calibration heuristic aligned to temp_condition_factor()"
+confidence = "heuristic"
+valid_range = [6.0, 16.0]
+notes = """\
+Degrees below optimal_temp_min_c needed for the general condition factor to \
+reach its 0.2 floor. 10.0°C gives Neocaridina a broad cold-side taper (22°C \
+down to roughly 12°C) instead of an abrupt collapse. Curve-shape heuristic, \
+not a measured physiology slope."""
+
+[param_meta.temp_condition_high_divisor_c]
+unit = "°C"
+source = "Calibration heuristic aligned to temp_condition_factor()"
+confidence = "heuristic"
+valid_range = [5.0, 12.0]
+notes = """\
+Degrees above optimal_temp_max_c needed for the general condition factor to \
+reach its 0.2 hot-side floor. 8.0°C keeps condition losses gradual through the \
+upper 20s while still allowing sustained low-30s heat to register as severe \
+stress. Curve-shape heuristic, not a direct literature fit."""
+
+[param_meta.temp_condition_min_factor]
+unit = "condition factor floor"
+source = "Model calibration aligned to temp_condition_factor()"
+confidence = "heuristic"
+valid_range = [0.05, 0.4]
+notes = """\
+Minimum condition-support factor allowed once the cold or hot penalty ramps \
+fully saturate. 0.2 prevents temperature stress alone from forcing condition \
+to zero, leaving room for shrimp to survive but remain clearly impaired. \
+Model floor, not a direct physiology measurement."""
+
+[param_meta.molt_stress_condition_midpoint]
+unit = "condition index"
+source = "Model calibration for molt-stress pressure blending"
+confidence = "heuristic"
+valid_range = [0.3, 0.7]
+notes = """\
+Population condition threshold below which low condition contributes to daily \
+molt stress. 0.5 means the bottom half of the condition scale begins adding \
+pressure, which keeps persistent underfeeding or chemistry stress relevant \
+without turning brief dips into immediate molt crises."""
+
+[param_meta.molt_stress_thermal_cap]
+unit = "stress index"
+source = "Model calibration for heat-driven molt stress"
+confidence = "heuristic"
+valid_range = [0.2, 0.8]
+notes = """\
+Upper clamp on the thermal contribution before it is blended into the daily \
+molt-stress pressure score. 0.5 lets heat explain at most half of the \
+pressure on its own so mineral deficits, instability, and hourly stress can \
+still materially change the outcome."""
+
+# ── Molt mineral thresholds ──────────────────────────────────────────
+[param_meta.ca_min_mg_per_l]
+unit = "mg Ca/L"
+source = "Sharpe & Millar 2016 (crustacean mineralization); Marks 2008"
+confidence = "expert"
+valid_range = [10.0, 40.0]
+notes = """\
+Minimum calcium for successful molting. 20 mg/L (~50 ppm) is a widely-cited \
+threshold for freshwater dwarf shrimp. Literature on Neocaridina specifically \
+is limited; values are extrapolated from Caridina and Macrobrachium studies."""
+
+[param_meta.mg_min_mg_per_l]
+unit = "mg Mg/L"
+source = "Greenaway 1985; crustacean exoskeleton chemistry reviews"
+confidence = "expert"
+valid_range = [2.0, 10.0]
+notes = """\
+Minimum magnesium for successful molting. 5 mg/L is conservative; Mg is needed \
+for CaCO₃ crystal regulation in the exoskeleton. Less studied than Ca for \
+dwarf shrimp specifically."""
+
+[param_meta.molt_stress_mineral_gh_weight]
+unit = "dimensionless"
+source = "Model calibration for warm_room scenario shrimp mortality"
+confidence = "heuristic"
+valid_range = [0.2, 0.8]
+notes = """\
+Relative weight of GH adequacy in the mineral stress score. 0.5 makes GH \
+(general hardness, Ca+Mg) the dominant mineral signal. The 0.5/0.3/0.2 split \
+(GH/Ca/Mg) is a calibration choice, not literature-derived."""
+
+[param_meta.molt_stress_mineral_ca_weight]
+unit = "dimensionless"
+source = "Model calibration"
+confidence = "heuristic"
+valid_range = [0.1, 0.5]
+notes = "Ca sub-weight in mineral stress. See molt_stress_mineral_gh_weight notes."
+
+[param_meta.molt_stress_mineral_mg_weight]
+unit = "dimensionless"
+source = "Model calibration"
+confidence = "heuristic"
+valid_range = [0.1, 0.4]
+notes = "Mg sub-weight in mineral stress. See molt_stress_mineral_gh_weight notes."
+
+# ── Chloride-nitrite protection factor ───────────────────────────────
+[param_meta.chloride_protection_factor]
+unit = "dimensionless"
+source = "Lewis & Morris 1986; Tomasso 1994; freshwater crustacean Cl⁻/NO₂⁻ studies"
+confidence = "heuristic"
+valid_range = [0.2, 1.0]
+notes = """\
+Scalar modelling Cl⁻ competition with NO₂⁻ at gill uptake sites. Calibrated \
+so Cl:NO₂ > 10:1 yields < 20% of unprotected nitrite hazard. The mechanism \
+(competitive inhibition at branchial chloride cells) is well-established in \
+fish; quantitative transfer to Neocaridina is medium-confidence. Directionally \
+supported but species-specific dose-response data is lacking."""
+
+# ── NH3 toxicology / hourly stress routing ───────────────────────────
+[param_meta.nh3_stress_threshold_mg_n_per_l]
+unit = "mg NH3-N/L"
+source = "EPA 2013 ammonia criteria; Camargo & Alonso 2006; freshwater invertebrate toxicity reviews"
+confidence = "expert"
+valid_range = [0.005, 0.05]
+notes = """\
+Unionized ammonia threshold where hourly NH3 stress begins accumulating. \
+0.02 mg NH3-N/L is a conservative invertebrate-safe anchor close to common \
+chronic warning levels. Species-specific Neocaridina data are sparse, so this \
+is expert-curated rather than a directly measured species constant."""
+
+[param_meta.nh3_stress_response_scale]
+unit = "stress index per mg NH3-N/L excess"
+source = "Model calibration around hourly NH3 stress accumulation"
+confidence = "heuristic"
+valid_range = [0.5, 4.0]
+notes = """\
+Converts NH3 excess above nh3_stress_threshold_mg_n_per_l into hourly stress \
+accumulation. 2.0 was tuned so sub-threshold pH noise stays quiet while \
+sustained free-ammonia spikes still register quickly in mortality and molt \
+channels. Response-shape coefficient, not a toxicology datum."""
+
+# ── Body stoichiometric constants ────────────────────────────────────
+[param_meta.body_nitrogen_mg_per_g_wet_mass]
+unit = "mg N / g wet mass"
+source = "Anger 2001 (crustacean elemental composition); general invertebrate stoichiometry"
+confidence = "literature"
+valid_range = [20.0, 35.0]
+notes = """\
+27.6 mg N/g wet mass. Derived from ~12% protein content × 16% N in protein, \
+adjusted for Neocaridina wet mass including exoskeleton water. Used for N \
+budget accounting when shrimp die. Not tunable — stoichiometric constant."""
+
+[param_meta.body_carbon_mg_per_g_wet_mass]
+unit = "mg C / g wet mass"
+source = "Anger 2001; general crustacean body composition"
+confidence = "literature"
+valid_range = [120.0, 220.0]
+notes = """\
+172.4 mg C/g wet mass. Derived from typical crustacean dry-weight carbon \
+content (~45% of dry mass) and ~40% dry:wet ratio. Used for C budget \
+accounting. Not tunable — stoichiometric constant."""
+
+# ── Reproduction toxicant thresholds ─────────────────────────────────
+[param_meta.tan_repro_threshold_mg_n_per_l]
+unit = "mg N/L"
+source = "EPA 2013 ammonia criteria; Romano & Zeng 2013"
+confidence = "expert"
+valid_range = [0.5, 2.0]
+notes = """\
+TAN concentration where reproduction suppression begins. 1.0 mg N/L is \
+conservative; EPA chronic ammonia criterion for aquatic life is ~1.9 mg TAN/L \
+at pH 7, but invertebrates may be more sensitive."""
+
+[param_meta.tan_repro_full_suppression_mg_n_per_l]
+unit = "mg N/L"
+source = "Derived from tan_repro_threshold_mg_n_per_l and the legacy decline span"
+confidence = "heuristic"
+valid_range = [1.5, 4.0]
+notes = """\
+TAN concentration where the reproduction penalty reaches 100%. 3.0 preserves \
+the legacy `excess / (threshold * 2.0)` decline span after the 1.0 mg N/L \
+suppression onset; this is a curve-shape choice, not a direct toxicity datum."""
+
+[param_meta.no2_repro_threshold_mg_n_per_l]
+unit = "mg N/L"
+source = "Tomasso 1994; Jensen 2003; freshwater invertebrate nitrite reviews"
+confidence = "expert"
+valid_range = [0.2, 1.0]
+notes = """\
+NO₂⁻ concentration where reproduction suppression begins. 0.5 mg N/L is a \
+precautionary threshold. Freshwater crustaceans are generally more nitrite-\
+sensitive than fish; exact Neocaridina dose-response is not well-characterized."""
+
+[param_meta.no2_repro_full_suppression_mg_n_per_l]
+unit = "mg N/L"
+source = "Derived from no2_repro_threshold_mg_n_per_l and the legacy decline span"
+confidence = "heuristic"
+valid_range = [0.75, 2.0]
+notes = """\
+NO₂⁻ concentration where the reproduction penalty reaches 100%. 1.5 mg N/L \
+keeps the same legacy decline span used before the threshold correction; treat \
+it as a model-curve endpoint rather than a literature-backed toxicology limit."""

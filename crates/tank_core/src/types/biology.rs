@@ -1,5 +1,8 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
+use crate::types::habitat::HabitatKind;
 use crate::types::substrate::SubstrateLayerState;
 
 /// A cohort of berried females that became berried on the same day.
@@ -35,31 +38,140 @@ pub struct PlantGuildState {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AlgaeState {
     pub suspended_biomass_g: f64,
+    /// Total periphyton biomass (grams). Kept in sync as the sum of
+    /// `periphyton_by_habitat` values by [`AlgaeState::sync_periphyton_total`].
     pub periphyton_biomass_g: f64,
     pub nuisance_index: f64,
+    /// Per-habitat periphyton biomass pools (grams).
+    /// Habitats with meaningful periphyton: GlassHardscape, PlantSurfaces,
+    /// SubstrateSurface. FilterMedia carries minimal periphyton (dark).
+    /// SubstrateDeep carries none (no light).
+    #[serde(default)]
+    pub periphyton_by_habitat: BTreeMap<HabitatKind, f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MicrobeState {
+    /// Total decomposer biomass (grams). Kept in sync as the sum of
+    /// `decomposer_by_habitat` values by [`MicrobeState::sync_decomposer_total`].
     pub decomposer_biomass_g: f64,
     pub ammonia_oxidizer_biomass_g: f64,
     pub nitrite_oxidizer_biomass_g: f64,
     pub comammox_biomass_g: f64,
     pub maturity_index: f64,
+    /// Per-habitat decomposer biomass pools (grams).
+    /// Decomposers thrive in FilterMedia (high flow/O2), SubstrateSurface
+    /// (detritus processing), SubstrateDeep (anaerobic/suboxic).
+    /// GlassHardscape and PlantSurfaces carry modest decomposer biofilm.
+    #[serde(default)]
+    pub decomposer_by_habitat: BTreeMap<HabitatKind, f64>,
+    /// Denitrifier community activity index (0.0–1.0).
+    /// Represents the maturation of the anaerobic microbial community in
+    /// suboxic substrate zones. Starts near zero in fresh substrate and
+    /// ramps up over weeks as the denitrifier community establishes.
+    /// Updated daily alongside biofilter maturity.
+    #[serde(default)]
+    pub denitrifier_activity_index: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MicrofaunaState {
     pub population_index: f64,
     pub grazing_pressure_index: f64,
+    /// Retained organic matter from consumer routing (organic matter grams).
+    /// Microfauna are index-based so this lightweight reserve pool serves as
+    /// the explicit "retained" destination required by the routing contract.
+    #[serde(default)]
+    pub reserve_g: f64,
+}
+
+/// Per-stage cohort with its own count, reserve, condition, and maturation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StageCohort {
+    pub count: u32,
+    /// Assimilated organic reserve (grams of organic matter) for this stage.
+    #[serde(default)]
+    pub reserve_g: f64,
+    /// Condition index for this stage, in [0, 1].
+    #[serde(default = "default_condition_index")]
+    pub condition_index: f64,
+    /// Fractional maturation accumulator for stage promotion.
+    #[serde(default)]
+    pub maturation_accum: f64,
+    /// Days since this stage's last molt resolution.
+    #[serde(default)]
+    pub molt_timer_days: f64,
+}
+
+pub const DEFAULT_STAGE_CONDITION_INDEX: f64 = 0.8;
+
+fn default_condition_index() -> f64 {
+    DEFAULT_STAGE_CONDITION_INDEX
+}
+
+impl Default for StageCohort {
+    fn default() -> Self {
+        Self {
+            count: 0,
+            reserve_g: 0.0,
+            condition_index: DEFAULT_STAGE_CONDITION_INDEX,
+            maturation_accum: 0.0,
+            molt_timer_days: 0.0,
+        }
+    }
+}
+
+impl StageCohort {
+    /// Adds entrants to a stage cohort.
+    ///
+    /// Empty stages are re-seeded from the incoming animals so stale reserve,
+    /// condition, or maturation state cannot leak into newly recruited shrimp.
+    pub fn receive_entrants(
+        &mut self,
+        incoming_count: u32,
+        incoming_reserve_g: f64,
+        incoming_condition_index: f64,
+    ) {
+        if incoming_count == 0 {
+            return;
+        }
+
+        let incoming_condition_index = incoming_condition_index.clamp(0.0, 1.0);
+        let previous_count = self.count;
+        if previous_count == 0 {
+            self.count = incoming_count;
+            self.reserve_g = incoming_reserve_g;
+            self.condition_index = incoming_condition_index;
+            self.maturation_accum = 0.0;
+            self.molt_timer_days = 0.0;
+            return;
+        }
+
+        let total_count = previous_count.saturating_add(incoming_count);
+        self.count = total_count;
+        self.reserve_g += incoming_reserve_g;
+        self.condition_index = ((f64::from(previous_count) * self.condition_index)
+            + (f64::from(incoming_count) * incoming_condition_index))
+            / f64::from(total_count);
+    }
+
+    pub fn clamp_maturation_accum_to_count(&mut self) {
+        self.maturation_accum = self.maturation_accum.clamp(0.0, f64::from(self.count));
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AnimalState {
-    pub adults_count: u32,
-    pub juveniles_count: u32,
+    /// Adult stage cohort.
+    pub adult: StageCohort,
+    /// Sub-adult stage cohort (intermediate between juvenile and adult).
+    #[serde(default)]
+    pub sub_adult: StageCohort,
+    /// Juvenile stage cohort.
+    pub juvenile: StageCohort,
+    /// Subset bookkeeping only: these shrimp are already included in
+    /// `adult.count` and therefore do not represent an extra biomass pool.
     pub berried_females_count: u32,
-    pub condition_index: f64,
     pub molt_stress_index: f64,
     pub reproductive_readiness_index: f64,
     pub egg_progress_days: f64,
@@ -77,16 +189,50 @@ pub struct AnimalState {
     pub hourly_heat_stress_accum: f64,
     #[serde(default)]
     pub hourly_instability_stress_accum: f64,
+    /// Daily consumed food on the shrimp-routing organic-matter basis.
+    /// Periphyton source biomass is converted onto that basis before this
+    /// field is recorded so satiation and reserve routing use the same units.
     #[serde(default)]
     pub daily_food_consumed_g: f64,
-    /// Fractional maturation accumulator for juvenile → adult promotion.
+    /// Signed rounding carry for deterministic adult -> berried transfers.
     #[serde(default)]
-    pub maturation_accum: f64,
+    pub spawn_progress_accum: f64,
+    /// Signed rounding carry for deterministic clutch-resolution counts.
+    #[serde(default)]
+    pub hatch_success_carry: f64,
+    /// Molt readiness index, in [0, 1].
+    #[serde(default)]
+    pub molt_readiness: f64,
+    /// Failed molt accumulator, in [0, 1].
+    #[serde(default)]
+    pub failed_molt_accum: f64,
+    /// Days since the last population-wide molt event.
+    #[serde(default = "default_inter_molt_timer_days")]
+    pub inter_molt_timer_days: f64,
+    /// Whether the most recent molt cycle succeeded.
+    #[serde(default = "default_last_molt_success")]
+    pub last_molt_success: bool,
 }
+
+fn default_inter_molt_timer_days() -> f64 {
+    14.0
+}
+
+fn default_last_molt_success() -> bool {
+    true
+}
+
+pub(crate) const ADULT_FEEDING_WEIGHT: f64 = 1.0;
+pub(crate) const SUB_ADULT_FEEDING_WEIGHT: f64 = 0.67;
+pub(crate) const JUVENILE_FEEDING_WEIGHT: f64 = 0.3;
+
+pub const DEFAULT_SHRIMP_BODY_NITROGEN_MG_PER_G_WET_MASS: f64 = 27.586206896551722;
+pub const DEFAULT_SHRIMP_BODY_CARBON_MG_PER_G_WET_MASS: f64 = 172.41379310344828;
 
 /// Species-specific shrimp parameters materialized from ShrimpPreset.
 /// Stored in TankState for deterministic save/load.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct ShrimpRuntimeParams {
     pub optimal_temp_min_c: f64,
     pub optimal_temp_max_c: f64,
@@ -98,6 +244,285 @@ pub struct ShrimpRuntimeParams {
     pub juvenile_sensitivity: f64,
     pub high_temp_repro_penalty_start_c: f64,
     pub high_temp_repro_penalty_full_c: f64,
+    /// Width of the cold-side reproduction ramp below `optimal_temp_min_c`
+    /// before the fixed minimum temperature factor is reached.
+    #[serde(default = "default_low_temp_repro_ramp_width_c")]
+    pub low_temp_repro_ramp_width_c: f64,
+    /// Species/body-composition nitrogen content used for mortality routing and
+    /// closed-system shrimp biomass accounting.
+    ///
+    /// Default preserves the phase-1 tracked wet-mass composition that earlier
+    /// releases derived implicitly from the generic detrital `feed_n_to_c_ratio`.
+    #[serde(default = "default_shrimp_body_nitrogen_mg_per_g_wet_mass")]
+    pub body_nitrogen_mg_per_g_wet_mass: f64,
+    /// Species/body-composition carbon content used for mortality routing and
+    /// closed-system shrimp biomass accounting.
+    ///
+    /// Default preserves the phase-1 tracked wet-mass composition that earlier
+    /// releases derived implicitly from the generic detrital `feed_n_to_c_ratio`.
+    #[serde(default = "default_shrimp_body_carbon_mg_per_g_wet_mass")]
+    pub body_carbon_mg_per_g_wet_mass: f64,
+    /// Base days for juvenile -> sub-adult transition at optimal conditions.
+    #[serde(default = "default_juvenile_to_subadult_days")]
+    pub juvenile_to_subadult_days: f64,
+    /// Base days for sub-adult -> adult transition at optimal conditions.
+    #[serde(default = "default_subadult_to_adult_days")]
+    pub subadult_to_adult_days: f64,
+    /// Minimum condition for juvenile maturation to proceed.
+    #[serde(default = "default_juvenile_maturation_condition_threshold")]
+    pub juvenile_maturation_condition_threshold: f64,
+    /// Minimum condition for sub-adult maturation to proceed.
+    #[serde(default = "default_subadult_maturation_condition_threshold")]
+    pub subadult_maturation_condition_threshold: f64,
+    /// Base inter-molt period at optimal conditions (days).
+    #[serde(default = "default_base_molt_interval_days")]
+    pub base_molt_interval_days: f64,
+    /// Additional daily mortality fraction per unit of failed_molt_accum.
+    #[serde(default = "default_failed_molt_mortality_scale")]
+    pub failed_molt_mortality_scale: f64,
+    /// Failed-molt accumulator increase applied for each stage that fails
+    /// a molt on a resolved day.
+    #[serde(default = "default_failed_molt_accum_increase_per_failed_stage")]
+    pub failed_molt_accum_increase_per_failed_stage: f64,
+    /// Failed-molt accumulator recovery applied for each stage that succeeds
+    /// on a fully successful resolved day.
+    #[serde(default = "default_failed_molt_accum_recovery_per_successful_stage")]
+    pub failed_molt_accum_recovery_per_successful_stage: f64,
+    /// Fraction of `failed_molt_accum` blended back into `molt_stress_index`
+    /// after the explicit daily molt resolution pass.
+    #[serde(default = "default_failed_molt_stress_blend")]
+    pub failed_molt_stress_blend: f64,
+    /// Stress sensitivity multiplier for sub-adult mortality.
+    #[serde(default = "default_sub_adult_sensitivity")]
+    pub sub_adult_sensitivity: f64,
+    /// Base juveniles per clutch at good condition.
+    #[serde(default = "default_base_clutch_size")]
+    pub base_clutch_size: u32,
+    /// Condition below which clutch size is zero.
+    #[serde(default = "default_min_clutch_condition")]
+    pub min_clutch_condition: f64,
+    /// Minimum calcium concentration (mg/L) for full molt mineral support.
+    #[serde(default = "default_ca_min_mg_per_l")]
+    pub ca_min_mg_per_l: f64,
+    /// Minimum magnesium concentration (mg/L) for full molt mineral support.
+    #[serde(default = "default_mg_min_mg_per_l")]
+    pub mg_min_mg_per_l: f64,
+    /// Reserve target as a fraction of organic body mass required for full
+    /// molt support.
+    #[serde(default = "default_molt_reserve_fraction")]
+    pub molt_reserve_fraction: f64,
+    /// Lower bound applied to reserve support so reserve shortfall degrades,
+    /// but does not zero out, the blended molt condition score.
+    #[serde(default = "default_molt_reserve_factor_floor")]
+    pub molt_reserve_factor_floor: f64,
+    /// Blend weight for condition index in the molt condition modifier.
+    #[serde(default = "default_molt_condition_weight")]
+    pub molt_condition_weight: f64,
+    /// Blend weight for reserve support in the molt condition modifier.
+    #[serde(default = "default_molt_reserve_weight")]
+    pub molt_reserve_weight: f64,
+    /// Minimum blended molt-condition modifier that should emit a
+    /// `PoorCondition` diagnostic on molt failure.
+    #[serde(default = "default_molt_failure_poor_condition_threshold")]
+    pub molt_failure_poor_condition_threshold: f64,
+    /// Minimum instability index that should emit a
+    /// `ChemistryInstability` diagnostic on molt failure/stress events.
+    #[serde(default = "default_molt_failure_instability_threshold")]
+    pub molt_failure_instability_threshold: f64,
+    /// Degrees Celsius below `optimal_temp_min_c` required to reach the cold
+    /// floor in `temp_condition_factor`.
+    #[serde(default = "default_temp_condition_low_divisor_c")]
+    pub temp_condition_low_divisor_c: f64,
+    /// Degrees Celsius above `optimal_temp_max_c` required to reach the hot
+    /// floor in `temp_condition_factor` and the daily thermal contribution to
+    /// `molt_stress_index`.
+    #[serde(default = "default_temp_condition_high_divisor_c")]
+    pub temp_condition_high_divisor_c: f64,
+    /// Minimum temperature-support factor allowed by `temp_condition_factor`
+    /// once the cold/hot penalty ramps have fully saturated.
+    #[serde(default = "default_temp_condition_min_factor")]
+    pub temp_condition_min_factor: f64,
+    /// Molt-stress index threshold above which a `MoltStressWarning` event
+    /// should fire.
+    #[serde(default = "default_molt_stress_warning_threshold")]
+    pub molt_stress_warning_threshold: f64,
+    /// Molt-stress index threshold above which molt stress contributes to the
+    /// generic mortality stress total.
+    #[serde(default = "default_molt_stress_mortality_threshold")]
+    pub molt_stress_mortality_threshold: f64,
+    /// Relative GH contribution within the mineral-stress blend used to update
+    /// `molt_stress_index`.
+    #[serde(default = "default_molt_stress_mineral_gh_weight")]
+    pub molt_stress_mineral_gh_weight: f64,
+    /// Relative calcium contribution within the mineral-stress blend used to
+    /// update `molt_stress_index`.
+    #[serde(default = "default_molt_stress_mineral_ca_weight")]
+    pub molt_stress_mineral_ca_weight: f64,
+    /// Relative magnesium contribution within the mineral-stress blend used to
+    /// update `molt_stress_index`.
+    #[serde(default = "default_molt_stress_mineral_mg_weight")]
+    pub molt_stress_mineral_mg_weight: f64,
+    /// Weight of mineral stress in the overall molt-stress pressure blend.
+    #[serde(default = "default_molt_stress_pressure_mineral_weight")]
+    pub molt_stress_pressure_mineral_weight: f64,
+    /// Weight of chemistry instability in the overall molt-stress pressure
+    /// blend.
+    #[serde(default = "default_molt_stress_pressure_instability_weight")]
+    pub molt_stress_pressure_instability_weight: f64,
+    /// Weight of low condition in the overall molt-stress pressure blend.
+    #[serde(default = "default_molt_stress_pressure_condition_weight")]
+    pub molt_stress_pressure_condition_weight: f64,
+    /// Population condition index below which low condition contributes to the
+    /// daily `molt_stress_index` pressure blend.
+    #[serde(default = "default_molt_stress_condition_midpoint")]
+    pub molt_stress_condition_midpoint: f64,
+    /// Weight of thermal stress in the overall molt-stress pressure blend.
+    #[serde(default = "default_molt_stress_pressure_thermal_weight")]
+    pub molt_stress_pressure_thermal_weight: f64,
+    /// Upper clamp applied to the thermal component before it is blended into
+    /// daily `molt_stress_index` pressure.
+    #[serde(default = "default_molt_stress_thermal_cap")]
+    pub molt_stress_thermal_cap: f64,
+    /// Weight of short-horizon hourly stress accumulation in the overall
+    /// molt-stress pressure blend.
+    #[serde(default = "default_molt_stress_pressure_hourly_weight")]
+    pub molt_stress_pressure_hourly_weight: f64,
+    /// EMA smoothing factor applied when `molt_stress_index` is rising toward
+    /// today's pressure.
+    #[serde(default = "default_molt_stress_rise_smoothing")]
+    pub molt_stress_rise_smoothing: f64,
+    /// EMA smoothing factor applied when `molt_stress_index` is decaying toward
+    /// today's pressure.
+    #[serde(default = "default_molt_stress_decay_smoothing")]
+    pub molt_stress_decay_smoothing: f64,
+    /// Degrees GH above `gh_max_d` required to apply the full high-mineral
+    /// penalty in `molt_mineral_modifier` and the shared reproduction GH
+    /// penalty curve.
+    #[serde(default = "default_molt_gh_excess_penalty_divisor")]
+    pub molt_gh_excess_penalty_divisor: f64,
+    /// Floor applied to the low-GH branch after the quadratic deficit curve,
+    /// to Ca/Mg sub-factors inside `molt_mineral_modifier`, and to the shared
+    /// reproduction GH penalty curve so mineral shortfalls degrade outcomes
+    /// without forcing a hard zero.
+    #[serde(default = "default_molt_mineral_factor_floor")]
+    pub molt_mineral_factor_floor: f64,
+    /// Base inter-molt period for juveniles (days). Shorter than adults.
+    #[serde(default = "default_juvenile_molt_interval_days")]
+    pub juvenile_molt_interval_days: f64,
+    /// Base inter-molt period for sub-adults (days).
+    #[serde(default = "default_sub_adult_molt_interval_days")]
+    pub sub_adult_molt_interval_days: f64,
+    /// Minimum overall molt score required for a molt to succeed.
+    #[serde(default = "default_molt_success_threshold")]
+    pub molt_success_threshold: f64,
+    /// Ratio of `gh_min_d` below which molt attempts fail regardless of the
+    /// blended success score.
+    #[serde(default = "default_critical_molt_gh_ratio")]
+    pub critical_molt_gh_ratio: f64,
+    /// Species-specific factor governing how strongly chloride inhibits nitrite
+    /// uptake at the gills. Higher values mean stronger protection per unit of
+    /// Cl:NO2 ratio. Used in the effective nitrite hazard formula:
+    ///   effective_hazard = [NO2] / (1 + chloride_protection_factor * [Cl] / [NO2])
+    ///
+    /// Confidence: medium. Directionally well-supported by freshwater crustacean
+    /// literature (Cl- competes with NO2- at gill uptake sites); the scalar is
+    /// calibrated so that Cl:NO2 > 10:1 yields < 20% of unprotected hazard.
+    #[serde(default = "default_chloride_protection_factor")]
+    pub chloride_protection_factor: f64,
+    /// Unionized ammonia threshold (mg N/L NH3) above which hourly NH3 stress
+    /// begins accumulating.
+    #[serde(default = "default_nh3_stress_threshold_mg_n_per_l")]
+    pub nh3_stress_threshold_mg_n_per_l: f64,
+    /// Scaling applied to NH3 excess above
+    /// `nh3_stress_threshold_mg_n_per_l` when routing hourly NH3 stress into
+    /// mortality and molt-stress channels.
+    #[serde(default = "default_nh3_stress_response_scale")]
+    pub nh3_stress_response_scale: f64,
+    /// Dissolved-oxygen reference (mg/L) used to normalize the daily
+    /// condition-support factor.
+    #[serde(default = "default_condition_do_reference_mg_l")]
+    pub condition_do_reference_mg_l: f64,
+    /// Linear NH3 sensitivity applied inside the daily condition-support
+    /// factor: `1 - nh3_mg_l * sensitivity`.
+    #[serde(default = "default_condition_nh3_sensitivity")]
+    pub condition_nh3_sensitivity: f64,
+    /// Linear effective-nitrite sensitivity applied inside the daily
+    /// condition-support factor: `1 - effective_hazard_mg_l * sensitivity`.
+    #[serde(default = "default_condition_nitrite_sensitivity")]
+    pub condition_nitrite_sensitivity: f64,
+    /// Weight applied to the accumulated hourly stress sum before it is
+    /// subtracted from the daily condition-support product.
+    #[serde(default = "default_condition_hourly_stress_penalty_weight")]
+    pub condition_hourly_stress_penalty_weight: f64,
+
+    // ── Reproduction suppression parameters ────────────────────────────────
+    /// Density (shrimp per litre) below which per-capita reproduction is
+    /// unaffected. Above this, breeding rate declines monotonically.
+    #[serde(default = "default_density_repro_threshold_per_l")]
+    pub density_repro_threshold_per_l: f64,
+    /// Density (shrimp per litre) at which the density factor reaches 50%
+    /// of its unpenalised value (half-suppression point).
+    #[serde(default = "default_density_repro_half_suppression_per_l")]
+    pub density_repro_half_suppression_per_l: f64,
+    /// TAN concentration (mg N/L) above which reproduction is suppressed.
+    #[serde(default = "default_tan_repro_threshold_mg_n_per_l")]
+    pub tan_repro_threshold_mg_n_per_l: f64,
+    /// TAN concentration (mg N/L) at which the reproduction TAN curve reaches
+    /// its fixed minimum factor. The default preserves the legacy
+    /// `excess / (threshold * 2.0)` decline span after suppression begins.
+    #[serde(default = "default_tan_repro_full_suppression_mg_n_per_l")]
+    pub tan_repro_full_suppression_mg_n_per_l: f64,
+    /// NO2 concentration (mg N/L) above which reproduction is suppressed.
+    #[serde(default = "default_no2_repro_threshold_mg_n_per_l")]
+    pub no2_repro_threshold_mg_n_per_l: f64,
+    /// NO2 concentration (mg N/L) at which the reproduction nitrite curve
+    /// reaches its fixed minimum factor. The default preserves the legacy
+    /// `excess / (threshold * 2.0)` decline span after suppression begins.
+    #[serde(default = "default_no2_repro_full_suppression_mg_n_per_l")]
+    pub no2_repro_full_suppression_mg_n_per_l: f64,
+    /// Temperature swing (°C per day) that begins to trigger egg dropping
+    /// in berried females.
+    #[serde(default = "default_egg_drop_temp_swing_c")]
+    pub egg_drop_temp_swing_c: f64,
+    /// Instability index threshold above which egg dropping can occur.
+    #[serde(default = "default_egg_drop_instability_threshold")]
+    pub egg_drop_instability_threshold: f64,
+    /// Maximum daily egg-drop probability even under severe instability.
+    #[serde(default = "default_egg_drop_max_probability")]
+    pub egg_drop_max_probability: f64,
+    /// Dissolved-oxygen reference used to normalize hatch success during egg
+    /// development.
+    #[serde(default = "default_egg_oxygen_reference_mg_l")]
+    pub egg_oxygen_reference_mg_l: f64,
+    /// EMA smoothing factor applied when reproductive readiness moves toward
+    /// today's target.
+    #[serde(default = "default_reproductive_readiness_smoothing")]
+    pub reproductive_readiness_smoothing: f64,
+    /// Condition threshold at which clutches reach full size. Below this, the
+    /// clutch-size modifier linearly tapers down toward
+    /// `min_clutch_condition`.
+    #[serde(default = "default_full_clutch_condition_threshold")]
+    pub full_clutch_condition_threshold: f64,
+    /// Temperature swing (°C per day) that contributes a full unit of
+    /// instability pressure.
+    #[serde(default = "default_instability_temp_swing_c")]
+    pub instability_temp_swing_c: f64,
+    /// pH swing per day that contributes a full unit of instability pressure.
+    #[serde(default = "default_instability_ph_swing")]
+    pub instability_ph_swing: f64,
+    /// GH swing (°dGH per day) that contributes a full unit of instability pressure.
+    #[serde(default = "default_instability_gh_swing_d")]
+    pub instability_gh_swing_d: f64,
+    /// Dissolved oxygen swing (mg/L per day) that contributes a full unit of
+    /// instability pressure.
+    #[serde(default = "default_instability_do_swing_mg_l")]
+    pub instability_do_swing_mg_l: f64,
+    /// Smoothing applied when instability is rising.
+    #[serde(default = "default_instability_rise_smoothing")]
+    pub instability_rise_smoothing: f64,
+    /// Smoothing applied when instability is decaying.
+    #[serde(default = "default_instability_decay_smoothing")]
+    pub instability_decay_smoothing: f64,
 }
 
 /// Tracks recent chemistry swings for shrimp stress calculations.
@@ -107,6 +532,8 @@ pub struct StabilityTracker {
     pub prev_ph: f64,
     pub prev_gh_d: f64,
     pub prev_do_mg_l: f64,
+    #[serde(default)]
+    pub last_temp_swing_c: f64,
     pub instability_index: f64,
 }
 
@@ -131,24 +558,258 @@ impl Default for PlantGuildState {
     }
 }
 
+impl AlgaeState {
+    /// Recalculate `periphyton_biomass_g` as the sum of per-habitat pools.
+    pub fn sync_periphyton_total(&mut self) {
+        self.periphyton_biomass_g = self.periphyton_by_habitat.values().sum();
+    }
+
+    /// Set the total periphyton and redistribute to habitat pools proportionally.
+    /// Use this instead of writing `periphyton_biomass_g` directly when habitat
+    /// pools are already populated, to keep the two in sync.
+    pub fn set_periphyton_total(&mut self, total_g: f64) {
+        let old_sum: f64 = self.periphyton_by_habitat.values().sum();
+        if old_sum > f64::EPSILON && total_g >= 0.0 {
+            let scale = total_g / old_sum;
+            for biomass in self.periphyton_by_habitat.values_mut() {
+                *biomass *= scale;
+            }
+        } else if total_g > f64::EPSILON && !self.periphyton_by_habitat.is_empty() {
+            // Map is zeroed out; distribute uniformly across existing keys.
+            let n = self.periphyton_by_habitat.len() as f64;
+            let share = total_g / n;
+            for biomass in self.periphyton_by_habitat.values_mut() {
+                *biomass = share;
+            }
+        }
+        self.periphyton_biomass_g = total_g;
+    }
+
+    /// Distribute the lumped periphyton biomass into habitat pools using
+    /// light-exposure-weighted fractions from the habitat registry.
+    /// Called during migration or when per-habitat pools are empty.
+    pub fn distribute_periphyton_to_habitats(&mut self, registry: &[super::habitat::HabitatEntry]) {
+        let total = self.periphyton_biomass_g;
+        self.periphyton_by_habitat =
+            distribute_biomass_by_weight(total, registry, periphyton_habitat_affinity);
+    }
+
+    /// Reconcile persisted per-habitat pools with the current habitat registry.
+    ///
+    /// This keeps biomass tied to currently available habitats after hardware,
+    /// plants, or substrate change. Biomass stranded on removed habitats is
+    /// redistributed across the remaining valid habitats without changing the
+    /// aggregate total.
+    pub fn normalize_periphyton_habitats(&mut self, registry: &[super::habitat::HabitatEntry]) {
+        self.periphyton_by_habitat = normalize_biomass_by_weight(
+            self.periphyton_biomass_g,
+            &self.periphyton_by_habitat,
+            registry,
+            periphyton_habitat_affinity,
+        );
+        self.sync_periphyton_total();
+    }
+}
+
+impl MicrobeState {
+    /// Recalculate `decomposer_biomass_g` as the sum of per-habitat pools.
+    pub fn sync_decomposer_total(&mut self) {
+        self.decomposer_biomass_g = self.decomposer_by_habitat.values().sum();
+    }
+
+    /// Set the total decomposer biomass and redistribute to habitat pools
+    /// proportionally. Use this instead of writing `decomposer_biomass_g`
+    /// directly when habitat pools are already populated.
+    pub fn set_decomposer_total(&mut self, total_g: f64) {
+        let old_sum: f64 = self.decomposer_by_habitat.values().sum();
+        if old_sum > f64::EPSILON && total_g >= 0.0 {
+            let scale = total_g / old_sum;
+            for biomass in self.decomposer_by_habitat.values_mut() {
+                *biomass *= scale;
+            }
+        } else if total_g > f64::EPSILON && !self.decomposer_by_habitat.is_empty() {
+            // Map is zeroed out; distribute uniformly across existing keys.
+            let n = self.decomposer_by_habitat.len() as f64;
+            let share = total_g / n;
+            for biomass in self.decomposer_by_habitat.values_mut() {
+                *biomass = share;
+            }
+        }
+        self.decomposer_biomass_g = total_g;
+    }
+
+    /// Distribute the lumped decomposer biomass into habitat pools using
+    /// flow+oxygen-weighted fractions from the habitat registry.
+    /// Called during migration or when per-habitat pools are empty.
+    pub fn distribute_decomposer_to_habitats(&mut self, registry: &[super::habitat::HabitatEntry]) {
+        let total = self.decomposer_biomass_g;
+        self.decomposer_by_habitat =
+            distribute_biomass_by_weight(total, registry, decomposer_habitat_affinity);
+    }
+
+    /// Reconcile persisted per-habitat pools with the current habitat registry.
+    ///
+    /// This removes biomass from habitats that no longer exist and
+    /// redistributes it across the remaining valid habitats while preserving
+    /// the aggregate decomposer total.
+    pub fn normalize_decomposer_habitats(&mut self, registry: &[super::habitat::HabitatEntry]) {
+        self.decomposer_by_habitat = normalize_biomass_by_weight(
+            self.decomposer_biomass_g,
+            &self.decomposer_by_habitat,
+            registry,
+            decomposer_habitat_affinity,
+        );
+        self.sync_decomposer_total();
+    }
+}
+
+/// Ecological affinity weight for periphyton colonization of a habitat.
+/// Periphyton is light-driven: high affinity on lit surfaces, near-zero
+/// in dark habitats. Area is factored in separately.
+fn periphyton_habitat_affinity(entry: &super::habitat::HabitatEntry) -> f64 {
+    if entry.kind == HabitatKind::SubstrateDeep {
+        return 0.0;
+    }
+
+    // Light is the primary driver; a small baseline (0.01) allows trace
+    // colonization even in dim habitats like FilterMedia.
+    (entry.light_exposure + 0.01) * entry.colonizable_area_cm2
+}
+
+/// Ecological affinity weight for decomposer colonization of a habitat.
+/// Decomposers are flow- and oxygen-driven: they thrive on filter media
+/// and substrate surfaces where organic matter accumulates.
+fn decomposer_habitat_affinity(entry: &super::habitat::HabitatEntry) -> f64 {
+    // Weighted combination: flow and oxygen promote aerobic decomposers.
+    // SubstrateDeep gets a baseline for anaerobic decomposers even at low O2.
+    let o2_factor = entry.oxygen_exposure + 0.05;
+    let flow_factor = entry.flow_exposure + 0.05;
+    (o2_factor * 0.6 + flow_factor * 0.4) * entry.colonizable_area_cm2
+}
+
+/// Generic helper: distribute a total biomass across habitats weighted
+/// by an affinity function.
+fn distribute_biomass_by_weight(
+    total_g: f64,
+    registry: &[super::habitat::HabitatEntry],
+    affinity: fn(&super::habitat::HabitatEntry) -> f64,
+) -> BTreeMap<HabitatKind, f64> {
+    let weights: Vec<(HabitatKind, f64)> = registry
+        .iter()
+        .filter_map(|entry| {
+            let weight = affinity(entry).max(0.0);
+            (weight > f64::EPSILON).then_some((entry.kind, weight))
+        })
+        .collect();
+    if weights.is_empty() {
+        return BTreeMap::new();
+    }
+
+    if total_g <= f64::EPSILON {
+        return weights.into_iter().map(|(kind, _)| (kind, 0.0)).collect();
+    }
+
+    let total_weight: f64 = weights.iter().map(|(_, w)| w).sum();
+    if total_weight <= f64::EPSILON {
+        return weights.into_iter().map(|(kind, _)| (kind, 0.0)).collect();
+    }
+
+    weights
+        .into_iter()
+        .map(|(kind, w)| (kind, total_g * w / total_weight))
+        .collect()
+}
+
+fn normalize_biomass_by_weight(
+    total_g: f64,
+    current: &BTreeMap<HabitatKind, f64>,
+    registry: &[super::habitat::HabitatEntry],
+    affinity: fn(&super::habitat::HabitatEntry) -> f64,
+) -> BTreeMap<HabitatKind, f64> {
+    let available: Vec<(HabitatKind, f64, f64)> = registry
+        .iter()
+        .filter_map(|entry| {
+            let weight = affinity(entry).max(0.0);
+            (weight > f64::EPSILON).then_some((
+                entry.kind,
+                weight,
+                current.get(&entry.kind).copied().unwrap_or(0.0).max(0.0),
+            ))
+        })
+        .collect();
+
+    if available.is_empty() {
+        return BTreeMap::new();
+    }
+
+    if total_g <= f64::EPSILON {
+        return available
+            .into_iter()
+            .map(|(kind, _, _)| (kind, 0.0))
+            .collect();
+    }
+
+    let retained_sum: f64 = available.iter().map(|(_, _, biomass)| *biomass).sum();
+    if retained_sum > f64::EPSILON {
+        let scale = total_g / retained_sum;
+        return available
+            .into_iter()
+            .map(|(kind, _, biomass)| (kind, biomass * scale))
+            .collect();
+    }
+
+    let total_weight: f64 = available.iter().map(|(_, weight, _)| *weight).sum();
+    if total_weight <= f64::EPSILON {
+        return available
+            .into_iter()
+            .map(|(kind, _, _)| (kind, 0.0))
+            .collect();
+    }
+
+    available
+        .into_iter()
+        .map(|(kind, weight, _)| (kind, total_g * weight / total_weight))
+        .collect()
+}
+
 impl Default for AlgaeState {
     fn default() -> Self {
+        // Default habitat distribution for 0.2 g total periphyton:
+        // mostly on glass (lit), some on substrate surface, trace elsewhere.
+        let periphyton_by_habitat = BTreeMap::from([
+            (HabitatKind::GlassHardscape, 0.10),
+            (HabitatKind::SubstrateSurface, 0.06),
+            (HabitatKind::PlantSurfaces, 0.03),
+            (HabitatKind::FilterMedia, 0.01),
+        ]);
         Self {
             suspended_biomass_g: 0.0,
             periphyton_biomass_g: 0.2,
             nuisance_index: 0.1,
+            periphyton_by_habitat,
         }
     }
 }
 
 impl Default for MicrobeState {
     fn default() -> Self {
+        // Default habitat distribution for 0.1 g total decomposers:
+        // concentrated on filter media and substrate.
+        let decomposer_by_habitat = BTreeMap::from([
+            (HabitatKind::FilterMedia, 0.04),
+            (HabitatKind::SubstrateSurface, 0.03),
+            (HabitatKind::SubstrateDeep, 0.015),
+            (HabitatKind::GlassHardscape, 0.01),
+            (HabitatKind::PlantSurfaces, 0.005),
+        ]);
         Self {
             decomposer_biomass_g: 0.1,
             ammonia_oxidizer_biomass_g: 0.05,
             nitrite_oxidizer_biomass_g: 0.05,
             comammox_biomass_g: 0.01,
             maturity_index: 0.1,
+            decomposer_by_habitat,
+            denitrifier_activity_index: 0.0,
         }
     }
 }
@@ -158,6 +819,7 @@ impl Default for MicrofaunaState {
         Self {
             population_index: 0.2,
             grazing_pressure_index: 0.2,
+            reserve_g: 0.0,
         }
     }
 }
@@ -165,10 +827,10 @@ impl Default for MicrofaunaState {
 impl Default for AnimalState {
     fn default() -> Self {
         Self {
-            adults_count: 0,
-            juveniles_count: 0,
+            adult: StageCohort::default(),
+            sub_adult: StageCohort::default(),
+            juvenile: StageCohort::default(),
             berried_females_count: 0,
-            condition_index: 0.8,
             molt_stress_index: 0.1,
             reproductive_readiness_index: 0.4,
             egg_progress_days: 0.0,
@@ -179,7 +841,12 @@ impl Default for AnimalState {
             hourly_heat_stress_accum: 0.0,
             hourly_instability_stress_accum: 0.0,
             daily_food_consumed_g: 0.0,
-            maturation_accum: 0.0,
+            spawn_progress_accum: 0.0,
+            hatch_success_carry: 0.0,
+            molt_readiness: 0.0,
+            failed_molt_accum: 0.0,
+            inter_molt_timer_days: 14.0,
+            last_molt_success: true,
         }
     }
 }
@@ -197,8 +864,390 @@ impl Default for ShrimpRuntimeParams {
             juvenile_sensitivity: 1.5,
             high_temp_repro_penalty_start_c: 28.0,
             high_temp_repro_penalty_full_c: 33.0,
+            low_temp_repro_ramp_width_c: default_low_temp_repro_ramp_width_c(),
+            body_nitrogen_mg_per_g_wet_mass: default_shrimp_body_nitrogen_mg_per_g_wet_mass(),
+            body_carbon_mg_per_g_wet_mass: default_shrimp_body_carbon_mg_per_g_wet_mass(),
+            juvenile_to_subadult_days: default_juvenile_to_subadult_days(),
+            subadult_to_adult_days: default_subadult_to_adult_days(),
+            juvenile_maturation_condition_threshold:
+                default_juvenile_maturation_condition_threshold(),
+            subadult_maturation_condition_threshold:
+                default_subadult_maturation_condition_threshold(),
+            base_molt_interval_days: default_base_molt_interval_days(),
+            failed_molt_mortality_scale: default_failed_molt_mortality_scale(),
+            failed_molt_accum_increase_per_failed_stage:
+                default_failed_molt_accum_increase_per_failed_stage(),
+            failed_molt_accum_recovery_per_successful_stage:
+                default_failed_molt_accum_recovery_per_successful_stage(),
+            failed_molt_stress_blend: default_failed_molt_stress_blend(),
+            sub_adult_sensitivity: default_sub_adult_sensitivity(),
+            base_clutch_size: default_base_clutch_size(),
+            min_clutch_condition: default_min_clutch_condition(),
+            ca_min_mg_per_l: default_ca_min_mg_per_l(),
+            mg_min_mg_per_l: default_mg_min_mg_per_l(),
+            molt_reserve_fraction: default_molt_reserve_fraction(),
+            molt_reserve_factor_floor: default_molt_reserve_factor_floor(),
+            molt_condition_weight: default_molt_condition_weight(),
+            molt_reserve_weight: default_molt_reserve_weight(),
+            molt_failure_poor_condition_threshold: default_molt_failure_poor_condition_threshold(),
+            molt_failure_instability_threshold: default_molt_failure_instability_threshold(),
+            temp_condition_low_divisor_c: default_temp_condition_low_divisor_c(),
+            temp_condition_high_divisor_c: default_temp_condition_high_divisor_c(),
+            temp_condition_min_factor: default_temp_condition_min_factor(),
+            molt_stress_warning_threshold: default_molt_stress_warning_threshold(),
+            molt_stress_mortality_threshold: default_molt_stress_mortality_threshold(),
+            molt_stress_mineral_gh_weight: default_molt_stress_mineral_gh_weight(),
+            molt_stress_mineral_ca_weight: default_molt_stress_mineral_ca_weight(),
+            molt_stress_mineral_mg_weight: default_molt_stress_mineral_mg_weight(),
+            molt_stress_pressure_mineral_weight: default_molt_stress_pressure_mineral_weight(),
+            molt_stress_pressure_instability_weight:
+                default_molt_stress_pressure_instability_weight(),
+            molt_stress_pressure_condition_weight: default_molt_stress_pressure_condition_weight(),
+            molt_stress_condition_midpoint: default_molt_stress_condition_midpoint(),
+            molt_stress_pressure_thermal_weight: default_molt_stress_pressure_thermal_weight(),
+            molt_stress_thermal_cap: default_molt_stress_thermal_cap(),
+            molt_stress_pressure_hourly_weight: default_molt_stress_pressure_hourly_weight(),
+            molt_stress_rise_smoothing: default_molt_stress_rise_smoothing(),
+            molt_stress_decay_smoothing: default_molt_stress_decay_smoothing(),
+            molt_gh_excess_penalty_divisor: default_molt_gh_excess_penalty_divisor(),
+            molt_mineral_factor_floor: default_molt_mineral_factor_floor(),
+            juvenile_molt_interval_days: default_juvenile_molt_interval_days(),
+            sub_adult_molt_interval_days: default_sub_adult_molt_interval_days(),
+            molt_success_threshold: default_molt_success_threshold(),
+            critical_molt_gh_ratio: default_critical_molt_gh_ratio(),
+            chloride_protection_factor: default_chloride_protection_factor(),
+            nh3_stress_threshold_mg_n_per_l: default_nh3_stress_threshold_mg_n_per_l(),
+            nh3_stress_response_scale: default_nh3_stress_response_scale(),
+            condition_do_reference_mg_l: default_condition_do_reference_mg_l(),
+            condition_nh3_sensitivity: default_condition_nh3_sensitivity(),
+            condition_nitrite_sensitivity: default_condition_nitrite_sensitivity(),
+            condition_hourly_stress_penalty_weight: default_condition_hourly_stress_penalty_weight(
+            ),
+            density_repro_threshold_per_l: default_density_repro_threshold_per_l(),
+            density_repro_half_suppression_per_l: default_density_repro_half_suppression_per_l(),
+            tan_repro_threshold_mg_n_per_l: default_tan_repro_threshold_mg_n_per_l(),
+            tan_repro_full_suppression_mg_n_per_l: default_tan_repro_full_suppression_mg_n_per_l(),
+            no2_repro_threshold_mg_n_per_l: default_no2_repro_threshold_mg_n_per_l(),
+            no2_repro_full_suppression_mg_n_per_l: default_no2_repro_full_suppression_mg_n_per_l(),
+            egg_drop_temp_swing_c: default_egg_drop_temp_swing_c(),
+            egg_drop_instability_threshold: default_egg_drop_instability_threshold(),
+            egg_drop_max_probability: default_egg_drop_max_probability(),
+            egg_oxygen_reference_mg_l: default_egg_oxygen_reference_mg_l(),
+            reproductive_readiness_smoothing: default_reproductive_readiness_smoothing(),
+            full_clutch_condition_threshold: default_full_clutch_condition_threshold(),
+            instability_temp_swing_c: default_instability_temp_swing_c(),
+            instability_ph_swing: default_instability_ph_swing(),
+            instability_gh_swing_d: default_instability_gh_swing_d(),
+            instability_do_swing_mg_l: default_instability_do_swing_mg_l(),
+            instability_rise_smoothing: default_instability_rise_smoothing(),
+            instability_decay_smoothing: default_instability_decay_smoothing(),
         }
     }
+}
+
+impl ShrimpRuntimeParams {
+    /// Splits the legacy total maturation period into juvenile and sub-adult
+    /// stage durations while preserving the default 30:20 ratio.
+    pub fn split_legacy_total_maturation_days(total_days: f64) -> (f64, f64) {
+        let juvenile_ratio = default_juvenile_to_subadult_days()
+            / (default_juvenile_to_subadult_days() + default_subadult_to_adult_days());
+        let juvenile_to_subadult_days = total_days * juvenile_ratio;
+        let subadult_to_adult_days = total_days - juvenile_to_subadult_days;
+        (juvenile_to_subadult_days, subadult_to_adult_days)
+    }
+
+    pub fn apply_legacy_total_maturation_days(&mut self, total_days: f64) {
+        let (juvenile_to_subadult_days, subadult_to_adult_days) =
+            Self::split_legacy_total_maturation_days(total_days);
+        self.juvenile_to_subadult_days = juvenile_to_subadult_days;
+        self.subadult_to_adult_days = subadult_to_adult_days;
+    }
+}
+
+fn default_shrimp_body_nitrogen_mg_per_g_wet_mass() -> f64 {
+    DEFAULT_SHRIMP_BODY_NITROGEN_MG_PER_G_WET_MASS
+}
+
+fn default_shrimp_body_carbon_mg_per_g_wet_mass() -> f64 {
+    DEFAULT_SHRIMP_BODY_CARBON_MG_PER_G_WET_MASS
+}
+
+fn default_juvenile_to_subadult_days() -> f64 {
+    30.0
+}
+
+fn default_subadult_to_adult_days() -> f64 {
+    20.0
+}
+
+fn default_juvenile_maturation_condition_threshold() -> f64 {
+    0.3
+}
+
+fn default_subadult_maturation_condition_threshold() -> f64 {
+    0.4
+}
+
+fn default_base_molt_interval_days() -> f64 {
+    28.0
+}
+
+fn default_failed_molt_mortality_scale() -> f64 {
+    0.15
+}
+
+fn default_failed_molt_accum_increase_per_failed_stage() -> f64 {
+    0.3
+}
+
+fn default_failed_molt_accum_recovery_per_successful_stage() -> f64 {
+    0.35
+}
+
+fn default_failed_molt_stress_blend() -> f64 {
+    0.5
+}
+
+fn default_sub_adult_sensitivity() -> f64 {
+    1.2
+}
+
+fn default_low_temp_repro_ramp_width_c() -> f64 {
+    4.0
+}
+
+fn default_base_clutch_size() -> u32 {
+    25
+}
+
+fn default_min_clutch_condition() -> f64 {
+    0.3
+}
+
+fn default_ca_min_mg_per_l() -> f64 {
+    20.0
+}
+
+fn default_mg_min_mg_per_l() -> f64 {
+    5.0
+}
+
+fn default_molt_reserve_fraction() -> f64 {
+    0.1
+}
+
+fn default_molt_reserve_factor_floor() -> f64 {
+    0.4
+}
+
+fn default_molt_condition_weight() -> f64 {
+    0.75
+}
+
+fn default_molt_reserve_weight() -> f64 {
+    0.25
+}
+
+fn default_molt_failure_poor_condition_threshold() -> f64 {
+    0.65
+}
+
+fn default_molt_failure_instability_threshold() -> f64 {
+    0.3
+}
+
+fn default_temp_condition_low_divisor_c() -> f64 {
+    10.0
+}
+
+fn default_temp_condition_high_divisor_c() -> f64 {
+    8.0
+}
+
+fn default_temp_condition_min_factor() -> f64 {
+    0.2
+}
+
+fn default_molt_stress_warning_threshold() -> f64 {
+    0.6
+}
+
+fn default_molt_stress_mortality_threshold() -> f64 {
+    0.5
+}
+
+fn default_molt_stress_mineral_gh_weight() -> f64 {
+    0.5
+}
+
+fn default_molt_stress_mineral_ca_weight() -> f64 {
+    0.3
+}
+
+fn default_molt_stress_mineral_mg_weight() -> f64 {
+    0.2
+}
+
+fn default_molt_stress_pressure_mineral_weight() -> f64 {
+    0.3
+}
+
+fn default_molt_stress_pressure_instability_weight() -> f64 {
+    0.3
+}
+
+fn default_molt_stress_pressure_condition_weight() -> f64 {
+    0.2
+}
+
+fn default_molt_stress_condition_midpoint() -> f64 {
+    0.5
+}
+
+fn default_molt_stress_pressure_thermal_weight() -> f64 {
+    0.2
+}
+
+fn default_molt_stress_thermal_cap() -> f64 {
+    0.5
+}
+
+fn default_molt_stress_pressure_hourly_weight() -> f64 {
+    0.3
+}
+
+fn default_molt_stress_rise_smoothing() -> f64 {
+    0.2
+}
+
+fn default_molt_stress_decay_smoothing() -> f64 {
+    0.05
+}
+
+fn default_molt_gh_excess_penalty_divisor() -> f64 {
+    10.0
+}
+
+fn default_molt_mineral_factor_floor() -> f64 {
+    0.3
+}
+
+fn default_juvenile_molt_interval_days() -> f64 {
+    14.0
+}
+
+fn default_sub_adult_molt_interval_days() -> f64 {
+    21.0
+}
+
+fn default_molt_success_threshold() -> f64 {
+    0.55
+}
+
+fn default_critical_molt_gh_ratio() -> f64 {
+    0.3
+}
+
+fn default_chloride_protection_factor() -> f64 {
+    0.5
+}
+
+fn default_nh3_stress_threshold_mg_n_per_l() -> f64 {
+    0.02
+}
+
+fn default_nh3_stress_response_scale() -> f64 {
+    2.0
+}
+
+fn default_condition_do_reference_mg_l() -> f64 {
+    6.0
+}
+
+fn default_condition_nh3_sensitivity() -> f64 {
+    3.0
+}
+
+fn default_condition_nitrite_sensitivity() -> f64 {
+    0.5
+}
+
+fn default_condition_hourly_stress_penalty_weight() -> f64 {
+    0.5
+}
+
+fn default_density_repro_threshold_per_l() -> f64 {
+    10.0
+}
+
+fn default_density_repro_half_suppression_per_l() -> f64 {
+    20.0
+}
+
+fn default_tan_repro_threshold_mg_n_per_l() -> f64 {
+    1.0
+}
+
+fn default_tan_repro_full_suppression_mg_n_per_l() -> f64 {
+    // Preserve the pre-parameterization `excess / (threshold * 2.0)` curve.
+    3.0
+}
+
+fn default_no2_repro_threshold_mg_n_per_l() -> f64 {
+    0.5
+}
+
+fn default_no2_repro_full_suppression_mg_n_per_l() -> f64 {
+    // Preserve the pre-parameterization `excess / (threshold * 2.0)` curve.
+    1.5
+}
+
+fn default_egg_drop_temp_swing_c() -> f64 {
+    2.0
+}
+
+fn default_egg_drop_instability_threshold() -> f64 {
+    0.5
+}
+
+fn default_egg_drop_max_probability() -> f64 {
+    0.6
+}
+
+fn default_egg_oxygen_reference_mg_l() -> f64 {
+    6.0
+}
+
+fn default_reproductive_readiness_smoothing() -> f64 {
+    0.1
+}
+
+fn default_full_clutch_condition_threshold() -> f64 {
+    0.7
+}
+
+fn default_instability_temp_swing_c() -> f64 {
+    3.0
+}
+
+fn default_instability_ph_swing() -> f64 {
+    0.5
+}
+
+fn default_instability_gh_swing_d() -> f64 {
+    3.0
+}
+
+fn default_instability_do_swing_mg_l() -> f64 {
+    3.0
+}
+
+fn default_instability_rise_smoothing() -> f64 {
+    0.3
+}
+
+fn default_instability_decay_smoothing() -> f64 {
+    0.1
 }
 
 impl Default for StabilityTracker {
@@ -208,6 +1257,7 @@ impl Default for StabilityTracker {
             prev_ph: 7.0,
             prev_gh_d: 7.0,
             prev_do_mg_l: 8.0,
+            last_temp_swing_c: 0.0,
             instability_index: 0.0,
         }
     }
@@ -217,13 +1267,11 @@ impl StabilityTracker {
     /// Re-seed baselines from actual water state so the first stability update
     /// does not register a false chemistry swing.
     pub fn seed_from_water(&mut self, water: &super::WaterState, volume_l: f64) {
-        let vol = volume_l.max(f64::EPSILON);
         self.prev_temp_c = water.temperature_c;
         self.prev_ph = water.ph;
-        let ca_mg_l = water.calcium_mg_total / vol;
-        let mg_mg_l = water.magnesium_mg_total / vol;
-        self.prev_gh_d = ((2.497 * ca_mg_l) + (4.118 * mg_mg_l)) / 17.848;
-        self.prev_do_mg_l = water.dissolved_oxygen_mg_total / vol;
+        self.prev_gh_d = water.gh_d(volume_l);
+        self.prev_do_mg_l = water.do_mg_per_l(volume_l);
+        self.last_temp_swing_c = 0.0;
         self.instability_index = 0.0;
     }
 }
@@ -257,19 +1305,139 @@ impl PlantGuildState {
 impl AnimalState {
     pub fn with_adults(adults_count: u32) -> Self {
         Self {
-            adults_count,
+            adult: StageCohort {
+                count: adults_count,
+                ..StageCohort::default()
+            },
             ..Self::default()
         }
     }
 
-    /// Ensures `berried_females_count <= adults_count` by trimming
+    /// Total shrimp across all stages.
+    pub fn total_count(&self) -> u32 {
+        self.adult.count + self.sub_adult.count + self.juvenile.count
+    }
+
+    /// Feeding demand units used by shrimp grazing and reserve routing.
+    pub fn feeding_units(&self) -> f64 {
+        f64::from(self.adult.count) * ADULT_FEEDING_WEIGHT
+            + f64::from(self.sub_adult.count) * SUB_ADULT_FEEDING_WEIGHT
+            + f64::from(self.juvenile.count) * JUVENILE_FEEDING_WEIGHT
+    }
+
+    /// Total organic reserve across all stages (grams).
+    pub fn total_reserve_g(&self) -> f64 {
+        self.adult.reserve_g + self.sub_adult.reserve_g + self.juvenile.reserve_g
+    }
+
+    /// Population-weighted condition index across all stages.
+    pub fn population_condition_index(&self) -> f64 {
+        let total = self.total_count();
+        if total == 0 {
+            return 0.0;
+        }
+        let weighted = f64::from(self.adult.count) * self.adult.condition_index
+            + f64::from(self.sub_adult.count) * self.sub_adult.condition_index
+            + f64::from(self.juvenile.count) * self.juvenile.condition_index;
+        weighted / f64::from(total)
+    }
+
+    pub fn set_population_condition_index(&mut self, value: f64) {
+        let clamped = value.clamp(0.0, 1.0);
+        self.adult.condition_index = clamped;
+        self.sub_adult.condition_index = clamped;
+        self.juvenile.condition_index = clamped;
+    }
+
+    pub fn total_maturation_accum(&self) -> f64 {
+        self.sub_adult.maturation_accum + self.juvenile.maturation_accum
+    }
+
+    pub fn egg_cohort_count_total(&self) -> u32 {
+        self.egg_cohorts
+            .iter()
+            .fold(0u32, |total, cohort| total.saturating_add(cohort.count))
+    }
+
+    /// Adds retained reserve back into the stage pools using the same weights
+    /// that the legacy feeding model used for daily food demand.
+    pub fn add_reserve_by_feeding_units(&mut self, reserve_g: f64) {
+        if reserve_g <= f64::EPSILON {
+            return;
+        }
+
+        let adult_weight = f64::from(self.adult.count) * ADULT_FEEDING_WEIGHT;
+        let sub_adult_weight = f64::from(self.sub_adult.count) * SUB_ADULT_FEEDING_WEIGHT;
+        let juvenile_weight = f64::from(self.juvenile.count) * JUVENILE_FEEDING_WEIGHT;
+        let total_weight = adult_weight + sub_adult_weight + juvenile_weight;
+
+        if total_weight <= f64::EPSILON {
+            self.adult.reserve_g += reserve_g;
+            return;
+        }
+
+        self.adult.reserve_g += reserve_g * adult_weight / total_weight;
+        self.sub_adult.reserve_g += reserve_g * sub_adult_weight / total_weight;
+        self.juvenile.reserve_g += reserve_g * juvenile_weight / total_weight;
+    }
+
+    pub fn transfer_dead_reserve_g(
+        &mut self,
+        adult_deaths: u32,
+        sub_adult_deaths: u32,
+        juvenile_deaths: u32,
+    ) -> f64 {
+        let adult_fraction = reserve_fraction(self.adult.count, adult_deaths);
+        let sub_adult_fraction = reserve_fraction(self.sub_adult.count, sub_adult_deaths);
+        let juvenile_fraction = reserve_fraction(self.juvenile.count, juvenile_deaths);
+
+        let adult_transfer = self.adult.reserve_g * adult_fraction;
+        let sub_adult_transfer = self.sub_adult.reserve_g * sub_adult_fraction;
+        let juvenile_transfer = self.juvenile.reserve_g * juvenile_fraction;
+
+        self.adult.reserve_g -= adult_transfer;
+        self.sub_adult.reserve_g -= sub_adult_transfer;
+        self.juvenile.reserve_g -= juvenile_transfer;
+
+        adult_transfer + sub_adult_transfer + juvenile_transfer
+    }
+
+    /// Ensures `berried_females_count <= adult.count` by trimming
     /// excess from the newest egg cohorts first.
     pub fn clamp_berried_to_adults(&mut self) {
-        if self.berried_females_count > self.adults_count {
-            let excess = self.berried_females_count - self.adults_count;
-            self.berried_females_count = self.adults_count;
+        if self.berried_females_count > self.adult.count {
+            let excess = self.berried_females_count - self.adult.count;
+            self.berried_females_count = self.adult.count;
             trim_egg_cohorts(&mut self.egg_cohorts, excess);
+            // If all egg cohorts were removed, clear the hatch carry so a
+            // future clutch does not inherit stale fractional progress.
+            if self.egg_cohorts.is_empty() {
+                self.hatch_success_carry = 0.0;
+            }
         }
+    }
+
+    /// Repairs egg cohort bookkeeping for load/migration boundaries so clutch
+    /// cohorts line up with the serialized `berried_females_count`.
+    pub fn repair_egg_cohort_counts_for_load(&mut self) {
+        let cohort_total = self.egg_cohort_count_total();
+        if cohort_total > self.berried_females_count {
+            trim_egg_cohorts(
+                &mut self.egg_cohorts,
+                cohort_total - self.berried_females_count,
+            );
+        } else if cohort_total < self.berried_females_count {
+            let progress_days = self
+                .egg_cohorts
+                .iter()
+                .map(|cohort| cohort.progress_days)
+                .fold(self.egg_progress_days.max(0.0), f64::max);
+            self.egg_cohorts.push(EggCohort {
+                count: self.berried_females_count - cohort_total,
+                progress_days,
+            });
+        }
+        self.sync_egg_progress_from_cohorts();
     }
 
     /// Derives `egg_progress_days` from the most-advanced cohort for display.
@@ -279,6 +1447,14 @@ impl AnimalState {
             .iter()
             .map(|c| c.progress_days)
             .fold(0.0_f64, f64::max);
+    }
+}
+
+fn reserve_fraction(total_count: u32, dead_count: u32) -> f64 {
+    if total_count == 0 {
+        0.0
+    } else {
+        (f64::from(dead_count) / f64::from(total_count)).clamp(0.0, 1.0)
     }
 }
 
@@ -296,6 +1472,11 @@ fn trim_egg_cohorts(cohorts: &mut Vec<EggCohort>, mut to_remove: u32) {
     }
 }
 
+/// Legacy aggregate colonizable-area helper for algae/periphyton code paths.
+///
+/// This intentionally excludes `geometry.hardscape_area_cm2`; downstream
+/// habitatization work in `tanksim-6e5.5.3` should migrate callers to the
+/// habitat registry instead of extending this flattened total.
 pub fn total_colonizable_area_cm2(
     substrate_layers: &[SubstrateLayerState],
     wall_area_cm2: f64,

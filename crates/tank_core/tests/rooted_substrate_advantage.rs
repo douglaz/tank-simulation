@@ -23,7 +23,7 @@ fn rosette_state(seed: SimSeed, substrate_kind: SubstrateKind) -> TankState {
         substrate_uptake_bias: Some(0.9),
     }];
     state.algae.suspended_biomass_g = 0.0;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     state.microfauna.population_index = 0.1;
     state.microfauna.grazing_pressure_index = 0.1;
     state.substrate_layers = vec![match substrate_kind {
@@ -34,9 +34,11 @@ fn rosette_state(seed: SimSeed, substrate_kind: SubstrateKind) -> TankState {
             nutrient_store_mg_p_total: 18.0,
             cation_exchange_capacity_index: 0.9,
             detritus_trapping_index: 0.4,
+            colonizable_area_factor: SubstrateKind::ActivePlanted.default_colonizable_area_factor(),
             colonizable_area_cm2: 600.0,
             low_oxygen_tendency_index: 0.4,
             grazing_surface_index: 0.5,
+            ..SubstrateLayerState::default()
         },
         _ => SubstrateLayerState {
             kind: SubstrateKind::InertSand,
@@ -45,9 +47,11 @@ fn rosette_state(seed: SimSeed, substrate_kind: SubstrateKind) -> TankState {
             nutrient_store_mg_p_total: 0.0,
             cation_exchange_capacity_index: 0.05,
             detritus_trapping_index: 0.2,
+            colonizable_area_factor: SubstrateKind::InertSand.default_colonizable_area_factor(),
             colonizable_area_cm2: 450.0,
             low_oxygen_tendency_index: 0.2,
             grazing_surface_index: 0.3,
+            ..SubstrateLayerState::default()
         },
     }];
     state

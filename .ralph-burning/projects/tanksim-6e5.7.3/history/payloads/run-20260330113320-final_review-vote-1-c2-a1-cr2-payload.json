@@ -1,0 +1,49 @@
+{
+  "payload_id": "run-20260330113320-final_review-vote-1-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T12:52:58.704492009Z",
+  "payload": {
+    "summary": "Accepted 1 amendment. The only material defect is that calibration reporting can mask underlying harness failures; the other amendments are already documented or covered elsewhere, or rely on a stale premise that no longer matches the current code.",
+    "votes": [
+      {
+        "amendment_id": "fr-2-878c6151",
+        "decision": "reject",
+        "rationale": "VS-03 is already documented in both the test and the validation docs as a high-productivity planted-tank scenario rather than a default-parameters check. The amplified rates are explicitly called out as intentional, so the amendment's requested minimum documentation is already present; adding a separate default-rate probe would be extra coverage, not a defect fix."
+      },
+      {
+        "amendment_id": "fr-2-c6b05ec5",
+        "decision": "reject",
+        "rationale": "VS-05 intentionally isolates breeding suppression with mortality disabled, and the scenario docs already cross-reference the dedicated thermal-suppression probe, which asserts warm-arm egg dropping and worse reproductive outcomes after heat shock. The envelope claim is therefore supported by the current scenario test set even though the lightweight VS-05 fixture itself does not assert every sub-behavior."
+      },
+      {
+        "amendment_id": "fr-2-55664bd1",
+        "decision": "reject",
+        "rationale": "Scenario 7 already documents that it uses a deliberately favorable denitrification setup: low-nitrate refill water, a mature pre-seeded denitrifier community, and a deep low-porosity substrate in the planted arm. The control is also converted to true bare-bottom by clearing substrate, so the premise about an undocumented inert-sand control is off; spelling out every numeric override would be nice to have, but not a material correctness or maintainability fix."
+      },
+      {
+        "amendment_id": "fr-2-b4f97863",
+        "decision": "reject",
+        "rationale": "The cadence_frozen branch is an extreme parameter edge case that already has direct unit coverage, while the validation suite is aimed at realistic preset envelopes. The docs are not defective merely because they do not enumerate every unit-tested edge path that is intentionally outside scenario coverage."
+      },
+      {
+        "amendment_id": "fr-2-c1a30bdf",
+        "decision": "reject",
+        "rationale": "The amendment's premise no longer matches the current code. FieldCheck already stores observed and envelope bounds as Option<f64> with non-finite values mapped to None, and the calibration report JSON round-trip tests currently pass, including the machine-readable cases cited here."
+      },
+      {
+        "amendment_id": "fr-2-cfc6f6b8",
+        "decision": "accept",
+        "rationale": "CalibrationRun::finish() derives scenario status only from checkpoint_rows and discards the Result from self.inner.finish(). Because callers can reach the underlying HarnessRun through inner_mut() and record failures via assert_snapshot() or record_failure() without adding a checkpoint row, the report can falsely return pass and omit artifact_path while the harness itself failed. That is a real correctness bug."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

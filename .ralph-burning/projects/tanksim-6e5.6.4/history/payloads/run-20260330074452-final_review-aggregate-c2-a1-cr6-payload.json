@@ -1,0 +1,54 @@
+{
+  "payload_id": "run-20260330074452-final_review-aggregate-c2-a1-cr6-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T12:13:42.378574632Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-6-67e44980"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-6-67e44980",
+        "normalized_body": "In `crates/tank_data/src/presets.rs`, `temp_condition_min_factor` appears in two preset validation loops: the non-negative check (line ~913, `>= 0.0`) and the strictly-positive check (line ~1005, `> 0.0`). The strictly-positive list is designed for divisors and physical quantities where zero would cause division-by-zero; a clamp floor factor semantically can be zero. Remove `temp_condition_min_factor` from the strictly-positive list (line ~1005) to keep only the non-negative + finite check and the runtime `check_unit_interval` invariant. This eliminates an inconsistency where the preset validator rejects `temp_condition_min_factor = 0.0` but the runtime invariant validator (`check_unit_interval`) accepts it.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-6-67e44980",
+        "normalized_body": "In `crates/tank_data/src/presets.rs`, `temp_condition_min_factor` appears in two preset validation loops: the non-negative check (line ~913, `>= 0.0`) and the strictly-positive check (line ~1005, `> 0.0`). The strictly-positive list is designed for divisors and physical quantities where zero would cause division-by-zero; a clamp floor factor semantically can be zero. Remove `temp_condition_min_factor` from the strictly-positive list (line ~1005) to keep only the non-negative + finite check and the runtime `check_unit_interval` invariant. This eliminates an inconsistency where the preset validator rejects `temp_condition_min_factor = 0.0` but the runtime invariant validator (`check_unit_interval`) accepts it.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 6,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [],
+    "restart_required": true,
+    "summary": "Final review accepted 1 amendment(s); restart required.",
+    "total_proposed_amendments": 1,
+    "total_reviewers": 2,
+    "unique_amendment_count": 1
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 6
+}

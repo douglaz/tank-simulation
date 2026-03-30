@@ -13,6 +13,24 @@
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
     in
     {
+      packages = forAllSystems (system:
+        let
+          pkgs = import nixpkgs {
+            inherit system;
+            overlays = [ rust-overlay.overlays.default ];
+          };
+          rust = pkgs.rust-bin.stable.latest.default;
+        in
+        {
+          default = pkgs.rustPlatform.buildRustPackage {
+            pname = "tank-simulation";
+            version = "0.1.0";
+            src = ./.;
+            cargoLock.lockFile = ./Cargo.lock;
+            nativeBuildInputs = [ rust ];
+          };
+        });
+
       devShells = forAllSystems (system:
         let
           pkgs = import nixpkgs {

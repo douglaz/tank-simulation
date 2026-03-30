@@ -1,14 +1,19 @@
 use std::collections::VecDeque;
 
 use crate::{
-    invariants::enforce_invariants,
+    invariants::{enforce_invariants, validate_invariants},
     rng::SimSeed,
     systems,
+    tracing::{PoolSnapshot, SimTracer, SystemTraceEntry, TickTraceBuilder, Verbosity},
     types::{
-        EventCause, EventKind, EventSeverity, PlayerAction, SimError, SimEvent, TankSnapshot,
-        TankState,
+        live_biomass_carbon_mg, live_biomass_nitrogen_mg, BudgetDelta, BudgetEntry, BudgetLedger,
+        BudgetMetric, BudgetMetricUnit, BudgetRecordingKind, BudgetSnapshot, ElementBudget,
+        EventCause, EventKind, EventSeverity, HabitatKind, PlayerAction, SimError, SimEvent,
+        TankSnapshot, TankState, TickBudgetRecord,
     },
 };
+
+const BUDGET_GUARD_TOLERANCE_MG: f64 = 1e-6;
 
 pub trait SimulationEngine {
     fn apply_action(&mut self, action: PlayerAction) -> Result<(), SimError>;
@@ -17,10 +22,193 @@ pub trait SimulationEngine {
     fn full_state(&self) -> &TankState;
 }
 
-#[derive(Debug, Clone, PartialEq)]
 pub struct Engine {
     state: TankState,
     queued_actions: VecDeque<PlayerAction>,
+    budget_ledger: Option<BudgetLedger>,
+    tracer: Option<SimTracer>,
+}
+
+impl std::fmt::Debug for Engine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Engine")
+            .field("state", &self.state)
+            .field("queued_actions", &self.queued_actions)
+            .field("budget_ledger", &self.budget_ledger)
+            .field("tracer", &self.tracer)
+            .finish()
+    }
+}
+
+/// Cloned engines intentionally start with tracing disabled.
+///
+/// `SimTracer` can own non-cloneable external sinks, so clones keep the
+/// simulation state, queued actions, and budget ledger but drop the tracer.
+/// Re-enable tracing on scenario forks that still need diagnostics.
+impl Clone for Engine {
+    fn clone(&self) -> Self {
+        Self {
+            state: self.state.clone(),
+            queued_actions: self.queued_actions.clone(),
+            budget_ledger: self.budget_ledger.clone(),
+            tracer: None,
+        }
+    }
+}
+
+impl PartialEq for Engine {
+    fn eq(&self, other: &Self) -> bool {
+        self.state == other.state
+            && self.queued_actions == other.queued_actions
+            && self.budget_ledger == other.budget_ledger
+    }
+}
+
+/// Per-tick working state for both budget tracking and tracing.
+struct TickContext {
+    budget: Option<TickBudgetRecord>,
+    trace: Option<TickTraceBuilder>,
+}
+
+struct StageTrace {
+    enabled: bool,
+    budget_metrics_enabled: bool,
+    notes: Vec<String>,
+    budget_metrics: Vec<BudgetMetric>,
+}
+
+impl StageTrace {
+    fn new(enabled: bool, budget_metrics_enabled: bool) -> Self {
+        Self {
+            enabled,
+            budget_metrics_enabled,
+            notes: Vec::new(),
+            budget_metrics: Vec::new(),
+        }
+    }
+
+    fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
+    fn note(&mut self, note: impl Into<String>) {
+        if self.enabled {
+            self.notes.push(note.into());
+        }
+    }
+
+    fn metric_with_unit(&mut self, label: impl Into<String>, value: f64, unit: BudgetMetricUnit) {
+        if self.budget_metrics_enabled {
+            self.budget_metrics.push(BudgetMetric {
+                label: label.into(),
+                value,
+                unit,
+            });
+        }
+    }
+
+    fn into_parts(self) -> (Vec<String>, Vec<BudgetMetric>) {
+        let notes = if self.enabled { self.notes } else { Vec::new() };
+        (notes, self.budget_metrics)
+    }
+}
+
+fn emit_tick_snapshot(stage_trace: &mut StageTrace, state: &TankState) {
+    if !stage_trace.is_enabled() {
+        return;
+    }
+
+    let chemistry = state.concentrations();
+    let carbonate_eq = state
+        .water
+        .projected_carbonate_equilibrium(chemistry.volume_l());
+
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.total_count={}",
+        state.animal.total_count()
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.adult.count={}",
+        state.animal.adult.count
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.adult.condition={:.6}",
+        state.animal.adult.condition_index
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.adult.reserve_g={:.6}",
+        state.animal.adult.reserve_g
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.sub_adult.count={}",
+        state.animal.sub_adult.count
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.sub_adult.condition={:.6}",
+        state.animal.sub_adult.condition_index
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.sub_adult.reserve_g={:.6}",
+        state.animal.sub_adult.reserve_g
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.juvenile.count={}",
+        state.animal.juvenile.count
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.juvenile.condition={:.6}",
+        state.animal.juvenile.condition_index
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.juvenile.reserve_g={:.6}",
+        state.animal.juvenile.reserve_g
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.berried_females={}",
+        state.animal.berried_females_count
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.population_condition={:.6}",
+        state.animal.population_condition_index()
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.molt_stress={:.6}",
+        state.animal.molt_stress_index
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.molt_readiness={:.6}",
+        state.animal.molt_readiness
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.failed_molt_accum={:.6}",
+        state.animal.failed_molt_accum
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.last_molt_success={}",
+        state.animal.last_molt_success
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.reproductive_readiness={:.6}",
+        state.animal.reproductive_readiness_index
+    ));
+    stage_trace.note(format!("tick_snapshot.water.gh_d={:.6}", chemistry.gh_d()));
+    stage_trace.note(format!("tick_snapshot.water.ph={:.6}", carbonate_eq.ph));
+    stage_trace.note(format!(
+        "tick_snapshot.water.nitrite_mg_n_per_l={:.6}",
+        chemistry.nitrite_mg_n_per_l()
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.water.chloride_mg_per_l={:.6}",
+        chemistry.chloride_mg_per_l()
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.water.do_mg_l={:.6}",
+        chemistry.do_mg_per_l()
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.water.temperature_c={:.6}",
+        state.water.temperature_c
+    ));
 }
 
 impl Engine {
@@ -28,13 +216,26 @@ impl Engine {
         Self {
             state: TankState::new(seed),
             queued_actions: VecDeque::new(),
+            budget_ledger: None,
+            tracer: None,
         }
     }
 
-    pub fn from_parts(state: TankState, queued_actions: Vec<PlayerAction>) -> Self {
+    pub fn from_parts(mut state: TankState, queued_actions: Vec<PlayerAction>) -> Self {
+        // Only normalize derived substrate zones for states that already pass
+        // read-only invariant validation. Invalid states are preserved as-is
+        // so callers still get the expected pre-simulation validation error
+        // without incidental mutation from engine construction.
+        if validate_invariants(&state).is_ok() {
+            state.refresh_habitat_registry();
+            systems::substrate::step_substrate_zones(&mut state);
+        }
+        state.refresh_habitat_registry();
         Self {
             state,
             queued_actions: queued_actions.into(),
+            budget_ledger: None,
+            tracer: None,
         }
     }
 
@@ -42,10 +243,60 @@ impl Engine {
         self.queued_actions.iter().cloned().collect()
     }
 
+    pub fn enable_budget_tracking(&mut self) {
+        if self.budget_ledger.is_none() {
+            self.budget_ledger = Some(BudgetLedger::default());
+        }
+    }
+
+    pub fn disable_budget_tracking(&mut self) {
+        self.budget_ledger = None;
+    }
+
+    pub fn budget_ledger(&self) -> Option<&BudgetLedger> {
+        self.budget_ledger.as_ref()
+    }
+
+    /// Enable structured tracing with the given tracer configuration.
+    ///
+    /// Engine clones do not inherit this tracer because `SimTracer` may own a
+    /// non-cloneable sink. Re-enable tracing on cloned engines explicitly when
+    /// forked scenarios still need trace output.
+    pub fn enable_tracing(&mut self, tracer: SimTracer) {
+        self.tracer = Some(tracer);
+    }
+
+    /// Disable tracing, returning the tracer with all recorded data.
+    pub fn disable_tracing(&mut self) -> Option<SimTracer> {
+        self.tracer.take()
+    }
+
+    /// Access the active tracer (if any).
+    pub fn tracer(&self) -> Option<&SimTracer> {
+        self.tracer.as_ref()
+    }
+
+    /// Mutably access the active tracer (if any).
+    pub fn tracer_mut(&mut self) -> Option<&mut SimTracer> {
+        self.tracer.as_mut()
+    }
+
     fn step_one_hour(&mut self) -> Result<(), SimError> {
+        let mut ctx = TickContext {
+            budget: self
+                .budget_ledger
+                .as_ref()
+                .map(|ledger| TickBudgetRecord::start(&self.state, ledger.ticks.len())),
+            trace: self
+                .tracer
+                .as_ref()
+                .filter(|tracer| tracer.verbosity() > Verbosity::Off)
+                .map(|tracer| tracer.begin_tick(&self.state)),
+        };
+
         let actions_slice: Vec<_> = self.queued_actions.iter().cloned().collect();
         // Validate all queued actions (covers from_parts callers that bypass apply_action).
-        let mut available_shrimp = self.state.animal.adults_count as i64;
+        let mut available_shrimp = self.state.animal.adult.count as i64;
         for action in &actions_slice {
             action.validate()?;
             // State-aware check: RemoveShrimp must not exceed available adults.
@@ -68,11 +319,18 @@ impl Engine {
         systems::water_change::validate_water_changes(&self.state, &actions_slice)?;
 
         while let Some(action) = self.queued_actions.pop_front() {
-            self.process_action(action);
+            let label = action_budget_label(&action);
+            self.maybe_record_stage_with_explicit_budget(
+                &mut ctx,
+                label,
+                move |engine, _stage_trace, tracking| ((), engine.process_action(action, tracking)),
+            );
         }
 
         // Step 4: update water temperature from ambient and heater
-        systems::temperature::step_temperature(&mut self.state);
+        self.maybe_record_stage(&mut ctx, "system:temperature", |engine, _stage_trace| {
+            systems::temperature::step_temperature(&mut engine.state);
+        });
 
         // Step 5: compute light state for the current hour.
         let light_on = self.state.hardware.light.enabled
@@ -86,74 +344,543 @@ impl Engine {
         // This runs between light-state resolution and chemistry/DO/event phases.
         // Nitrification O2 consumption and alkalinity depletion are handled
         // internally by the nitrogen cycle system.
-        let _nc_output = systems::nitrogen_cycle::step_nitrogen_cycle(&mut self.state);
+        self.maybe_record_stage(&mut ctx, "system:nitrogen_cycle", |engine, stage_trace| {
+            let alkalinity_before = engine.state.water.alkalinity_meq_total;
+            let output = systems::nitrogen_cycle::step_nitrogen_cycle(&mut engine.state);
+            let alkalinity_after = engine.state.water.alkalinity_meq_total;
+            stage_trace.metric_with_unit(
+                "water.alkalinity_meq.delta",
+                alkalinity_after - alkalinity_before,
+                BudgetMetricUnit::MilliEquivalents,
+            );
+            stage_trace.metric_with_unit(
+                "nitrogen_cycle.tan_oxidized_mg",
+                output.tan_oxidized_mg,
+                BudgetMetricUnit::Milligrams,
+            );
+            stage_trace.metric_with_unit(
+                "nitrogen_cycle.nitrate_produced_mg_n",
+                output.nitrate_produced_mg_n,
+                BudgetMetricUnit::Milligrams,
+            );
+            stage_trace.metric_with_unit(
+                "nitrogen_cycle.alkalinity_consumed_meq",
+                output.alkalinity_consumed_meq,
+                BudgetMetricUnit::MilliEquivalents,
+            );
+            stage_trace.metric_with_unit(
+                "nitrogen_cycle.alkalinity_produced_meq",
+                output.alkalinity_produced_meq,
+                BudgetMetricUnit::MilliEquivalents,
+            );
+            if stage_trace.is_enabled() {
+                stage_trace.note(format!(
+                    "nitrogen_cycle.tan_oxidized_mg={:.6}",
+                    output.tan_oxidized_mg
+                ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.nitrate_produced_mg_n={:.6}",
+                    output.nitrate_produced_mg_n
+                ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.alkalinity_consumed_meq={:.6}",
+                    output.alkalinity_consumed_meq
+                ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.alkalinity_produced_meq={:.6}",
+                    output.alkalinity_produced_meq
+                ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.alkalinity_net_delta_meq={:.6}",
+                    output.net_alkalinity_delta_meq()
+                ));
+                stage_trace.note(format!(
+                    "water.alkalinity_meq.before={alkalinity_before:.6}"
+                ));
+                stage_trace.note(format!("water.alkalinity_meq.after={alkalinity_after:.6}"));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.aob_n_oxidized_mg={:.6}",
+                    output.aob_n_oxidized_mg
+                ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.nob_n_oxidized_mg={:.6}",
+                    output.nob_n_oxidized_mg
+                ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.comammox_n_oxidized_mg={:.6}",
+                    output.comammox_n_oxidized_mg
+                ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.denitrification_n2_export_mg_n={:.6}",
+                    output.denitrification_n2_export_mg_n
+                ));
+                stage_trace.note(format!(
+                    "nitrogen_cycle.denitrification_doc_consumed_mg_c={:.6}",
+                    output.denitrification_doc_consumed_mg_c
+                ));
+            }
+            stage_trace.metric_with_unit(
+                "nitrogen_cycle.denitrification_n2_export_mg_n",
+                output.denitrification_n2_export_mg_n,
+                BudgetMetricUnit::Milligrams,
+            );
+            stage_trace.metric_with_unit(
+                "nitrogen_cycle.denitrification_doc_consumed_mg_c",
+                output.denitrification_doc_consumed_mg_c,
+                BudgetMetricUnit::Milligrams,
+            );
+        });
 
         // Step 9: update DIC, alkalinity, and pH.
-        systems::chemistry::step_hourly_chemistry(&mut self.state, light_on);
+        self.maybe_record_stage_with_explicit_budget(
+            &mut ctx,
+            "system:chemistry",
+            move |engine, stage_trace, tracking| {
+                let ph_before = engine.state.water.ph;
+                let dic_before = engine.state.water.dissolved_inorganic_carbon_mg_c_total;
+                let alkalinity_before = engine.state.water.alkalinity_meq_total;
+                let delta = if tracking {
+                    Some(systems::chemistry::step_hourly_chemistry_with_budget(
+                        &mut engine.state,
+                        light_on,
+                    ))
+                } else {
+                    systems::chemistry::step_hourly_chemistry(&mut engine.state, light_on);
+                    None
+                };
+                if stage_trace.is_enabled() {
+                    stage_trace.note(format!("chemistry.light_on={light_on}"));
+                    stage_trace.note(format!("chemistry.ph.before={ph_before:.6}"));
+                    stage_trace.note(format!("chemistry.ph.after={:.6}", engine.state.water.ph));
+                    stage_trace.note(format!("chemistry.dic_mg_c.before={dic_before:.6}"));
+                    stage_trace.note(format!(
+                        "chemistry.dic_mg_c.after={:.6}",
+                        engine.state.water.dissolved_inorganic_carbon_mg_c_total
+                    ));
+                    stage_trace.note(format!(
+                        "chemistry.alkalinity_meq.before={alkalinity_before:.6}"
+                    ));
+                    stage_trace.note(format!(
+                        "chemistry.alkalinity_meq.after={:.6}",
+                        engine.state.water.alkalinity_meq_total
+                    ));
+                }
+                ((), delta)
+            },
+        );
 
         // Step 10 / 11-partial: update dissolved oxygen with background respiration and
         // light-driven photosynthetic support from existing biomass.
-        systems::dissolved_oxygen::step_dissolved_oxygen(&mut self.state, light_on);
+        self.maybe_record_stage_with_explicit_budget(
+            &mut ctx,
+            "system:dissolved_oxygen",
+            move |engine, stage_trace, tracking| {
+                let oxygen_before = engine.state.water.dissolved_oxygen_mg_total;
+                let oxygen_kla = stage_trace
+                    .is_enabled()
+                    .then(|| systems::dissolved_oxygen::compute_o2_kla(&engine.state));
+                let delta = if tracking {
+                    Some(
+                        systems::dissolved_oxygen::step_dissolved_oxygen_with_budget(
+                            &mut engine.state,
+                            light_on,
+                        ),
+                    )
+                } else {
+                    systems::dissolved_oxygen::step_dissolved_oxygen(&mut engine.state, light_on);
+                    None
+                };
+                if let Some(oxygen_kla) = oxygen_kla {
+                    stage_trace.note(format!("dissolved_oxygen.light_on={light_on}"));
+                    stage_trace.note(format!("dissolved_oxygen.kla={oxygen_kla:.6}"));
+                    stage_trace.note(format!("dissolved_oxygen.do_mg.before={oxygen_before:.6}"));
+                    stage_trace.note(format!(
+                        "dissolved_oxygen.do_mg.after={:.6}",
+                        engine.state.water.dissolved_oxygen_mg_total
+                    ));
+                }
+                ((), delta)
+            },
+        );
+
+        // Step 11b: recompute substrate O₂ penetration depths from water-column
+        // DO and biological demand (Bouldin steady-state model).
+        self.maybe_record_stage(&mut ctx, "system:substrate_zones", |engine, stage_trace| {
+            let breakdown = systems::substrate::step_substrate_zones(&mut engine.state);
+            stage_trace.metric_with_unit(
+                "substrate.base_o2_penetration_depth_cm",
+                breakdown.base_penetration_cm,
+                BudgetMetricUnit::Centimeters,
+            );
+            stage_trace.metric_with_unit(
+                "substrate.root_oxygenation_active_biomass_g",
+                breakdown.active_root_biomass_g,
+                BudgetMetricUnit::Grams,
+            );
+            stage_trace.metric_with_unit(
+                "substrate.root_oxygenation_bonus_cm",
+                breakdown.root_oxygenation_bonus_cm,
+                BudgetMetricUnit::Centimeters,
+            );
+            stage_trace.metric_with_unit(
+                "substrate.o2_penetration_depth_cm",
+                breakdown.effective_penetration_cm,
+                BudgetMetricUnit::Centimeters,
+            );
+            stage_trace.note(format!(
+                "substrate.base_o2_penetration_depth_cm={:.6}",
+                breakdown.base_penetration_cm
+            ));
+            stage_trace.note(format!(
+                "substrate.root_oxygenation_active_biomass_g={:.6}",
+                breakdown.active_root_biomass_g
+            ));
+            stage_trace.note(format!(
+                "substrate.root_oxygenation_bonus_cm={:.6}",
+                breakdown.root_oxygenation_bonus_cm
+            ));
+            stage_trace.note(format!(
+                "substrate.o2_penetration_depth_cm={:.6}",
+                breakdown.effective_penetration_cm
+            ));
+        });
 
         // Step 12: hourly shrimp stress accumulation.
-        systems::shrimp::step_hourly_shrimp_stress(&mut self.state);
+        self.maybe_record_stage(&mut ctx, "system:shrimp_stress", |engine, stage_trace| {
+            let nitrite_stress_before = engine.state.animal.hourly_nitrite_stress_accum;
+            let nitrite_diagnostics = stage_trace.is_enabled().then(|| {
+                let chemistry = engine.state.concentrations();
+                systems::shrimp::compute_nitrite_stress_diagnostics(
+                    chemistry.nitrite_mg_n_per_l(),
+                    chemistry.chloride_mg_per_l(),
+                    engine.state.shrimp_params.chloride_protection_factor,
+                )
+            });
+            systems::shrimp::step_hourly_shrimp_stress(&mut engine.state);
+            if let Some(nitrite_diagnostics) = nitrite_diagnostics {
+                stage_trace.note(format!(
+                    "shrimp_stress.nitrite_mg_n_per_l={:.6}",
+                    nitrite_diagnostics.nitrite_mg_l
+                ));
+                stage_trace.note(format!(
+                    "shrimp_stress.chloride_mg_per_l={:.6}",
+                    nitrite_diagnostics.chloride_mg_l
+                ));
+                stage_trace.note(format!(
+                    "shrimp_stress.effective_nitrite_hazard_mg_n_per_l={:.6}",
+                    nitrite_diagnostics.effective_hazard_mg_l
+                ));
+                stage_trace.note(format!(
+                    "shrimp_stress.nitrite_stress_increment={:.6}",
+                    nitrite_diagnostics.hourly_stress_increment
+                ));
+                stage_trace.note(format!(
+                    "shrimp_stress.nitrite_stress_accum.before={nitrite_stress_before:.6}"
+                ));
+                stage_trace.note(format!(
+                    "shrimp_stress.nitrite_stress_accum.after={:.6}",
+                    engine.state.animal.hourly_nitrite_stress_accum
+                ));
+            }
+        });
 
         // Step 13: emit threshold-based chemistry warnings.
-        systems::events::emit_hourly_threshold_events(&mut self.state);
+        self.maybe_record_stage(&mut ctx, "system:hourly_events", |engine, _stage_trace| {
+            systems::events::emit_hourly_threshold_events(&mut engine.state);
+        });
 
         self.state.environment.hour_of_day = (self.state.environment.hour_of_day + 1) % 24;
         if self.state.environment.hour_of_day == 0 {
             self.state.environment.day += 1;
             // Daily pipeline
-            self.run_daily_update();
+            self.run_daily_update(&mut ctx);
         }
 
-        enforce_invariants(&mut self.state)
+        // Refresh habitat registry so light_exposure stays current with
+        // any DOC/detritus/algae changes from the hourly pipeline.
+        // (The daily update already refreshes twice; this covers non-daily hours.)
+        if self.state.environment.hour_of_day != 0 {
+            self.state.refresh_habitat_registry();
+        }
+
+        self.maybe_record_stage(&mut ctx, "system:invariants", |engine, _stage_trace| {
+            enforce_invariants(&mut engine.state)
+        })?;
+        self.maybe_record_stage(&mut ctx, "system:tick_snapshot", |engine, stage_trace| {
+            emit_tick_snapshot(stage_trace, &engine.state);
+        });
+
+        if let Some(tick_record) = ctx.budget.as_ref() {
+            enforce_tracked_tick_budget_guard(tick_record)?;
+        }
+
+        if let (Some(ledger), Some(tick)) = (self.budget_ledger.as_mut(), ctx.budget) {
+            ledger.push_tick(tick);
+        }
+
+        if let (Some(tracer), Some(builder)) = (self.tracer.as_mut(), ctx.trace) {
+            tracer.finish_tick(builder);
+        }
+
+        Ok(())
     }
 
-    fn run_daily_update(&mut self) {
+    fn run_daily_update(&mut self, ctx: &mut TickContext) {
         // Daily pipeline: plants → algae → microfauna → stability → shrimp → biofilter
-        systems::plant_growth::step_daily_plants(&mut self.state);
-        systems::algae_growth::step_daily_algae(&mut self.state);
-        systems::microfauna::step_daily_microfauna(&mut self.state);
+        self.maybe_record_stage(ctx, "system:daily_plants", |engine, _stage_trace| {
+            systems::plant_growth::step_daily_plants(&mut engine.state);
+        });
+        self.maybe_record_stage(ctx, "system:daily_algae", |engine, _stage_trace| {
+            systems::algae_growth::step_daily_algae(&mut engine.state);
+        });
+        self.maybe_record_stage(ctx, "system:daily_microfauna", |engine, _stage_trace| {
+            systems::microfauna::step_daily_microfauna(&mut engine.state);
+        });
+
+        // Microfauna consumer routing modifies DIC (respiration) without
+        // re-solving carbonate equilibrium. Resolve here so that the
+        // stability tracker and downstream daily systems read current pH.
+        self.maybe_record_stage(
+            ctx,
+            "system:daily_carbonate_resolve",
+            |engine, _stage_trace| {
+                let volume_l = engine.state.water_volume_l();
+                systems::chemistry::resolve_carbonate_state(&mut engine.state.water, volume_l);
+            },
+        );
+
+        // Refresh plant-driven habitat surfaces before downstream daily systems
+        // read the serialized registry.
+        self.maybe_record_stage(ctx, "system:habitat_registry", |engine, _stage_trace| {
+            engine.state.refresh_habitat_registry();
+        });
 
         // Update stability metrics before shrimp so that same-day chemistry
         // swings (water changes, temperature shifts) are reflected in the
         // instability_index that shrimp condition/mortality reads.
-        systems::shrimp::update_stability_tracker(&mut self.state);
+        self.maybe_record_stage(ctx, "system:stability_tracker", |engine, _stage_trace| {
+            systems::shrimp::update_stability_tracker(&mut engine.state);
+        });
 
-        systems::shrimp::step_daily_shrimp(&mut self.state);
-        systems::nitrogen_cycle::update_daily_filter_clogging(&mut self.state);
+        self.maybe_record_stage(ctx, "system:daily_shrimp", |engine, _stage_trace| {
+            systems::shrimp::step_daily_shrimp(&mut engine.state);
+        });
+        self.maybe_record_stage(
+            ctx,
+            "system:daily_filter_clogging",
+            |engine, _stage_trace| {
+                systems::nitrogen_cycle::update_daily_filter_clogging(&mut engine.state);
+            },
+        );
+        self.maybe_record_stage(
+            ctx,
+            "system:habitat_registry_finalize",
+            |engine, _stage_trace| {
+                // This second refresh is intentional: daily filter-clogging can
+                // change `filter_state.clogging_index`, and FilterMedia oxygen
+                // exposure reads that value directly from the serialized
+                // habitat registry.
+                engine.state.refresh_habitat_registry();
+            },
+        );
 
         // Biofilter maturity summary update
-        let maturity_delta =
-            systems::nitrogen_cycle::update_daily_biofilter_maturity(&mut self.state);
-        if maturity_delta > 0.005 {
-            self.push_event(
-                EventSeverity::Info,
-                EventKind::BiofilmMaturityIncrease,
-                vec![EventCause::BiofilterImmature],
-                format!(
-                    "Biofilter maturity increased to {:.3}",
-                    self.state.filter_state.biofilter_maturity_index
-                ),
-            );
-        }
-        // Emit CycleProgressing when maturity is actively growing
-        let current_maturity = self.state.filter_state.biofilter_maturity_index;
-        if maturity_delta > 0.001 && current_maturity < 0.9 {
-            systems::events::emit_once_per_day_pub(
-                &mut self.state,
-                EventSeverity::Info,
-                EventKind::CycleProgressing,
-                vec![EventCause::BiofilterImmature],
-                format!("Nitrogen cycle progressing, maturity {current_maturity:.3}"),
-            );
-        }
+        self.maybe_record_stage(ctx, "system:daily_biofilter_maturity", |engine, stage_trace| {
+                let maturity_before = engine.state.filter_state.biofilter_maturity_index;
+                let total_nitrifier_g = engine.state.microbe.ammonia_oxidizer_biomass_g
+                    + engine.state.microbe.nitrite_oxidizer_biomass_g
+                    + engine.state.microbe.comammox_biomass_g;
+                let maturity_delta =
+                    systems::nitrogen_cycle::update_daily_biofilter_maturity(&mut engine.state);
+                let biofilm_maturity_increase_emitted = maturity_delta > 0.005;
+                if biofilm_maturity_increase_emitted {
+                    engine.push_event(
+                        EventSeverity::Info,
+                        EventKind::BiofilmMaturityIncrease,
+                        vec![EventCause::BiofilterImmature],
+                        format!(
+                            "Biofilter maturity increased to {:.3}",
+                            engine.state.filter_state.biofilter_maturity_index
+                        ),
+                    );
+                }
+                let current_maturity = engine.state.filter_state.biofilter_maturity_index;
+                let cycle_progressing_emitted =
+                    maturity_delta > 0.001 && current_maturity < 0.9;
+                if cycle_progressing_emitted {
+                    systems::events::emit_once_per_day_pub(
+                        &mut engine.state,
+                        EventSeverity::Info,
+                        EventKind::CycleProgressing,
+                        vec![EventCause::BiofilterImmature],
+                        format!("Nitrogen cycle progressing, maturity {current_maturity:.3}"),
+                    );
+                }
+                // Update denitrifier community activity alongside biofilter maturity.
+                systems::nitrogen_cycle::update_daily_denitrifier_activity(&mut engine.state);
+
+                if stage_trace.is_enabled() {
+                    stage_trace.note(format!("biofilter_maturity.before={maturity_before:.6}"));
+                    stage_trace
+                        .note(format!("biofilter_maturity.total_nitrifier_g={total_nitrifier_g:.6}"));
+                    stage_trace.note(format!("biofilter_maturity.delta={maturity_delta:.6}"));
+                    stage_trace.note(format!("biofilter_maturity.after={current_maturity:.6}"));
+                    stage_trace.note(format!(
+                        "biofilter_maturity.emitted.biofilm_maturity_increase={biofilm_maturity_increase_emitted}"
+                    ));
+                    stage_trace.note(format!(
+                        "biofilter_maturity.emitted.cycle_progressing={cycle_progressing_emitted}"
+                    ));
+                    stage_trace.note(format!(
+                        "denitrifier_activity.index={:.6}",
+                        engine.state.microbe.denitrifier_activity_index
+                    ));
+                }
+                maturity_delta
+            });
     }
 
-    fn process_action(&mut self, action: PlayerAction) {
-        match action {
+    fn maybe_record_stage<F, R>(
+        &mut self,
+        ctx: &mut TickContext,
+        label: &'static str,
+        stage: F,
+    ) -> R
+    where
+        F: FnOnce(&mut Self, &mut StageTrace) -> R,
+    {
+        let budget_before = ctx
+            .budget
+            .as_ref()
+            .map(|_| BudgetSnapshot::from_state(&self.state));
+        let trace_before = ctx
+            .trace
+            .as_ref()
+            .filter(|t| t.verbosity >= Verbosity::Detail)
+            .map(|_| PoolSnapshot::capture(&self.state));
+        let event_count_before = ctx.trace.as_ref().map(|_| self.state.event_log.len());
+        let mut stage_trace = StageTrace::new(
+            matches!(
+                ctx.trace.as_ref(),
+                Some(trace) if trace.verbosity >= Verbosity::Trace
+            ),
+            ctx.budget.is_some(),
+        );
+
+        let result = stage(self, &mut stage_trace);
+        let (notes, budget_metrics) = stage_trace.into_parts();
+
+        if let (Some(tick), Some(before)) = (ctx.budget.as_mut(), budget_before) {
+            let after = BudgetSnapshot::from_state(&self.state);
+            let delta = BudgetDelta::from_snapshots(&before, &after);
+            tick.record_stage(
+                label,
+                before.totals,
+                after.totals,
+                delta,
+                BudgetRecordingKind::Snapshot,
+                budget_metrics,
+            );
+        }
+
+        if let Some(trace) = ctx.trace.as_mut() {
+            let pool_deltas = if let Some(before) = trace_before {
+                let after = PoolSnapshot::capture(&self.state);
+                before.deltas_to(&after)
+            } else {
+                Vec::new()
+            };
+            let events_generated = event_count_before
+                .map(|before| self.state.event_log.len().saturating_sub(before))
+                .unwrap_or(0);
+            trace.entries.push(SystemTraceEntry {
+                system: label.to_owned(),
+                pool_deltas,
+                notes,
+                events_generated,
+            });
+        }
+
+        result
+    }
+
+    fn maybe_record_stage_with_explicit_budget<F, R>(
+        &mut self,
+        ctx: &mut TickContext,
+        label: &'static str,
+        stage: F,
+    ) -> R
+    where
+        F: FnOnce(&mut Self, &mut StageTrace, bool) -> (R, Option<BudgetDelta>),
+    {
+        let budget_before = ctx
+            .budget
+            .as_ref()
+            .map(|_| BudgetSnapshot::from_state(&self.state));
+        let trace_before = ctx
+            .trace
+            .as_ref()
+            .filter(|t| t.verbosity >= Verbosity::Detail)
+            .map(|_| PoolSnapshot::capture(&self.state));
+        let event_count_before = ctx.trace.as_ref().map(|_| self.state.event_log.len());
+        let mut stage_trace = StageTrace::new(
+            matches!(
+                ctx.trace.as_ref(),
+                Some(trace) if trace.verbosity >= Verbosity::Trace
+            ),
+            ctx.budget.is_some(),
+        );
+
+        let (result, explicit_delta) = stage(self, &mut stage_trace, ctx.budget.is_some());
+        let (notes, budget_metrics) = stage_trace.into_parts();
+
+        if let (Some(tick), Some(before)) = (ctx.budget.as_mut(), budget_before) {
+            let after = BudgetSnapshot::from_state(&self.state);
+            let recording_kind = if explicit_delta.is_some() {
+                BudgetRecordingKind::Explicit
+            } else {
+                BudgetRecordingKind::Snapshot
+            };
+            let delta =
+                explicit_delta.unwrap_or_else(|| BudgetDelta::from_snapshots(&before, &after));
+            tick.record_stage(
+                label,
+                before.totals,
+                after.totals,
+                delta,
+                recording_kind,
+                budget_metrics,
+            );
+        }
+
+        if let Some(trace) = ctx.trace.as_mut() {
+            let pool_deltas = if let Some(before) = trace_before {
+                let after = PoolSnapshot::capture(&self.state);
+                before.deltas_to(&after)
+            } else {
+                Vec::new()
+            };
+            let events_generated = event_count_before
+                .map(|before| self.state.event_log.len().saturating_sub(before))
+                .unwrap_or(0);
+            trace.entries.push(SystemTraceEntry {
+                system: label.to_owned(),
+                pool_deltas,
+                notes,
+                events_generated,
+            });
+        }
+
+        result
+    }
+
+    fn process_action(
+        &mut self,
+        action: PlayerAction,
+        tracking_budget: bool,
+    ) -> Option<BudgetDelta> {
+        let refresh_habitat_registry = action.affects_habitat_registry();
+        let delta = match action {
             PlayerAction::Feed { grams } => {
                 self.state.detritus.particulate_organics_g_total += grams;
                 self.push_event(
@@ -162,13 +889,14 @@ impl Engine {
                     vec![EventCause::Overfeeding],
                     format!("Queued feed processed: {grams:.2} g"),
                 );
+                None
             }
             PlayerAction::WaterChangePercent {
                 percent,
                 source_profile_id,
             } => {
                 if percent <= 0.0 {
-                    return;
+                    return None;
                 }
                 // Profile was pre-validated; look it up (guaranteed to exist).
                 let profile = self
@@ -177,27 +905,78 @@ impl Engine {
                     .get(&source_profile_id)
                     .cloned();
                 if let Some(profile) = profile {
-                    systems::water_change::apply_water_change(&mut self.state, percent, &profile);
+                    let delta = if tracking_budget {
+                        Some(systems::water_change::apply_water_change_with_budget(
+                            &mut self.state,
+                            percent,
+                            &profile,
+                        ))
+                    } else {
+                        systems::water_change::apply_water_change(
+                            &mut self.state,
+                            percent,
+                            &profile,
+                        );
+                        None
+                    };
                     self.push_event(
                         EventSeverity::Info,
                         EventKind::StabilityImproving,
                         vec![EventCause::WaterChange],
                         format!("Water change processed: {percent:.1}% with {source_profile_id}"),
                     );
+                    delta
+                } else {
+                    None
                 }
             }
-            PlayerAction::TrimPlants { fraction } => {
+            PlayerAction::TrimPlantsAndRemove { fraction } => {
                 let mut trimmed_biomass_g = 0.0;
                 for plant in &mut self.state.plant_guilds {
                     let trimmed = plant.biomass_g * fraction;
                     plant.biomass_g -= trimmed;
                     trimmed_biomass_g += trimmed;
                 }
-                self.state.detritus.fine_detritus_g_total += trimmed_biomass_g;
+                self.push_event(
+                    EventSeverity::Info,
+                    EventKind::CycleProgressing,
+                    vec![EventCause::PlantTrimming],
+                    format!(
+                        "Plants trimmed ({fraction:.0}%), clippings removed from tank ({trimmed_biomass_g:.3} g exported)",
+                        fraction = fraction * 100.0,
+                    ),
+                );
+                // Biomass exits the system — snapshot delta captures the loss;
+                // the budget guard recognises this label as open-system.
+                None
+            }
+            PlayerAction::TrimPlantsAndLeaveCuttings { fraction } => {
+                let mut trimmed_biomass_g = 0.0;
+                for plant in &mut self.state.plant_guilds {
+                    let trimmed = plant.biomass_g * fraction;
+                    plant.biomass_g -= trimmed;
+                    trimmed_biomass_g += trimmed;
+                }
+                self.state.detritus.fine_detritus_g_total +=
+                    systems::plant_growth::plant_detrital_mass_g(
+                        trimmed_biomass_g,
+                        self.state.process_params.feed_n_to_c_ratio,
+                    );
+                self.push_event(
+                    EventSeverity::Info,
+                    EventKind::CycleProgressing,
+                    vec![EventCause::PlantTrimming],
+                    format!(
+                        "Plants trimmed ({fraction:.0}%), cuttings left in tank ({trimmed_biomass_g:.3} g to detritus)",
+                        fraction = fraction * 100.0,
+                    ),
+                );
+                None
             }
             PlayerAction::SiphonDetritus { fraction } => {
                 self.state.detritus.particulate_organics_g_total *= 1.0 - fraction;
                 self.state.detritus.fine_detritus_g_total *= 1.0 - fraction;
+                None
             }
             PlayerAction::CleanFilter { intensity } => {
                 let current_cleanliness =
@@ -207,46 +986,87 @@ impl Engine {
                     .clamp(0.0, 1.0);
                 self.state.filter_state.biofilter_maturity_index *= 1.0 - (intensity * 0.5);
                 self.state.filter_state.clogging_index *= 1.0 - intensity;
-                // Proportional setback in active nitrifier and decomposer biomass
+                // Proportional setback in active nitrifier biomass. Decomposer
+                // setback is concentrated on filter media and only lightly
+                // spills over to exposed nearby habitats.
                 let setback = intensity * 0.5;
-                self.state.microbe.decomposer_biomass_g *= 1.0 - setback;
-                self.state.microbe.ammonia_oxidizer_biomass_g *= 1.0 - setback;
-                self.state.microbe.nitrite_oxidizer_biomass_g *= 1.0 - setback;
-                self.state.microbe.comammox_biomass_g *= 1.0 - setback;
+                let mut removed_decomposer = 0.0;
+                let removed_aob = self.state.microbe.ammonia_oxidizer_biomass_g * setback;
+                let removed_nob = self.state.microbe.nitrite_oxidizer_biomass_g * setback;
+                let removed_comammox = self.state.microbe.comammox_biomass_g * setback;
+                for (kind, biomass) in &mut self.state.microbe.decomposer_by_habitat {
+                    let habitat_setback =
+                        setback * filter_cleaning_decomposer_setback_factor(*kind);
+                    let before = *biomass;
+                    *biomass = (*biomass * (1.0 - habitat_setback)).max(0.0);
+                    removed_decomposer += (before - *biomass).max(0.0);
+                }
+                self.state.microbe.sync_decomposer_total();
+                self.state.microbe.ammonia_oxidizer_biomass_g -= removed_aob;
+                self.state.microbe.nitrite_oxidizer_biomass_g -= removed_nob;
+                self.state.microbe.comammox_biomass_g -= removed_comammox;
+                route_live_biomass_to_dissolved_organics(
+                    &mut self.state,
+                    removed_decomposer + removed_aob + removed_nob + removed_comammox,
+                );
                 self.push_event(
                     EventSeverity::Warning,
                     EventKind::FilterCleaningSetback,
                     vec![EventCause::FilterMaintenance],
                     format!("Filter cleaned at intensity {intensity:.2}"),
                 );
+                None
             }
             PlayerAction::AddShrimp { count } => {
-                self.state.animal.adults_count =
-                    self.state.animal.adults_count.saturating_add(count);
+                self.state.animal.adult.receive_entrants(
+                    count,
+                    0.0,
+                    crate::types::biology::DEFAULT_STAGE_CONDITION_INDEX,
+                );
+                self.state.animal.inter_molt_timer_days = self.state.animal.adult.molt_timer_days;
+                None
             }
             PlayerAction::RemoveShrimp { count } => {
-                self.state.animal.adults_count =
-                    self.state.animal.adults_count.saturating_sub(count);
-                // Preserve berried_females_count <= adults_count (also trims egg cohorts)
+                // Export proportional share of adult reserve with removed shrimp.
+                let adults_before_removal = self.state.animal.adult.count;
+                if adults_before_removal > 0 && self.state.animal.adult.reserve_g > f64::EPSILON {
+                    let removed_frac = f64::from(count.min(adults_before_removal))
+                        / f64::from(adults_before_removal);
+                    self.state.animal.adult.reserve_g -=
+                        self.state.animal.adult.reserve_g * removed_frac;
+                }
+                self.state.animal.adult.count = self.state.animal.adult.count.saturating_sub(count);
+                // Preserve berried_females_count <= adult.count (also trims egg cohorts)
                 self.state.animal.clamp_berried_to_adults();
+                None
             }
             PlayerAction::ChangePhotoperiod { hours } => {
                 self.state.hardware.light.photoperiod_hours = hours;
+                None
             }
             PlayerAction::ChangeLightIntensity { intensity_index } => {
                 self.state.hardware.light.intensity_index = intensity_index;
+                None
             }
             PlayerAction::ChangeHeaterSetpoint { setpoint_c } => {
                 self.state.hardware.heater.setpoint_c = setpoint_c;
+                None
             }
             PlayerAction::ChangeAmbientTemperature { target_c } => {
                 self.state.environment.ambient_temp_c = target_c;
+                None
             }
             PlayerAction::ChangeAeration { enabled, intensity } => {
                 self.state.hardware.aeration.enabled = enabled;
                 self.state.hardware.aeration.intensity = intensity;
+                None
             }
+        };
+
+        if refresh_habitat_registry {
+            self.state.refresh_habitat_registry();
         }
+        delta
     }
 
     fn push_event(
@@ -273,7 +1093,7 @@ impl SimulationEngine for Engine {
 
         // State-aware validation for RemoveShrimp
         if let PlayerAction::RemoveShrimp { count } = &action {
-            let mut available = self.state.animal.adults_count as i64;
+            let mut available = self.state.animal.adult.count as i64;
             for queued in &self.queued_actions {
                 match queued {
                     PlayerAction::RemoveShrimp { count: c } => available -= *c as i64,
@@ -301,6 +1121,7 @@ impl SimulationEngine for Engine {
     }
 
     fn step_hours(&mut self, hours: u32) -> Result<(), SimError> {
+        enforce_invariants(&mut self.state)?;
         for _ in 0..hours {
             self.step_one_hour()?;
         }
@@ -313,5 +1134,459 @@ impl SimulationEngine for Engine {
 
     fn full_state(&self) -> &TankState {
         &self.state
+    }
+}
+
+fn action_budget_label(action: &PlayerAction) -> &'static str {
+    match action {
+        PlayerAction::Feed { .. } => "action:feed",
+        PlayerAction::WaterChangePercent { .. } => "action:water_change",
+        PlayerAction::TrimPlantsAndRemove { .. } => "action:trim_plants_and_remove",
+        PlayerAction::TrimPlantsAndLeaveCuttings { .. } => "action:trim_plants_and_leave_cuttings",
+        PlayerAction::SiphonDetritus { .. } => "action:siphon_detritus",
+        PlayerAction::CleanFilter { .. } => "action:clean_filter",
+        PlayerAction::AddShrimp { .. } => "action:add_shrimp",
+        PlayerAction::RemoveShrimp { .. } => "action:remove_shrimp",
+        PlayerAction::ChangePhotoperiod { .. } => "action:change_photoperiod",
+        PlayerAction::ChangeLightIntensity { .. } => "action:change_light_intensity",
+        PlayerAction::ChangeHeaterSetpoint { .. } => "action:change_heater_setpoint",
+        PlayerAction::ChangeAmbientTemperature { .. } => "action:change_ambient_temperature",
+        PlayerAction::ChangeAeration { .. } => "action:change_aeration",
+    }
+}
+
+fn enforce_tracked_tick_budget_guard(tick: &TickBudgetRecord) -> Result<(), SimError> {
+    let nitrogen_residual_mg = nitrogen_guard_delta_mg(tick);
+    if nitrogen_residual_mg.abs() > BUDGET_GUARD_TOLERANCE_MG {
+        return Err(SimError::BudgetImbalance {
+            element: "nitrogen",
+            delta_mg: nitrogen_residual_mg,
+            tick_index: tick.tick_index,
+            day: tick.day,
+            hour: tick.hour,
+        });
+    }
+
+    let carbon_residual_mg = carbon_guard_delta_mg(tick);
+    if carbon_residual_mg.abs() > BUDGET_GUARD_TOLERANCE_MG {
+        return Err(SimError::BudgetImbalance {
+            element: "carbon",
+            delta_mg: carbon_residual_mg,
+            tick_index: tick.tick_index,
+            day: tick.day,
+            hour: tick.hour,
+        });
+    }
+
+    Ok(())
+}
+
+fn route_live_biomass_to_dissolved_organics(state: &mut TankState, biomass_g: f64) {
+    if biomass_g <= f64::EPSILON {
+        return;
+    }
+
+    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
+    state.water.dissolved_organic_nitrogen_mg_n_total +=
+        live_biomass_nitrogen_mg(biomass_g, n_to_c_ratio);
+    state.water.dissolved_organic_carbon_mg_c_total +=
+        live_biomass_carbon_mg(biomass_g, n_to_c_ratio);
+}
+
+fn filter_cleaning_decomposer_setback_factor(kind: HabitatKind) -> f64 {
+    match kind {
+        HabitatKind::FilterMedia => 1.0,
+        HabitatKind::SubstrateSurface => 0.2,
+        HabitatKind::GlassHardscape => 0.05,
+        HabitatKind::PlantSurfaces => 0.05,
+        HabitatKind::SubstrateDeep => 0.0,
+    }
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn tick_has_closed_system_nitrogen(tick: &TickBudgetRecord) -> bool {
+    !tick
+        .entries
+        .iter()
+        .any(|entry| entry_has_open_action_flux(entry.label.as_str(), entry.delta.nitrogen))
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn tick_has_closed_system_carbon(tick: &TickBudgetRecord) -> bool {
+    !tick
+        .entries
+        .iter()
+        .any(|entry| entry_has_open_action_flux(entry.label.as_str(), entry.delta.carbon))
+}
+
+fn nitrogen_guard_delta_mg(tick: &TickBudgetRecord) -> f64 {
+    tick.net_delta.nitrogen.net_mg() - open_action_flux_mg(tick, |entry| entry.delta.nitrogen)
+}
+
+fn carbon_guard_delta_mg(tick: &TickBudgetRecord) -> f64 {
+    // The hourly chemistry system can opt into an explicit atmospheric DIC
+    // shortcut. Subtract that known open-system exchange so the guard still
+    // catches unrelated carbon leaks elsewhere in the same tick.
+    tick.net_delta.carbon.net_mg()
+        - open_action_flux_mg(tick, |entry| entry.delta.carbon)
+        - chemistry_external_carbon_flux_mg(tick)
+}
+
+fn chemistry_external_carbon_flux_mg(tick: &TickBudgetRecord) -> f64 {
+    tick.entries
+        .iter()
+        .filter(|entry| entry.label == "system:chemistry")
+        .map(|entry| entry.delta.carbon.net_mg())
+        .sum()
+}
+
+fn open_action_flux_mg<F>(tick: &TickBudgetRecord, budget: F) -> f64
+where
+    F: Fn(&BudgetEntry) -> ElementBudget,
+{
+    tick.entries
+        .iter()
+        .filter(|entry| is_open_system_action_label(entry.label.as_str()))
+        .map(|entry| budget(entry).net_mg())
+        .sum()
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn entry_has_open_action_flux(label: &str, budget: ElementBudget) -> bool {
+    is_open_system_action_label(label) && element_budget_has_flux(budget)
+}
+
+fn is_open_system_action_label(label: &str) -> bool {
+    matches!(
+        label,
+        "action:feed"
+            | "action:water_change"
+            | "action:siphon_detritus"
+            | "action:add_shrimp"
+            | "action:remove_shrimp"
+            | "action:trim_plants_and_remove"
+    )
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+fn element_budget_has_flux(budget: ElementBudget) -> bool {
+    budget.in_mg.abs() > BUDGET_GUARD_TOLERANCE_MG
+        || budget.out_mg.abs() > BUDGET_GUARD_TOLERANCE_MG
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{
+        BudgetEntry, BudgetMetric, BudgetMetricUnit, BudgetRecordingKind, BudgetTotals,
+    };
+
+    fn synthetic_entry(label: &str, delta: BudgetDelta) -> BudgetEntry {
+        BudgetEntry {
+            label: label.to_owned(),
+            delta,
+            recording_kind: BudgetRecordingKind::Snapshot,
+            metrics: Vec::new(),
+        }
+    }
+
+    fn synthetic_tick(entries: Vec<BudgetEntry>) -> TickBudgetRecord {
+        synthetic_tick_with_net_delta(entries, BudgetDelta::default())
+    }
+
+    fn synthetic_tick_with_net_delta(
+        entries: Vec<BudgetEntry>,
+        net_delta: BudgetDelta,
+    ) -> TickBudgetRecord {
+        TickBudgetRecord {
+            tick_index: 0,
+            day: 0,
+            hour: 0,
+            before: BudgetTotals::default(),
+            after: BudgetTotals::default(),
+            net_delta,
+            entries,
+        }
+    }
+
+    #[test]
+    fn stage_trace_skips_budget_metrics_without_budget_tracking() {
+        let mut stage_trace = StageTrace::new(true, false);
+
+        stage_trace.note("kept");
+        stage_trace.metric_with_unit(
+            "nitrogen_cycle.tan_oxidized_mg",
+            1.25,
+            BudgetMetricUnit::Milligrams,
+        );
+
+        let (notes, metrics) = stage_trace.into_parts();
+
+        assert_eq!(notes, vec!["kept".to_owned()]);
+        assert!(metrics.is_empty());
+    }
+
+    #[test]
+    fn stage_trace_records_budget_metrics_without_trace_notes() {
+        let mut stage_trace = StageTrace::new(false, true);
+
+        stage_trace.note("suppressed");
+        stage_trace.metric_with_unit(
+            "nitrogen_cycle.tan_oxidized_mg",
+            1.25,
+            BudgetMetricUnit::Milligrams,
+        );
+
+        let (notes, metrics) = stage_trace.into_parts();
+
+        assert!(notes.is_empty());
+        assert_eq!(
+            metrics,
+            vec![BudgetMetric {
+                label: "nitrogen_cycle.tan_oxidized_mg".to_owned(),
+                value: 1.25,
+                unit: BudgetMetricUnit::Milligrams,
+            }]
+        );
+    }
+
+    #[test]
+    fn stage_trace_preserves_metric_units() {
+        let mut stage_trace = StageTrace::new(false, true);
+
+        stage_trace.metric_with_unit(
+            "water.alkalinity_meq.delta",
+            -0.42,
+            BudgetMetricUnit::MilliEquivalents,
+        );
+
+        let (_, metrics) = stage_trace.into_parts();
+
+        assert_eq!(metrics.len(), 1);
+        assert_eq!(metrics[0].unit, BudgetMetricUnit::MilliEquivalents);
+    }
+
+    #[test]
+    fn no_op_open_system_actions_do_not_disable_the_budget_guard() {
+        let tick = synthetic_tick(vec![
+            synthetic_entry("action:feed", BudgetDelta::default()),
+            synthetic_entry("action:water_change", BudgetDelta::default()),
+            synthetic_entry("action:siphon_detritus", BudgetDelta::default()),
+            synthetic_entry("action:add_shrimp", BudgetDelta::default()),
+            synthetic_entry("action:remove_shrimp", BudgetDelta::default()),
+        ]);
+
+        assert!(tick_has_closed_system_nitrogen(&tick));
+        assert!(tick_has_closed_system_carbon(&tick));
+    }
+
+    #[test]
+    fn carbon_guard_uses_carbon_flux_for_open_system_actions() {
+        let tick = synthetic_tick(vec![synthetic_entry(
+            "action:water_change",
+            BudgetDelta {
+                carbon: ElementBudget {
+                    in_mg: 0.0,
+                    out_mg: 8.0,
+                },
+                ..BudgetDelta::default()
+            },
+        )]);
+
+        assert!(tick_has_closed_system_nitrogen(&tick));
+        assert!(!tick_has_closed_system_carbon(&tick));
+    }
+
+    #[test]
+    fn clean_filter_is_treated_as_closed_when_it_only_reroutes_internal_mass() {
+        let tick = synthetic_tick(vec![synthetic_entry(
+            "action:clean_filter",
+            BudgetDelta {
+                nitrogen: ElementBudget {
+                    in_mg: 2.0,
+                    out_mg: 2.0,
+                },
+                carbon: ElementBudget {
+                    in_mg: 10.0,
+                    out_mg: 10.0,
+                },
+                ..BudgetDelta::default()
+            },
+        )]);
+
+        assert!(tick_has_closed_system_nitrogen(&tick));
+        assert!(tick_has_closed_system_carbon(&tick));
+    }
+
+    #[test]
+    fn chemistry_flux_does_not_open_the_carbon_guard() {
+        let tick = synthetic_tick_with_net_delta(
+            vec![synthetic_entry(
+                "system:chemistry",
+                BudgetDelta {
+                    carbon: ElementBudget {
+                        in_mg: 5.0,
+                        out_mg: 3.0,
+                    },
+                    ..BudgetDelta::default()
+                },
+            )],
+            BudgetDelta {
+                carbon: ElementBudget {
+                    in_mg: 5.0,
+                    out_mg: 3.0,
+                },
+                ..BudgetDelta::default()
+            },
+        );
+
+        assert!(tick_has_closed_system_carbon(&tick));
+        assert!((carbon_guard_delta_mg(&tick) - 0.0).abs() <= f64::EPSILON);
+    }
+
+    #[test]
+    fn chemistry_flux_is_subtracted_before_carbon_budget_guard_checks_other_leaks() {
+        let tick = synthetic_tick_with_net_delta(
+            vec![
+                synthetic_entry(
+                    "system:chemistry",
+                    BudgetDelta {
+                        carbon: ElementBudget {
+                            in_mg: 5.0,
+                            out_mg: 3.0,
+                        },
+                        ..BudgetDelta::default()
+                    },
+                ),
+                synthetic_entry(
+                    "system:daily_plants",
+                    BudgetDelta {
+                        carbon: ElementBudget {
+                            in_mg: 0.0,
+                            out_mg: 4.0,
+                        },
+                        ..BudgetDelta::default()
+                    },
+                ),
+            ],
+            BudgetDelta {
+                carbon: ElementBudget {
+                    in_mg: 5.0,
+                    out_mg: 7.0,
+                },
+                ..BudgetDelta::default()
+            },
+        );
+
+        let err = enforce_tracked_tick_budget_guard(&tick).expect_err(
+            "chemistry exchange should not hide unrelated carbon drift in the same tick",
+        );
+        assert_eq!(
+            err,
+            SimError::BudgetImbalance {
+                element: "carbon",
+                delta_mg: -4.0,
+                tick_index: 0,
+                day: 0,
+                hour: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn open_action_flux_is_subtracted_before_nitrogen_budget_guard_checks_other_leaks() {
+        let tick = synthetic_tick_with_net_delta(
+            vec![
+                synthetic_entry(
+                    "action:feed",
+                    BudgetDelta {
+                        nitrogen: ElementBudget {
+                            in_mg: 10.0,
+                            out_mg: 0.0,
+                        },
+                        ..BudgetDelta::default()
+                    },
+                ),
+                synthetic_entry(
+                    "system:daily_plants",
+                    BudgetDelta {
+                        nitrogen: ElementBudget {
+                            in_mg: 0.0,
+                            out_mg: 3.0,
+                        },
+                        ..BudgetDelta::default()
+                    },
+                ),
+            ],
+            BudgetDelta {
+                nitrogen: ElementBudget {
+                    in_mg: 10.0,
+                    out_mg: 3.0,
+                },
+                ..BudgetDelta::default()
+            },
+        );
+
+        let err = enforce_tracked_tick_budget_guard(&tick).expect_err(
+            "external feed import should not hide unrelated nitrogen drift in the same tick",
+        );
+        assert_eq!(
+            err,
+            SimError::BudgetImbalance {
+                element: "nitrogen",
+                delta_mg: -3.0,
+                tick_index: 0,
+                day: 0,
+                hour: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn open_action_flux_is_subtracted_before_carbon_budget_guard_checks_other_leaks() {
+        let tick = synthetic_tick_with_net_delta(
+            vec![
+                synthetic_entry(
+                    "action:water_change",
+                    BudgetDelta {
+                        carbon: ElementBudget {
+                            in_mg: 0.0,
+                            out_mg: 8.0,
+                        },
+                        ..BudgetDelta::default()
+                    },
+                ),
+                synthetic_entry(
+                    "system:daily_algae",
+                    BudgetDelta {
+                        carbon: ElementBudget {
+                            in_mg: 0.0,
+                            out_mg: 4.0,
+                        },
+                        ..BudgetDelta::default()
+                    },
+                ),
+            ],
+            BudgetDelta {
+                carbon: ElementBudget {
+                    in_mg: 0.0,
+                    out_mg: 12.0,
+                },
+                ..BudgetDelta::default()
+            },
+        );
+
+        let err = enforce_tracked_tick_budget_guard(&tick)
+            .expect_err("external carbon export should not hide unrelated same-tick carbon drift");
+        assert_eq!(
+            err,
+            SimError::BudgetImbalance {
+                element: "carbon",
+                delta_mg: -4.0,
+                tick_index: 0,
+                day: 0,
+                hour: 0,
+            }
+        );
     }
 }

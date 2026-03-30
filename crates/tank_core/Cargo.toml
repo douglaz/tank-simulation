@@ -9,7 +9,9 @@ rand_chacha = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 thiserror = "1"
+tracing = "0.1"
 
 [dev-dependencies]
+proptest = "1"
+tank_data = { path = "../tank_data" }
 tank_scenarios = { path = "../tank_scenarios" }
-

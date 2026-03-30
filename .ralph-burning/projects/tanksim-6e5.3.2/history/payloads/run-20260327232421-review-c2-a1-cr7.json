@@ -1,0 +1,44 @@
+{
+  "payload_id": "run-20260327232421-review-c2-a1-cr7",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T03:25:24.151535734Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All 244 tank_core tests pass with 0 failures across all test binaries (lib + integration suites). cargo clippy -p tank_core -p tank_data -p tank_scenarios -- -D warnings passes clean. cargo fmt --all --check passes clean.",
+        "shrimp_feeding (shrimp.rs:128-181) bounds total intake to one daily grazing budget: periphyton consumed first (line 146), detritus only fills the remainder (line 153). All computation on the routing/organic-matter basis via algae_detrital_mass_g() conversion. Debug assert at line 172 confirms elemental N+C bookkeeping matches the routed mass.",
+        "route_consumed_food (shrimp.rs:197-271) correctly partitions consumed N+C through all five named pathways: feces→fine_detritus_g_total (lines 212-218), excreted N→TAN+alkalinity (lines 224-228), excreted C→DOC (lines 231-232), respired C→DIC+O2 demand with DO-limited scaling (lines 237-253), respired N→TAN+alkalinity (lines 256-262), and retained→reserve_g (lines 267-270).",
+        "O2-limited respiration (shrimp.rs:237-253) scales DIC/TAN by respiration_scale = actual_o2_consumed/o2_demand, retaining unrespired share in reserve_g. Stoichiometric coupling is preserved: no DIC/TAN is produced from respiration that did not actually consume oxygen.",
+        "Alkalinity coupling implemented at lines 228 and 262: both excretion and respiration TAN production credit alkalinity_meq_total via division by MG_N_PER_MEQ_AMMONIA.",
+        "fund_live_shrimp_biomass (shrimp.rs:666-678) returns false when reserve is insufficient with no dissolved-pool fallback. Used for both hatching and juvenile maturation.",
+        "migrate_v3_to_v4 (save.rs:327-374) seeds reserve_g from existing shrimp biomass: shrimp_biomass_g(adults, juveniles) * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G. Includes idempotency guard (line 336), proper error handling for missing/invalid counts, and u32 overflow checks.",
+        "Invariant validation (invariants.rs) covers: animal.reserve_g non-negative, shrimp_assimilation_efficiency via check_open_unit_interval (strict 0<ae<1), respiration/excretion/growth fractions individually checked via check_unit_interval, sum validated within tolerance, shrimp_o2_per_mg_c_respired validated via check_positive, death_biomass_to_detritus_fraction validated as 1.0.",
+        "Conservation tests pass: closed_system_shrimp_feeding_conserves_nitrogen (0.01 mg tolerance, 7 days), closed_system_shrimp_feeding_conserves_carbon (0.01 mg, 7 days), test_closed_system_shrimp_reproduction_conserves_n_and_c (1e-6 mg, 60 days with chemistry CO2 flux accounting).",
+        "assert_o2_balanced (budget_helpers.rs:318-401) now validates BudgetRecordingKind: rejects snapshot-only accounting for stages labeled 'system:dissolved_oxygen' or 'action:water_change' (line 334-335, 608-610). Regression test o2_balance_check_rejects_snapshot_only_bidirectional_stage_accounting confirms this rejection (lines 360-419).",
+        "TANK_BUDGET_DEBUG isolation reimplemented via with_budget_debug_env (budget_helpers.rs:151-163) which acquires a global mutex (budget_debug_lock) before setting the env var, and step_and_inspect (line 264) also acquires the same lock via with_budget_debug_lock. BudgetDebugLockGuard (lines 100-123) supports reentrant acquisition via thread-local depth counter. BudgetDebugEnvRestore RAII (lines 125-136) guarantees env var cleanup.",
+        "Engine stage recording properly propagates BudgetRecordingKind: maybe_record_stage (engine.rs:410-468) records as Snapshot; maybe_record_stage_with_explicit_budget (engine.rs:470-506) records as Explicit when the stage provides an explicit delta. Three stages use explicit recording: actions, system:chemistry, and system:dissolved_oxygen.",
+        "All five named parameters (shrimp_assimilation_efficiency=0.50, respiration=0.70, excretion=0.10, growth=0.20, o2_per_mg_c=2.67) defined in default.toml (lines 85-94), wired through preset materialization, and documented in ROUTING.md with parameter table and sum rules.",
+        "Phase-1 simplifications documented: shared food quality (shrimp.rs:162-165), unbounded reserve accumulation (shrimp.rs:263-265), lumped TAN+DOC excretion (ROUTING.md), closed-loop mortality (shrimp.rs:640-641).",
+        "step_daily_shrimp (shrimp.rs:67-93) calls shrimp_feeding→refresh_carbonate_state→update_condition in correct order, ensuring condition scoring uses post-feeding pH."
+      ],
+      "findings_or_gaps": [
+        "All four acceptance criteria are met: (1) consumed mass is partitioned into assimilated+fecal within tolerance via route_consumed_food with debug_assert verification, (2) TAN/DIC/O2/detritus/alkalinity are generated proportional to feeding and visible in budget entries, (3) five named parameters control all fractions with phase-1 simplifications documented in code and ROUTING.md, (4) closed-system conservation tests confirm N and C are preserved over multi-day runs.",
+        "Both final-review amendments from the previous voting round have been implemented in round 7: (a) assert_o2_balanced now rejects snapshot-only BudgetRecordingKind for oxygen-moving stages, with a dedicated regression test and proper BudgetRecordingKind propagation through the engine's stage recording infrastructure; (b) TANK_BUDGET_DEBUG env var isolation now uses a shared global mutex (budget_debug_lock) acquired by both with_budget_debug_env and step_and_inspect, with reentrant support via thread-local depth counter and RAII env var cleanup.",
+        "The water_change_mass_balance test that was previously reported as failing now passes cleanly (10/10 tests). The full tank_core suite is green: 244 tests, 0 failures.",
+        "No regressions detected. cargo clippy and cargo fmt both pass clean."
+      ],
+      "follow_up_or_amendments": [],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 7
+}

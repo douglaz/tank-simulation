@@ -1,6 +1,9 @@
 use crate::{
-    systems::{chemistry::compute_ph_from_totals, temperature::do_sat_mg_l},
-    types::{SimError, SourceWaterProfile, TankState},
+    systems::{chemistry::resolve_carbonate_state, temperature::do_sat_mg_l},
+    types::{
+        algae_carbon_mg, algae_nitrogen_mg, BudgetDelta, ElementBudget, SimError,
+        SourceWaterProfile, TankState,
+    },
 };
 
 pub fn validate_source_profile(state: &TankState, source_profile_id: &str) -> Result<(), SimError> {
@@ -40,7 +43,7 @@ pub fn apply_water_change(state: &mut TankState, percent: f64, source: &SourceWa
         return;
     }
 
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     let fraction = percent / 100.0;
     let retention = 1.0 - fraction;
     let exchanged_l = volume_l * fraction;
@@ -54,13 +57,16 @@ pub fn apply_water_change(state: &mut TankState, percent: f64, source: &SourceWa
     state.water.dissolved_inorganic_carbon_mg_c_total *= retention;
     state.water.dissolved_organic_carbon_mg_c_total *= retention;
     state.water.dissolved_organic_nitrogen_mg_n_total *= retention;
+    // This is only a shadow counter that mirrors DOC/DON-origin residue mass.
+    // The real exported C/N is already accounted through the dissolved pools,
+    // so this bookkeeping adjustment must stay out of the explicit budget delta.
+    state.detritus.dissolved_feed_residue_g_total *= retention;
     state.water.dissolved_oxygen_mg_total *= retention;
     state.water.alkalinity_meq_total *= retention;
     state.water.calcium_mg_total *= retention;
     state.water.magnesium_mg_total *= retention;
     state.water.sodium_mg_total *= retention;
     state.water.potassium_mg_total *= retention;
-    state.water.bicarbonate_mg_total *= retention;
     state.water.chloride_mg_total *= retention;
     state.water.sulfate_mg_total *= retention;
 
@@ -78,7 +84,6 @@ pub fn apply_water_change(state: &mut TankState, percent: f64, source: &SourceWa
     state.water.magnesium_mg_total += source.magnesium_mg_per_l * exchanged_l;
     state.water.sodium_mg_total += source.sodium_mg_per_l * exchanged_l;
     state.water.potassium_mg_total += source.potassium_mg_per_l * exchanged_l;
-    state.water.bicarbonate_mg_total += source.bicarbonate_mg_per_l * exchanged_l;
     state.water.chloride_mg_total += source.chloride_mg_per_l * exchanged_l;
     state.water.sulfate_mg_total += source.sulfate_mg_per_l * exchanged_l;
 
@@ -86,11 +91,58 @@ pub fn apply_water_change(state: &mut TankState, percent: f64, source: &SourceWa
     state.water.temperature_c =
         state.water.temperature_c * retention + source.temperature_c * fraction;
 
-    // Recompute pH from the new alkalinity/DIC so downstream systems in the
-    // same tick (e.g. nitrification) use the post-change value.
-    state.water.ph = compute_ph_from_totals(
-        state.water.alkalinity_meq_total,
-        state.water.dissolved_inorganic_carbon_mg_c_total,
-        volume_l,
-    );
+    // Resolve carbonate equilibrium so downstream systems in the same tick
+    // (e.g. nitrification) use the post-change pH and bicarbonate values.
+    resolve_carbonate_state(&mut state.water, volume_l);
+}
+
+pub fn apply_water_change_with_budget(
+    state: &mut TankState,
+    percent: f64,
+    source: &SourceWaterProfile,
+) -> BudgetDelta {
+    if percent <= 0.0 {
+        return BudgetDelta::default();
+    }
+
+    let fraction = percent / 100.0;
+    let exchanged_l = state.water_volume_l() * fraction;
+    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
+
+    let nitrogen_out_mg = fraction
+        * (state.water.ammonia_total_mg_n_total
+            + state.water.nitrite_mg_n_total
+            + state.water.nitrate_mg_n_total
+            + state.water.dissolved_organic_nitrogen_mg_n_total
+            + algae_nitrogen_mg(state.algae.suspended_biomass_g));
+    let carbon_out_mg = fraction
+        * (state.water.dissolved_inorganic_carbon_mg_c_total
+            + state.water.dissolved_organic_carbon_mg_c_total
+            + algae_carbon_mg(state.algae.suspended_biomass_g, n_to_c_ratio));
+    let oxygen_out_mg = fraction * state.water.dissolved_oxygen_mg_total.max(0.0);
+
+    let nitrogen_in_mg = exchanged_l
+        * (source.ammonia_mg_n_per_l
+            + source.nitrite_mg_n_per_l
+            + source.nitrate_mg_n_per_l
+            + source.don_mg_n_per_l);
+    let carbon_in_mg = exchanged_l * (source.dic_mg_c_per_l + source.doc_mg_c_per_l);
+    let oxygen_in_mg = exchanged_l * do_sat_mg_l(source.temperature_c);
+
+    apply_water_change(state, percent, source);
+
+    BudgetDelta {
+        nitrogen: ElementBudget {
+            in_mg: nitrogen_in_mg,
+            out_mg: nitrogen_out_mg,
+        },
+        carbon: ElementBudget {
+            in_mg: carbon_in_mg,
+            out_mg: carbon_out_mg,
+        },
+        oxygen: ElementBudget {
+            in_mg: oxygen_in_mg,
+            out_mg: oxygen_out_mg,
+        },
+    }
 }

@@ -1,0 +1,24 @@
+{
+  "payload_id": "run-20260330064830-final_review-vote-0-c2-a1-cr8-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:16:20.621754346Z",
+  "payload": {
+    "summary": "The amendment claims the rooted-plant substrate oxygenation hook is not implemented, but thorough codebase inspection shows it is fully implemented. `crates/tank_core/src/systems/substrate.rs` contains the complete Bouldin diffusion model with ROL (radial oxygen loss) bonus computation, habitat-registry queries for active rooted biomass, biomass-based saturation, and O₂ penetration depth tracking. The `rol_rate_cm_per_g` parameter is defined in `process.rs` with a documented default. Integration tests in `crates/tank_core/tests/root_zone_oxygenation.rs` validate planted-vs-unplanted divergence, denitrification interaction, nitrification surface area effects, and tracing visibility. The `plant_growth.rs` comment about future work refers to a deeper Phase 3 redox-coupling feature, not the current root oxygenation feature. The amendment appears to be based on a stale or incorrect diff.",
+    "votes": [
+      {
+        "amendment_id": "fr-8-00f5463d",
+        "decision": "reject",
+        "rationale": "Reject. The amendment's central claim — that rooted-plant substrate oxygenation is unimplemented — is factually wrong. Codebase inspection confirms: (1) `substrate.rs` implements `substrate_oxygenation_breakdown_with_registry()` with Bouldin diffusion, ROL bonus from rooted biomass, exponential saturation against bed depth, and habitat-registry queries for root activity factor; (2) `process.rs` defines `rol_rate_cm_per_g` (default 0.15 cm/g) with literature documentation; (3) `engine.rs` calls `step_substrate_zones()` during initialization; (4) `tests/root_zone_oxygenation.rs` contains 5 comprehensive integration tests covering planted-vs-unplanted divergence over 500h, denitrification interaction, nitrification surface area, suboxic volume reduction, and tracing exposure; (5) 90+ references to root oxygenation terms exist across the codebase. The `plant_growth.rs:22-24` comment about 'Phase 3 (E4)' refers to deeper oxic/suboxic layer differentiation and redox coupling — a future enhancement — not the baseline root oxygenation feature which is already shipping. The amendment appears to describe the wrong diff (alkalinity changes in nitrogen_cycle.rs/budget.rs) rather than the actual substrate oxygenation implementation."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 8
+}

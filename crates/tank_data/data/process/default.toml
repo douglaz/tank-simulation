@@ -1,73 +1,153 @@
 id = "default"
 name = "Default Process Pack"
+
+# ── Reserved parameters ──────────────────────────────────────────────
+# These two fields are NOT wired into the nitrogen cycle. The per-guild
+# vmax fields below are the effective rate controls. Changing these has
+# no effect; they are retained only for schema stability.
 mineralization_rate_per_day = 0.15
 nitrification_vmax = 0.08
+
 reaeration_kla_base = 0.35
 aeration_kla_boost = 0.9
 background_bod_mg_o2_per_g_biomass_per_hour = 0.05
 plant_photosynthesis_o2_mg_per_g_per_hour = 0.2
-respiration_dic_rate_mg_c_per_g_per_hour = 0.08
-photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.12
+
+# DIC exchange rates for planted-tank carbon cycling.
+# Stoichiometrically consistent with O2 rates (CH2O: CO2 + H2O → CH2O + O2,
+# 12g C per 32g O2 → ratio 0.375):
+#   respiration_dic  = background_bod (0.05) × 0.375 = 0.01875
+#   photosynthesis_dic = plant_photosynthesis_o2 (0.2) × 0.375 = 0.075
+respiration_dic_rate_mg_c_per_g_per_hour = 0.01875
+photosynthesis_dic_rate_mg_c_per_g_per_hour = 0.075
+
 k_surface_w_per_m2_k = 10.0
 k_wall_w_per_m2_k = 5.0
 
-# Nitrogen cycle: feed leaching
+# ── Nitrogen cycle: feed leaching ────────────────────────────────────
 feed_leach_rate_per_hour = 0.12
 fine_detritus_dissolution_rate_per_hour = 0.08
 feed_n_to_c_ratio = 0.16
 
-# Decomposer mineralization
+# ── Decomposer mineralization ────────────────────────────────────────
+# Half-saturation constants are concentration-based (mg/L).
+#
+# Retuning note (tanksim-6e5.2.3 → 6e5.2.6):
+#   Old legacy values were whole-tank totals divided by a 20 L reference
+#   at runtime, yielding effective Ks ≈ 0.25 mg C/L and 0.10 mg O₂/L —
+#   unrealistically low, meaning decomposers were almost never substrate-
+#   limited. New values are set directly in concentration units within
+#   literature ranges. This is a unit-correction, not new science.
 decomposer_vmax_per_hour = 0.02
-decomposer_k_doc_mg = 5.0
+decomposer_k_doc_mg_c_per_l = 3.0       # DOC Ks (mg C/L), literature 1–10
+decomposer_k_do_mg_per_l = 0.5          # DO Ks (mg O₂/L), literature 0.3–1.0
 decomposer_growth_yield = 0.3
 decomposer_decay_rate_per_hour = 0.002
 
-# AOB kinetics
+# ── AOB kinetics ─────────────────────────────────────────────────────
+# Half-saturation constants are concentration-based (mg/L).
+#
+# Retuning note (tanksim-6e5.2.3 → 6e5.2.6):
+#   Old effective Ks was 0.025 mg N/L (0.5 / 20 L) — far below any
+#   literature value and made AOB substrate-unlimited even at trace TAN.
+#   New value 1.0 mg N/L sits mid-range for mixed-community AOB and
+#   produces realistic TAN accumulation during fishless cycling (~16 mg
+#   N/L at day 30 in the nano_cycle scenario).
 aob_vmax_mg_n_per_g_per_hour = 1.5
-aob_k_tan_mg = 0.5
-aob_k_do_mg = 1.0
-aob_growth_yield = 0.001
+aob_k_tan_mg_n_per_l = 1.0              # TAN Ks (mg N/L), literature 0.5–2.0
+aob_k_do_mg_per_l = 0.5                 # DO Ks (mg O₂/L), literature 0.3–1.0
+aob_growth_yield = 0.05
 aob_decay_rate_per_hour = 0.003
 
-# NOB kinetics
+# ── NOB kinetics ─────────────────────────────────────────────────────
+# Half-saturation constants are concentration-based (mg/L).
+# NOB are more DO-sensitive than AOB: nob_k_do >= aob_k_do.
+#
+# Retuning note (tanksim-6e5.2.3 → 6e5.2.6):
+#   Old effective Ks was 0.015 mg N/L (0.3 / 20 L). New value 0.5 sits
+#   within the literature range and produces the expected nitrite
+#   intermediate accumulation during cycling (2–5 mg N/L at day 28).
 nob_vmax_mg_n_per_g_per_hour = 1.2
-nob_k_nitrite_mg = 0.3
-nob_k_do_mg = 1.0
-nob_growth_yield = 0.001
+nob_k_nitrite_mg_n_per_l = 0.5          # NO₂⁻ Ks (mg N/L), literature 0.2–1.0
+nob_k_do_mg_per_l = 0.8                 # DO Ks (mg O₂/L), literature 0.5–1.5
+nob_growth_yield = 0.04
 nob_decay_rate_per_hour = 0.003
 
-# Comammox kinetics
+# ── Comammox kinetics ────────────────────────────────────────────────
+# Comammox has lower TAN Ks than AOB (competitive at low ammonia).
+#
+# Retuning note (tanksim-6e5.2.3 → 6e5.2.6):
+#   Old effective Ks was 0.04 mg N/L (0.8 / 20 L). New value 0.2
+#   preserves the comammox low-ammonia niche while sitting within the
+#   literature range. Comammox naturally dominates late-cycle conditions
+#   when TAN drops below the AOB Ks.
 comammox_vmax_fraction = 0.4
-comammox_k_tan_mg = 0.8
-comammox_k_do_mg = 1.5
-comammox_growth_yield = 0.0008
+comammox_k_tan_mg_n_per_l = 0.2         # TAN Ks (mg N/L), literature 0.05–0.5
+comammox_k_do_mg_per_l = 0.6            # DO Ks (mg O₂/L), literature 0.3–1.0
+comammox_growth_yield = 0.03
 comammox_decay_rate_per_hour = 0.004
+
+# ── Denitrification kinetics ─────────────────────────────────────────
+# Simplified denitrification in suboxic substrate pore water.
+# Rate = vmax × activity × monod(NO3) × monod(DOC) × suboxic_pore_volume.
+# Stoichiometry: 5CH₂O + 4NO₃⁻ + 4H⁺ → 2N₂↑ + 5CO₂ + 7H₂O
+denitrification_vmax_mg_n_per_l_per_hour = 0.1     # mg N/L/h, literature 0.01–0.5
+denitrification_k_no3_mg_n_per_l = 2.0             # NO₃ Ks (mg N/L), literature 0.5–5.0
+denitrification_k_doc_mg_c_per_l = 5.0             # DOC Ks (mg C/L), literature 1.0–10.0
+denitrification_pore_water_mixing_factor = 0.5      # fraction of water-column conc. in pore water
+denitrification_activity_maturation_days = 60.0     # days for denitrifier community to mature
+
+# ── Root-zone oxygenation (radial oxygen loss) ──────────────────────
+# Low-biomass slope for the substrate O₂ bonus from substrate-active roots.
+# The core model applies this in a saturating depth cap:
+#   bonus = depth × (1 - exp(-(active_root_biomass × rol_rate) / depth))
+rol_rate_cm_per_g = 0.15
 
 # Stoichiometric constants
 o2_per_mg_n_nitrified = 4.57
-alkalinity_meq_per_mg_n_nitrified = 0.1428
+alkalinity_meq_per_mg_n_nitrified = 0.1427857499821518 # 2 / 14.007
 
-# Daily plant growth
+# ── Daily plant growth ────────────────────────────────────────────────
+# Half-saturation constants are concentration-based:
+#   Water-column Ks: mg nutrient / L (volumetric)
+#   Substrate Ks:    mg nutrient / m² (areal density)
+#
+# Retuning note (tanksim-6e5.2.4 → 6e5.2.6):
+#   Plant Ks values were migrated from legacy total-based names to
+#   concentration-based names (e.g. plant_half_saturation_n_mg_total →
+#   plant_half_saturation_n_mg_n_per_l). Values were adjusted to
+#   literature-reasonable ranges. Substrate Ks (mg/m²) is new in 6e5.2.4;
+#   it governs root-feeding rosette limitation independently of water-
+#   column concentrations.
 plant_max_growth_rate_fast_stem_per_day = 0.08
 plant_max_growth_rate_root_rosette_per_day = 0.06
 plant_respiration_fraction_per_day = 0.01
 plant_senescence_fraction_per_day = 0.005
 plant_health_recovery_per_day = 0.03
 plant_health_decline_per_day = 0.08
-plant_half_saturation_n_mg_total = 8.0
-plant_half_saturation_p_mg_total = 1.2
-plant_half_saturation_c_mg_total = 20.0
+plant_half_saturation_n_mg_n_per_l = 0.4
+plant_half_saturation_p_mg_p_per_l = 0.06
+plant_half_saturation_c_mg_c_per_l = 1.0
+plant_half_saturation_n_substrate_mg_n_per_m2 = 80.0
+plant_half_saturation_p_substrate_mg_p_per_m2 = 12.0
 plant_light_half_saturation = 0.45
 plant_temp_optimum_c = 25.0
 plant_temp_sigma_c = 7.0
 plant_crowding_biomass_g_per_m2 = 250.0
 
-# Daily algae/periphyton growth
+# ── Daily algae/periphyton growth ─────────────────────────────────────
+# Retuning note (tanksim-6e5.2.5 → 6e5.2.6):
+#   Algae Ks values were migrated from legacy total-based names to
+#   concentration-based (e.g. algae_half_saturation_n_mg_total →
+#   algae_half_saturation_n_mg_n_per_l). Algae Ks(N) = 0.25 mg N/L
+#   is lower than plant Ks(N) = 0.4, reflecting algae's competitive
+#   advantage at low nutrient concentrations — this drives the expected
+#   algae dominance under nutrient-depleted or warm conditions.
 algae_max_growth_rate_per_day = 0.2
 periphyton_max_growth_rate_per_day = 0.15
 algae_respiration_fraction_per_day = 0.03
-algae_half_saturation_n_mg_total = 5.0
-algae_half_saturation_p_mg_total = 0.8
+algae_half_saturation_n_mg_n_per_l = 0.25
+algae_half_saturation_p_mg_p_per_l = 0.04
 algae_light_half_saturation = 0.35
 algae_temp_optimum_c = 27.0
 algae_temp_sigma_c = 8.0
@@ -75,8 +155,340 @@ periphyton_capacity_g_per_m2 = 6.0
 algae_bloom_threshold_g_per_l = 0.08
 algae_nuisance_biomass_g_per_m2 = 10.0
 
+# Shrimp feeding pathway fractions (consumer routing contract)
+# Phase-1 simplification: periphyton and fine detritus share one food-quality
+# assumption (feed_n_to_c_ratio). See docs/ROUTING.md for the full contract.
+# Constraint: respiration + excretion + growth = 1.0
+shrimp_assimilation_efficiency = 0.50
+shrimp_respiration_fraction_of_assimilated = 0.70
+shrimp_excretion_fraction_of_assimilated = 0.10
+shrimp_growth_fraction_of_assimilated = 0.20
+# Stoichiometric O2:C for organic matter oxidation (32/12 ≈ 2.67)
+shrimp_o2_per_mg_c_respired = 2.67
+death_biomass_to_detritus_fraction = 1.0
+
+# Microfauna feeding pathway fractions (consumer routing contract)
+# Constraint: respiration + excretion + growth = 1.0
+microfauna_mineralization_boost = 0.15
+microfauna_periphyton_consumption = 0.02
+microfauna_population_smoothing = 0.10
+microfauna_shrimp_pressure_threshold = 3.0
+microfauna_assimilation_efficiency = 0.50
+microfauna_respiration_fraction_of_assimilated = 0.70
+microfauna_excretion_fraction_of_assimilated = 0.10
+microfauna_growth_fraction_of_assimilated = 0.20
+
 [provenance]
 source_title = "Starter preset pack"
 source_year = 2026
+# Whole-file provenance confidence is intentionally coarse/free-form;
+# per-parameter [param_meta.*].confidence uses the validated enum.
 confidence = "medium"
-notes = "Default process coefficients including heat-transfer parameters for the hourly thermal model."
+notes = """
+Default process coefficients retuned after Phase 1A normalization \
+(tanksim-6e5.2.3 through 6e5.2.6). All half-saturation constants are now \
+concentration-based (mg/L for water-column, mg/m² for substrate areal). \
+Values sit within published literature ranges and produce qualitatively \
+correct cycling stories in the nano_cycle, medium_planted, and warm_room \
+scenarios. These are temporary Phase 1 envelopes; later habitat and \
+carbonate work (Phase 2+) may shift individual parameters."""
+
+# ── Per-parameter provenance metadata ────────────────────────────────
+# Priority parameters annotated per tanksim-6e5.7.2.
+# Confidence levels: literature | expert | heuristic | placeholder
+
+# ── AOB half-saturation constants ────────────────────────────────────
+[param_meta.aob_k_tan_mg_n_per_l]
+unit = "mg N/L"
+source = "Prosser 1990; Rittmann & McCarty 2001; EPA ammonia criteria"
+confidence = "literature"
+valid_range = [0.5, 2.0]
+notes = """\
+Mixed-community AOB TAN Ks. Value 1.0 sits mid-range for Nitrosomonas spp. \
+in attached-growth biofilters. Pure-culture values as low as 0.3 exist but \
+mixed communities in aquarium biofilters operate higher."""
+
+[param_meta.aob_k_do_mg_per_l]
+unit = "mg O₂/L"
+source = "Rittmann & McCarty 2001; Henze et al. 2008 (ASM models)"
+confidence = "literature"
+valid_range = [0.3, 1.0]
+notes = "AOB DO half-saturation. 0.5 is a consensus value for activated sludge / biofilm AOB."
+
+# ── NOB half-saturation constants ────────────────────────────────────
+[param_meta.nob_k_nitrite_mg_n_per_l]
+unit = "mg N/L"
+source = "Blackburne et al. 2007; Henze et al. 2008"
+confidence = "literature"
+valid_range = [0.2, 1.0]
+notes = """\
+Nitrobacter/Nitrospira NO₂⁻ Ks. 0.5 is mid-range; Nitrospira-dominated \
+communities can be lower (~0.2). Value produces expected nitrite intermediate \
+peak during cycling."""
+
+[param_meta.nob_k_do_mg_per_l]
+unit = "mg O₂/L"
+source = "Rittmann & McCarty 2001; Blackburne et al. 2007"
+confidence = "literature"
+valid_range = [0.5, 1.5]
+notes = """\
+NOB are more DO-sensitive than AOB (nob_k_do >= aob_k_do). 0.8 produces the \
+classic DO-driven NOB suppression at low aeration."""
+
+# ── Comammox half-saturation constants ───────────────────────────────
+[param_meta.comammox_k_tan_mg_n_per_l]
+unit = "mg N/L"
+source = "Kits et al. 2017; Daims et al. 2015; Costa et al. 2006"
+confidence = "literature"
+valid_range = [0.05, 0.5]
+notes = """\
+Comammox Nitrospira have markedly lower TAN affinity (lower Ks) than canonical \
+AOB, enabling dominance at sub-ppm ammonia concentrations. 0.2 sits in the \
+upper range; kinetic enrichment studies suggest values as low as 0.05."""
+
+[param_meta.comammox_k_do_mg_per_l]
+unit = "mg O₂/L"
+source = "Kits et al. 2017; analogy with Nitrospira DO requirements"
+confidence = "heuristic"
+valid_range = [0.3, 1.0]
+notes = """\
+Less well-characterized than AOB/NOB DO Ks. 0.6 is an intermediate estimate \
+between AOB and NOB values, reflecting comammox's Nitrospira lineage."""
+
+# ── Biomass-rate and turnover controls ───────────────────────────────
+[param_meta.decomposer_vmax_per_hour]
+unit = "per hour"
+source = "Wetzel 2001; aquarium DOC-turnover calibration"
+confidence = "heuristic"
+valid_range = [0.005, 0.08]
+notes = """\
+Maximum DOC-processing capacity per g decomposer biomass. Because the model \
+compresses all heterotrophic activity into one DOC pool and one biomass guild, \
+0.02 is treated as a calibration anchor rather than a portable literature constant."""
+
+[param_meta.decomposer_growth_yield]
+unit = "g biomass / g DOC"
+source = "Rittmann & McCarty 2001; heterotroph attached-growth yield envelopes"
+confidence = "expert"
+valid_range = [0.2, 0.6]
+notes = """\
+Yield is set toward the lower half of standard heterotroph ranges because the \
+aquarium DOC pool is more refractory than readily biodegradable lab substrates."""
+
+[param_meta.decomposer_decay_rate_per_hour]
+unit = "per hour"
+source = "ASM-style heterotroph decay envelopes; aquarium starvation smoothing"
+confidence = "expert"
+valid_range = [0.0005, 0.01]
+notes = """\
+Hourly starvation/maintenance decay for decomposer biomass. This is a stability \
+and persistence knob more than a directly observed aquarium-specific constant."""
+
+[param_meta.aob_vmax_mg_n_per_g_per_hour]
+unit = "mg N / g biomass / h"
+source = "Rittmann & McCarty 2001; aquarium cycling calibration"
+confidence = "heuristic"
+valid_range = [0.3, 3.0]
+notes = """\
+Biomass-normalized TAN oxidation ceiling for AOB. 1.5 is chosen to reproduce \
+the expected fishless-cycling TAN decline with the model's coarse biomass units \
+rather than to mirror any single pure-culture assay."""
+
+[param_meta.aob_growth_yield]
+unit = "g biomass / mg N oxidized"
+source = "Henze et al. 2008 (ASM models); Rittmann & McCarty 2001"
+confidence = "literature"
+valid_range = [0.03, 0.08]
+notes = """\
+AOB growth yield sits in the standard autotrophic nitrifier envelope used in \
+wastewater and biofilm texts. The value is relatively well anchored even though \
+the associated vmax remains model-structural."""
+
+[param_meta.aob_decay_rate_per_hour]
+unit = "per hour"
+source = "ASM-style nitrifier decay envelopes"
+confidence = "expert"
+valid_range = [0.001, 0.01]
+notes = """\
+AOB decay is slower than fast heterotroph turnover but still material over long \
+starvation windows. 0.003/h is a first-pass persistence anchor for aquarium biofilms."""
+
+[param_meta.nob_vmax_mg_n_per_g_per_hour]
+unit = "mg N / g biomass / h"
+source = "Blackburne et al. 2007; aquarium nitrite-clearance calibration"
+confidence = "heuristic"
+valid_range = [0.2, 2.5]
+notes = """\
+Biomass-normalized NOB rate ceiling. 1.2 keeps nitrite peaks transient rather \
+than instantly cleared while respecting the model's coarse nitrifier biomass scale."""
+
+[param_meta.nob_growth_yield]
+unit = "g biomass / mg N oxidized"
+source = "Henze et al. 2008 (ASM models); Blackburne et al. 2007"
+confidence = "literature"
+valid_range = [0.02, 0.06]
+notes = """\
+NOB yield is slightly below the AOB yield, consistent with common activated-sludge \
+and biofilm formulations for nitrite oxidizers."""
+
+[param_meta.nob_decay_rate_per_hour]
+unit = "per hour"
+source = "ASM-style nitrifier decay envelopes; Nitrospira/Nitrobacter persistence heuristics"
+confidence = "expert"
+valid_range = [0.001, 0.01]
+notes = """\
+Decay shares the same order of magnitude as AOB because both guilds represent \
+slow-growing nitrifier biofilms rather than rapidly cycling plankton."""
+
+[param_meta.comammox_vmax_fraction]
+unit = "fraction of AOB vmax"
+source = "Kits et al. 2017; first-pass scaling for the comammox low-ammonia niche"
+confidence = "heuristic"
+valid_range = [0.2, 0.8]
+notes = """\
+Comammox uses a relative vmax because the model treats it as a specialization of \
+the existing nitrifier biomass scaffold. 0.4 preserves slower high-load kinetics \
+while allowing dominance once TAN falls below the AOB Ks."""
+
+[param_meta.comammox_growth_yield]
+unit = "g biomass / mg N oxidized"
+source = "Kits et al. 2017; heuristic transfer from Nitrospira-centered nitrifier yields"
+confidence = "heuristic"
+valid_range = [0.02, 0.06]
+notes = """\
+Direct comammox biomass-yield measurements remain sparse, so 0.03 is a cautious \
+first-pass value that stays close to the NOB/autotroph envelope without implying \
+high-confidence strain-specific physiology."""
+
+[param_meta.comammox_decay_rate_per_hour]
+unit = "per hour"
+source = "Nitrospira lineage analogy; aquarium persistence calibration"
+confidence = "heuristic"
+valid_range = [0.001, 0.01]
+notes = """\
+Comammox decay is kept slightly above the AOB/NOB values to avoid a permanent \
+late-cycle takeover from the simplified shared biomass representation."""
+
+# ── Denitrification kinetics ─────────────────────────────────────────
+[param_meta.denitrification_vmax_mg_n_per_l_per_hour]
+unit = "mg N/L/h"
+source = "Freshwater sediment denitrification reviews; aquarium substrate calibration"
+confidence = "literature"
+valid_range = [0.01, 0.5]
+notes = """\
+Maximum nitrate-reduction capacity in fully mature suboxic pore water. 0.1 is \
+a conservative mid-range literature anchor; it describes local pore-water \
+capacity rather than whole-tank nitrate removal."""
+
+[param_meta.denitrification_k_no3_mg_n_per_l]
+unit = "mg N/L"
+source = "Freshwater denitrifier Monod fits; wastewater denitrification kinetics texts"
+confidence = "literature"
+valid_range = [0.5, 5.0]
+notes = """\
+Nitrate half-saturation for denitrifying biofilms. 2.0 is a middle-of-the-pack \
+value that avoids unrealistically nitrate-unlimited denitrification at trace \
+NO₃ while staying within freshwater sediment ranges."""
+
+[param_meta.denitrification_k_doc_mg_c_per_l]
+unit = "mg C/L"
+source = "Heterotrophic denitrification kinetics reviews; Rittmann & McCarty 2001"
+confidence = "literature"
+valid_range = [1.0, 10.0]
+notes = """\
+DOC half-saturation for denitrifiers. 5.0 assumes mixed aquarium DOC quality \
+instead of easily-metabolized acetate; lower values would imply much more \
+aggressive nitrate removal from refractory carbon."""
+
+[param_meta.denitrification_pore_water_mixing_factor]
+unit = "fraction"
+source = "Heuristic pore-water coupling term for aquarium substrates"
+confidence = "heuristic"
+valid_range = [0.3, 0.7]
+notes = """\
+Fraction of water-column NO₃ and DOC assumed to reach suboxic pore water. This \
+is a geometry-and-flow proxy rather than a directly measured constant, so the \
+value should be treated as a tunable heuristic."""
+
+[param_meta.denitrification_activity_maturation_days]
+unit = "days"
+source = "Expert-curated from aquarium biofilm establishment timelines"
+confidence = "expert"
+valid_range = [30.0, 90.0]
+notes = """\
+Community-maturation time for denitrifiers after substrate setup. 60 days makes \
+denitrification lag behind nitrification in new tanks while still reaching a \
+meaningful steady-state within the Phase 5 scenario horizon."""
+
+# ── Decomposer half-saturation constants ─────────────────────────────
+[param_meta.decomposer_k_doc_mg_c_per_l]
+unit = "mg C/L"
+source = "Wetzel 2001; Boulton et al. 1998"
+confidence = "literature"
+valid_range = [1.0, 10.0]
+notes = """\
+Heterotrophic DOC Ks in freshwater biofilms. 3.0 is mid-range; actual value \
+depends heavily on DOC lability, which the model does not yet differentiate."""
+
+[param_meta.decomposer_k_do_mg_per_l]
+unit = "mg O₂/L"
+source = "Rittmann & McCarty 2001"
+confidence = "literature"
+valid_range = [0.3, 1.0]
+notes = "Aerobic heterotroph DO Ks. 0.5 is a standard activated-sludge value."
+
+# ── Stoichiometric constants ─────────────────────────────────────────
+[param_meta.o2_per_mg_n_nitrified]
+unit = "mg O₂ / mg N"
+source = "Stoichiometric derivation: NH₄⁺ + 2O₂ → NO₃⁻ + 2H⁺ + H₂O (64/14)"
+confidence = "literature"
+valid_range = [4.57, 4.57]
+notes = "Theoretical stoichiometric ratio. Fixed constant, not tunable."
+
+[param_meta.alkalinity_meq_per_mg_n_nitrified]
+unit = "meq / mg N"
+source = "Stoichiometric derivation: 2 meq alkalinity consumed per 14.007 mg N oxidized"
+confidence = "literature"
+valid_range = [0.1427, 0.1428]
+notes = "Theoretical stoichiometric ratio (2/14.007). Fixed constant."
+
+# ── Plant growth rate maxima ─────────────────────────────────────────
+[param_meta.plant_max_growth_rate_fast_stem_per_day]
+unit = "per day"
+source = "Calibrated against Hygrophila/Rotala growth observations; Kasselmann 2003"
+confidence = "heuristic"
+valid_range = [0.04, 0.15]
+notes = """\
+Fast-stem guild maximum daily growth rate. 0.08 is calibrated to produce \
+realistic stem elongation of ~2-4 cm/week under good conditions. Literature \
+values for Hygrophila polysperma range 0.05-0.12/day."""
+
+[param_meta.plant_max_growth_rate_root_rosette_per_day]
+unit = "per day"
+source = "Calibrated against Cryptocoryne/Echinodorus growth; Kasselmann 2003"
+confidence = "heuristic"
+valid_range = [0.02, 0.10]
+notes = """\
+Root-rosette guild maximum daily growth rate. 0.06 reflects slower leaf \
+production typical of rosette species. Substrate dependency dominates growth \
+limitation more than the rate ceiling."""
+
+# ── Algae/periphyton growth rate maxima ──────────────────────────────
+[param_meta.algae_max_growth_rate_per_day]
+unit = "per day"
+source = "Reynolds 2006; Eppley 1972 (temperature-growth relationship)"
+confidence = "literature"
+valid_range = [0.1, 0.5]
+notes = """\
+Planktonic algae max growth rate. 0.2/day is conservative for green algae at \
+25-27°C. Eppley curve predicts ~0.3-0.5 at these temperatures but aquarium \
+light/nutrient limitation keeps effective rates lower."""
+
+[param_meta.periphyton_max_growth_rate_per_day]
+unit = "per day"
+source = "Borchardt 1996; Stevenson et al. 1996"
+confidence = "heuristic"
+valid_range = [0.08, 0.30]
+notes = """\
+Periphyton (attached algae) max growth rate. 0.15 is set lower than planktonic \
+algae to reflect boundary-layer mass-transfer limitation on surfaces."""

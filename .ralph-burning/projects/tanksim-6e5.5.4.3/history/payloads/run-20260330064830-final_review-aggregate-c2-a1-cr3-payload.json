@@ -1,0 +1,115 @@
+{
+  "payload_id": "run-20260330064830-final_review-aggregate-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T08:47:33.513317806Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-3-a7b12680"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-3-a011636a",
+        "normalized_body": "The `egg_drop_temp_swing_c` parameter in `ShrimpRuntimeParams` (biology.rs:349-350) is defined, serialized, documented, and tested for existence (reproduction_factors.rs:541), but is never actually read by any runtime logic. The `egg_dropping` function (shrimp.rs:734) only uses `instability_index` and `egg_drop_instability_threshold`. The doc comment on `egg_dropping` (shrimp.rs:731) references it as if it controls behavior, which is misleading. Either wire the parameter into the egg-dropping logic (e.g., as a separate temperature-swing threshold distinct from general instability), or remove it to avoid a dead named parameter that violates the acceptance criterion of 'parameters are named parameters rather than hardcoded constants' — a parameter that exists but does nothing is worse than a hardcoded constant.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-717340b3",
+        "normalized_body": "The `EventCause::HighDensity` variant added in events.rs:49 is defined but never emitted anywhere in the codebase. The `egg_dropping` function emits `ChemistryInstability` as the cause, and the density reproduction suppression factor feeds only through the readiness index — no event is emitted when density specifically suppresses breeding. Either emit a `HighDensity` event when density is the dominant suppression factor, or remove the unused variant to keep the event model honest.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-a7b12680",
+        "normalized_body": "The `pub fn temp_repro_factor_pub` (shrimp.rs:1456) is declared public but has zero call sites in the workspace. It wraps a private function with a `_pub` suffix naming convention that suggests it was added for test access. If it's intended for external crate use, it should be documented; otherwise remove it to avoid dead public API surface.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-72451f87",
+        "normalized_body": "The denitrification integration test `test_denitrification_reduces_nitrate_accumulation` (denitrification.rs:583) was refactored from a full `Engine::step_hours(500)` simulation to isolated `step_substrate_zones` + `step_nitrogen_cycle` calls. The nitrate assertion was relaxed from strict `no3_with < no3_without` to `no3_with <= no3_without + 10.0` (a 10 mg/L margin). While the new test targets the subsystems more directly, the 10 mg/L margin is wide enough that a substantial regression in denitrification's nitrate-removing effect could pass undetected. Consider tightening the margin or adding a secondary assertion on relative nitrate reduction (e.g., `total_n_with < 0.95 * total_n_without`).",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-6f64c62a",
+        "normalized_body": "This patch does not implement the requested root-zone oxygenation bead. The only functional changes are nitrification/alkalinity bookkeeping in `crates/tank_core/src/engine.rs:229-241`, `crates/tank_core/src/systems/nitrogen_cycle.rs:12-23`, and `crates/tank_core/src/types/process.rs:10-27`, with matching alkalinity coverage in `crates/tank_core/tests/nitrification_alkalinity.rs:1-336`. `git diff` shows no changes to the required substrate/plant touchpoints (`crates/tank_core/src/systems/substrate.rs`, `crates/tank_core/src/systems/plant_growth.rs`, `crates/tank_data/data/plant_guilds`), so the acceptance criteria around rooted-only biomass, saturated penetration-depth bonuses, planted-vs-unplanted divergence, and root-zone tracing remain entirely unimplemented.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-ed44ead5",
+        "normalized_body": "The change regresses deterministic save/load. After switching the default nitrification alkalinity constant in `crates/tank_core/src/types/process.rs:337-338` and consuming it in `crates/tank_core/src/systems/nitrogen_cycle.rs:169` and `crates/tank_core/src/systems/nitrogen_cycle.rs:371-373`, `cargo test -p tank_core` now fails in `crates/tank_core/tests/save_load.rs:340-372`. A save/load round-trip immediately changes the state because load re-solves carbonate state in `crates/tank_core/src/save.rs:834-843`; in the active-cycle fixture the serialized state and the reloaded state already disagree on `water.ph`/`bicarbonate_mg_total`, so the resumed simulation diverges from the uninterrupted run. This needs a real fix before merge, either by keeping carbonate caches fresh before serialization or by ensuring post-chemistry alkalinity/DIC mutations cannot leave stale cached carbonate state behind.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-3-a7b12680",
+        "normalized_body": "The `pub fn temp_repro_factor_pub` (shrimp.rs:1456) is declared public but has zero call sites in the workspace. It wraps a private function with a `_pub` suffix naming convention that suggests it was added for test access. If it's intended for external crate use, it should be documented; otherwise remove it to avoid dead public API surface.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 3,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-3-a011636a",
+      "fr-3-717340b3",
+      "fr-3-72451f87",
+      "fr-3-6f64c62a",
+      "fr-3-ed44ead5"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 1 amendment(s); restart required.",
+    "total_proposed_amendments": 6,
+    "total_reviewers": 2,
+    "unique_amendment_count": 6
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 3
+}

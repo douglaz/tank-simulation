@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330064830-final_review-planner-positions-c2-a1-cr7-artifact",
+  "payload_id": "run-20260330064830-final_review-planner-positions-c2-a1-cr7-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T10:54:07.555527442Z",
+  "content": "# Final Review Planner Positions\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccept the numeric hardening and registry-consistency amendments; reject the blocking amendment because the current change set already includes substrate root-oxygenation logic and coverage for the cited acceptance criteria.\n\n## Votes\n\n- `fr-7-dd6f9b61`: Accept\n  `effective_penetration_cm` is an exposed value in the breakdown struct, and `base + (total - base)` can exceed `total_depth_cm` by a few ULPs in IEEE-754 even when the math is bounded. Downstream clamps limit impact, but adding `.min(total_depth_cm)` is a cheap, correct defensive invariant.\n- `fr-7-80ce85a0`: Accept\n  The inconsistency is real: `substrate_oxygenation_breakdown()` recomputes a registry, while `step_substrate_zones()` reads `state.habitat_registry`. Because `TankState` is publicly mutable and the cached registry must be refreshed after plant/geometry/substrate changes, direct callers can observe different results on the same state if the cache is stale. That should be unified or explicitly documented as a precondition.\n- `fr-7-c178d602`: Reject\n  This amendment is factually contradicted by the code under review. The substrate system already contains root-zone oxygenation logic in `crates/tank_core/src/systems/substrate.rs`, including rooted-only biomass handling, saturating biomass-dependent bonus behavior, and planted-vs-unplanted penetration changes, and there is dedicated long-horizon coverage in `crates/tank_core/tests/root_zone_oxygenation.rs` including a 500-hour planted/unplanted divergence test.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 7
+}

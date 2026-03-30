@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328125540-final_review-planner-positions-c2-a1-cr2-artifact",
+  "payload_id": "run-20260328125540-final_review-planner-positions-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T15:05:12.754129445Z",
+  "content": "# Final Review Planner Positions\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nAccept all four amendments. They address real state-integrity and coverage gaps, with the caveat that fr-2-81a07e81 should treat condition transfer as the primary correctness fix and handle maturation state carefully rather than blindly averaging it in every case.\n\n## Votes\n\n- `fr-2-6fdbcb32`: Accept\n  The egg cohort sum is a real invariant and it is currently unchecked. `egg_development` resolves cohorts from `egg_cohorts` and only later does a saturating subtraction from `berried_females_count`, so a mismatch can create phantom hatch events or stranded berried females. `clamp_berried_to_adults` only enforces an upper bound against `adult.count`; it does not guarantee cohort/count consistency. This should be repaired or surfaced as a normal invariant error in `enforce_invariants`, not left implicit.\n- `fr-2-c660eb57`: Accept\n  `maturation_accum` is an aggregate measured in equivalent individuals ready to promote, so values above the cohort's live `count` carry no extra semantic information. The current unfunded re-addition path can grow that float without bound under chronic resource shortage, which is unnecessary state drift and eventually a precision/serialization liability. Clamping at `count` preserves behavior while making the state bounded and easier to reason about.\n- `fr-2-07f4a3dd`: Accept\n  This is a worthwhile regression test for a core model invariant. Existing tests cover specific hatch paths, mortality behavior, and N/C conservation, but they do not directly assert that stage-population deltas are explained only by explicit births and deaths across a multi-day run. A dedicated accounting test would catch exactly the kind of silent phantom-birth or dropped-count bug these lifecycle systems are vulnerable to.\n- `fr-2-81a07e81`: Accept\n  The destination-stage updates currently move `count` and sometimes `reserve_g` only, leaving destination `condition_index` unchanged. That is a correctness bug because stage condition is cohort state, and after recruitment the destination cohort's average condition can be materially wrong until the next daily update, affecting mortality and later gating. The maturation-state part should be applied carefully: resetting stale progress on empty/corrupt destination cohorts is justified, but the key issue is that entrant state is not being reinitialized or blended at all.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

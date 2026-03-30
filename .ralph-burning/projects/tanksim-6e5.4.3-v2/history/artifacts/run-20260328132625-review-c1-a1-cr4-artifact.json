@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328132625-review-c1-a1-cr4-artifact",
+  "payload_id": "run-20260328132625-review-c1-a1-cr4",
+  "stage_id": "review",
+  "created_at": "2026-03-28T14:39:09.957809589Z",
+  "content": "# Review\n\n## Outcome\n\n**Conditionally Approved**\n\n## Evidence\n\n- `crates/tank_core/src/systems/dissolved_oxygen.rs:9-53` normalizes `compute_o2_kla()` by the tank's actual surface-area-to-volume ratio against a reference SA/V, so total air-water flux scales with exposed surface area instead of raw water volume.\n- `crates/tank_core/src/systems/chemistry.rs:47-58` derives `compute_co2_kla()` from `compute_o2_kla(state)`, applies the Euler cap on the O2 basis first, then multiplies by `0.91`, keeping CO2 and O2 aligned on the same K_LA basis even when raw O2 K_LA exceeds 1.0.\n- `crates/tank_core/src/systems/chemistry.rs:566-603` computes CO2 exchange from carbonate-solved aqueous CO2 versus Henry-law equilibrium and immediately re-resolves carbonate state after DIC changes, so aeration-driven CO2 stripping propagates into bicarbonate and pH in the same hourly step.\n- `crates/tank_core/tests/co2_exchange.rs:216-316` now checks the corrected equal-footprint invariant: shallow and deep tanks exchange similar total DIC mass over an hour, while the shallower tank shows the faster concentration change.\n- `cargo test -q -p tank_core --test co2_exchange` passed (12/12), and `cargo test -q -p tank_core --test co2_exchange --test chemistry --test dissolved_oxygen` passed (38/38 total). `cargo clippy -q -p tank_core --tests -- -D warnings` and `cargo fmt --check -p tank_core` also passed.\n- `cargo test -q -p tank_core --test validation` still fails 1/11 at `crates/tank_core/tests/validation.rs:141`, and `cargo test -q -p tank_core` fails for the same reason, so the prior round's full-package-green claim is not reproducible in the current checkout.\n\n## Findings and Gaps\n\n- Validation gap: clean repo-wide approval is not reproducible from the current checkout because `cargo test -q -p tank_core` still fails in `step_hours_leaves_state_untouched_when_clamps_precede_a_validation_error` (`crates/tank_core/tests/validation.rs:118-141`).\n- No task-specific correctness, regression, or completeness issue was found in the CO2/O2 gas-exchange implementation after targeted code review and gas-exchange validation.\n\n## Follow-up and Amendments\n\n- No amendment is requested for the gas-exchange implementation itself.\n- If package-wide green is required before merge, fix or rebaseline `crates/tank_core/tests/validation.rs:118-141` so its expected state accounts for `Engine::from_parts` refreshing `habitat_registry` before `step_hours()`, then rerun `cargo test -q -p tank_core`.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

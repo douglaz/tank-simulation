@@ -1,7 +1,97 @@
+use std::collections::BTreeMap;
+use tank_core::systems::chemistry::solve_carbonate_equilibrium;
+use tank_core::systems::shrimp::update_stability_tracker;
 use tank_core::{
-    Engine, MicrobeState, PlayerAction, ProcessParams, SaveFile, SimSeed, SimulationEngine,
-    SourceWaterProfile, TankState,
+    compute_habitat_registry, legacy_total_param_to_mg_per_l, legacy_total_param_to_mg_per_m2,
+    shrimp_biomass_g, Engine, MicrobeState, PlayerAction, ProcessParams, SaveFile,
+    ShrimpRuntimeParams, SimError, SimSeed, SimulationEngine, SourceWaterProfile, StabilityTracker,
+    TankState, WaterState, APP_VERSION, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G, SCHEMA_VERSION,
 };
+
+fn legacy_pre_stage_state_json(
+    state: &TankState,
+    adults_count: u32,
+    juveniles_count: u32,
+    reserve_g: Option<f64>,
+    condition_index: f64,
+    maturation_accum: f64,
+) -> serde_json::Value {
+    let mut state_json = serde_json::to_value(state).expect("serialize legacy state");
+    let state_obj = state_json.as_object_mut().expect("state json object");
+    state_obj.remove("habitat_registry");
+    state_obj
+        .get_mut("geometry")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("geometry object")
+        .remove("hardscape_area_cm2");
+    state_obj
+        .get_mut("hardware")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("hardware object")
+        .get_mut("filter")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("filter object")
+        .remove("media_area_cm2");
+    state_obj.remove("shrimp_params");
+
+    let mut animal = serde_json::Map::new();
+    animal.insert("adults_count".to_string(), serde_json::json!(adults_count));
+    animal.insert(
+        "juveniles_count".to_string(),
+        serde_json::json!(juveniles_count),
+    );
+    animal.insert(
+        "condition_index".to_string(),
+        serde_json::json!(condition_index),
+    );
+    animal.insert(
+        "maturation_accum".to_string(),
+        serde_json::json!(maturation_accum),
+    );
+    animal.insert(
+        "berried_females_count".to_string(),
+        serde_json::json!(state.animal.berried_females_count),
+    );
+    animal.insert(
+        "molt_stress_index".to_string(),
+        serde_json::json!(state.animal.molt_stress_index),
+    );
+    animal.insert(
+        "reproductive_readiness_index".to_string(),
+        serde_json::json!(state.animal.reproductive_readiness_index),
+    );
+    animal.insert(
+        "egg_progress_days".to_string(),
+        serde_json::json!(state.animal.egg_progress_days),
+    );
+    if let Some(reserve_g) = reserve_g {
+        animal.insert("reserve_g".to_string(), serde_json::json!(reserve_g));
+    }
+    state_obj.insert("animal".to_string(), serde_json::Value::Object(animal));
+
+    state_json
+}
+
+fn rewrite_algae_half_saturation_fields_to_legacy_totals(
+    state_json: &mut serde_json::Value,
+    legacy_n_mg_total: f64,
+    legacy_p_mg_total: f64,
+) {
+    let process_params = state_json
+        .pointer_mut("/process_params")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("process params object");
+    process_params.remove("algae_half_saturation_n_mg_n_per_l");
+    process_params.remove("algae_half_saturation_p_mg_p_per_l");
+    process_params.insert(
+        "algae_half_saturation_n_mg_total".to_string(),
+        serde_json::json!(legacy_n_mg_total),
+    );
+    process_params.insert(
+        "algae_half_saturation_p_mg_total".to_string(),
+        serde_json::json!(legacy_p_mg_total),
+    );
+}
 
 #[test]
 fn save_load_roundtrip() -> Result<(), tank_core::SimError> {
@@ -21,6 +111,137 @@ fn save_load_roundtrip() -> Result<(), tank_core::SimError> {
     assert_eq!(save, restored);
     assert_eq!(engine.full_state(), restored_engine.full_state());
     assert_eq!(engine.queued_actions(), restored_engine.queued_actions());
+
+    Ok(())
+}
+
+#[test]
+fn current_schema_load_rebuilds_stale_habitat_registry() -> Result<(), tank_core::SimError> {
+    let mut state = TankState::new(SimSeed(142));
+    let stale_registry = state.habitat_registry.clone();
+    state.plant_guilds[0].biomass_g *= 3.0;
+    state.habitat_registry = stale_registry;
+
+    let json = serde_json::to_string(&SaveFile {
+        schema_version: SCHEMA_VERSION,
+        app_version: APP_VERSION.to_string(),
+        state,
+        queued_actions: vec![],
+    })
+    .expect("serialize current-schema save");
+
+    let loaded = SaveFile::from_json(&json)?;
+    assert_eq!(
+        loaded.state.habitat_registry,
+        compute_habitat_registry(&loaded.state)
+    );
+
+    Ok(())
+}
+
+#[test]
+fn current_schema_save_roundtrip_preserves_serialized_substrate_factor(
+) -> Result<(), tank_core::SimError> {
+    let mut state = TankState::new(SimSeed(143));
+    state.substrate_layers[0].colonizable_area_factor = 0.73;
+    state.refresh_habitat_registry();
+
+    let json = serde_json::to_string(&SaveFile {
+        schema_version: SCHEMA_VERSION,
+        app_version: APP_VERSION.to_string(),
+        state,
+        queued_actions: vec![],
+    })
+    .expect("serialize current-schema save");
+
+    let loaded = SaveFile::from_json(&json)?;
+    assert!((loaded.state.substrate_layers[0].colonizable_area_factor - 0.73).abs() < 1e-9);
+
+    let expected = loaded.state.geometry.footprint_area_cm2()
+        * loaded.state.substrate_layers[0].depth_cm
+        * 0.73;
+    assert!((loaded.state.substrate_layers[0].colonizable_area_cm2 - expected).abs() < 0.01);
+
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v8_saves_convert_algae_half_saturation_totals_to_concentrations(
+) -> Result<(), tank_core::SimError> {
+    let legacy_state = TankState::new(SimSeed(1440));
+    let mut state_json = serde_json::to_value(&legacy_state).expect("serialize legacy state");
+    rewrite_algae_half_saturation_fields_to_legacy_totals(&mut state_json, 5.0, 0.8);
+
+    let json = serde_json::json!({
+        "schema_version": 8,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert!(
+        (migrated
+            .state
+            .process_params
+            .algae_half_saturation_n_mg_n_per_l
+            - 0.25)
+            .abs()
+            < 1e-9
+    );
+    assert!(
+        (migrated
+            .state
+            .process_params
+            .algae_half_saturation_p_mg_p_per_l
+            - 0.04)
+            .abs()
+            < 1e-9
+    );
+
+    let _engine = migrated.into_engine()?;
+    Ok(())
+}
+
+#[test]
+fn current_schema_payloads_accept_legacy_algae_half_saturation_keys(
+) -> Result<(), tank_core::SimError> {
+    let state = TankState::new(SimSeed(1441));
+    let mut state_json = serde_json::to_value(&state).expect("serialize current state");
+    rewrite_algae_half_saturation_fields_to_legacy_totals(&mut state_json, 5.0, 0.8);
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+
+    assert_eq!(loaded.schema_version, SCHEMA_VERSION);
+    assert!(
+        (loaded
+            .state
+            .process_params
+            .algae_half_saturation_n_mg_n_per_l
+            - 0.25)
+            .abs()
+            < 1e-9
+    );
+    assert!(
+        (loaded
+            .state
+            .process_params
+            .algae_half_saturation_p_mg_p_per_l
+            - 0.04)
+            .abs()
+            < 1e-9
+    );
 
     Ok(())
 }
@@ -126,6 +347,10 @@ fn save_load_with_active_cycle_state() -> Result<(), tank_core::SimError> {
         nitrite_oxidizer_biomass_g: 0.12,
         comammox_biomass_g: 0.03,
         maturity_index: 0.5,
+        // Empty map: ensure_habitat_pools() will distribute using registry
+        // weights on engine creation, keeping scalar and map in sync.
+        decomposer_by_habitat: BTreeMap::new(),
+        denitrifier_activity_index: 0.0,
     };
     state.filter_state.biofilter_maturity_index = 0.5;
 
@@ -150,6 +375,1369 @@ fn save_load_with_active_cycle_state() -> Result<(), tank_core::SimError> {
         resumed.full_state(),
         "Save/load with active cycle state must produce identical results"
     );
+
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v2_saves_are_migrated_to_net_water_volume() -> Result<(), tank_core::SimError> {
+    let mut legacy_state = TankState::new(SimSeed(99));
+    let gross_volume_l = legacy_state.geometry.gross_water_volume_l();
+    let net_volume_l = legacy_state.water_volume_l();
+    legacy_state.water = WaterState::default_for_volume_l(gross_volume_l);
+    legacy_state.water.ammonia_total_mg_n_total = 1.5 * gross_volume_l;
+    legacy_state.water.nitrate_mg_n_total = 3.0 * gross_volume_l;
+    legacy_state.water.phosphate_mg_p_total = 0.4 * gross_volume_l;
+    let state_json = legacy_pre_stage_state_json(&legacy_state, 0, 0, None, 0.8, 0.0);
+
+    let json = serde_json::json!({
+        "schema_version": 2,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert!((migrated.state.water_volume_l() - net_volume_l).abs() < 1e-9);
+    assert!((migrated.state.tan_mg_n_per_l() - 1.5).abs() < 1e-9);
+    assert!((migrated.state.nitrate_mg_n_per_l() - 3.0).abs() < 1e-9);
+    assert!((migrated.state.phosphate_mg_p_per_l() - 0.4).abs() < 1e-9);
+    assert!((migrated.state.water.do_mg_per_l(net_volume_l) - 8.0).abs() < 1e-9);
+
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v2_saves_without_tracker_reseed_stability_baselines(
+) -> Result<(), tank_core::SimError> {
+    let mut legacy_state = TankState::new(SimSeed(100));
+    let gross_volume_l = legacy_state.geometry.gross_water_volume_l();
+    legacy_state.water = WaterState::default_for_volume_l(gross_volume_l);
+    legacy_state.water.temperature_c = 26.5;
+    legacy_state.water.ph = 6.6;
+    legacy_state.water.dissolved_oxygen_mg_total = 6.2 * gross_volume_l;
+    legacy_state.water.alkalinity_meq_total = 2.3 * gross_volume_l;
+    legacy_state.water.calcium_mg_total = 34.0 * gross_volume_l;
+    legacy_state.water.magnesium_mg_total = 9.0 * gross_volume_l;
+
+    let mut state_json = legacy_pre_stage_state_json(&legacy_state, 0, 0, None, 0.8, 0.0);
+    state_json
+        .as_object_mut()
+        .expect("state json object")
+        .remove("stability_tracker");
+
+    let json = serde_json::json!({
+        "schema_version": 2,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert!(
+        (migrated.state.stability_tracker.prev_temp_c - migrated.state.water.temperature_c).abs()
+            < 1e-9
+    );
+    assert!((migrated.state.stability_tracker.prev_ph - migrated.state.water.ph).abs() < 1e-9);
+    assert!(
+        (migrated.state.stability_tracker.prev_do_mg_l - migrated.state.do_mg_per_l()).abs() < 1e-9
+    );
+    assert!((migrated.state.stability_tracker.prev_gh_d - migrated.state.gh_d()).abs() < 1e-9);
+    assert_eq!(migrated.state.stability_tracker.instability_index, 0.0);
+
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v2_saves_with_unseeded_tracker_reseed_stability_baselines(
+) -> Result<(), tank_core::SimError> {
+    let mut legacy_state = TankState::new(SimSeed(108));
+    let gross_volume_l = legacy_state.geometry.gross_water_volume_l();
+    legacy_state.water = WaterState::default_for_volume_l(gross_volume_l);
+    legacy_state.stability_tracker = StabilityTracker::default();
+    let state_json = legacy_pre_stage_state_json(&legacy_state, 0, 0, None, 0.8, 0.0);
+
+    let json = serde_json::json!({
+        "schema_version": 2,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert!(
+        (migrated.state.stability_tracker.prev_temp_c - migrated.state.water.temperature_c).abs()
+            < 1e-9
+    );
+    assert!((migrated.state.stability_tracker.prev_ph - migrated.state.water.ph).abs() < 1e-9);
+    assert!(
+        (migrated.state.stability_tracker.prev_do_mg_l - migrated.state.do_mg_per_l()).abs() < 1e-9
+    );
+    assert!((migrated.state.stability_tracker.prev_gh_d - migrated.state.gh_d()).abs() < 1e-9);
+    assert_eq!(migrated.state.stability_tracker.instability_index, 0.0);
+
+    let mut loaded_state = migrated.state.clone();
+    update_stability_tracker(&mut loaded_state);
+    assert!(
+        loaded_state.stability_tracker.instability_index.abs() < 1e-12,
+        "reseeded legacy tracker should not register a fake first-day swing"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v3_saves_seed_reserve_from_existing_shrimp_biomass() -> Result<(), SimError> {
+    let legacy_state = TankState::new(SimSeed(103));
+    let mut state_json = legacy_pre_stage_state_json(&legacy_state, 30, 20, None, 0.8, 0.0);
+    state_json
+        .as_object_mut()
+        .expect("state json object")
+        .get_mut("animal")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("animal object")
+        .remove("reserve_g");
+
+    let process_obj = state_json
+        .as_object_mut()
+        .expect("state json object")
+        .get_mut("process_params")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("process params object");
+    for field in [
+        "shrimp_assimilation_efficiency",
+        "shrimp_respiration_fraction_of_assimilated",
+        "shrimp_excretion_fraction_of_assimilated",
+        "shrimp_growth_fraction_of_assimilated",
+        "shrimp_o2_per_mg_c_respired",
+    ] {
+        process_obj.remove(field);
+    }
+
+    let json = serde_json::json!({
+        "schema_version": 3,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+    let defaults = ProcessParams::default();
+    let expected_reserve_g = shrimp_biomass_g(30, 0, 20) * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G;
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert!(
+        (migrated.state.animal.total_reserve_g() - expected_reserve_g).abs() < 1e-12,
+        "legacy reserve should be reconstructed from serialized shrimp biomass"
+    );
+    assert_eq!(
+        migrated.state.process_params.shrimp_assimilation_efficiency,
+        defaults.shrimp_assimilation_efficiency
+    );
+    assert_eq!(
+        migrated
+            .state
+            .process_params
+            .shrimp_respiration_fraction_of_assimilated,
+        defaults.shrimp_respiration_fraction_of_assimilated
+    );
+    assert_eq!(
+        migrated
+            .state
+            .process_params
+            .shrimp_excretion_fraction_of_assimilated,
+        defaults.shrimp_excretion_fraction_of_assimilated
+    );
+    assert_eq!(
+        migrated
+            .state
+            .process_params
+            .shrimp_growth_fraction_of_assimilated,
+        defaults.shrimp_growth_fraction_of_assimilated
+    );
+    assert_eq!(
+        migrated.state.process_params.shrimp_o2_per_mg_c_respired,
+        defaults.shrimp_o2_per_mg_c_respired
+    );
+
+    let _engine = migrated.into_engine()?;
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v4_saves_preserve_trim_plants_as_leave_cuttings() -> Result<(), SimError> {
+    let mut legacy_state = TankState::new(SimSeed(110));
+    legacy_state.animal.berried_females_count = 1;
+    legacy_state.animal.molt_stress_index = 0.25;
+    legacy_state.animal.reproductive_readiness_index = 0.6;
+    legacy_state.animal.egg_progress_days = 4.0;
+
+    let mut state_json = serde_json::to_value(&legacy_state).expect("serialize legacy state");
+    let state_obj = state_json.as_object_mut().expect("state json object");
+    state_obj.remove("habitat_registry");
+    state_obj
+        .get_mut("geometry")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("geometry object")
+        .remove("hardscape_area_cm2");
+    state_obj
+        .get_mut("hardware")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("hardware object")
+        .get_mut("filter")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("filter object")
+        .remove("media_area_cm2");
+    state_obj.remove("shrimp_params");
+    state_obj.insert(
+        "animal".to_string(),
+        serde_json::json!({
+            "adults_count": 4,
+            "juveniles_count": 7,
+            "condition_index": 0.65,
+            "reserve_g": 1.2,
+            "maturation_accum": 0.35,
+            "berried_females_count": legacy_state.animal.berried_females_count,
+            "molt_stress_index": legacy_state.animal.molt_stress_index,
+            "reproductive_readiness_index": legacy_state.animal.reproductive_readiness_index,
+            "egg_progress_days": legacy_state.animal.egg_progress_days,
+        }),
+    );
+
+    let json = serde_json::json!({
+        "schema_version": 4,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [
+            { "TrimPlants": { "fraction": 0.3 } },
+            { "Feed": { "grams": 1.0 } },
+            { "TrimPlants": { "fraction": 0.5 } },
+        ],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert_eq!(migrated.state.animal.adult.count, 4);
+    assert_eq!(migrated.state.animal.juvenile.count, 7);
+    assert_eq!(migrated.state.animal.sub_adult.count, 0);
+    assert_eq!(migrated.state.animal.berried_females_count, 1);
+    assert!(!migrated.state.habitat_registry.is_empty());
+    assert_eq!(
+        migrated.queued_actions,
+        vec![
+            PlayerAction::TrimPlantsAndLeaveCuttings { fraction: 0.3 },
+            PlayerAction::Feed { grams: 1.0 },
+            PlayerAction::TrimPlantsAndLeaveCuttings { fraction: 0.5 },
+        ]
+    );
+
+    let engine = migrated.into_engine()?;
+    let actions = engine.queued_actions();
+    assert_eq!(actions.len(), 3);
+    assert_eq!(
+        actions[0],
+        PlayerAction::TrimPlantsAndLeaveCuttings { fraction: 0.3 }
+    );
+    assert_eq!(actions[1], PlayerAction::Feed { grams: 1.0 });
+    assert_eq!(
+        actions[2],
+        PlayerAction::TrimPlantsAndLeaveCuttings { fraction: 0.5 }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v6_saves_gain_explicit_substrate_area_factor() -> Result<(), SimError> {
+    let legacy_state = TankState::new(SimSeed(144));
+    let mut state_json = serde_json::to_value(&legacy_state).expect("serialize legacy state");
+    state_json
+        .pointer_mut("/substrate_layers/0")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("substrate layer object")
+        .remove("colonizable_area_factor");
+
+    let json = serde_json::json!({
+        "schema_version": 6,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert!(
+        (migrated.state.substrate_layers[0].colonizable_area_factor - 0.5).abs() < f64::EPSILON
+    );
+
+    let expected = migrated.state.substrate_layers[0]
+        .derived_colonizable_area_cm2(migrated.state.geometry.footprint_area_cm2());
+    assert!((migrated.state.substrate_layers[0].colonizable_area_cm2 - expected).abs() < 0.01);
+
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v7_saves_migrate_renamed_plant_half_saturation_fields() -> Result<(), SimError> {
+    let mut legacy_state = TankState::new(SimSeed(145));
+    legacy_state
+        .process_params
+        .plant_half_saturation_n_mg_n_per_l = 999.0;
+    legacy_state
+        .process_params
+        .plant_half_saturation_p_mg_p_per_l = 999.0;
+    legacy_state
+        .process_params
+        .plant_half_saturation_c_mg_c_per_l = 999.0;
+    legacy_state
+        .process_params
+        .plant_half_saturation_n_substrate_mg_n_per_m2 = 999.0;
+    legacy_state
+        .process_params
+        .plant_half_saturation_p_substrate_mg_p_per_m2 = 999.0;
+
+    let legacy_n_total = 13.0;
+    let legacy_p_total = 2.8;
+    let legacy_c_total = 34.0;
+
+    let mut state_json = serde_json::to_value(&legacy_state).expect("serialize legacy state");
+    let process_params = state_json
+        .pointer_mut("/process_params")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("process params object");
+    process_params.remove("plant_half_saturation_n_mg_n_per_l");
+    process_params.remove("plant_half_saturation_p_mg_p_per_l");
+    process_params.remove("plant_half_saturation_c_mg_c_per_l");
+    process_params.remove("plant_half_saturation_n_substrate_mg_n_per_m2");
+    process_params.remove("plant_half_saturation_p_substrate_mg_p_per_m2");
+    process_params.insert(
+        "plant_half_saturation_n_mg_total".to_string(),
+        serde_json::json!(legacy_n_total),
+    );
+    process_params.insert(
+        "plant_half_saturation_p_mg_total".to_string(),
+        serde_json::json!(legacy_p_total),
+    );
+    process_params.insert(
+        "plant_half_saturation_c_mg_total".to_string(),
+        serde_json::json!(legacy_c_total),
+    );
+
+    let json = serde_json::json!({
+        "schema_version": 7,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+    assert_eq!(migrated.schema_version, SCHEMA_VERSION);
+    assert!(
+        (migrated
+            .state
+            .process_params
+            .plant_half_saturation_n_mg_n_per_l
+            - legacy_total_param_to_mg_per_l(legacy_n_total))
+        .abs()
+            < 1e-12
+    );
+    assert!(
+        (migrated
+            .state
+            .process_params
+            .plant_half_saturation_p_mg_p_per_l
+            - legacy_total_param_to_mg_per_l(legacy_p_total))
+        .abs()
+            < 1e-12
+    );
+    assert!(
+        (migrated
+            .state
+            .process_params
+            .plant_half_saturation_c_mg_c_per_l
+            - legacy_total_param_to_mg_per_l(legacy_c_total))
+        .abs()
+            < 1e-12
+    );
+    assert!(
+        (migrated
+            .state
+            .process_params
+            .plant_half_saturation_n_substrate_mg_n_per_m2
+            - legacy_total_param_to_mg_per_m2(legacy_n_total))
+        .abs()
+            < 1e-12
+    );
+    assert!(
+        (migrated
+            .state
+            .process_params
+            .plant_half_saturation_p_substrate_mg_p_per_m2
+            - legacy_total_param_to_mg_per_m2(legacy_p_total))
+        .abs()
+            < 1e-12
+    );
+
+    let _engine = migrated.into_engine()?;
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v4_saves_split_legacy_maturation_days_into_stage_params() -> Result<(), SimError> {
+    let mut legacy_state = TankState::new(SimSeed(111));
+    legacy_state.process_params.shrimp_juvenile_maturation_days = 75.0;
+    let state_json = legacy_pre_stage_state_json(&legacy_state, 4, 7, Some(1.2), 0.65, 0.35);
+
+    let json = serde_json::json!({
+        "schema_version": 4,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let migrated = SaveFile::from_json(&json)?;
+    let (expected_juvenile, expected_subadult) =
+        ShrimpRuntimeParams::split_legacy_total_maturation_days(75.0);
+
+    assert!(
+        (migrated.state.shrimp_params.juvenile_to_subadult_days - expected_juvenile).abs() < 1e-9
+    );
+    assert!((migrated.state.shrimp_params.subadult_to_adult_days - expected_subadult).abs() < 1e-9);
+
+    let _engine = migrated.into_engine()?;
+    Ok(())
+}
+
+fn assert_schema_v2_migration_failure(state_json: serde_json::Value, expected_message: &str) {
+    let json = serde_json::json!({
+        "schema_version": 2,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let err = SaveFile::from_json(&json).unwrap_err();
+    match err {
+        SimError::SchemaMigration { from, to, message } => {
+            assert_eq!(from, 2);
+            assert_eq!(to, 3);
+            assert!(
+                message.contains(expected_message),
+                "error should mention `{expected_message}`: {message}"
+            );
+        }
+        other => panic!("expected SchemaMigration, got: {other:?}"),
+    }
+}
+
+#[test]
+fn malformed_legacy_schema_v2_save_reports_migration_failure() {
+    let mut state_json =
+        serde_json::to_value(TankState::new(SimSeed(104))).expect("serialize legacy state");
+    state_json
+        .as_object_mut()
+        .expect("state json object")
+        .remove("water");
+
+    assert_schema_v2_migration_failure(state_json, "/state/water");
+}
+
+#[test]
+fn malformed_legacy_schema_v2_negative_fill_height_reports_migration_failure() {
+    let mut state_json =
+        serde_json::to_value(TankState::new(SimSeed(105))).expect("serialize legacy state");
+    *state_json
+        .pointer_mut("/geometry/fill_height_cm")
+        .expect("fill height path") = serde_json::json!(-1.0);
+
+    assert_schema_v2_migration_failure(state_json, "/state/geometry/fill_height_cm");
+}
+
+#[test]
+fn malformed_legacy_schema_v2_negative_substrate_depth_reports_migration_failure() {
+    let mut state_json =
+        serde_json::to_value(TankState::new(SimSeed(106))).expect("serialize legacy state");
+    *state_json
+        .pointer_mut("/substrate_layers/0/depth_cm")
+        .expect("substrate depth path") = serde_json::json!(-0.5);
+
+    assert_schema_v2_migration_failure(state_json, "/state/substrate_layers/0/depth_cm");
+}
+
+#[test]
+fn malformed_legacy_schema_v2_substrate_depth_exceeds_fill_height_reports_migration_failure() {
+    let legacy_state = TankState::new(SimSeed(107));
+    let mut state_json = serde_json::to_value(&legacy_state).expect("serialize legacy state");
+    *state_json
+        .pointer_mut("/substrate_layers/0/depth_cm")
+        .expect("substrate depth path") =
+        serde_json::json!(legacy_state.geometry.fill_height_cm + 1.0);
+
+    assert_schema_v2_migration_failure(state_json, "exceeds fill height");
+}
+
+#[test]
+fn future_schema_version_produces_clear_error() {
+    let state = TankState::new(SimSeed(1));
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION + 1,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let err = SaveFile::from_json(&json).unwrap_err();
+    match err {
+        SimError::SchemaVersionTooNew {
+            actual,
+            max_supported,
+        } => {
+            assert_eq!(actual, SCHEMA_VERSION + 1);
+            assert_eq!(max_supported, SCHEMA_VERSION);
+        }
+        other => panic!("expected SchemaVersionTooNew, got: {other}"),
+    }
+
+    // Verify the error message is human-readable (not silent data loss).
+    let msg = err.to_string();
+    assert!(msg.contains("newer"), "error should mention 'newer': {msg}");
+    assert!(
+        msg.contains("upgrade"),
+        "error should suggest upgrade: {msg}"
+    );
+}
+
+#[test]
+fn very_old_schema_version_produces_clear_error() {
+    let state = TankState::new(SimSeed(1));
+    let json = serde_json::json!({
+        "schema_version": 1,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let err = SaveFile::from_json(&json).unwrap_err();
+    match err {
+        SimError::SchemaVersionTooOld {
+            actual,
+            min_supported,
+        } => {
+            assert_eq!(actual, 1);
+            assert_eq!(min_supported, 2);
+        }
+        other => panic!("expected SchemaVersionTooOld, got: {other}"),
+    }
+
+    let msg = err.to_string();
+    assert!(
+        msg.contains("too old"),
+        "error should mention 'too old': {msg}"
+    );
+    assert!(
+        msg.contains("re-create this save"),
+        "error should suggest re-creating the save: {msg}"
+    );
+}
+
+#[test]
+fn zero_schema_version_produces_clear_error() {
+    // Covers malformed saves with missing or zero schema_version.
+    let state = TankState::new(SimSeed(1));
+    let json = serde_json::json!({
+        "schema_version": 0,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let err = SaveFile::from_json(&json).unwrap_err();
+    assert!(matches!(err, SimError::SchemaVersionTooOld { .. }));
+}
+
+#[test]
+fn migration_chain_applies_v2_to_current() -> Result<(), SimError> {
+    // Build a v2 save and verify the full migration chain lands at current schema.
+    let mut legacy_state = TankState::new(SimSeed(50));
+    let gross_volume_l = legacy_state.geometry.gross_water_volume_l();
+    legacy_state.water = WaterState::default_for_volume_l(gross_volume_l);
+    legacy_state.water.ammonia_total_mg_n_total = 2.0 * gross_volume_l;
+    let state_json = legacy_pre_stage_state_json(&legacy_state, 0, 0, None, 0.8, 0.0);
+
+    let json = serde_json::json!({
+        "schema_version": 2,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    assert_eq!(loaded.schema_version, SCHEMA_VERSION);
+    // After migration, concentration should be preserved at 2.0 mg/L.
+    assert!((loaded.state.tan_mg_n_per_l() - 2.0).abs() < 1e-9);
+
+    // The loaded save should produce a working engine.
+    let _engine = loaded.into_engine()?;
+    Ok(())
+}
+
+#[test]
+fn malformed_v4_save_with_negative_reserve_is_rejected() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(101));
+    state.animal.adult.reserve_g = -0.01;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    let err = loaded.into_engine().unwrap_err();
+
+    assert_eq!(
+        err,
+        SimError::InvariantViolation {
+            field: "animal.adult.reserve_g",
+            value: -0.01,
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn malformed_v4_save_with_invalid_shrimp_partition_sum_is_rejected() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(102));
+    state
+        .process_params
+        .shrimp_respiration_fraction_of_assimilated = 0.6;
+    state
+        .process_params
+        .shrimp_excretion_fraction_of_assimilated = 0.1;
+    state.process_params.shrimp_growth_fraction_of_assimilated = 0.1;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    let err = loaded.into_engine().unwrap_err();
+
+    match err {
+        SimError::InvariantViolation { field, value } => {
+            assert_eq!(field, "process.shrimp_assimilated_partition_sum");
+            assert!(
+                (value - 0.8).abs() < 1e-12,
+                "unexpected partition sum: {value}"
+            );
+        }
+        other => panic!("expected shrimp partition invariant violation, got: {other:?}"),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn malformed_current_save_with_invalid_shrimp_stage_duration_is_rejected() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(112));
+    state.shrimp_params.juvenile_to_subadult_days = 0.0;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    let err = loaded.into_engine().unwrap_err();
+
+    assert_eq!(
+        err,
+        SimError::InvariantViolation {
+            field: "shrimp_params.juvenile_to_subadult_days",
+            value: 0.0,
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected() -> Result<(), SimError>
+{
+    let invalid_cases = [
+        ("shrimp_params.ca_min_mg_per_l", -1.0),
+        ("shrimp_params.mg_min_mg_per_l", 0.0),
+        ("shrimp_params.molt_reserve_fraction", 0.0),
+        ("shrimp_params.molt_condition_weight", 1.2),
+        ("shrimp_params.molt_reserve_weight", -0.1),
+        (
+            "shrimp_params.failed_molt_accum_increase_per_failed_stage",
+            -0.1,
+        ),
+        (
+            "shrimp_params.failed_molt_accum_recovery_per_successful_stage",
+            -0.1,
+        ),
+        ("shrimp_params.failed_molt_stress_blend", 1.2),
+        ("shrimp_params.molt_failure_poor_condition_threshold", 1.2),
+        ("shrimp_params.molt_failure_instability_threshold", -0.1),
+        ("shrimp_params.temp_condition_low_divisor_c", 0.0),
+        ("shrimp_params.temp_condition_high_divisor_c", 0.0),
+        ("shrimp_params.temp_condition_min_factor", 1.2),
+        ("shrimp_params.molt_stress_warning_threshold", 1.2),
+        ("shrimp_params.molt_stress_mortality_threshold", 1.2),
+        ("shrimp_params.molt_stress_mineral_gh_weight", 1.2),
+        ("shrimp_params.molt_stress_mineral_ca_weight", -0.1),
+        ("shrimp_params.molt_stress_mineral_mg_weight", 1.2),
+        ("shrimp_params.molt_stress_pressure_hourly_weight", 1.2),
+        ("shrimp_params.molt_stress_condition_midpoint", 1.2),
+        ("shrimp_params.molt_stress_thermal_cap", 1.2),
+        ("shrimp_params.molt_stress_rise_smoothing", 1.2),
+        ("shrimp_params.molt_stress_decay_smoothing", -0.1),
+        ("shrimp_params.molt_gh_excess_penalty_divisor", 0.0),
+        ("shrimp_params.molt_mineral_factor_floor", 1.2),
+        ("shrimp_params.juvenile_molt_interval_days", 0.0),
+        ("shrimp_params.sub_adult_molt_interval_days", 0.0),
+        ("shrimp_params.molt_success_threshold", 1.2),
+        ("shrimp_params.critical_molt_gh_ratio", 1.2),
+        ("shrimp_params.chloride_protection_factor", -1.0),
+        ("shrimp_params.nh3_stress_threshold_mg_n_per_l", -0.1),
+        ("shrimp_params.nh3_stress_response_scale", -0.1),
+        ("shrimp_params.condition_do_reference_mg_l", 0.0),
+        ("shrimp_params.condition_nh3_sensitivity", -0.1),
+        ("shrimp_params.condition_nitrite_sensitivity", -0.1),
+        ("shrimp_params.condition_hourly_stress_penalty_weight", 1.2),
+        ("shrimp_params.low_temp_repro_ramp_width_c", 0.0),
+        ("shrimp_params.tan_repro_full_suppression_mg_n_per_l", 0.0),
+        ("shrimp_params.no2_repro_full_suppression_mg_n_per_l", 0.0),
+        ("shrimp_params.egg_drop_max_probability", 1.2),
+        ("shrimp_params.egg_oxygen_reference_mg_l", 0.0),
+        ("shrimp_params.reproductive_readiness_smoothing", -0.1),
+        ("shrimp_params.full_clutch_condition_threshold", 1.2),
+    ];
+
+    for (index, (field, value)) in invalid_cases.into_iter().enumerate() {
+        let mut state = TankState::new(SimSeed(120 + index as u64));
+        match field {
+            "shrimp_params.ca_min_mg_per_l" => state.shrimp_params.ca_min_mg_per_l = value,
+            "shrimp_params.mg_min_mg_per_l" => state.shrimp_params.mg_min_mg_per_l = value,
+            "shrimp_params.molt_reserve_fraction" => {
+                state.shrimp_params.molt_reserve_fraction = value;
+            }
+            "shrimp_params.molt_condition_weight" => {
+                state.shrimp_params.molt_condition_weight = value;
+            }
+            "shrimp_params.molt_reserve_weight" => {
+                state.shrimp_params.molt_reserve_weight = value;
+            }
+            "shrimp_params.failed_molt_accum_increase_per_failed_stage" => {
+                state
+                    .shrimp_params
+                    .failed_molt_accum_increase_per_failed_stage = value;
+            }
+            "shrimp_params.failed_molt_accum_recovery_per_successful_stage" => {
+                state
+                    .shrimp_params
+                    .failed_molt_accum_recovery_per_successful_stage = value;
+            }
+            "shrimp_params.failed_molt_stress_blend" => {
+                state.shrimp_params.failed_molt_stress_blend = value;
+            }
+            "shrimp_params.molt_failure_poor_condition_threshold" => {
+                state.shrimp_params.molt_failure_poor_condition_threshold = value;
+            }
+            "shrimp_params.molt_failure_instability_threshold" => {
+                state.shrimp_params.molt_failure_instability_threshold = value;
+            }
+            "shrimp_params.temp_condition_low_divisor_c" => {
+                state.shrimp_params.temp_condition_low_divisor_c = value;
+            }
+            "shrimp_params.temp_condition_high_divisor_c" => {
+                state.shrimp_params.temp_condition_high_divisor_c = value;
+            }
+            "shrimp_params.temp_condition_min_factor" => {
+                state.shrimp_params.temp_condition_min_factor = value;
+            }
+            "shrimp_params.molt_stress_warning_threshold" => {
+                state.shrimp_params.molt_stress_warning_threshold = value;
+            }
+            "shrimp_params.molt_stress_mortality_threshold" => {
+                state.shrimp_params.molt_stress_mortality_threshold = value;
+            }
+            "shrimp_params.molt_stress_mineral_gh_weight" => {
+                state.shrimp_params.molt_stress_mineral_gh_weight = value;
+            }
+            "shrimp_params.molt_stress_mineral_ca_weight" => {
+                state.shrimp_params.molt_stress_mineral_ca_weight = value;
+            }
+            "shrimp_params.molt_stress_mineral_mg_weight" => {
+                state.shrimp_params.molt_stress_mineral_mg_weight = value;
+            }
+            "shrimp_params.molt_stress_pressure_hourly_weight" => {
+                state.shrimp_params.molt_stress_pressure_hourly_weight = value;
+            }
+            "shrimp_params.molt_stress_condition_midpoint" => {
+                state.shrimp_params.molt_stress_condition_midpoint = value;
+            }
+            "shrimp_params.molt_stress_thermal_cap" => {
+                state.shrimp_params.molt_stress_thermal_cap = value;
+            }
+            "shrimp_params.molt_stress_rise_smoothing" => {
+                state.shrimp_params.molt_stress_rise_smoothing = value;
+            }
+            "shrimp_params.molt_stress_decay_smoothing" => {
+                state.shrimp_params.molt_stress_decay_smoothing = value;
+            }
+            "shrimp_params.molt_gh_excess_penalty_divisor" => {
+                state.shrimp_params.molt_gh_excess_penalty_divisor = value;
+            }
+            "shrimp_params.molt_mineral_factor_floor" => {
+                state.shrimp_params.molt_mineral_factor_floor = value;
+            }
+            "shrimp_params.juvenile_molt_interval_days" => {
+                state.shrimp_params.juvenile_molt_interval_days = value;
+            }
+            "shrimp_params.sub_adult_molt_interval_days" => {
+                state.shrimp_params.sub_adult_molt_interval_days = value;
+            }
+            "shrimp_params.molt_success_threshold" => {
+                state.shrimp_params.molt_success_threshold = value;
+            }
+            "shrimp_params.critical_molt_gh_ratio" => {
+                state.shrimp_params.critical_molt_gh_ratio = value;
+            }
+            "shrimp_params.chloride_protection_factor" => {
+                state.shrimp_params.chloride_protection_factor = value;
+            }
+            "shrimp_params.nh3_stress_threshold_mg_n_per_l" => {
+                state.shrimp_params.nh3_stress_threshold_mg_n_per_l = value;
+            }
+            "shrimp_params.nh3_stress_response_scale" => {
+                state.shrimp_params.nh3_stress_response_scale = value;
+            }
+            "shrimp_params.condition_do_reference_mg_l" => {
+                state.shrimp_params.condition_do_reference_mg_l = value;
+            }
+            "shrimp_params.condition_nh3_sensitivity" => {
+                state.shrimp_params.condition_nh3_sensitivity = value;
+            }
+            "shrimp_params.condition_nitrite_sensitivity" => {
+                state.shrimp_params.condition_nitrite_sensitivity = value;
+            }
+            "shrimp_params.condition_hourly_stress_penalty_weight" => {
+                state.shrimp_params.condition_hourly_stress_penalty_weight = value;
+            }
+            "shrimp_params.low_temp_repro_ramp_width_c" => {
+                state.shrimp_params.low_temp_repro_ramp_width_c = value;
+            }
+            "shrimp_params.tan_repro_full_suppression_mg_n_per_l" => {
+                state.shrimp_params.tan_repro_full_suppression_mg_n_per_l = value;
+            }
+            "shrimp_params.no2_repro_full_suppression_mg_n_per_l" => {
+                state.shrimp_params.no2_repro_full_suppression_mg_n_per_l = value;
+            }
+            "shrimp_params.egg_drop_max_probability" => {
+                state.shrimp_params.egg_drop_max_probability = value;
+            }
+            "shrimp_params.egg_oxygen_reference_mg_l" => {
+                state.shrimp_params.egg_oxygen_reference_mg_l = value;
+            }
+            "shrimp_params.reproductive_readiness_smoothing" => {
+                state.shrimp_params.reproductive_readiness_smoothing = value;
+            }
+            "shrimp_params.full_clutch_condition_threshold" => {
+                state.shrimp_params.full_clutch_condition_threshold = value;
+            }
+            _ => unreachable!(),
+        }
+
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "app_version": APP_VERSION,
+            "state": state,
+            "queued_actions": [],
+        })
+        .to_string();
+
+        let loaded = SaveFile::from_json(&json)?;
+        let err = loaded.into_engine().unwrap_err();
+        assert_eq!(err, SimError::InvariantViolation { field, value });
+    }
+
+    Ok(())
+}
+
+#[test]
+fn malformed_current_save_with_invalid_molt_condition_weight_sum_is_rejected(
+) -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(127));
+    state.shrimp_params.molt_condition_weight = 0.8;
+    state.shrimp_params.molt_reserve_weight = 0.3;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    let err = loaded.into_engine().unwrap_err();
+
+    assert_eq!(
+        err,
+        SimError::InvariantViolation {
+            field: "shrimp_params.molt_condition_weight + shrimp_params.molt_reserve_weight",
+            value: 1.1,
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn malformed_current_save_with_invalid_molt_stress_mineral_weight_sum_is_rejected(
+) -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(128));
+    state.shrimp_params.molt_stress_mineral_gh_weight = 0.6;
+    state.shrimp_params.molt_stress_mineral_ca_weight = 0.3;
+    state.shrimp_params.molt_stress_mineral_mg_weight = 0.3;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    let err = loaded.into_engine().unwrap_err();
+
+    assert_eq!(
+        err,
+        SimError::InvariantViolation {
+            field: "shrimp_params.molt_stress_mineral_gh_weight + shrimp_params.molt_stress_mineral_ca_weight + shrimp_params.molt_stress_mineral_mg_weight",
+            value: 1.2,
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn malformed_current_save_with_inverted_shrimp_thermal_penalty_range_is_rejected(
+) -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(113));
+    state.shrimp_params.high_temp_repro_penalty_start_c = 33.0;
+    state.shrimp_params.high_temp_repro_penalty_full_c = 30.0;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    let err = loaded.into_engine().unwrap_err();
+
+    assert_eq!(
+        err,
+        SimError::OrderingViolation {
+            lower_field: "shrimp_params.high_temp_repro_penalty_start_c",
+            lower_value: 33.0,
+            upper_field: "shrimp_params.high_temp_repro_penalty_full_c",
+            upper_value: 30.0,
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn malformed_current_save_with_inverted_stage_molt_intervals_is_rejected() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(126));
+    state.shrimp_params.juvenile_molt_interval_days = 12.0;
+    state.shrimp_params.sub_adult_molt_interval_days = 10.0;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    let err = loaded.into_engine().unwrap_err();
+
+    assert_eq!(
+        err,
+        SimError::OrderingViolation {
+            lower_field: "shrimp_params.juvenile_molt_interval_days",
+            lower_value: 12.0,
+            upper_field: "shrimp_params.sub_adult_molt_interval_days",
+            upper_value: 10.0,
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn current_schema_load_repairs_missing_shrimp_egg_cohort_bookkeeping() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(114));
+    state.animal.adult.count = 4;
+    state.animal.berried_females_count = 3;
+    state.animal.egg_progress_days = 6.0;
+    state.animal.egg_cohorts = vec![
+        tank_core::EggCohort {
+            count: 2,
+            progress_days: 4.0,
+        },
+        tank_core::EggCohort {
+            count: 0,
+            progress_days: 9.0,
+        },
+    ];
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+
+    assert_eq!(loaded.state.animal.berried_females_count, 3);
+    assert_eq!(loaded.state.animal.egg_cohort_count_total(), 3);
+    assert_eq!(loaded.state.animal.egg_cohorts.len(), 2);
+    assert!(loaded
+        .state
+        .animal
+        .egg_cohorts
+        .iter()
+        .all(|cohort| cohort.count > 0));
+    assert!(loaded
+        .state
+        .animal
+        .egg_cohorts
+        .iter()
+        .any(|cohort| cohort.count == 1 && (cohort.progress_days - 6.0).abs() < 1e-12));
+
+    let _engine = loaded.into_engine()?;
+    Ok(())
+}
+
+#[test]
+fn malformed_v4_save_with_out_of_range_death_biomass_fraction_is_rejected() -> Result<(), SimError>
+{
+    let mut state = TankState::new(SimSeed(104));
+    state.process_params.death_biomass_to_detritus_fraction = 2.0;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    let err = loaded.into_engine().unwrap_err();
+
+    assert_eq!(
+        err,
+        SimError::InvariantViolation {
+            field: "process.death_biomass_to_detritus_fraction",
+            value: 2.0,
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn current_schema_load_repairs_stale_carbonate_caches() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(103));
+    let volume_l = state.water_volume_l();
+    let expected = solve_carbonate_equilibrium(
+        state.water.dissolved_inorganic_carbon_mg_c_total,
+        state.water.alkalinity_meq_total,
+        state.water.temperature_c,
+        volume_l,
+    );
+
+    state.water.ph = 6.05;
+    state.water.bicarbonate_mg_total = 1.0;
+    state.stability_tracker.prev_ph = 6.05;
+    state.stability_tracker.instability_index = 0.42;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+
+    assert!((loaded.state.water.ph - expected.ph).abs() < 1e-9);
+    assert!(
+        (loaded.state.water.bicarbonate_mg_total - expected.hco3_mmol_per_l * 61.0 * volume_l)
+            .abs()
+            < 1e-6
+    );
+    assert!((loaded.state.stability_tracker.prev_ph - expected.ph).abs() < 1e-9);
+    assert!(
+        (loaded.state.stability_tracker.instability_index - 0.42).abs() < 1e-12,
+        "repairing stale caches should not wipe tracker history"
+    );
+
+    Ok(())
+}
+
+// ---- oxic/suboxic zone state round-trip tests ----
+
+#[test]
+fn save_load_roundtrip_preserves_o2_penetration_depth() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(200));
+    // Set a non-default penetration depth on each layer.
+    for layer in &mut state.substrate_layers {
+        layer.o2_penetration_depth_cm = layer.depth_cm * 0.35;
+    }
+    state.refresh_habitat_registry();
+
+    let save = SaveFile {
+        schema_version: SCHEMA_VERSION,
+        app_version: APP_VERSION.to_string(),
+        state: state.clone(),
+        queued_actions: vec![],
+    };
+    let json = save.to_json_pretty()?;
+    let loaded = SaveFile::from_json(&json)?;
+
+    for (orig, loaded_layer) in state
+        .substrate_layers
+        .iter()
+        .zip(&loaded.state.substrate_layers)
+    {
+        assert!(
+            (orig.o2_penetration_depth_cm - loaded_layer.o2_penetration_depth_cm).abs() < 1e-12,
+            "o2_penetration_depth_cm should survive round-trip: original={}, loaded={}",
+            orig.o2_penetration_depth_cm,
+            loaded_layer.o2_penetration_depth_cm,
+        );
+        assert!(
+            (orig.porosity - loaded_layer.porosity).abs() < 1e-12,
+            "porosity should survive round-trip: original={}, loaded={}",
+            orig.porosity,
+            loaded_layer.porosity,
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
+fn save_load_roundtrip_preserves_zero_penetration_depth() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(202));
+    for layer in &mut state.substrate_layers {
+        layer.o2_penetration_depth_cm = 0.0;
+    }
+    state.refresh_habitat_registry();
+
+    let json = SaveFile {
+        schema_version: SCHEMA_VERSION,
+        app_version: APP_VERSION.to_string(),
+        state,
+        queued_actions: vec![],
+    }
+    .to_json_pretty()?;
+    let loaded = SaveFile::from_json(&json)?;
+
+    assert!(
+        loaded
+            .state
+            .substrate_layers
+            .iter()
+            .all(|layer| layer.o2_penetration_depth_cm.abs() < 1e-12),
+        "valid 0 cm penetration should survive round-trip without being treated as legacy/uncomputed"
+    );
+    assert!(
+        loaded.state.substrate_oxic_zone_geometry().volume_cm3.abs() < 1e-12,
+        "0 cm penetration should leave no oxic substrate volume after load"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn current_schema_roundtrip_preserves_zero_stage_timer_for_newly_added_adults(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut engine = Engine::from_parts(TankState::new(SimSeed(205)), vec![]);
+    engine.apply_action(PlayerAction::AddShrimp { count: 4 })?;
+    engine.step_hours(1)?;
+
+    assert!(engine.full_state().animal.adult.molt_timer_days.abs() < 1e-9);
+    assert!(engine.full_state().animal.inter_molt_timer_days.abs() < 1e-9);
+
+    let json = SaveFile::from_engine(&engine).to_json_pretty()?;
+    let loaded = SaveFile::from_json(&json)?;
+
+    assert!(loaded.state.animal.adult.molt_timer_days.abs() < 1e-9);
+    assert!(loaded.state.animal.inter_molt_timer_days.abs() < 1e-9);
+
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v12_saves_backfill_stage_molt_timers_from_population_timer(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut state = TankState::new(SimSeed(203));
+    state.animal.adult.count = 4;
+    state.animal.sub_adult.count = 2;
+    state.animal.juvenile.count = 0;
+    state.animal.inter_molt_timer_days = 17.5;
+
+    let mut state_json = serde_json::to_value(&state).expect("serialize state");
+    let animal = state_json
+        .get_mut("animal")
+        .and_then(|value| value.as_object_mut())
+        .expect("animal object");
+    for stage_name in ["adult", "sub_adult", "juvenile"] {
+        animal
+            .get_mut(stage_name)
+            .and_then(|value| value.as_object_mut())
+            .expect("stage object")
+            .remove("molt_timer_days");
+    }
+
+    let save_json = serde_json::json!({
+        "schema_version": 12,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    });
+
+    let loaded = SaveFile::from_json(&serde_json::to_string(&save_json)?)?;
+    assert_eq!(loaded.schema_version, SCHEMA_VERSION);
+    assert!((loaded.state.animal.adult.molt_timer_days - 17.5).abs() < 1e-9);
+    assert!((loaded.state.animal.sub_adult.molt_timer_days - 17.5).abs() < 1e-9);
+    assert!(loaded.state.animal.juvenile.molt_timer_days.abs() < 1e-9);
+
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v12_migration_preserves_explicit_stage_molt_timers(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut state = TankState::new(SimSeed(204));
+    state.animal.adult.count = 3;
+    state.animal.sub_adult.count = 2;
+    state.animal.juvenile.count = 5;
+    state.animal.inter_molt_timer_days = 14.0;
+    state.animal.adult.molt_timer_days = 21.0;
+    state.animal.sub_adult.molt_timer_days = 9.0;
+    state.animal.juvenile.molt_timer_days = 4.0;
+
+    let save_json = serde_json::json!({
+        "schema_version": 12,
+        "app_version": APP_VERSION,
+        "state": serde_json::to_value(&state)?,
+        "queued_actions": [],
+    });
+
+    let loaded = SaveFile::from_json(&serde_json::to_string(&save_json)?)?;
+    assert_eq!(loaded.schema_version, SCHEMA_VERSION);
+    assert!((loaded.state.animal.adult.molt_timer_days - 21.0).abs() < 1e-9);
+    assert!((loaded.state.animal.sub_adult.molt_timer_days - 9.0).abs() < 1e-9);
+    assert!((loaded.state.animal.juvenile.molt_timer_days - 4.0).abs() < 1e-9);
+
+    Ok(())
+}
+
+#[test]
+fn legacy_save_without_o2_penetration_loads_with_computed_default(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let state = TankState::new(SimSeed(201));
+    let mut state_json = serde_json::to_value(&state).expect("serialize state");
+
+    // Strip the new fields from each substrate layer to simulate a legacy save.
+    if let Some(layers) = state_json
+        .get_mut("substrate_layers")
+        .and_then(|v| v.as_array_mut())
+    {
+        for layer in layers {
+            if let Some(obj) = layer.as_object_mut() {
+                obj.remove("o2_penetration_depth_cm");
+                obj.remove("porosity");
+            }
+        }
+    }
+
+    let save_json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION - 1,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    });
+
+    let loaded = SaveFile::from_json(&serde_json::to_string(&save_json)?)?;
+    let restored = &loaded.state;
+    assert_eq!(loaded.schema_version, SCHEMA_VERSION);
+
+    for layer in &restored.substrate_layers {
+        assert!(
+            layer.o2_penetration_depth_cm > 0.0,
+            "legacy load should compute a positive penetration depth, got {}",
+            layer.o2_penetration_depth_cm,
+        );
+        assert!(
+            layer.o2_penetration_depth_cm <= layer.depth_cm,
+            "penetration depth ({}) should not exceed layer depth ({})",
+            layer.o2_penetration_depth_cm,
+            layer.depth_cm,
+        );
+        assert!(
+            layer.resolved_porosity() > 0.0,
+            "legacy load should resolve porosity from substrate kind default, got {}",
+            layer.resolved_porosity(),
+        );
+    }
 
     Ok(())
 }

@@ -28,10 +28,11 @@ fn state_with_volume(seed: SimSeed, target_volume_l: f64) -> TankState {
         glass_thickness_mm: 5.0,
         open_top: true,
         lid_exchange_factor: 0.25,
+        hardscape_area_cm2: 0.0,
     };
 
     // Re-initialize water for new geometry
-    state.water = tank_core::WaterState::default_for_geometry(&state.geometry);
+    state.water = tank_core::WaterState::default_for_volume_l(state.water_volume_l());
     state.water.temperature_c = 24.0;
     state.environment.ambient_temp_c = 24.0;
     state.hardware.heater.enabled = false;
@@ -45,8 +46,8 @@ fn smaller_tank_responds_faster_to_ambient_change() -> Result<(), tank_core::Sim
     let state_10l = state_with_volume(SimSeed(2000), 10.0);
     let state_100l = state_with_volume(SimSeed(2000), 100.0);
 
-    let vol_10 = state_10l.geometry.water_volume_l();
-    let vol_100 = state_100l.geometry.water_volume_l();
+    let vol_10 = state_10l.geometry.gross_water_volume_l();
+    let vol_100 = state_100l.geometry.gross_water_volume_l();
     assert!(
         (vol_10 - 10.0).abs() < 0.1,
         "10L tank should be ~10L, got {vol_10}"
@@ -142,8 +143,8 @@ fn feed_pulse_tan_concentration_scales_with_volume() -> Result<(), tank_core::Si
     let mut state_100l = state_with_volume(SimSeed(2200), 100.0);
 
     // Give both tanks some decomposer biomass to mineralize feed into TAN
-    state_10l.microbe.decomposer_biomass_g = 0.1;
-    state_100l.microbe.decomposer_biomass_g = 0.1;
+    state_10l.microbe.set_decomposer_total(0.1);
+    state_100l.microbe.set_decomposer_total(0.1);
     // Same maturity so nitrification doesn't dominate the result
     state_10l.filter_state.biofilter_maturity_index = 0.1;
     state_100l.filter_state.biofilter_maturity_index = 0.1;
@@ -170,11 +171,8 @@ fn feed_pulse_tan_concentration_scales_with_volume() -> Result<(), tank_core::Si
         engine_10l.step_hours(1)?;
         engine_100l.step_hours(1)?;
 
-        let vol_10 = engine_10l.full_state().geometry.water_volume_l();
-        let vol_100 = engine_100l.full_state().geometry.water_volume_l();
-
-        let tan_10 = engine_10l.full_state().water.ammonia_total_mg_n_total / vol_10;
-        let tan_100 = engine_100l.full_state().water.ammonia_total_mg_n_total / vol_100;
+        let tan_10 = engine_10l.full_state().tan_mg_n_per_l();
+        let tan_100 = engine_100l.full_state().tan_mg_n_per_l();
 
         peak_tan_10l = peak_tan_10l.max(tan_10);
         peak_tan_100l = peak_tan_100l.max(tan_100);

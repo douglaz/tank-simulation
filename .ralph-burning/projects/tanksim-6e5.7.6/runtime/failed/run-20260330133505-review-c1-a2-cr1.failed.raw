@@ -1,0 +1,241 @@
+=== stdout ===
+=== stderr ===
+OpenAI Codex v0.117.0 (research preview)
+--------
+workdir: /home/master/p/tank-simulation
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019d3efa-b9a2-7623-8188-4172329ba761
+--------
+user
+Contract: review
+Role: Reviewer
+
+# Stage Execution Prompt
+
+You are the Reviewer. Your objective for this Review stage is to review the completed work for correctness, regressions, and completeness.
+
+## Original Project Prompt
+
+○ tanksim-6e5.7.6 · Run end-to-end rebalance pass and capture release narrative for the scientific-core upgrade   [● P2 · OPEN]
+Owner: master · Type: task
+Created: 2026-03-26 · Updated: 2026-03-27
+Labels: calibration, phase-5, release, retuning, scientific-core
+
+Context:
+- After all major scientific-core changes land, the simulator will need a final rebalance and a clear statement of what improved.
+- This is the bead that turns a pile of refactors into a coherent "next version."
+
+Deliverable:
+- One final pass over shipped scenarios and high-value parameters after all earlier beads are merged.
+- A concise release narrative summarizing what changed scientifically, what new behaviors should emerge, and what still remains out of scope.
+- A list of follow-on backlog candidates discovered during the pass.
+
+Likely touch points:
+- scenario data
+- parameter files
+- calibration outputs
+- release/docs notes
+
+## Acceptance Criteria
+
+Acceptance Criteria:
+- the upgraded simulator has a documented post-refactor tuning state
+- the release narrative ties changes back to the project's overarching scientific goals
+- obvious follow-on work is captured cleanly instead of being lost in memory
+
+Dependencies:
+  -> tanksim-6e5.7.2 (blocks) - Attach provenance and confidence metadata to high-value chemistry and ecology parameters
+  -> tanksim-6e5.7.5 (blocks) - Update developer docs, TUI/API messaging, and scientific-scope narrative
+  -> tanksim-6e5.7.4 (blocks) - Create calibration-report workflow comparing simulated outputs to target envelopes
+  -> tanksim-6e5.7 (parent-child) - Phase 5 — provenance, calibration, validation, and release narrative
+
+Comments:
+  [2026-03-26 13:47 UTC] backlog-planner: Future-self notes:
+- This is the "make it legible" bead, not just a tuning sweep.
+- Use the calibration workflow (G4) and validation scenarios (G3) rather than intuition-only tweaks.
+- Capture what was intentionally postponed so future roadmaps can pick it up without re-opening old debates.
+
+## Prior Stage Outputs This Cycle
+
+### Plan and Implement (`plan_and_implement`)
+- Payload ID: `run-20260330133505-plan_and_implement-c1-a1-cr1`
+- Attempt: `1`
+
+```json
+{
+  "data": {
+    "change_summary": "End-to-end rebalance pass completed for the scientific-core upgrade (v0.2-v0.6). Ran full calibration report against 8 validation scenarios: 6 pass, 2 marginal, 0 fail. Both marginal findings (vs01 cycling pH clamp at 8.5; vs08 crash shrimp_count=0 near zero boundary) are boundary-detection artifacts, not parameter deficiencies — no parameter tuning was needed. Created three deliverables: (1) docs/traces/calibration_snapshot_v0.6.md documenting the post-refactor tuning state with per-scenario analysis, (2) docs/RELEASE_NARRATIVE_v0.6.md tying each phase's changes back to the five structural weaknesses identified in the v0.1 gap analysis and describing new emergent behaviors, (3) a 10-item follow-on backlog covering envelope heuristic refinement, remaining provenance gaps (plant presets, routing fractions, thermal transport, substrate indices), microfauna routing parity, equipment auto-scaling, and sensitivity analysis tooling. Archived machine-readable calibration_report.json and calibration_summary.txt alongside the snapshot for future cross-run comparison.",
+    "outstanding_risks": [
+      "The 10% marginal heuristic produces false positives on zero-bounded envelope fields (TAN, nitrite, shrimp_count near 0) — cosmetic noise in reports, not a model risk, but could mask real marginals in future scenarios with zero-bounded fields",
+      "pH gameplay clamp at 8.5 is a hard ceiling that prevents the carbonate solver from expressing equilibrium pH in high-buffer scenarios — affects vs01 presentation but not scientific validity since freshwater aquaria rarely exceed pH 8.5",
+      "Plant growth rate parameters (fast_stem: 0.08/day, root_rosette: 0.06/day) lack provenance metadata and are load-bearing for the algae-plant competition scenario (vs06, medium confidence) — a future literature search could shift these values and change vs06 outcome",
+      "Process routing fractions (shrimp assimilation 0.50, respiration 0.70, excretion 0.10, growth 0.20) are uncited heuristics that directly control how feeding rate translates to nutrient loading — sensitivity analysis should quantify their influence before making nutrient-budget claims",
+      "Microfauna routing remains a simpler approximation than shrimp routing, creating an asymmetry in mass-conservation rigor between the two consumer pathways"
+    ],
+    "steps": [
+      {
+        "description": "Run full test suite (96+ tests across tank_core, tank_scenarios, tank_harness, tank_tui) — all pass, zero failures, zero clippy warnings, clean formatting",
+        "order": 1,
+        "status": "completed"
+      },
+      {
+        "description": "Run calibration report binary against all 8 shipped validation scenarios with default parameter set",
+        "order": 2,
+        "status": "completed"
+      },
+      {
+        "description": "Analyze 2 marginal findings (vs01 pH clamp artifact, vs08 zero-boundary artifact) — determined both are structural marginal-heuristic artifacts, not parameter tuning problems",
+        "order": 3,
+        "status": "completed"
+      },
+      {
+        "description": "Write post-refactor calibration snapshot (docs/traces/calibration_snapshot_v0.6.md) documenting per-scenario results, marginal root causes, key observed behaviors, and test suite status",
+        "order": 4,
+        "status": "completed"
+      },
+      {
+        "description": "Archive machine-readable calibration artifacts (calibration_report_v0.6.json, calibration_summary_v0.6.txt) in docs/traces/ for future cross-run comparison",
+        "order": 5,
+        "status": "completed"
+      },
+      {
+        "description": "Write release narrative (docs/RELEASE_NARRATIVE_v0.6.md) covering all 6 phases: concentration normalization, closed mass loops, carbonate equilibrium, habitat-aware biofilms, stage-structured shrimp, and scientific accountability layer",
+        "order": 6,
+        "status": "completed"
+      },
+      {
+        "description": "Capture 10 follow-on backlog candidates in the release narrative: envelope refinement, pH clamp interaction, plant/source-water/routing/thermal/substrate provenance gaps, microfauna parity, equipment auto-scaling, sensitivity analysis tooling",
+        "order": 7,
+        "status": "completed"
+      }
+    ],
+    "validation_evidence": [
+      "Calibration report: 8 scenarios total — 6 pass, 2 marginal, 0 fail (generated 2026-03-30T13:38:11Z with default parameter set)",
+      "vs01 marginal root cause: pH clamped at gameplay bound 8.500 (exact envelope boundary) + TAN/nitrite near zero-bounded lower envelope — structural artifact, not parameter deficiency",
+      "vs08 marginal root cause: shrimp_count=0 at week_4 within [0,5] envelope — crash trajectory correct (20→10→3→0→0), zero value triggers 10% boundary heuristic on zero-bounded field",
+      "Full test suite: 96+ tests pass across all 5 crates (tank_core: 45, tank_scenarios: 16, tank_harness: 24, tank_tui: 11), 5 explicit-only probes ignored by design",
+      "cargo clippy: zero warnings across all crates",
+      "cargo fmt --check: clean (no formatting issues)",
+      "Key passing scenarios confirm emergent behaviors: aeration DO gap 4.28 mg/L + pH gap 1.60 (vs02), day/night pH swing 0.92 units (vs03), source-water pH differentiation 1.53 units (vs04), thermal breeding suppression 50:1 offspring ratio (vs05), denitrification N2 export 87.1 mg N in planted vs 0.0 in bare (vs07)",
+      "Calibration artifacts archived: docs/traces/calibration_report_v0.6.json, docs/traces/calibration_summary_v0.6.txt, docs/traces/calibration_snapshot_v0.6.md"
+    ]
+  },
+  "family": "Execution"
+}
+```
+
+## Authoritative JSON Schema
+
+The JSON schema below is authoritative. Return only JSON that conforms exactly to it.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ReviewOutcome": {
+      "enum": [
+        "approved",
+        "conditionally_approved",
+        "request_changes",
+        "rejected"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload for validation/review stages.\n\nRequires an explicit outcome/decision enum plus evidence, findings or gaps, and follow-up or amendment data when the outcome is not cleanly approved.",
+  "properties": {
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "findings_or_gaps": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "follow_up_or_amendments": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "outcome": {
+      "$ref": "#/definitions/ReviewOutcome"
+    }
+  },
+  "required": [
+    "evidence",
+    "findings_or_gaps",
+    "follow_up_or_amendments",
+    "outcome"
+  ],
+  "title": "ValidationPayload",
+  "type": "object"
+}
+```
+
+--- Context JSON ---
+{
+  "attempt": 2,
+  "completion_round": 1,
+  "cycle": 1
+}
+
+Return ONLY valid JSON matching the following schema:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ReviewOutcome": {
+      "enum": [
+        "approved",
+        "conditionally_approved",
+        "request_changes",
+        "rejected"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload for validation/review stages.\n\nRequires an explicit outcome/decision enum plus evidence, findings or gaps, and follow-up or amendment data when the outcome is not cleanly approved.",
+  "properties": {
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "findings_or_gaps": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "follow_up_or_amendments": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "outcome": {
+      "$ref": "#/definitions/ReviewOutcome"
+    }
+  },
+  "required": [
+    "evidence",
+    "findings_or_gaps",
+    "follow_up_or_amendments",
+    "outcome"
+  ],
+  "title": "ValidationPayload",
+  "type": "object"
+}
+
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 3:03 PM.
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 3:03 PM.

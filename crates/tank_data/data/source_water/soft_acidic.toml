@@ -5,20 +5,27 @@ ammonia_mg_n_per_l = 0.0
 nitrite_mg_n_per_l = 0.0
 nitrate_mg_n_per_l = 0.0
 phosphate_mg_p_per_l = 0.0
-dic_mg_c_per_l = 6.0
+dic_mg_c_per_l = 15.0
 doc_mg_c_per_l = 0.0
 don_mg_n_per_l = 0.0
-alkalinity_meq_per_l = 0.535
+alkalinity_meq_per_l = 0.893
 calcium_mg_per_l = 12.0
 magnesium_mg_per_l = 6.0
-sodium_mg_per_l = 10.0
+sodium_mg_per_l = 8.0
 potassium_mg_per_l = 2.0
-bicarbonate_mg_per_l = 32.6
-chloride_mg_per_l = 15.0
-sulfate_mg_per_l = 12.4
+bicarbonate_mg_per_l = 54.5
+chloride_mg_per_l = 12.0
+sulfate_mg_per_l = 10.4
 
 [provenance]
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "Low-mineral planted tank source water. GH ~3.0, KH ~1.5, TDS ~90."
+notes = """
+Soft acidic freshwater modeled after blackwater-influenced tap or low-KH \
+community water. GH ~3.1, KH ~2.5, and lower DIC keep the carbonate preview \
+in the pH 6.5-7.0 band, so nitrification can pull pH down noticeably as the \
+small buffer reserve is consumed. Zero initial nitrogen species means all TAN \
+in cycling scenarios comes from feed decomposition. This remains the default \
+for the nano_cycle scenario because it teaches the soft-water buffering story \
+without collapsing straight to the solver floor."""

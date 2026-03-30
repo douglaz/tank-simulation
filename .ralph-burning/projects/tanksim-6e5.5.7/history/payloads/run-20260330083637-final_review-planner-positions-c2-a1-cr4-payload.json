@@ -1,0 +1,44 @@
+{
+  "payload_id": "run-20260330083637-final_review-planner-positions-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:16:24.735739741Z",
+  "payload": {
+    "summary": "Accept only the equipment-scaling probe amendment. The other four are either stale against the current tree or describe behavior that is already intentional and technically coherent.",
+    "votes": [
+      {
+        "amendment_id": "fr-4-8001ff1d",
+        "decision": "reject",
+        "rationale": "`poor_condition_involved` is only the boolean gate for whether a poor-condition cause is present, while `min_condition_factor`, `min_condition_index`, and `min_reserve_factor` consistently track the worst failing stage. The emitted detail does not claim to identify the first stage that flipped the boolean, and whenever the boolean is true the recorded minimum necessarily comes from a threshold-violating stage. That makes the diagnostic conservative but still coherent, not a defect that requires separate trigger-stage tracking."
+      },
+      {
+        "amendment_id": "fr-4-fa502cd0",
+        "decision": "accept",
+        "rationale": "The probe compares 1× vs 2× peak TAN, DO range, and temperature directly, but plant biomass is only checked against the same absolute `[1.0, 400.0]` envelope for both runs. Startup plant mass is footprint-scaled, and the bead explicitly calls for proportionally scaled plants across sizes, so using an identical absolute ceiling makes the 2× run materially less strict and can hide a regression in geometry-aware plant scaling. Scaling the biomass envelope or comparing biomass density would better match the acceptance criteria."
+      },
+      {
+        "amendment_id": "fr-4-5e81fa2c",
+        "decision": "reject",
+        "rationale": "The current repository already contains the requested habitat/geometry deliverables. `crates/tank_harness/tests/e2e_habitat_geometry_probes.rs` implements all five named probes, includes habitat-specific debug output, and provides the all-probes summary runner. The amendment's claim that none of the bead's scenario coverage or harness/report work was added is no longer true in the reviewed tree."
+      },
+      {
+        "amendment_id": "fr-4-46c961d8",
+        "decision": "reject",
+        "rationale": "`crates/tank_core/tests/nitrification_alkalinity.rs` is tracked in git in the current tree, so this is not a live issue. The failure mode described by the amendment depends on that test file being untracked and therefore omitted from the patch, which does not match the repository state being reviewed."
+      },
+      {
+        "amendment_id": "fr-4-1f9e983d",
+        "decision": "reject",
+        "rationale": "The cited `nitrogen_cycle.total_n_nitrified_mg` field is not present in the current implementation. The code now separates `tan_oxidized_mg` from `nitrate_produced_mg_n`, with comments explaining that TAN oxidation and nitrate production diverge when nitrite accumulates. That split already avoids the AOB-vs-NOB accounting inconsistency described by the amendment."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

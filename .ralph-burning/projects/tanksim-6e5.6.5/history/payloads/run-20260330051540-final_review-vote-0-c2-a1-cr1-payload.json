@@ -1,0 +1,39 @@
+{
+  "payload_id": "run-20260330051540-final_review-vote-0-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T05:58:23.742280760Z",
+  "payload": {
+    "summary": "Accept the missing validation for chloride_protection_factor (real NaN/Infinity propagation risk). Reject all three other amendments: the helper comment is cosmetic polish on correct code, the chloride-aware nitrite hazard is fully implemented and tested, and alkalinity is intentionally diagnostic-only rather than a conserved element requiring a budget guard.",
+    "votes": [
+      {
+        "amendment_id": "fr-1-5075c6ab",
+        "decision": "accept",
+        "rationale": "Verified that validate_shrimp_runtime_params() checks 24 parameters but omits chloride_protection_factor. The runtime .max(0.0) in compute_effective_nitrite_hazard handles negative values but not NaN or Infinity — NaN.max(0.0) returns NaN, which would propagate through the hazard formula and corrupt stress accumulation. Adding check_non_negative is a correct, minimal fix that closes a real invariant gap consistent with the validation pattern used for all other shrimp parameters."
+      },
+      {
+        "amendment_id": "fr-1-290c3e44",
+        "decision": "reject",
+        "rationale": "The 1L-total-equals-concentration pattern is correct by construction: default_for_volume_l(1.0) calls resolve_carbonate_state() before returning, so bicarbonate_mg_total IS properly solver-resolved for 1L. Moreover, SourceWaterProfile's bicarbonate_mg_per_l field is explicitly documented as 'Display/documentation field only. Runtime carbonate chemistry uses DIC, alkalinity, and temperature as the authoritative inputs and immediately re-derives bicarbonate.' This is not a correctness or safety defect — it's a request for an optional comment on already-correct, well-documented code."
+      },
+      {
+        "amendment_id": "fr-1-70b84642",
+        "decision": "reject",
+        "rationale": "The premise is factually wrong. The chloride-aware nitrite hazard is fully implemented: compute_effective_nitrite_hazard() takes chloride_protection_factor and applies the competitive inhibition formula; step_hourly_shrimp_stress() calls it with state.shrimp_params.chloride_protection_factor and accumulates the result into hourly_nitrite_stress_accum; update_condition() also uses chloride-adjusted effective hazard for daily condition. Unit tests verify monotonic decrease with chloride, and the integration test test_salt_treatment_emergency_scenario proves that adding chloride (via salt treatment) reduces mortality rate despite persistent elevated nitrite."
+      },
+      {
+        "amendment_id": "fr-1-a6050caf",
+        "decision": "reject",
+        "rationale": "Alkalinity is intentionally tracked as diagnostic BudgetMetric entries, not as a conserved element in the BudgetTotals/BudgetDelta ledger. The BudgetMetric docstring explicitly states it is for 'quantities that matter for attribution and debugging but are not part of the conserved N/C/O element ledger, such as alkalinity deltas.' Since there is no tick-wide alkalinity ledger (no before/after totals, no per-stage deltas in the BudgetDelta struct), there is nothing coherent for enforce_tracked_tick_budget_guard to validate. Adding a guard would require first promoting alkalinity to a full conserved-element ledger, which is a much larger architectural change not warranted by the current diagnostic-only design."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

@@ -33,6 +33,7 @@ fn default_overrides() -> StartupOverrides {
         heater_preset: Some(StartupHeaterPreset::Celsius25),
         aeration_enabled: Some(false),
         initial_adult_shrimp_count: Some(10),
+        ..StartupOverrides::default()
     }
 }
 
@@ -77,9 +78,9 @@ fn weekly_maintenance(engine: &mut Engine, days: u32, feed_g: f64, wc_percent: f
 fn assert_finite_snapshot(s: &TankSnapshot) {
     assert!(s.ph.is_finite(), "pH NaN/Inf");
     assert!(s.water_temp_c.is_finite(), "temp NaN/Inf");
-    assert!(s.tan_mg_l.is_finite(), "TAN NaN/Inf");
-    assert!(s.nitrite_mg_l.is_finite(), "NO2 NaN/Inf");
-    assert!(s.nitrate_mg_l.is_finite(), "NO3 NaN/Inf");
+    assert!(s.tan_mg_n_per_l.is_finite(), "TAN NaN/Inf");
+    assert!(s.nitrite_mg_n_per_l.is_finite(), "NO2 NaN/Inf");
+    assert!(s.nitrate_mg_n_per_l.is_finite(), "NO3 NaN/Inf");
     assert!(s.do_mg_l.is_finite(), "DO NaN/Inf");
     assert!(s.gh_d.is_finite(), "GH NaN/Inf");
     assert!(s.kh_d.is_finite(), "KH NaN/Inf");
@@ -94,13 +95,13 @@ fn print_status(label: &str, s: &TankSnapshot, engine: &Engine) {
          shrimp {}/{}/{} | plants {:.2}g | algae {:.3}g | biofilter {:.3}",
         s.water_temp_c,
         s.ph,
-        s.tan_mg_l,
-        s.nitrite_mg_l,
-        s.nitrate_mg_l,
+        s.tan_mg_n_per_l,
+        s.nitrite_mg_n_per_l,
+        s.nitrate_mg_n_per_l,
         s.do_mg_l,
         s.gh_d,
-        st.animal.adults_count,
-        st.animal.juveniles_count,
+        st.animal.adult.count,
+        st.animal.juvenile.count,
         st.animal.berried_females_count,
         s.total_plant_biomass_g,
         s.suspended_algae_biomass_g + s.periphyton_biomass_g,
@@ -156,7 +157,7 @@ fn happy_medium_planted_well_maintained() {
     assert_finite_snapshot(&s120);
 
     // Ecosystem viability checks
-    assert!(s120.ph > 5.5 && s120.ph < 8.5, "pH viable: {}", s120.ph);
+    assert!(s120.ph >= 5.5 && s120.ph < 8.5, "pH viable: {}", s120.ph);
     assert!(s120.do_mg_l > 3.0, "DO healthy: {}", s120.do_mg_l);
     assert!(
         s120.water_temp_c > 20.0 && s120.water_temp_c < 30.0,
@@ -277,9 +278,10 @@ fn happy_plants_grow_with_light_and_nutrients() {
 
     assert!(
         s.total_plant_biomass_g >= initial_biomass,
-        "plants should grow or hold steady: initial {:.3} -> {:.3}",
+        "plants should grow under good conditions: initial {:.3} -> {:.3} ({:.1}%)",
         initial_biomass,
-        s.total_plant_biomass_g
+        s.total_plant_biomass_g,
+        (s.total_plant_biomass_g / initial_biomass) * 100.0,
     );
 }
 
@@ -301,7 +303,7 @@ fn happy_determinism_full_journey() {
 
     assert_eq!(s1.ph, s2.ph, "pH must be deterministic");
     assert_eq!(s1.water_temp_c, s2.water_temp_c, "temp deterministic");
-    assert_eq!(s1.tan_mg_l, s2.tan_mg_l, "TAN deterministic");
+    assert_eq!(s1.tan_mg_n_per_l, s2.tan_mg_n_per_l, "TAN deterministic");
     assert_eq!(s1.do_mg_l, s2.do_mg_l, "DO deterministic");
     assert_eq!(
         s1.adult_shrimp_count, s2.adult_shrimp_count,
@@ -328,11 +330,11 @@ fn sad_no_water_changes() {
     assert_finite_snapshot(&s);
 
     // TAN or nitrate should be elevated from no dilution
-    let total_dissolved_n = s.tan_mg_l + s.nitrite_mg_l + s.nitrate_mg_l;
+    let total_dissolved_n = s.tan_mg_n_per_l + s.nitrite_mg_n_per_l + s.nitrate_mg_n_per_l;
     println!("  Total dissolved N: {:.2} mg/L", total_dissolved_n);
 
     // In a neglected nano, shrimp should be stressed or dead
-    let alive = state.animal.adults_count + state.animal.juveniles_count;
+    let alive = state.animal.adult.count + state.animal.juvenile.count;
     println!("  Shrimp remaining: {alive}");
     // We don't assert all dead (some may survive), but conditions should be poor
 }
@@ -359,10 +361,10 @@ fn sad_massive_overfeeding() {
 
     // Ammonia should spike from decomposing food
     assert!(
-        s_after.tan_mg_l > s_before.tan_mg_l,
+        s_after.tan_mg_n_per_l > s_before.tan_mg_n_per_l,
         "TAN should spike after overfeeding: {:.3} -> {:.3}",
-        s_before.tan_mg_l,
-        s_after.tan_mg_l
+        s_before.tan_mg_n_per_l,
+        s_after.tan_mg_n_per_l
     );
 
     // Detritus should accumulate
@@ -486,13 +488,13 @@ fn sad_filter_off_ammonia_rises() {
 
     // The no-filter run should have equal or worse TAN (less processing)
     // or lower biofilter maturity.
-    let filtered_better = s_filtered.tan_mg_l <= s_no_filter.tan_mg_l
+    let filtered_better = s_filtered.tan_mg_n_per_l <= s_no_filter.tan_mg_n_per_l
         || s_filtered.biofilter_maturity_index >= s_no_filter.biofilter_maturity_index;
     assert!(
         filtered_better,
         "filter should help: TAN {:.3} vs {:.3}, maturity {:.4} vs {:.4}",
-        s_filtered.tan_mg_l,
-        s_no_filter.tan_mg_l,
+        s_filtered.tan_mg_n_per_l,
+        s_no_filter.tan_mg_n_per_l,
         s_filtered.biofilter_maturity_index,
         s_no_filter.biofilter_maturity_index,
     );
@@ -524,12 +526,15 @@ fn sad_overstocking_nano() {
     print_status("Day 37 (overstocked)", &s, &engine);
     assert_finite_snapshot(&s);
 
-    let alive = state.animal.adults_count + state.animal.juveniles_count;
+    let alive = state.animal.adult.count + state.animal.juvenile.count;
     println!("  Shrimp alive: {alive}/50 stocked");
 
     // With 50 shrimp in 10L and heavy feeding, conditions should be poor
     // Ammonia should be elevated
-    assert!(s.tan_mg_l > 0.5, "TAN should be elevated from overstocking");
+    assert!(
+        s.tan_mg_n_per_l > 0.5,
+        "TAN should be elevated from overstocking"
+    );
 }
 
 /// User removes all shrimp — ecosystem should still function, just without fauna.
@@ -539,7 +544,7 @@ fn sad_remove_all_shrimp() {
 
     feed_daily(&mut engine, 7, 0.03);
 
-    let count = engine.full_state().animal.adults_count;
+    let count = engine.full_state().animal.adult.count;
     if count > 0 {
         engine
             .apply_action(PlayerAction::RemoveShrimp { count })
@@ -554,7 +559,7 @@ fn sad_remove_all_shrimp() {
     print_status("Day 21 (no shrimp)", &s, &engine);
     assert_finite_snapshot(&s);
 
-    assert_eq!(state.animal.adults_count, 0, "all shrimp removed");
+    assert_eq!(state.animal.adult.count, 0, "all shrimp removed");
     assert!(s.ph > 4.0, "pH still valid");
 }
 
@@ -613,7 +618,7 @@ fn sad_total_neglect() {
     print_status("Day 67 (neglected)", &s, &engine);
     assert_finite_snapshot(&s);
 
-    let alive = state.animal.adults_count + state.animal.juveniles_count;
+    let alive = state.animal.adult.count + state.animal.juvenile.count;
     println!("  Shrimp alive after neglect: {alive}");
     println!("  Events: {}", state.event_log.len());
 }

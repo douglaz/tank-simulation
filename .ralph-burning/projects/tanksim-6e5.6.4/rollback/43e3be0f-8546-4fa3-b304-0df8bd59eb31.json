@@ -1,0 +1,110 @@
+{
+  "rollback_id": "43e3be0f-8546-4fa3-b304-0df8bd59eb31",
+  "created_at": "2026-03-30T10:26:05.024794469Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "3f50857f5176174d74f6d8834b46fb50881db8d5",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260330074452",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 4
+      },
+      "started_at": "2026-03-30T07:44:52.239585331Z",
+      "prompt_hash_at_cycle_start": "66f17358106a4fe2",
+      "prompt_hash_at_stage_start": "66f17358106a4fe2",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 3
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T08:27:24.787635193Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 4,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-3-3ba94eb9",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "In `gh_mineral_factor()` (shrimp.rs:1639-1641), the floor value 0.3 is hardcoded in both the low-GH and high-GH branches, while the parallel `molt_mineral_modifier()` (shrimp.rs:1690) uses the tunable `params.molt_mineral_factor_floor`. If a user tunes `molt_mineral_factor_floor` to a different value, molt and reproduction GH penalties will diverge silently. Either: (a) add a dedicated `repro_mineral_factor_floor` parameter, or (b) reuse `molt_mineral_factor_floor` in `gh_mineral_factor()` and document that it controls both domains.",
+          "created_at": "2026-03-30T10:26:04.921827115Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "46c14473cd56e41e88f37e50c4514f3b7cb8e6dc173d870ae3b45c1700b24e1f"
+        },
+        {
+          "amendment_id": "fr-3-d55993bf",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "In `tan_repro_factor()` (shrimp.rs:1619) and `no2_repro_factor()` (shrimp.rs:1630), the slope of suppression is computed as `threshold * 2.0`, meaning full suppression always occurs at 2× the threshold concentration. This implicit doubling rule is not exposed as a tunable parameter. Add explicit `tan_repro_full_suppression_mg_n_per_l` and `no2_repro_full_suppression_mg_n_per_l` parameters (defaulting to 2.0 and 1.0 respectively) so the suppression curve shape can be tuned independently of the onset threshold.",
+          "created_at": "2026-03-30T10:26:04.921830431Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "b5d97915216f0a87bb933a0fef636949cb1351c746a7776c9a0c45824abc0b5d"
+        },
+        {
+          "amendment_id": "fr-3-8df107a9",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "In `temp_repro_factor()` (shrimp.rs:1546-1549), the cold-temperature offset `4.0` (which defines the width of the ramp from 0.1 to 1.0 below `optimal_temp_min_c`) is hardcoded. Similarly, the piecewise slopes 0.5 and 0.45 (lines 1554, 1557) and the minimum values 0.1 and 0.05 (lines 1547, 1559) are all hardcoded. These shape the temperature-reproduction curve but cannot be tuned via species data. At minimum, document these as intentionally fixed; ideally, extract the cold-offset width as a named parameter.",
+          "created_at": "2026-03-30T10:26:04.921833687Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "13a29e9b2f3b2307d64949ab68bb1162a5c50f578c5f3e2e1515dbb48ff79ada"
+        },
+        {
+          "amendment_id": "fr-3-435cc5b4",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 3,
+          "body": "In `gh_mineral_factor()` (shrimp.rs:1641), the high-GH penalty divisor is hardcoded as `10.0`: `(1.0 - (gh_d - params.gh_max_d) / 10.0)`. The molt system has a tunable `molt_gh_excess_penalty_divisor` for the analogous calculation. Use a corresponding named parameter for the reproduction GH excess curve.",
+          "created_at": "2026-03-30T10:26:04.921835731Z",
+          "batch_sequence": 4,
+          "source": "workflow_stage",
+          "dedup_key": "723b862d7279022401b6b741892cacd89a45ac54bd9d52e66280bb77b9a217af"
+        }
+      ],
+      "processed_count": 10
+    },
+    "status_summary": "running: final review restart round 4 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-30T10:05:47.867269691Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

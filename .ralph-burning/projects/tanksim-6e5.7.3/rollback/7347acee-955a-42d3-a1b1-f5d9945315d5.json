@@ -1,0 +1,99 @@
+{
+  "rollback_id": "7347acee-955a-42d3-a1b1-f5d9945315d5",
+  "created_at": "2026-03-30T12:27:31.702671799Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "6721e27173c476634682f05a82537069157b40a5",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260330113320",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 2
+      },
+      "started_at": "2026-03-30T11:33:20.053257722Z",
+      "prompt_hash_at_cycle_start": "d66864ba772de08c",
+      "prompt_hash_at_stage_start": "d66864ba772de08c",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 1
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T12:03:31.915768914Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 2,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-1-98b4d260",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "The validation_scenarios.md report template (lines 508-511) still references `maturity=X.XX` in the VS-01 cycling checkpoints, but the scenario's code and envelope bounds no longer validate the biofilter maturity index (the doc note at line 69-72 explicitly says cycling completion is validated by nitrification output, not maturity index). The template should drop the maturity field from the checkpoint lines or add a note that it is reported for observability only, to avoid confusion when the calibration workflow (G4) auto-populates it.",
+          "created_at": "2026-03-30T12:27:31.557757973Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "633a9e8d950424c0d85bef92795376178125b55f3ae074e0a75905a19ddef2b1"
+        },
+        {
+          "amendment_id": "fr-1-e53a714b",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "In `crates/tank_core/src/systems/shrimp.rs:557-559` and `crates/tank_core/src/systems/shrimp.rs:632`, remove the hidden `.max(0.01)` fallback or replace it with explicit zero handling. The new validation path now accepts `temp_condition_min_factor = 0.0`, but molt cadence still silently treats that as `0.01`, so a configuration that is supposed to set the cadence floor to zero will still advance molt readiness and eventually resolve molts instead of freezing readiness.",
+          "created_at": "2026-03-30T12:27:31.557761820Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "3fab692fabbd8e91f1c3d514b6c723b390c7a396838bbcfa718ba0d200a356ee"
+        },
+        {
+          "amendment_id": "fr-1-c1750e41",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "In `crates/tank_core/src/systems/shrimp.rs:1380-1440`, gate `critical_gh_failure` on `params.gh_min_d > 0.0`, matching the new guard added in `molt_cycle`. Right now, when `gh_min_d` is disabled (`0.0`), a failed molt at `GH=0` will still emit a bogus `critical GH ratio` detail even though the success/failure path no longer treats GH as a hard fail in that mode.",
+          "created_at": "2026-03-30T12:27:31.557764725Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "a38e11f91489e1f8a2c8508157bdb0140836e4e35767c125b6ee94323c3116e8"
+        }
+      ],
+      "processed_count": 0
+    },
+    "status_summary": "running: final review restart round 2 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-30T12:14:53.806538926Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

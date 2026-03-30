@@ -1,0 +1,732 @@
+use serde::{Deserialize, Deserializer, Serialize};
+
+use super::{
+    TankState, DEFAULT_SHRIMP_BODY_CARBON_MG_PER_G_WET_MASS,
+    DEFAULT_SHRIMP_BODY_NITROGEN_MG_PER_G_WET_MASS,
+};
+
+/// Average wet mass of one adult shrimp (grams).
+pub const ADULT_SHRIMP_BIOMASS_G: f64 = 0.12;
+/// Average wet mass of one sub-adult shrimp (grams).
+pub const SUB_ADULT_SHRIMP_BIOMASS_G: f64 = 0.08;
+/// Average wet mass of one juvenile shrimp (grams).
+pub const JUVENILE_SHRIMP_BIOMASS_G: f64 = 0.05;
+
+/// Plant nitrogen content: mg N per gram wet biomass.
+pub const PLANT_N_MG_PER_G_BIOMASS: f64 = 28.0;
+/// Algae nitrogen content: mg N per gram wet biomass.
+pub const ALGAE_N_MG_PER_G_BIOMASS: f64 = 35.0;
+
+/// Fraction of wet mass that is metabolizable organic matter for generic
+/// live-biomass bookkeeping. Shrimp body biomass now uses species-specific
+/// composition fields from `ShrimpRuntimeParams`; this constant still governs
+/// reserve funding and generic microbe biomass accounting.
+pub const LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G: f64 = 0.20;
+
+/// Default shrimp body N content: mg N per gram wet mass.
+pub const SHRIMP_N_MG_PER_G_WET_MASS: f64 = DEFAULT_SHRIMP_BODY_NITROGEN_MG_PER_G_WET_MASS;
+
+/// Default shrimp body C content: mg C per gram wet mass.
+pub const SHRIMP_C_MG_PER_G_WET_MASS: f64 = DEFAULT_SHRIMP_BODY_CARBON_MG_PER_G_WET_MASS;
+
+const DEFAULT_N_TO_C_RATIO: f64 = 0.16;
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
+pub struct ElementBudget {
+    pub in_mg: f64,
+    pub out_mg: f64,
+}
+
+impl ElementBudget {
+    pub fn from_delta(delta_mg: f64) -> Self {
+        if delta_mg >= 0.0 {
+            Self {
+                in_mg: delta_mg,
+                out_mg: 0.0,
+            }
+        } else {
+            Self {
+                in_mg: 0.0,
+                out_mg: -delta_mg,
+            }
+        }
+    }
+
+    pub fn net_mg(&self) -> f64 {
+        self.in_mg - self.out_mg
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum BudgetRecordingKind {
+    #[default]
+    Snapshot,
+    Explicit,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
+pub struct BudgetDelta {
+    pub nitrogen: ElementBudget,
+    pub carbon: ElementBudget,
+    pub oxygen: ElementBudget,
+}
+
+impl BudgetDelta {
+    pub fn between(before: BudgetTotals, after: BudgetTotals) -> Self {
+        Self {
+            nitrogen: ElementBudget::from_delta(after.nitrogen_mg - before.nitrogen_mg),
+            carbon: ElementBudget::from_delta(after.carbon_mg - before.carbon_mg),
+            oxygen: ElementBudget::from_delta(after.oxygen_mg - before.oxygen_mg),
+        }
+    }
+
+    pub(crate) fn from_snapshots(before: &BudgetSnapshot, after: &BudgetSnapshot) -> Self {
+        Self {
+            nitrogen: gross_element_budget(&before.nitrogen_components, &after.nitrogen_components),
+            carbon: gross_element_budget(&before.carbon_components, &after.carbon_components),
+            oxygen: ElementBudget::from_delta(after.totals.oxygen_mg - before.totals.oxygen_mg),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
+pub struct BudgetTotals {
+    pub nitrogen_mg: f64,
+    pub carbon_mg: f64,
+    pub oxygen_mg: f64,
+}
+
+impl BudgetTotals {
+    pub fn from_state(state: &TankState) -> Self {
+        let dissolved_oxygen_mg_total = state.water.dissolved_oxygen_mg_total;
+        debug_assert!(
+            dissolved_oxygen_mg_total >= -f64::EPSILON,
+            "negative dissolved oxygen should not reach budget totals: {dissolved_oxygen_mg_total}"
+        );
+        Self {
+            nitrogen_mg: total_nitrogen_mg(state),
+            carbon_mg: total_carbon_mg(state),
+            oxygen_mg: dissolved_oxygen_mg_total.max(0.0),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BudgetComponent {
+    pub label: &'static str,
+    pub amount_mg: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct BudgetSnapshot {
+    pub(crate) totals: BudgetTotals,
+    nitrogen_components: [BudgetComponent; 20],
+    carbon_components: [BudgetComponent; 16],
+}
+
+impl BudgetSnapshot {
+    pub(crate) fn from_state(state: &TankState) -> Self {
+        Self {
+            totals: BudgetTotals::from_state(state),
+            nitrogen_components: nitrogen_budget_components(state),
+            carbon_components: carbon_budget_components(state),
+        }
+    }
+}
+
+/// Unit tag for scalar budget metrics that sit alongside the conserved element
+/// ledger.
+///
+/// `ElementBudget` remains mg-only because it is limited to conserved nitrogen,
+/// carbon, and oxygen mass. Scalar diagnostics such as alkalinity therefore use
+/// `BudgetMetric` plus an explicit unit tag instead of overloading the element
+/// budget surface.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum BudgetMetricUnit {
+    #[default]
+    Unitless,
+    Milligrams,
+    MilliEquivalents,
+    Grams,
+    Centimeters,
+}
+
+impl BudgetMetricUnit {
+    pub fn infer_from_label(label: &str) -> Self {
+        if label.contains("_meq") || label.contains(".alkalinity_meq.") {
+            Self::MilliEquivalents
+        } else if label.contains("_mg") {
+            Self::Milligrams
+        } else if label.ends_with("_g") {
+            Self::Grams
+        } else if label.ends_with("_cm") {
+            Self::Centimeters
+        } else {
+            Self::Unitless
+        }
+    }
+}
+
+/// Optional per-stage scalar diagnostics that complement element budgets.
+///
+/// These are for tracked quantities that matter for attribution and debugging
+/// but are not part of the conserved N/C/O element ledger, such as alkalinity
+/// deltas or future denitrification return bookkeeping.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct BudgetMetric {
+    pub label: String,
+    pub value: f64,
+    pub unit: BudgetMetricUnit,
+}
+
+impl<'de> Deserialize<'de> for BudgetMetric {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct BudgetMetricRepr {
+            label: String,
+            value: f64,
+            #[serde(default)]
+            unit: Option<BudgetMetricUnit>,
+        }
+
+        let repr = BudgetMetricRepr::deserialize(deserializer)?;
+        let unit = repr
+            .unit
+            .unwrap_or_else(|| BudgetMetricUnit::infer_from_label(&repr.label));
+
+        Ok(Self {
+            label: repr.label,
+            value: repr.value,
+            unit,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BudgetEntry {
+    pub label: String,
+    pub delta: BudgetDelta,
+    #[serde(default)]
+    pub recording_kind: BudgetRecordingKind,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub metrics: Vec<BudgetMetric>,
+}
+
+impl BudgetEntry {
+    pub fn metric(&self, label: &str) -> Option<&BudgetMetric> {
+        self.metrics.iter().find(|metric| metric.label == label)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TickBudgetRecord {
+    pub tick_index: usize,
+    pub day: u32,
+    pub hour: u32,
+    pub before: BudgetTotals,
+    pub after: BudgetTotals,
+    pub net_delta: BudgetDelta,
+    pub entries: Vec<BudgetEntry>,
+}
+
+impl TickBudgetRecord {
+    pub fn start(state: &TankState, tick_index: usize) -> Self {
+        let totals = BudgetTotals::from_state(state);
+        Self {
+            tick_index,
+            day: state.environment.day,
+            hour: u32::from(state.environment.hour_of_day),
+            before: totals,
+            after: totals,
+            net_delta: BudgetDelta::default(),
+            entries: Vec::new(),
+        }
+    }
+
+    pub fn record_stage(
+        &mut self,
+        label: &str,
+        before: BudgetTotals,
+        after: BudgetTotals,
+        delta: BudgetDelta,
+        recording_kind: BudgetRecordingKind,
+        metrics: Vec<BudgetMetric>,
+    ) {
+        debug_assert!(delta_net_matches_totals(delta, before, after));
+        self.after = after;
+        self.net_delta = BudgetDelta::between(self.before, after);
+        self.entries.push(BudgetEntry {
+            label: label.to_owned(),
+            delta,
+            recording_kind,
+            metrics,
+        });
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct BudgetLedger {
+    pub ticks: Vec<TickBudgetRecord>,
+}
+
+impl BudgetLedger {
+    pub fn push_tick(&mut self, tick: TickBudgetRecord) {
+        self.ticks.push(tick);
+    }
+}
+
+/// Canonical nitrogen-bearing TankState components for conservation checks,
+/// diagnostics, and budget snapshots.
+///
+/// The structural coverage test auto-discovers expected fields by naming
+/// convention (`*_mg_n_total`, `*biomass_g`, plus shared detritus/count pools).
+/// When adding a new explicit nitrogen-bearing field, update this function in
+/// the same change. If the field uses a non-standard name, also extend the
+/// budget-path discovery rules used by the coverage test.
+pub fn nitrogen_budget_components(state: &TankState) -> [BudgetComponent; 20] {
+    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
+    let substrate_n_mg: f64 = state
+        .substrate_layers
+        .iter()
+        .map(|layer| layer.nutrient_store_mg_n_total)
+        .sum();
+    let plant_n_mg: f64 = state
+        .plant_guilds
+        .iter()
+        .map(|plant| plant_nitrogen_mg(plant.biomass_g))
+        .sum();
+
+    [
+        BudgetComponent {
+            label: "water.ammonia_total_mg_n_total",
+            amount_mg: state.water.ammonia_total_mg_n_total,
+        },
+        BudgetComponent {
+            label: "water.nitrite_mg_n_total",
+            amount_mg: state.water.nitrite_mg_n_total,
+        },
+        BudgetComponent {
+            label: "water.nitrate_mg_n_total",
+            amount_mg: state.water.nitrate_mg_n_total,
+        },
+        BudgetComponent {
+            label: "water.dissolved_organic_nitrogen_mg_n_total",
+            amount_mg: state.water.dissolved_organic_nitrogen_mg_n_total,
+        },
+        BudgetComponent {
+            label: "substrate_layers[*].nutrient_store_mg_n_total",
+            amount_mg: substrate_n_mg,
+        },
+        BudgetComponent {
+            label: "plant_guilds[*].biomass_g",
+            amount_mg: plant_n_mg,
+        },
+        BudgetComponent {
+            label: "algae.suspended_biomass_g",
+            amount_mg: algae_nitrogen_mg(state.algae.suspended_biomass_g),
+        },
+        BudgetComponent {
+            label: "algae.periphyton_biomass_g",
+            amount_mg: algae_nitrogen_mg(state.algae.periphyton_biomass_g),
+        },
+        BudgetComponent {
+            label: "microbe.decomposer_biomass_g",
+            amount_mg: live_biomass_nitrogen_mg(state.microbe.decomposer_biomass_g, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "microbe.ammonia_oxidizer_biomass_g",
+            amount_mg: live_biomass_nitrogen_mg(
+                state.microbe.ammonia_oxidizer_biomass_g,
+                n_to_c_ratio,
+            ),
+        },
+        BudgetComponent {
+            label: "microbe.nitrite_oxidizer_biomass_g",
+            amount_mg: live_biomass_nitrogen_mg(
+                state.microbe.nitrite_oxidizer_biomass_g,
+                n_to_c_ratio,
+            ),
+        },
+        BudgetComponent {
+            label: "microbe.comammox_biomass_g",
+            amount_mg: live_biomass_nitrogen_mg(state.microbe.comammox_biomass_g, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "animal.adult.count",
+            amount_mg: shrimp_nitrogen_mg(
+                state.animal.adult.count,
+                0,
+                0,
+                state.shrimp_params.body_nitrogen_mg_per_g_wet_mass,
+            ),
+        },
+        BudgetComponent {
+            label: "animal.sub_adult.count",
+            amount_mg: shrimp_nitrogen_mg(
+                0,
+                state.animal.sub_adult.count,
+                0,
+                state.shrimp_params.body_nitrogen_mg_per_g_wet_mass,
+            ),
+        },
+        BudgetComponent {
+            label: "animal.juvenile.count",
+            amount_mg: shrimp_nitrogen_mg(
+                0,
+                0,
+                state.animal.juvenile.count,
+                state.shrimp_params.body_nitrogen_mg_per_g_wet_mass,
+            ),
+        },
+        BudgetComponent {
+            label: "animal.reserve_g",
+            amount_mg: detritus_nitrogen_mg(state.animal.total_reserve_g(), n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "microfauna.reserve_g",
+            amount_mg: detritus_nitrogen_mg(state.microfauna.reserve_g, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "detritus.particulate_organics_g_total",
+            amount_mg: detritus_nitrogen_mg(
+                state.detritus.particulate_organics_g_total,
+                n_to_c_ratio,
+            ),
+        },
+        BudgetComponent {
+            label: "detritus.fine_detritus_g_total",
+            amount_mg: detritus_nitrogen_mg(state.detritus.fine_detritus_g_total, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "cumulative_n2_export_mg_n",
+            amount_mg: state.cumulative_n2_export_mg_n,
+        },
+    ]
+}
+
+/// Canonical carbon-bearing TankState components for conservation checks,
+/// diagnostics, and budget snapshots.
+///
+/// The structural coverage test auto-discovers expected fields by naming
+/// convention (`*_mg_c_total`, `*biomass_g`, plus shared detritus/count pools).
+/// When adding a new explicit carbon-bearing field, update this function in the
+/// same change. If the field uses a non-standard name, also extend the
+/// budget-path discovery rules used by the coverage test.
+pub fn carbon_budget_components(state: &TankState) -> [BudgetComponent; 16] {
+    let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
+    let plant_c_mg: f64 = state
+        .plant_guilds
+        .iter()
+        .map(|plant| plant_carbon_mg(plant.biomass_g, n_to_c_ratio))
+        .sum();
+
+    [
+        BudgetComponent {
+            label: "water.dissolved_inorganic_carbon_mg_c_total",
+            amount_mg: state.water.dissolved_inorganic_carbon_mg_c_total,
+        },
+        BudgetComponent {
+            label: "water.dissolved_organic_carbon_mg_c_total",
+            amount_mg: state.water.dissolved_organic_carbon_mg_c_total,
+        },
+        BudgetComponent {
+            label: "plant_guilds[*].biomass_g",
+            amount_mg: plant_c_mg,
+        },
+        BudgetComponent {
+            label: "algae.suspended_biomass_g",
+            amount_mg: algae_carbon_mg(state.algae.suspended_biomass_g, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "algae.periphyton_biomass_g",
+            amount_mg: algae_carbon_mg(state.algae.periphyton_biomass_g, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "microbe.decomposer_biomass_g",
+            amount_mg: live_biomass_carbon_mg(state.microbe.decomposer_biomass_g, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "microbe.ammonia_oxidizer_biomass_g",
+            amount_mg: live_biomass_carbon_mg(
+                state.microbe.ammonia_oxidizer_biomass_g,
+                n_to_c_ratio,
+            ),
+        },
+        BudgetComponent {
+            label: "microbe.nitrite_oxidizer_biomass_g",
+            amount_mg: live_biomass_carbon_mg(
+                state.microbe.nitrite_oxidizer_biomass_g,
+                n_to_c_ratio,
+            ),
+        },
+        BudgetComponent {
+            label: "microbe.comammox_biomass_g",
+            amount_mg: live_biomass_carbon_mg(state.microbe.comammox_biomass_g, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "animal.adult.count",
+            amount_mg: shrimp_carbon_mg(
+                state.animal.adult.count,
+                0,
+                0,
+                state.shrimp_params.body_carbon_mg_per_g_wet_mass,
+            ),
+        },
+        BudgetComponent {
+            label: "animal.sub_adult.count",
+            amount_mg: shrimp_carbon_mg(
+                0,
+                state.animal.sub_adult.count,
+                0,
+                state.shrimp_params.body_carbon_mg_per_g_wet_mass,
+            ),
+        },
+        BudgetComponent {
+            label: "animal.juvenile.count",
+            amount_mg: shrimp_carbon_mg(
+                0,
+                0,
+                state.animal.juvenile.count,
+                state.shrimp_params.body_carbon_mg_per_g_wet_mass,
+            ),
+        },
+        BudgetComponent {
+            label: "animal.reserve_g",
+            amount_mg: detritus_carbon_mg(state.animal.total_reserve_g(), n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "microfauna.reserve_g",
+            amount_mg: detritus_carbon_mg(state.microfauna.reserve_g, n_to_c_ratio),
+        },
+        BudgetComponent {
+            label: "detritus.particulate_organics_g_total",
+            amount_mg: detritus_carbon_mg(
+                state.detritus.particulate_organics_g_total,
+                n_to_c_ratio,
+            ),
+        },
+        BudgetComponent {
+            label: "detritus.fine_detritus_g_total",
+            amount_mg: detritus_carbon_mg(state.detritus.fine_detritus_g_total, n_to_c_ratio),
+        },
+    ]
+}
+
+pub fn total_nitrogen_mg(state: &TankState) -> f64 {
+    nitrogen_budget_components(state)
+        .into_iter()
+        .map(|component| component.amount_mg)
+        .sum()
+}
+
+pub fn total_carbon_mg(state: &TankState) -> f64 {
+    carbon_budget_components(state)
+        .into_iter()
+        .map(|component| component.amount_mg)
+        .sum()
+}
+
+pub fn plant_nitrogen_mg(biomass_g: f64) -> f64 {
+    biomass_g.max(0.0) * PLANT_N_MG_PER_G_BIOMASS
+}
+
+pub fn plant_carbon_mg(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
+    carbon_from_nitrogen_mg(plant_nitrogen_mg(biomass_g), n_to_c_ratio)
+}
+
+pub fn algae_nitrogen_mg(biomass_g: f64) -> f64 {
+    biomass_g.max(0.0) * ALGAE_N_MG_PER_G_BIOMASS
+}
+
+pub fn algae_carbon_mg(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
+    carbon_from_nitrogen_mg(algae_nitrogen_mg(biomass_g), n_to_c_ratio)
+}
+
+pub fn algae_detrital_mass_g(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
+    if biomass_g <= f64::EPSILON {
+        return 0.0;
+    }
+
+    (algae_nitrogen_mg(biomass_g) + algae_carbon_mg(biomass_g, n_to_c_ratio)) / 1000.0
+}
+
+pub fn live_biomass_nitrogen_mg(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
+    organic_nitrogen_mg(
+        biomass_g.max(0.0) * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
+        n_to_c_ratio,
+    )
+}
+
+pub fn live_biomass_carbon_mg(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
+    organic_carbon_mg(
+        biomass_g.max(0.0) * LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G,
+        n_to_c_ratio,
+    )
+}
+
+pub fn live_biomass_detrital_mass_g(biomass_g: f64, n_to_c_ratio: f64) -> f64 {
+    if biomass_g <= f64::EPSILON {
+        return 0.0;
+    }
+
+    (live_biomass_nitrogen_mg(biomass_g, n_to_c_ratio)
+        + live_biomass_carbon_mg(biomass_g, n_to_c_ratio))
+        / 1000.0
+}
+
+pub fn shrimp_biomass_g(adults_count: u32, sub_adult_count: u32, juveniles_count: u32) -> f64 {
+    (f64::from(adults_count) * ADULT_SHRIMP_BIOMASS_G)
+        + (f64::from(sub_adult_count) * SUB_ADULT_SHRIMP_BIOMASS_G)
+        + (f64::from(juveniles_count) * JUVENILE_SHRIMP_BIOMASS_G)
+}
+
+pub fn shrimp_body_nitrogen_mg(biomass_g: f64, body_nitrogen_mg_per_g_wet_mass: f64) -> f64 {
+    biomass_g.max(0.0)
+        * sanitize_body_composition_mg_per_g(
+            body_nitrogen_mg_per_g_wet_mass,
+            SHRIMP_N_MG_PER_G_WET_MASS,
+        )
+}
+
+pub fn shrimp_body_carbon_mg(biomass_g: f64, body_carbon_mg_per_g_wet_mass: f64) -> f64 {
+    biomass_g.max(0.0)
+        * sanitize_body_composition_mg_per_g(
+            body_carbon_mg_per_g_wet_mass,
+            SHRIMP_C_MG_PER_G_WET_MASS,
+        )
+}
+
+pub fn shrimp_body_detrital_mass_g(
+    biomass_g: f64,
+    body_nitrogen_mg_per_g_wet_mass: f64,
+    body_carbon_mg_per_g_wet_mass: f64,
+) -> f64 {
+    if biomass_g <= f64::EPSILON {
+        return 0.0;
+    }
+
+    (shrimp_body_nitrogen_mg(biomass_g, body_nitrogen_mg_per_g_wet_mass)
+        + shrimp_body_carbon_mg(biomass_g, body_carbon_mg_per_g_wet_mass))
+        / 1000.0
+}
+
+pub fn shrimp_nitrogen_mg(
+    adults_count: u32,
+    sub_adult_count: u32,
+    juveniles_count: u32,
+    body_nitrogen_mg_per_g_wet_mass: f64,
+) -> f64 {
+    shrimp_body_nitrogen_mg(
+        shrimp_biomass_g(adults_count, sub_adult_count, juveniles_count),
+        body_nitrogen_mg_per_g_wet_mass,
+    )
+}
+
+pub fn shrimp_carbon_mg(
+    adults_count: u32,
+    sub_adult_count: u32,
+    juveniles_count: u32,
+    body_carbon_mg_per_g_wet_mass: f64,
+) -> f64 {
+    shrimp_body_carbon_mg(
+        shrimp_biomass_g(adults_count, sub_adult_count, juveniles_count),
+        body_carbon_mg_per_g_wet_mass,
+    )
+}
+
+pub fn detritus_nitrogen_mg(mass_g: f64, n_to_c_ratio: f64) -> f64 {
+    organic_nitrogen_mg(mass_g, n_to_c_ratio)
+}
+
+pub fn detritus_carbon_mg(mass_g: f64, n_to_c_ratio: f64) -> f64 {
+    organic_carbon_mg(mass_g, n_to_c_ratio)
+}
+
+fn organic_nitrogen_mg(mass_g: f64, n_to_c_ratio: f64) -> f64 {
+    let ratio = sanitize_n_to_c_ratio(n_to_c_ratio);
+    mass_g.max(0.0) * 1000.0 * ratio / (1.0 + ratio)
+}
+
+fn organic_carbon_mg(mass_g: f64, n_to_c_ratio: f64) -> f64 {
+    let ratio = sanitize_n_to_c_ratio(n_to_c_ratio);
+    mass_g.max(0.0) * 1000.0 / (1.0 + ratio)
+}
+
+fn carbon_from_nitrogen_mg(nitrogen_mg: f64, n_to_c_ratio: f64) -> f64 {
+    nitrogen_mg.max(0.0) / sanitize_n_to_c_ratio(n_to_c_ratio)
+}
+
+fn sanitize_n_to_c_ratio(n_to_c_ratio: f64) -> f64 {
+    if n_to_c_ratio.is_finite() && n_to_c_ratio > f64::EPSILON {
+        n_to_c_ratio
+    } else {
+        DEFAULT_N_TO_C_RATIO
+    }
+}
+
+fn sanitize_body_composition_mg_per_g(value: f64, fallback: f64) -> f64 {
+    if value.is_finite() && value > f64::EPSILON {
+        value
+    } else {
+        fallback
+    }
+}
+
+fn gross_element_budget<const N: usize>(
+    before: &[BudgetComponent; N],
+    after: &[BudgetComponent; N],
+) -> ElementBudget {
+    let mut in_mg = 0.0;
+    let mut out_mg = 0.0;
+
+    for (before_component, after_component) in before.iter().zip(after.iter()) {
+        debug_assert_eq!(before_component.label, after_component.label);
+        let delta_mg = after_component.amount_mg - before_component.amount_mg;
+        if delta_mg >= 0.0 {
+            in_mg += delta_mg;
+        } else {
+            out_mg += -delta_mg;
+        }
+    }
+
+    ElementBudget { in_mg, out_mg }
+}
+
+fn delta_net_matches_totals(delta: BudgetDelta, before: BudgetTotals, after: BudgetTotals) -> bool {
+    const TOLERANCE_MG: f64 = 1e-6;
+
+    (delta.nitrogen.net_mg() - (after.nitrogen_mg - before.nitrogen_mg)).abs() <= TOLERANCE_MG
+        && (delta.carbon.net_mg() - (after.carbon_mg - before.carbon_mg)).abs() <= TOLERANCE_MG
+        && (delta.oxygen.net_mg() - (after.oxygen_mg - before.oxygen_mg)).abs() <= TOLERANCE_MG
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BudgetMetric, BudgetMetricUnit};
+
+    #[test]
+    fn legacy_budget_metrics_infer_units_from_labels() {
+        let metric: BudgetMetric =
+            serde_json::from_str(r#"{"label":"water.alkalinity_meq.delta","value":-0.25}"#)
+                .expect("legacy budget metric should deserialize");
+
+        assert_eq!(metric.unit, BudgetMetricUnit::MilliEquivalents);
+    }
+
+    #[test]
+    fn explicit_budget_metric_units_roundtrip() {
+        let metric = BudgetMetric {
+            label: "nitrogen_cycle.tan_oxidized_mg".to_owned(),
+            value: 1.25,
+            unit: BudgetMetricUnit::Milligrams,
+        };
+
+        let json = serde_json::to_string(&metric).expect("serialize metric");
+        let parsed: BudgetMetric = serde_json::from_str(&json).expect("deserialize metric");
+
+        assert_eq!(parsed, metric);
+    }
+}

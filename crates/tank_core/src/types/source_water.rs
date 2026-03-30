@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use super::SimError;
+use crate::systems::chemistry::{
+    validate_source_water_carbonate_profile, SourceWaterCarbonateValidationError,
+};
 
 /// Runtime source-water profile with explicit per-liter chemistry.
 /// Stored in `TankState.source_water_catalog` for deterministic continuation.
@@ -19,6 +22,9 @@ pub struct SourceWaterProfile {
     pub magnesium_mg_per_l: f64,
     pub sodium_mg_per_l: f64,
     pub potassium_mg_per_l: f64,
+    /// Display/documentation field only. Runtime carbonate chemistry uses DIC,
+    /// alkalinity, and temperature as the authoritative inputs and immediately
+    /// re-derives bicarbonate when materializing water state or snapshots.
     pub bicarbonate_mg_per_l: f64,
     pub chloride_mg_per_l: f64,
     pub sulfate_mg_per_l: f64,
@@ -62,10 +68,26 @@ impl SourceWaterProfile {
                 value: self.temperature_c,
             });
         }
+        if let Err(err) = validate_source_water_carbonate_profile(
+            self.dic_mg_c_per_l,
+            self.alkalinity_meq_per_l,
+            self.temperature_c,
+        ) {
+            return Err(SimError::InvalidSourceProfile {
+                id: profile_id.to_string(),
+                field: "carbonate_derived_ph",
+                value: match err {
+                    SourceWaterCarbonateValidationError::OutOfRangePh(ph) => ph,
+                    SourceWaterCarbonateValidationError::NonFiniteNeutralFallback => f64::NAN,
+                },
+            });
+        }
         Ok(())
     }
 
-    /// Creates a zero-nutrient profile (equivalent to pure RO water).
+    /// Creates a zeroed profile for tests and validation probes.
+    /// This is intentionally more extreme than the shipped `ro_like` preset,
+    /// which models lightly remineralized RO/DI water.
     pub fn zero() -> Self {
         Self {
             temperature_c: 23.0,

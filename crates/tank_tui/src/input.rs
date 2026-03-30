@@ -30,11 +30,18 @@ pub fn handle_key_event(app: &mut TuiApp, key: KeyEvent) -> InputOutcome {
                 app.show_status(StatusLevel::Error, format!("Load failed: {error:#}"));
             }
         }
-        KeyCode::Char(digit)
-            if Screen::from_digit(digit).is_some() && app.active_screen != Screen::Actions =>
-        {
-            if let Some(screen) = Screen::from_digit(digit) {
-                app.set_screen(screen);
+        KeyCode::Esc if app.active_screen == Screen::Actions => {
+            app.set_screen(Screen::Overview);
+        }
+        KeyCode::Char(digit) if Screen::from_digit(digit).is_some() => {
+            // On Actions screen, digits go to the numeric field editor first;
+            // only switch screens if the field rejects the input.
+            // Use Esc to leave Actions when a numeric field is focused.
+            let consumed = app.active_screen == Screen::Actions && app.action_form.edit_char(digit);
+            if !consumed {
+                if let Some(screen) = Screen::from_digit(digit) {
+                    app.set_screen(screen);
+                }
             }
         }
         _ => {

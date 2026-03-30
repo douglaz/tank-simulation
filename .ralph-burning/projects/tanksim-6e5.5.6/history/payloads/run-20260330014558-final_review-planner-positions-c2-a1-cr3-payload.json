@@ -1,0 +1,39 @@
+{
+  "payload_id": "run-20260330014558-final_review-planner-positions-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T05:16:23.964661134Z",
+  "payload": {
+    "summary": "Accept only the alkalinity budget-guard amendment. The other proposals either describe code that is not present in this review branch or point at a separate open backlog item rather than a correctness defect in the alkalinity patch itself.",
+    "votes": [
+      {
+        "amendment_id": "fr-3-2df09666",
+        "decision": "reject",
+        "rationale": "`update_molt_stress` does contain an unguarded `/ params.gh_min_d`, but with the enforced non-negative GH state the branch is unreachable when `gh_min_d == 0`, so this is not a concrete divide-by-zero defect. The cited `molt_mineral_modifier` helper is also not present in this branch, which makes the amendment a defensive consistency preference rather than a required fix."
+      },
+      {
+        "amendment_id": "fr-3-17e84003",
+        "decision": "reject",
+        "rationale": "This review branch's `molt_cycle` does not scale `failed_molt_accum` or recovery by `failed_stage_count` / `successful_stage_count`; it still applies a single fixed `+0.3` or `-0.35` adjustment per resolved molt day. The amendment describes a different implementation, so it does not identify a real issue in the code under review."
+      },
+      {
+        "amendment_id": "fr-3-2b94d94d",
+        "decision": "reject",
+        "rationale": "The cited geometry-scaling gaps are real separate backlog work under open bead `tanksim-6e5.5.6`, but they are unrelated to and untouched by the current `tanksim-6e5.4.7` alkalinity-accounting patch. As written, this amendment does not identify a correctness, safety, or robustness defect in the proposed alkalinity changes themselves."
+      },
+      {
+        "amendment_id": "fr-3-dbc7b143",
+        "decision": "accept",
+        "rationale": "This is a real robustness gap. The patch adds alkalinity to `BudgetDelta`, `BudgetTotals`, `Element`, and explicit water-change accounting, but `enforce_tracked_tick_budget_guard` still checks only nitrogen and carbon. That means a bad explicit alkalinity delta can pass `step_hours()` silently in normal execution and only be caught by optional external assertions, so the engine-level guard should be extended to alkalinity as well."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

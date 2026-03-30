@@ -1,0 +1,90 @@
+{
+  "payload_id": "run-20260330064830-final_review-aggregate-c2-a1-cr7-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T10:58:47.743252Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-7-dd6f9b61",
+      "fr-7-80ce85a0"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-7-dd6f9b61",
+        "normalized_body": "In `substrate_oxygenation_breakdown_with_registry` (substrate.rs:128), `effective_penetration_cm = base_penetration_cm + root_oxygenation_bonus_cm` is not explicitly clamped to `total_depth_cm`. While the exponential saturation formula mathematically ensures the bonus stays below `remaining_depth_cm`, floating-point arithmetic (specifically `base + (total - base)` not being guaranteed to equal `total` in IEEE 754) can cause the sum to exceed `total_depth_cm` by a few ULPs. Downstream consumers (`resolved_o2_penetration_depth_cm`, `zone_depth_cm`) do clamp, so this is not an exploitable bug, but adding `.min(total_depth_cm)` after line 128 would be a cheap defensive measure that eliminates the class of issue entirely.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-7-80ce85a0",
+        "normalized_body": "The public function `substrate_oxygenation_breakdown()` (substrate.rs:82) computes a fresh habitat registry via `compute_habitat_registry(state)`, while the mutation function `step_substrate_zones()` (substrate.rs:60) uses the cached `state.habitat_registry`. This means calling the public read-only function and the engine's step function on the same state can produce different breakdowns if the cached registry is stale. Consider either (a) documenting this divergence in the public function's doc comment, or (b) having both paths use the same registry source.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-7-c178d602",
+        "normalized_body": "Blocking: this change set does not implement the root-zone oxygenation bead described in the prompt. The actual edits only add alkalinity stoichiometry/budget plumbing and trace notes in `crates/tank_core/src/types/process.rs:6-27`, `crates/tank_core/src/systems/nitrogen_cycle.rs:12-23`, `crates/tank_core/src/systems/nitrogen_cycle.rs:366-384`, `crates/tank_core/src/engine.rs:224-239`, and `crates/tank_core/src/systems/water_change.rs:124-152`. None of those changes touch the substrate O2 penetration calculation, rooted-plant biomass access, guild-specific rooted contribution, or planted-vs-unplanted substrate behavior, so the acceptance criteria for deeper oxic zones, rooted-only contribution, saturation by biomass, and the 500-hour planted-substrate divergence are still unmet.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-7-dd6f9b61",
+        "normalized_body": "In `substrate_oxygenation_breakdown_with_registry` (substrate.rs:128), `effective_penetration_cm = base_penetration_cm + root_oxygenation_bonus_cm` is not explicitly clamped to `total_depth_cm`. While the exponential saturation formula mathematically ensures the bonus stays below `remaining_depth_cm`, floating-point arithmetic (specifically `base + (total - base)` not being guaranteed to equal `total` in IEEE 754) can cause the sum to exceed `total_depth_cm` by a few ULPs. Downstream consumers (`resolved_o2_penetration_depth_cm`, `zone_depth_cm`) do clamp, so this is not an exploitable bug, but adding `.min(total_depth_cm)` after line 128 would be a cheap defensive measure that eliminates the class of issue entirely.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-7-80ce85a0",
+        "normalized_body": "The public function `substrate_oxygenation_breakdown()` (substrate.rs:82) computes a fresh habitat registry via `compute_habitat_registry(state)`, while the mutation function `step_substrate_zones()` (substrate.rs:60) uses the cached `state.habitat_registry`. This means calling the public read-only function and the engine's step function on the same state can produce different breakdowns if the cached registry is stale. Consider either (a) documenting this divergence in the public function's doc comment, or (b) having both paths use the same registry source.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 7,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-7-c178d602"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 2 amendment(s); restart required.",
+    "total_proposed_amendments": 3,
+    "total_reviewers": 2,
+    "unique_amendment_count": 3
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 7
+}

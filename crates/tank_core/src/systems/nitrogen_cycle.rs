@@ -1,15 +1,67 @@
-use crate::types::TankState;
+use std::collections::BTreeMap;
+
+use crate::types::{
+    concentration_from_total, find_habitat, live_biomass_carbon_mg, live_biomass_nitrogen_mg,
+    HabitatKind, TankState, ADULT_SHRIMP_BIOMASS_G, DENITRIFICATION_ALK_MEQ_PER_MG_N,
+    JUVENILE_SHRIMP_BIOMASS_G, SUB_ADULT_SHRIMP_BIOMASS_G,
+};
 
 const FEED_P_TO_N_MASS_RATIO: f64 = 0.10;
-const ADULT_SHRIMP_BIOMASS_G: f64 = 0.12;
-const JUVENILE_SHRIMP_BIOMASS_G: f64 = 0.05;
+const SMALL_NEGATIVE_ROUNDING_TOLERANCE_MG: f64 = 1e-9;
+const SMALL_NEGATIVE_ROUNDING_TOLERANCE_MEQ: f64 = 1e-9;
+
+/// Stoichiometric DOC consumed per mg N denitrified.
+///
+/// From simplified denitrification: 5 CH₂O + 4 NO₃⁻ → 2 N₂ + 5 CO₂ + 7 H₂O
+/// Carbon consumed = 5 mol C / 4 mol N × (12 g/mol C) / (14.007 g/mol N)
+/// ≈ 1.0714 mg C per mg N.
+const DENITRIFICATION_DOC_MG_C_PER_MG_N: f64 = 5.0 / 4.0 * 12.0 / 14.007;
 
 /// Result of one hourly nitrogen cycle step, carrying coupling values
 /// that downstream systems (DO, chemistry) need.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NitrogenCycleOutput {
-    /// Total mg N oxidized to nitrate this tick (AOB + NOB + comammox pathway).
-    pub total_mg_n_nitrified: f64,
+    /// Total mg N that reached nitrate this tick (NOB + comammox pathway).
+    ///
+    /// This excludes AOB TAN -> NO₂ oxidation that remains buffered in the
+    /// nitrite pool at tick end. Use `tan_oxidized_mg` for the nitrogen basis
+    /// that drives alkalinity consumption.
+    pub nitrate_produced_mg_n: f64,
+    /// Total mg N oxidized from TAN this tick (AOB + comammox pathway).
+    ///
+    /// This is the stoichiometric nitrogen basis for nitrification alkalinity
+    /// depletion and stays correct even when nitrite accumulates transiently.
+    pub tan_oxidized_mg: f64,
+    /// Total alkalinity consumed this tick by nitrification (meq).
+    ///
+    /// Only AOB and comammox consume alkalinity (TAN oxidation step).
+    /// NOB (NO₂⁻ → NO₃⁻) does not consume additional alkalinity.
+    pub alkalinity_consumed_meq: f64,
+    /// Total alkalinity produced this tick by denitrification (meq).
+    pub alkalinity_produced_meq: f64,
+    /// mg N removed by denitrification as N₂ gas (permanent export).
+    pub denitrification_n2_export_mg_n: f64,
+    /// mg C (DOC) consumed by denitrification this tick.
+    pub denitrification_doc_consumed_mg_c: f64,
+    /// mg N oxidized by AOB (TAN → NO₂⁻) this tick.
+    pub aob_n_oxidized_mg: f64,
+    /// mg N oxidized by NOB (NO₂⁻ → NO₃⁻) this tick.
+    pub nob_n_oxidized_mg: f64,
+    /// mg N oxidized by comammox (TAN → NO₃⁻) this tick.
+    pub comammox_n_oxidized_mg: f64,
+}
+
+impl NitrogenCycleOutput {
+    /// Net alkalinity change applied to the water pool this tick.
+    pub fn net_alkalinity_delta_meq(&self) -> f64 {
+        self.alkalinity_produced_meq - self.alkalinity_consumed_meq
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct NitrifierStepResult {
+    oxidized_n_mg: f64,
+    growth_g: f64,
 }
 
 /// Monod-style environmental factors shared across guilds.
@@ -31,18 +83,46 @@ fn safe_rate(v: f64) -> f64 {
     }
 }
 
+fn clamp_post_growth_residual_mg(value_mg: f64, pool: &'static str) -> f64 {
+    debug_assert!(
+        value_mg >= -SMALL_NEGATIVE_ROUNDING_TOLERANCE_MG,
+        "{pool} residual underflowed past floating-point tolerance: {value_mg} mg"
+    );
+    value_mg.max(0.0)
+}
+
 /// Runs the full nitrogen-cycle phase for one hourly tick.
 ///
 /// Order: feed leaching -> detritus breakdown/mineralization -> nitrification + guild growth/decay.
 ///
 /// Returns coupling values for downstream DO and alkalinity systems.
+///
+/// ## Mass-flow context (see docs/MASS_FLOW.md)
+///
+/// This function owns the hourly cascade from coarse feed to dissolved
+/// inorganic pools:
+///
+/// 1. Feed leaching: particulate_organics -> fine_detritus
+/// 2. Dissolution: fine_detritus -> DOC + DON + P
+/// 3. Decomposer mineralization: DOC/DON -> TAN + DIC (with growth)
+/// 4. Nitrification: TAN -> NO2 -> NO3 (AOB/NOB/comammox)
+///
+/// Death/senescence inputs from C7 (shrimp mortality, plant senescence,
+/// algae loss) enter fine_detritus_g_total through their respective
+/// daily systems.  Once in fine detritus, they follow the same
+/// dissolution and mineralization path as feed-derived material, with
+/// no separate treatment or double-counting.
+///
+/// Microbe decay (decomposers + nitrifiers) bypasses fine detritus and
+/// routes directly to DOC/DON via route_live_biomass_to_dissolved_organics.
 pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     if volume_l <= f64::EPSILON {
         return NitrogenCycleOutput::default();
     }
 
-    let pp = &state.process_params;
+    let pp = state.process_params.clone();
+    let n_to_c = safe_rate(pp.feed_n_to_c_ratio);
 
     // ---- 1. Feed leaching: particulate -> fine detritus ----
     let trapping_factor =
@@ -60,7 +140,6 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     state.detritus.fine_detritus_g_total -= dissolved;
     // dissolved mass (g) -> mg for dissolved pools: 1 g = 1000 mg
     // Split into DOC and DON using N:C ratio
-    let n_to_c = safe_rate(pp.feed_n_to_c_ratio);
     let doc_mg = dissolved * 1000.0 / (1.0 + n_to_c); // carbon fraction
     let don_mg = doc_mg * n_to_c; // nitrogen fraction
     let phosphate_mg = don_mg * FEED_P_TO_N_MASS_RATIO;
@@ -71,31 +150,84 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     // Track flow through dissolved_feed_residue (bookkeeping, decremented by mineralization)
     state.detritus.dissolved_feed_residue_g_total += dissolved;
 
-    // ---- 3. Decomposer mineralization: DOC/DON -> TAN ----
+    // ---- 3. Decomposer mineralization: DOC/DON -> TAN + DIC ----
+    //
+    // Habitat-based decomposer activity: each habitat's decomposer biomass
+    // contributes to DOC/DON consumption weighted by its local oxygen and
+    // flow exposure. Growth and decay are distributed proportionally back
+    // to per-habitat pools. The net chemistry effect is identical to the
+    // pre-split model when exposure modifiers are uniform.
+    //
+    // Simplification: decomposer remineralization does not debit dissolved
+    // oxygen stoichiometrically.  DO modulates the rate via a Monod factor
+    // (f_do_decomp) but is not consumed.  Background BOD in the DO system
+    // provides an aggregate respiration demand.  See docs/MASS_FLOW.md §7.
     let decomposer_biomass = state.microbe.decomposer_biomass_g;
     let doc_total = state.water.dissolved_organic_carbon_mg_c_total;
     let don_total = state.water.dissolved_organic_nitrogen_mg_n_total;
-    let do_total = state.water.dissolved_oxygen_mg_total;
+    let doc_mg_c_per_l = state.water.doc_mg_c_per_l(volume_l);
+    let do_mg_per_l = state.water.do_mg_per_l(volume_l);
 
-    // Environmental factors for decomposers
+    // Shared environmental factors for decomposers.
     let temp = state.water.temperature_c;
     let f_temp_decomp = temperature_factor(temp);
-    let f_do_decomp = do_total / (do_total + 2.0); // half-sat ~2 mg total
+    let decomposer_k_do_mg_per_l = pp.decomposer_k_do_mg_per_l.max(0.01);
+    let decomposer_k_doc_mg_c_per_l = pp.decomposer_k_doc_mg_c_per_l.max(0.01);
+    let monod_doc = monod_factor(doc_mg_c_per_l, decomposer_k_doc_mg_c_per_l);
 
-    // Microfauna modestly improve mineralization efficiency
+    // Microfauna modestly improve mineralization efficiency.
     let microfauna_boost =
         1.0 + pp.microfauna_mineralization_boost * state.microfauna.population_index;
     let decomp_vmax = safe_rate(pp.decomposer_vmax_per_hour) * microfauna_boost;
-    let k_doc = pp.decomposer_k_doc_mg.max(0.01);
-    let monod_doc = doc_total / (doc_total + k_doc);
 
-    let potential_doc_consumed_mg = decomp_vmax * decomposer_biomass * 1000.0 // g->mg conversion for biomass effect
-        * f_temp_decomp * f_do_decomp * monod_doc;
+    // Compute per-habitat effective decomposer activity (biomass × local
+    // oxygen modifier). Habitats with higher O2 exposure have more active
+    // aerobic decomposers; SubstrateDeep still contributes via its baseline.
+    //
+    // The habitat weights determine growth/decay distribution only; aggregate
+    // DOC consumption uses the bulk-water DO factor to avoid amplifying the
+    // total rate when high-O2 habitats (FilterMedia) carry biomass.
+    let f_do_decomp = monod_factor(do_mg_per_l, decomposer_k_do_mg_per_l);
+    let habitat_keys: Vec<HabitatKind> = state
+        .microbe
+        .decomposer_by_habitat
+        .keys()
+        .copied()
+        .collect();
+    let mut habitat_effective: Vec<(HabitatKind, f64)> = Vec::with_capacity(habitat_keys.len());
+    let mut total_effective_biomass = 0.0_f64;
+    for kind in &habitat_keys {
+        let biomass_g = state
+            .microbe
+            .decomposer_by_habitat
+            .get(kind)
+            .copied()
+            .unwrap_or(0.0);
+        // Per-habitat oxygen modulation: lookup the habitat entry's oxygen
+        // exposure and use it to scale the base Monod DO factor.
+        let habitat_o2_factor = find_habitat(&state.habitat_registry, *kind)
+            .map(|h| {
+                // Blend bulk-water DO Monod with habitat-specific O2 exposure.
+                // Filter media gets near-full DO benefit; SubstrateDeep gets
+                // only its (low) oxygen_exposure fraction.
+                f_do_decomp * (0.3 + 0.7 * h.oxygen_exposure)
+            })
+            .unwrap_or(f_do_decomp);
+
+        let effective = biomass_g * habitat_o2_factor;
+        total_effective_biomass += effective;
+        habitat_effective.push((*kind, effective));
+    }
+
+    // Aggregate DOC consumption uses bulk-water DO factor × total biomass
+    // (habitat weights only influence growth/decay distribution below).
+    let potential_doc_consumed_mg =
+        decomp_vmax * decomposer_biomass * f_do_decomp * 1000.0 * f_temp_decomp * monod_doc;
     let potential_doc_consumed_mg = safe_rate(potential_doc_consumed_mg);
 
-    // Clamp: cannot consume more DOC than exists
+    // Clamp: cannot consume more DOC than exists.
     let doc_consumed_mg = potential_doc_consumed_mg.min(doc_total);
-    // Proportional DON consumed
+    // Proportional DON consumed.
     let don_consumed_mg = if doc_total > f64::EPSILON {
         doc_consumed_mg * (don_total / doc_total)
     } else {
@@ -105,18 +237,53 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
 
     state.water.dissolved_organic_carbon_mg_c_total -= doc_consumed_mg;
     state.water.dissolved_organic_nitrogen_mg_n_total -= don_consumed_mg;
-    // Mineralized DON becomes TAN
-    state.water.ammonia_total_mg_n_total += don_consumed_mg;
-    // Track residue pool depletion
-    let residue_consumed_g = doc_consumed_mg / 1000.0 * (1.0 + n_to_c);
+    // Track residue pool depletion.
+    let residue_consumed_g = (doc_consumed_mg + don_consumed_mg) / 1000.0;
     state.detritus.dissolved_feed_residue_g_total =
         (state.detritus.dissolved_feed_residue_g_total - residue_consumed_g).max(0.0);
 
-    // Decomposer growth/decay
-    let decomp_growth = safe_rate(pp.decomposer_growth_yield) * doc_consumed_mg / 1000.0; // mg->g
+    // Decomposer growth/decay on the aggregate level (chemistry is well-mixed).
+    let decomp_growth_potential = safe_rate(pp.decomposer_growth_yield) * doc_consumed_mg / 1000.0;
+    let decomp_growth = constrained_live_growth_g(
+        decomp_growth_potential,
+        don_consumed_mg,
+        doc_consumed_mg,
+        n_to_c,
+    );
+    state.water.ammonia_total_mg_n_total += clamp_post_growth_residual_mg(
+        don_consumed_mg - live_biomass_nitrogen_mg(decomp_growth, n_to_c),
+        "decomposer DON remineralization",
+    );
+    state.water.dissolved_inorganic_carbon_mg_c_total += clamp_post_growth_residual_mg(
+        doc_consumed_mg - live_biomass_carbon_mg(decomp_growth, n_to_c),
+        "decomposer DOC remineralization",
+    );
     let decomp_decay = safe_rate(pp.decomposer_decay_rate_per_hour) * decomposer_biomass;
-    state.microbe.decomposer_biomass_g =
-        (state.microbe.decomposer_biomass_g + decomp_growth - decomp_decay).max(0.0);
+
+    // Distribute growth back to per-habitat pools proportionally to each
+    // habitat's effective contribution. Decay is then removed using the same
+    // weights, but routed according to the biomass actually removed so low-DO
+    // edge cases stay mass-conservative.
+    if total_effective_biomass > f64::EPSILON {
+        for (kind, effective) in &habitat_effective {
+            let fraction = effective / total_effective_biomass;
+            let current = state
+                .microbe
+                .decomposer_by_habitat
+                .get(kind)
+                .copied()
+                .unwrap_or(0.0);
+            let new_g = (current + decomp_growth * fraction).max(0.0);
+            state.microbe.decomposer_by_habitat.insert(*kind, new_g);
+        }
+    }
+    let actual_decomp_decay = remove_weighted_biomass(
+        &mut state.microbe.decomposer_by_habitat,
+        decomp_decay,
+        &habitat_effective,
+    );
+    route_live_biomass_to_dissolved_organics(state, actual_decomp_decay, n_to_c);
+    state.microbe.sync_decomposer_total();
 
     // ---- 4. Nitrification: TAN -> nitrite -> nitrate (+ comammox TAN -> nitrate) ----
     //
@@ -133,18 +300,45 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
     let o2_for_aob = 3.43_f64; // TAN -> nitrite
     let o2_for_comammox = pp.o2_per_mg_n_nitrified; // TAN -> nitrate (4.57)
     let o2_for_nob = 1.14_f64; // nitrite -> nitrate
+    let aob_k_tan_mg_n_per_l = pp.aob_k_tan_mg_n_per_l.max(0.01);
+    let aob_k_do_mg_per_l = pp.aob_k_do_mg_per_l.max(0.01);
+    let comammox_k_tan_mg_n_per_l = pp.comammox_k_tan_mg_n_per_l.max(0.01);
+    let comammox_k_do_mg_per_l = pp.comammox_k_do_mg_per_l.max(0.01);
+    let nob_k_nitrite_mg_n_per_l = pp.nob_k_nitrite_mg_n_per_l.max(0.01);
+    let nob_k_do_mg_per_l = pp.nob_k_do_mg_per_l.max(0.01);
+
+    // Shared logistic factor for nitrifier growth bookkeeping.
+    // Growth is suppressed as total biomass approaches the habitat-derived
+    // carrying capacity (base_density × Σ area × flow × O2 per habitat).
+    let capacity_g = compute_biofilter_carrying_capacity(
+        &state.habitat_registry,
+        pp.nitrifier_base_density_g_per_cm2,
+    );
+    let total_nitrifier_g = state.microbe.ammonia_oxidizer_biomass_g
+        + state.microbe.nitrite_oxidizer_biomass_g
+        + state.microbe.comammox_biomass_g;
+    let logistic_factor = if capacity_g > f64::EPSILON {
+        (1.0 - total_nitrifier_g / capacity_g).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
 
     // 4a. AOB: TAN -> nitrite
-    let aob_env_factor =
-        combined_env * env.f_temp * env.f_ph * (do_budget / (do_budget + pp.aob_k_do_mg.max(0.01)));
+    let aob_env_factor = combined_env
+        * env.f_temp
+        * env.f_ph
+        * monod_factor(
+            concentration_from_total(do_budget, volume_l),
+            aob_k_do_mg_per_l,
+        );
     let aob_potential = monod_rate(
         safe_rate(pp.aob_vmax_mg_n_per_g_per_hour) * env.flow_factor,
         state.microbe.ammonia_oxidizer_biomass_g,
         aob_env_factor,
-        state.water.ammonia_total_mg_n_total,
-        pp.aob_k_tan_mg.max(0.01),
+        state.water.tan_mg_n_per_l(volume_l),
+        aob_k_tan_mg_n_per_l,
     );
-    let aob_rate = safe_rate(aob_potential)
+    let aob_rate_ceiling = safe_rate(aob_potential)
         .min(state.water.ammonia_total_mg_n_total)
         .min(if o2_for_aob > 0.0 {
             do_budget / o2_for_aob
@@ -156,30 +350,51 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
         } else {
             f64::MAX
         });
+    let aob_step = resolve_nitrifier_step(
+        aob_rate_ceiling,
+        state.water.ammonia_total_mg_n_total,
+        state.water.dissolved_inorganic_carbon_mg_c_total,
+        pp.aob_growth_yield,
+        logistic_factor,
+        n_to_c,
+    );
+    consume_live_growth_inputs_from_pool(
+        &mut state.water.ammonia_total_mg_n_total,
+        &mut state.water.dissolved_inorganic_carbon_mg_c_total,
+        aob_step.growth_g,
+        n_to_c,
+    );
+    state.water.ammonia_total_mg_n_total =
+        (state.water.ammonia_total_mg_n_total - aob_step.oxidized_n_mg).max(0.0);
+    state.water.nitrite_mg_n_total += aob_step.oxidized_n_mg;
 
-    // Debit shared budgets for AOB
-    let aob_o2_cost = aob_rate * o2_for_aob;
-    let aob_alk_cost = aob_rate * alk_per_mg_n;
+    // Debit shared budgets for AOB.
+    let aob_o2_cost = aob_step.oxidized_n_mg * o2_for_aob;
+    let aob_alk_cost = aob_step.oxidized_n_mg * alk_per_mg_n;
     do_budget = (do_budget - aob_o2_cost).max(0.0);
     alk_budget = (alk_budget - aob_alk_cost).max(0.0);
+    state.water.dissolved_oxygen_mg_total =
+        (state.water.dissolved_oxygen_mg_total - aob_o2_cost).max(0.0);
 
     // 4b. Comammox: TAN -> nitrate directly (lower vmax)
     let comammox_vmax =
         safe_rate(pp.aob_vmax_mg_n_per_g_per_hour * pp.comammox_vmax_fraction) * env.flow_factor;
-    let tan_after_aob = (state.water.ammonia_total_mg_n_total - aob_rate).max(0.0);
     let comammox_env_factor = combined_env
         * env.f_temp
         * env.f_ph
-        * (do_budget / (do_budget + pp.comammox_k_do_mg.max(0.01)));
+        * monod_factor(
+            concentration_from_total(do_budget, volume_l),
+            comammox_k_do_mg_per_l,
+        );
     let comammox_potential = monod_rate(
         comammox_vmax,
         state.microbe.comammox_biomass_g,
         comammox_env_factor,
-        tan_after_aob,
-        pp.comammox_k_tan_mg.max(0.01),
+        state.water.tan_mg_n_per_l(volume_l),
+        comammox_k_tan_mg_n_per_l,
     );
-    let comammox_rate = safe_rate(comammox_potential)
-        .min(tan_after_aob)
+    let comammox_rate_ceiling = safe_rate(comammox_potential)
+        .min(state.water.ammonia_total_mg_n_total)
         .min(if o2_for_comammox > 0.0 {
             do_budget / o2_for_comammox
         } else {
@@ -190,96 +405,440 @@ pub fn step_nitrogen_cycle(state: &mut TankState) -> NitrogenCycleOutput {
         } else {
             f64::MAX
         });
-
-    // Debit shared budgets for comammox
-    let comammox_o2_cost = comammox_rate * o2_for_comammox;
-    do_budget = (do_budget - comammox_o2_cost).max(0.0);
-
-    // Apply AOB + comammox TAN consumption
-    let total_tan_consumed = aob_rate + comammox_rate;
+    let comammox_step = resolve_nitrifier_step(
+        comammox_rate_ceiling,
+        state.water.ammonia_total_mg_n_total,
+        state.water.dissolved_inorganic_carbon_mg_c_total,
+        pp.comammox_growth_yield,
+        logistic_factor,
+        n_to_c,
+    );
+    consume_live_growth_inputs_from_pool(
+        &mut state.water.ammonia_total_mg_n_total,
+        &mut state.water.dissolved_inorganic_carbon_mg_c_total,
+        comammox_step.growth_g,
+        n_to_c,
+    );
     state.water.ammonia_total_mg_n_total =
-        (state.water.ammonia_total_mg_n_total - total_tan_consumed).max(0.0);
-    // AOB produces nitrite
-    state.water.nitrite_mg_n_total += aob_rate;
-    // Comammox produces nitrate directly
-    state.water.nitrate_mg_n_total += comammox_rate;
+        (state.water.ammonia_total_mg_n_total - comammox_step.oxidized_n_mg).max(0.0);
+    state.water.nitrate_mg_n_total += comammox_step.oxidized_n_mg;
 
-    // Apply O2 costs so far (AOB + comammox) to state
+    // Debit shared budgets for comammox.
+    let comammox_o2_cost = comammox_step.oxidized_n_mg * o2_for_comammox;
+    let comammox_alk_cost = comammox_step.oxidized_n_mg * alk_per_mg_n;
+    do_budget = (do_budget - comammox_o2_cost).max(0.0);
+    let remaining_alk_budget = alk_budget - comammox_alk_cost;
+    debug_assert!(
+        remaining_alk_budget >= -SMALL_NEGATIVE_ROUNDING_TOLERANCE_MEQ,
+        "running alkalinity budget over-deducted before the pool commit: remaining={remaining_alk_budget} meq, cost={comammox_alk_cost} meq, prior_budget={alk_budget} meq"
+    );
+    alk_budget = remaining_alk_budget.max(0.0);
     state.water.dissolved_oxygen_mg_total =
-        (state.water.dissolved_oxygen_mg_total - aob_o2_cost - comammox_o2_cost).max(0.0);
+        (state.water.dissolved_oxygen_mg_total - comammox_o2_cost).max(0.0);
 
-    // 4c. NOB: nitrite -> nitrate (uses remaining DO/alk budget)
-    let nob_env_factor =
-        combined_env * env.f_temp * env.f_ph * (do_budget / (do_budget + pp.nob_k_do_mg.max(0.01)));
+    // 4c. NOB: nitrite -> nitrate (uses remaining DO budget only)
+    let nob_env_factor = combined_env
+        * env.f_temp
+        * env.f_ph
+        * monod_factor(
+            concentration_from_total(do_budget, volume_l),
+            nob_k_do_mg_per_l,
+        );
     let nob_potential = monod_rate(
         safe_rate(pp.nob_vmax_mg_n_per_g_per_hour) * env.flow_factor,
         state.microbe.nitrite_oxidizer_biomass_g,
         nob_env_factor,
-        state.water.nitrite_mg_n_total,
-        pp.nob_k_nitrite_mg.max(0.01),
+        state.water.nitrite_mg_n_per_l(volume_l),
+        nob_k_nitrite_mg_n_per_l,
     );
     // NOB (nitrite -> nitrate) does not consume additional alkalinity beyond
     // what AOB already consumed for the TAN -> nitrite step.  Only DO limits NOB.
-    let nob_rate = safe_rate(nob_potential)
+    let nob_rate_ceiling = safe_rate(nob_potential)
         .min(state.water.nitrite_mg_n_total)
         .min(if o2_for_nob > 0.0 {
             do_budget / o2_for_nob
         } else {
             f64::MAX
         });
-
-    let nob_o2_cost = nob_rate * o2_for_nob;
-
-    state.water.nitrite_mg_n_total = (state.water.nitrite_mg_n_total - nob_rate).max(0.0);
-    state.water.nitrate_mg_n_total += nob_rate;
+    let nob_step = resolve_nitrifier_step(
+        nob_rate_ceiling,
+        state.water.nitrite_mg_n_total,
+        state.water.dissolved_inorganic_carbon_mg_c_total,
+        pp.nob_growth_yield,
+        logistic_factor,
+        n_to_c,
+    );
+    consume_live_growth_inputs_from_pool(
+        &mut state.water.nitrite_mg_n_total,
+        &mut state.water.dissolved_inorganic_carbon_mg_c_total,
+        nob_step.growth_g,
+        n_to_c,
+    );
+    state.water.nitrite_mg_n_total =
+        (state.water.nitrite_mg_n_total - nob_step.oxidized_n_mg).max(0.0);
+    state.water.nitrate_mg_n_total += nob_step.oxidized_n_mg;
+    let nob_o2_cost = nob_step.oxidized_n_mg * o2_for_nob;
     state.water.dissolved_oxygen_mg_total =
         (state.water.dissolved_oxygen_mg_total - nob_o2_cost).max(0.0);
 
-    // Total N fully nitrified to nitrate (for alkalinity coupling)
-    // AOB only takes TAN -> nitrite, NOB takes nitrite -> nitrate, comammox takes TAN -> nitrate
-    // Full pathway N: nob_rate (came from AOB path) + comammox_rate
-    let total_mg_n_nitrified = nob_rate + comammox_rate;
+    // Keep both nitrate production and TAN oxidation explicit. Nitrate
+    // production can lag TAN oxidation when nitrite accumulates, but the
+    // alkalinity charge belongs to the TAN-oxidation leg overall.
+    let nitrate_produced_mg_n = nob_step.oxidized_n_mg + comammox_step.oxidized_n_mg;
+    let tan_oxidized_mg = aob_step.oxidized_n_mg + comammox_step.oxidized_n_mg;
 
-    // ---- 5. Guild growth and decay ----
-    // AOB growth from TAN oxidized
-    let aob_growth = safe_rate(pp.aob_growth_yield) * aob_rate;
     let aob_decay =
         safe_rate(pp.aob_decay_rate_per_hour) * state.microbe.ammonia_oxidizer_biomass_g;
+    route_live_biomass_to_dissolved_organics(state, aob_decay, n_to_c);
     state.microbe.ammonia_oxidizer_biomass_g =
-        (state.microbe.ammonia_oxidizer_biomass_g + aob_growth - aob_decay).max(0.0);
+        (state.microbe.ammonia_oxidizer_biomass_g + aob_step.growth_g - aob_decay).max(0.0);
 
-    // NOB growth from nitrite oxidized
-    let nob_growth = safe_rate(pp.nob_growth_yield) * nob_rate;
     let nob_decay =
         safe_rate(pp.nob_decay_rate_per_hour) * state.microbe.nitrite_oxidizer_biomass_g;
+    route_live_biomass_to_dissolved_organics(state, nob_decay, n_to_c);
     state.microbe.nitrite_oxidizer_biomass_g =
-        (state.microbe.nitrite_oxidizer_biomass_g + nob_growth - nob_decay).max(0.0);
+        (state.microbe.nitrite_oxidizer_biomass_g + nob_step.growth_g - nob_decay).max(0.0);
 
-    // Comammox growth from TAN fully oxidized
-    let comammox_growth = safe_rate(pp.comammox_growth_yield) * comammox_rate;
     let comammox_decay =
         safe_rate(pp.comammox_decay_rate_per_hour) * state.microbe.comammox_biomass_g;
+    route_live_biomass_to_dissolved_organics(state, comammox_decay, n_to_c);
     state.microbe.comammox_biomass_g =
-        (state.microbe.comammox_biomass_g + comammox_growth - comammox_decay).max(0.0);
+        (state.microbe.comammox_biomass_g + comammox_step.growth_g - comammox_decay).max(0.0);
 
-    // ---- 6. Alkalinity consumption from nitrification ----
-    // Only AOB and comammox consume alkalinity (TAN oxidation step).
-    // NOB (nitrite -> nitrate) does not consume additional alkalinity.
-    let total_alk_consumed = (aob_rate + comammox_rate) * alk_per_mg_n;
-    state.water.alkalinity_meq_total =
-        (state.water.alkalinity_meq_total - total_alk_consumed).max(0.0);
-    // Deplete bicarbonate proportionally so TDS/conductivity stay consistent
-    // with the alkalinity drop.  1 meq alkalinity ≈ 61 mg HCO₃⁻.
-    let bicarb_consumed_mg = total_alk_consumed * 61.0;
-    state.water.bicarbonate_mg_total =
-        (state.water.bicarbonate_mg_total - bicarb_consumed_mg).max(0.0);
+    // ---- 5. Denitrification: NO₃⁻ → N₂ in suboxic substrate zone ----
+    //
+    // Simplified denitrification occurs in the suboxic pore water where O₂ is
+    // depleted. The rate depends on NO₃ and DOC concentrations (estimated from
+    // water-column values via a pore-water mixing factor), the denitrifier
+    // activity index (matures over weeks), and the suboxic pore volume.
+    //
+    // Stoichiometry: 5 CH₂O + 4 NO₃⁻ + 4 H⁺ → 2 N₂↑ + 5 CO₂ + 7 H₂O
+    //   N removed as N₂ gas (permanent export)
+    //   DOC consumed: DENITRIFICATION_DOC_MG_C_PER_MG_N per mg N
+    //   DIC produced: same amount (carbon is conserved, changes form)
+    //   Alkalinity produced: DENITRIFICATION_ALK_MEQ_PER_MG_N per mg N
+    let suboxic_pore_volume_l = state.substrate_suboxic_pore_volume_cm3() / 1000.0;
 
-    // Nitrification is a chemoautotrophic process that produces some DIC fixation
-    // but for simplicity we model it as a net DIC producer via mineralization pathway above.
+    let (
+        denitrification_n2_export_mg_n,
+        denitrification_doc_consumed_mg_c,
+        denitrification_alk_meq,
+    ) = if suboxic_pore_volume_l > f64::EPSILON {
+        let mixing_factor = safe_rate(pp.denitrification_pore_water_mixing_factor).min(1.0);
+        let no3_pore_mg_n_per_l = state.water.nitrate_mg_n_per_l(volume_l) * mixing_factor;
+        let doc_pore_mg_c_per_l = state.water.doc_mg_c_per_l(volume_l) * mixing_factor;
+
+        let k_no3 = pp.denitrification_k_no3_mg_n_per_l.max(0.01);
+        let k_doc = pp.denitrification_k_doc_mg_c_per_l.max(0.01);
+
+        let monod_no3 = monod_factor(no3_pore_mg_n_per_l, k_no3);
+        let monod_doc_denit = monod_factor(doc_pore_mg_c_per_l, k_doc);
+
+        let activity = state.microbe.denitrifier_activity_index.clamp(0.0, 1.0);
+        let denitrification_vmax = safe_rate(pp.denitrification_vmax_mg_n_per_l_per_hour);
+
+        // rate = vmax × activity × monod(NO₃) × monod(DOC) × volume × f_temp
+        let potential_mg_n = denitrification_vmax
+            * activity
+            * monod_no3
+            * monod_doc_denit
+            * suboxic_pore_volume_l
+            * temperature_factor(temp);
+
+        // Clamp to available NO₃ and stoichiometrically available DOC.
+        let potential_mg_n = safe_rate(potential_mg_n);
+        let no3_limited = potential_mg_n.min(state.water.nitrate_mg_n_total);
+        let doc_limited = if DENITRIFICATION_DOC_MG_C_PER_MG_N > f64::EPSILON {
+            state.water.dissolved_organic_carbon_mg_c_total / DENITRIFICATION_DOC_MG_C_PER_MG_N
+        } else {
+            f64::MAX
+        };
+        let actual_mg_n = no3_limited.min(doc_limited).max(0.0);
+        let actual_doc_mg_c = actual_mg_n * DENITRIFICATION_DOC_MG_C_PER_MG_N;
+
+        if actual_mg_n > f64::EPSILON {
+            // Remove NO₃ (converted to N₂ gas — permanent export).
+            state.water.nitrate_mg_n_total =
+                (state.water.nitrate_mg_n_total - actual_mg_n).max(0.0);
+            // Remove DOC consumed as electron donor.
+            state.water.dissolved_organic_carbon_mg_c_total =
+                (state.water.dissolved_organic_carbon_mg_c_total - actual_doc_mg_c).max(0.0);
+            // Produce DIC: organic C is oxidized to CO₂ which enters
+            // the DIC pool. Carbon is conserved (DOC → DIC).
+            state.water.dissolved_inorganic_carbon_mg_c_total += actual_doc_mg_c;
+            // Track cumulative N₂ export for budget diagnostics.
+            state.cumulative_n2_export_mg_n += actual_mg_n;
+
+            let alk_produced = actual_mg_n * DENITRIFICATION_ALK_MEQ_PER_MG_N;
+            (actual_mg_n, actual_doc_mg_c, alk_produced)
+        } else {
+            (0.0, 0.0, 0.0)
+        }
+    } else {
+        (0.0, 0.0, 0.0)
+    };
+
+    // ---- 6. Alkalinity accounting ----
+    // Nitrification consumed alkalinity (AOB + comammox); denitrification
+    // produces alkalinity. Both are committed to the water pool here.
+    let alkalinity_consumed_meq = aob_alk_cost + comammox_alk_cost;
+    let alkalinity_produced_meq = denitrification_alk_meq;
+    state.water.alkalinity_meq_total = (alk_budget + alkalinity_produced_meq).max(0.0);
+    // The subsequent chemistry step is responsible for re-running the carbonate
+    // solver after this alkalinity mutation. Until then, `water.ph` and
+    // `bicarbonate_mg_total` remain stale cached projections, so any new system
+    // inserted between nitrification and chemistry must not read them.
+
+    // Nitrifier growth consumes DIC for assimilatory uptake, while the broader
+    // chemistry model still omits a more detailed inorganic-carbon coupling.
 
     NitrogenCycleOutput {
-        total_mg_n_nitrified,
+        nitrate_produced_mg_n,
+        tan_oxidized_mg,
+        alkalinity_consumed_meq,
+        alkalinity_produced_meq,
+        denitrification_n2_export_mg_n,
+        denitrification_doc_consumed_mg_c,
+        aob_n_oxidized_mg: aob_step.oxidized_n_mg,
+        nob_n_oxidized_mg: nob_step.oxidized_n_mg,
+        comammox_n_oxidized_mg: comammox_step.oxidized_n_mg,
     }
+}
+
+fn constrained_live_growth_g(
+    potential_growth_g: f64,
+    available_nitrogen_mg: f64,
+    available_carbon_mg: f64,
+    n_to_c_ratio: f64,
+) -> f64 {
+    if potential_growth_g <= f64::EPSILON {
+        return 0.0;
+    }
+
+    let required_n = live_biomass_nitrogen_mg(potential_growth_g, n_to_c_ratio);
+    let required_c = live_biomass_carbon_mg(potential_growth_g, n_to_c_ratio);
+    let n_scale = if required_n > f64::EPSILON {
+        available_nitrogen_mg / required_n
+    } else {
+        1.0
+    };
+    let c_scale = if required_c > f64::EPSILON {
+        available_carbon_mg / required_c
+    } else {
+        1.0
+    };
+
+    potential_growth_g * n_scale.min(c_scale).clamp(0.0, 1.0)
+}
+
+fn carbon_limited_live_growth_g(
+    potential_growth_g: f64,
+    available_carbon_mg: f64,
+    n_to_c_ratio: f64,
+) -> f64 {
+    if potential_growth_g <= f64::EPSILON {
+        return 0.0;
+    }
+
+    let required_c = live_biomass_carbon_mg(potential_growth_g, n_to_c_ratio);
+    let c_scale = if required_c > f64::EPSILON {
+        available_carbon_mg.max(0.0) / required_c
+    } else {
+        1.0
+    };
+
+    potential_growth_g * c_scale.clamp(0.0, 1.0)
+}
+
+fn resolve_nitrifier_step(
+    oxidation_ceiling_mg_n: f64,
+    source_n_mg: f64,
+    available_carbon_mg: f64,
+    growth_yield_g_per_mg_n: f64,
+    logistic_factor: f64,
+    n_to_c_ratio: f64,
+) -> NitrifierStepResult {
+    let oxidation_ceiling_mg_n = safe_rate(oxidation_ceiling_mg_n).min(source_n_mg.max(0.0));
+    if oxidation_ceiling_mg_n <= f64::EPSILON {
+        return NitrifierStepResult::default();
+    }
+
+    let growth_yield_g_per_mg_n = safe_rate(growth_yield_g_per_mg_n) * logistic_factor;
+    if growth_yield_g_per_mg_n <= f64::EPSILON {
+        return NitrifierStepResult {
+            oxidized_n_mg: oxidation_ceiling_mg_n,
+            growth_g: 0.0,
+        };
+    }
+
+    let carbon_limited_growth = |oxidized_n_mg: f64| {
+        carbon_limited_live_growth_g(
+            growth_yield_g_per_mg_n * oxidized_n_mg,
+            available_carbon_mg,
+            n_to_c_ratio,
+        )
+    };
+    let is_feasible = |oxidized_n_mg: f64| {
+        let growth_g = carbon_limited_growth(oxidized_n_mg);
+        oxidized_n_mg + live_biomass_nitrogen_mg(growth_g, n_to_c_ratio) <= source_n_mg + 1e-9
+    };
+
+    if is_feasible(oxidation_ceiling_mg_n) {
+        return NitrifierStepResult {
+            oxidized_n_mg: oxidation_ceiling_mg_n,
+            growth_g: carbon_limited_growth(oxidation_ceiling_mg_n),
+        };
+    }
+
+    let mut low = 0.0;
+    let mut high = oxidation_ceiling_mg_n;
+    for _ in 0..48 {
+        let mid = (low + high) * 0.5;
+        if is_feasible(mid) {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+
+    NitrifierStepResult {
+        oxidized_n_mg: low,
+        growth_g: carbon_limited_growth(low),
+    }
+}
+
+fn consume_live_growth_inputs_from_pool(
+    nitrogen_pool_mg: &mut f64,
+    carbon_pool_mg: &mut f64,
+    growth_g: f64,
+    n_to_c_ratio: f64,
+) {
+    if growth_g <= f64::EPSILON {
+        return;
+    }
+
+    *nitrogen_pool_mg =
+        (*nitrogen_pool_mg - live_biomass_nitrogen_mg(growth_g, n_to_c_ratio)).max(0.0);
+    *carbon_pool_mg = (*carbon_pool_mg - live_biomass_carbon_mg(growth_g, n_to_c_ratio)).max(0.0);
+}
+
+fn route_live_biomass_to_dissolved_organics(
+    state: &mut TankState,
+    biomass_g: f64,
+    n_to_c_ratio: f64,
+) {
+    if biomass_g <= f64::EPSILON {
+        return;
+    }
+
+    state.water.dissolved_organic_nitrogen_mg_n_total +=
+        live_biomass_nitrogen_mg(biomass_g, n_to_c_ratio);
+    state.water.dissolved_organic_carbon_mg_c_total +=
+        live_biomass_carbon_mg(biomass_g, n_to_c_ratio);
+}
+
+fn remove_weighted_biomass(
+    pools: &mut BTreeMap<HabitatKind, f64>,
+    requested_g: f64,
+    weights: &[(HabitatKind, f64)],
+) -> f64 {
+    if requested_g <= f64::EPSILON {
+        return 0.0;
+    }
+
+    let total_biomass: f64 = pools.values().copied().sum();
+    let target = requested_g.min(total_biomass);
+    if target <= f64::EPSILON {
+        return 0.0;
+    }
+
+    let mut removal_by_kind = BTreeMap::new();
+    let mut active: Vec<(HabitatKind, f64, f64)> = weights
+        .iter()
+        .filter_map(|(kind, weight)| {
+            let current = pools.get(kind).copied().unwrap_or(0.0).max(0.0);
+            (current > f64::EPSILON).then_some((*kind, current, weight.max(0.0)))
+        })
+        .collect();
+    if active.is_empty() {
+        return 0.0;
+    }
+
+    let mut remaining = target;
+    while remaining > f64::EPSILON && !active.is_empty() {
+        let has_positive_weight = active.iter().any(|(_, _, weight)| *weight > f64::EPSILON);
+        let total_score: f64 = active
+            .iter()
+            .map(|(_, current, weight)| {
+                if has_positive_weight {
+                    current * weight.max(0.0)
+                } else {
+                    *current
+                }
+            })
+            .sum();
+        if total_score <= f64::EPSILON {
+            let total_current: f64 = active.iter().map(|(_, current, _)| *current).sum();
+            if total_current <= f64::EPSILON {
+                break;
+            }
+            for (kind, current, _) in &active {
+                let share = remaining * (*current / total_current);
+                removal_by_kind
+                    .entry(*kind)
+                    .and_modify(|removal| *removal += share)
+                    .or_insert(share);
+            }
+            break;
+        }
+
+        let mut saturated_any = false;
+        let mut next_active = Vec::with_capacity(active.len());
+        for (kind, current, weight) in active.iter().copied() {
+            let score = if has_positive_weight {
+                current * weight.max(0.0)
+            } else {
+                current
+            };
+            let proposed = remaining * score / total_score;
+            if proposed >= current - f64::EPSILON {
+                saturated_any = true;
+                remaining = (remaining - current).max(0.0);
+                removal_by_kind
+                    .entry(kind)
+                    .and_modify(|removal| *removal += current)
+                    .or_insert(current);
+            } else {
+                next_active.push((kind, current, weight));
+            }
+        }
+
+        if !saturated_any {
+            for (kind, current, weight) in next_active {
+                let score = if has_positive_weight {
+                    current * weight.max(0.0)
+                } else {
+                    current
+                };
+                let share = remaining * score / total_score;
+                removal_by_kind
+                    .entry(kind)
+                    .and_modify(|removal| *removal += share)
+                    .or_insert(share);
+            }
+            remaining = 0.0;
+        } else {
+            active = next_active;
+        }
+    }
+
+    let actual_removed: f64 = removal_by_kind.values().copied().sum();
+    for (kind, removal) in removal_by_kind {
+        if let Some(current) = pools.get_mut(&kind) {
+            *current = (*current - removal).max(0.0);
+        }
+    }
+    actual_removed
 }
 
 /// Temperature factor: peaks around 25-30°C, drops off at extremes.
@@ -314,7 +873,7 @@ fn compute_env_factors(state: &TankState) -> EnvFactors {
     } else {
         0.1
     };
-    let volume_l = state.geometry.water_volume_l().max(f64::EPSILON);
+    let volume_l = state.water_volume_l().max(f64::EPSILON);
     let flow_factor = if state.hardware.filter.enabled {
         (state.hardware.filter.flow_lph / volume_l).clamp(0.1, 1.0)
     } else {
@@ -331,7 +890,9 @@ fn compute_env_factors(state: &TankState) -> EnvFactors {
     }
 }
 
-/// Monod-style rate: vmax * biomass * environmental_factor * S/(K+S)
+/// Monod-style rate: vmax * biomass * environmental_factor * S/(K+S).
+/// `substrate` and `k_substrate` must use the same units; after the
+/// concentration migration, current call sites pass mg/L rather than totals.
 fn monod_rate(
     vmax: f64,
     biomass_g: f64,
@@ -339,8 +900,41 @@ fn monod_rate(
     substrate: f64,
     k_substrate: f64,
 ) -> f64 {
-    let monod = substrate / (substrate + k_substrate);
+    let monod = monod_factor(substrate, k_substrate);
     safe_rate(vmax * biomass_g * environmental_factor * monod)
+}
+
+/// Monod factor `S / (K + S)` for substrate and half-saturation values in the
+/// same units. Current call sites use concentration terms in mg/L.
+fn monod_factor(substrate: f64, k_substrate: f64) -> f64 {
+    let substrate = safe_rate(substrate);
+    let k_substrate = safe_rate(k_substrate).max(f64::MIN_POSITIVE);
+    substrate / (substrate + k_substrate)
+}
+
+/// Compute the total nitrifier carrying capacity (g) from the habitat
+/// registry.
+///
+/// Each habitat contributes:
+///   area_cm2 × flow_exposure × oxygen_exposure × base_density_g_per_cm2
+///
+/// The product area × flow × O2 represents the *effective* colonizable area
+/// for nitrifiers: high flow delivers substrate (TAN) and the oxygen needed
+/// for autotrophic nitrification, so both modifiers act multiplicatively.
+///
+/// A minimum floor of 0.01 g prevents division-by-zero in the logistic factor
+/// when the registry is empty or all areas are zero (e.g. no filter, no
+/// substrate, no hardscape).
+pub fn compute_biofilter_carrying_capacity(
+    habitat_registry: &[crate::types::HabitatEntry],
+    base_density_g_per_cm2: f64,
+) -> f64 {
+    let density = safe_rate(base_density_g_per_cm2);
+    let raw: f64 = habitat_registry
+        .iter()
+        .map(|h| h.colonizable_area_cm2.max(0.0) * h.flow_exposure * h.oxygen_exposure * density)
+        .sum();
+    raw.max(0.01)
 }
 
 /// Daily biofilter maturity update. Called every 24 ticks.
@@ -348,12 +942,20 @@ fn monod_rate(
 pub fn update_daily_biofilter_maturity(state: &mut TankState) -> f64 {
     let prev = state.filter_state.biofilter_maturity_index;
 
-    // Capacity reference: a "mature" biofilter might have ~0.5g total nitrifier biomass
-    let capacity_g = 0.5;
+    // Capacity reference derived from habitat registry: same formulation used
+    // by the hourly logistic factor so that maturity tracks the same ceiling.
+    let capacity_g = compute_biofilter_carrying_capacity(
+        &state.habitat_registry,
+        state.process_params.nitrifier_base_density_g_per_cm2,
+    );
     let total_nitrifier_g = state.microbe.ammonia_oxidizer_biomass_g
         + state.microbe.nitrite_oxidizer_biomass_g
         + state.microbe.comammox_biomass_g;
-    let raw_maturity = (total_nitrifier_g / capacity_g).clamp(0.0, 1.0);
+    let raw_maturity = if capacity_g > f64::EPSILON {
+        (total_nitrifier_g / capacity_g).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
 
     // Smooth towards raw_maturity
     let alpha = 0.1;
@@ -363,12 +965,35 @@ pub fn update_daily_biofilter_maturity(state: &mut TankState) -> f64 {
     new_maturity - prev
 }
 
+/// Daily denitrifier activity maturation update. Called every 24 ticks.
+///
+/// The denitrifier activity index ramps from 0.0 toward 1.0 over the
+/// configured maturation period. The ramp requires a suboxic zone to exist;
+/// if the substrate is fully oxic, activity decays back toward zero.
+pub fn update_daily_denitrifier_activity(state: &mut TankState) {
+    let maturation_days = state
+        .process_params
+        .denitrification_activity_maturation_days
+        .max(1.0);
+
+    let suboxic_pore_volume_cm3 = state.substrate_suboxic_pore_volume_cm3();
+    let has_suboxic_zone = suboxic_pore_volume_cm3 > f64::EPSILON;
+
+    let prev = state.microbe.denitrifier_activity_index.clamp(0.0, 1.0);
+    let target = if has_suboxic_zone { 1.0 } else { 0.0 };
+
+    // Exponential approach toward target: daily step = 1/maturation_days.
+    let daily_rate = 1.0 / maturation_days;
+    let new_activity = (prev + daily_rate * (target - prev)).clamp(0.0, 1.0);
+    state.microbe.denitrifier_activity_index = new_activity;
+}
+
 pub fn update_daily_filter_clogging(state: &mut TankState) -> f64 {
     if !state.hardware.filter.enabled {
         return 0.0;
     }
 
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     if volume_l <= f64::EPSILON {
         return 0.0;
     }
@@ -379,8 +1004,9 @@ pub fn update_daily_filter_clogging(state: &mut TankState) -> f64 {
     let detritus_pressure =
         (fine_detritus_g_l + (0.35 * particulate_detritus_g_l) + (0.25 * dissolved_residue_g_l))
             .clamp(0.0, 2.0);
-    let shrimp_biomass_g = (f64::from(state.animal.adults_count) * ADULT_SHRIMP_BIOMASS_G)
-        + (f64::from(state.animal.juveniles_count) * JUVENILE_SHRIMP_BIOMASS_G);
+    let shrimp_biomass_g = (f64::from(state.animal.adult.count) * ADULT_SHRIMP_BIOMASS_G)
+        + (f64::from(state.animal.sub_adult.count) * SUB_ADULT_SHRIMP_BIOMASS_G)
+        + (f64::from(state.animal.juvenile.count) * JUVENILE_SHRIMP_BIOMASS_G);
     let bioload_pressure = (shrimp_biomass_g / volume_l).clamp(0.0, 1.0);
 
     let cleanliness_before = state.hardware.filter.cleanliness_index.clamp(0.0, 1.0);

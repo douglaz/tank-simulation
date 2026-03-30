@@ -60,8 +60,12 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, app: &TuiApp) {
 
     let shrimp = Paragraph::new(vec![
         Line::from(format!(
-            "Adults {}  Juveniles {}  Berried {}",
-            snapshot.adult_shrimp_count, snapshot.juveniles_count, snapshot.berried_females_count
+            "Total {}  Adults {}  Sub-adults {}",
+            snapshot.total_shrimp_count, snapshot.adult_shrimp_count, snapshot.sub_adult_count
+        )),
+        Line::from(format!(
+            "Juveniles {}  Berried {}",
+            snapshot.juveniles_count, snapshot.berried_females_count
         )),
         Line::from(format!(
             "Condition {:.2}  Molt stress {:.2}",

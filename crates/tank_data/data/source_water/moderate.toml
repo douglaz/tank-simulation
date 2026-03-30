@@ -5,15 +5,15 @@ ammonia_mg_n_per_l = 0.0
 nitrite_mg_n_per_l = 0.0
 nitrate_mg_n_per_l = 5.0
 phosphate_mg_p_per_l = 0.1
-dic_mg_c_per_l = 15.0
+dic_mg_c_per_l = 20.0
 doc_mg_c_per_l = 0.0
 don_mg_n_per_l = 0.0
-alkalinity_meq_per_l = 1.249
+alkalinity_meq_per_l = 1.429
 calcium_mg_per_l = 25.0
 magnesium_mg_per_l = 10.0
 sodium_mg_per_l = 12.0
 potassium_mg_per_l = 3.0
-bicarbonate_mg_per_l = 76.2
+bicarbonate_mg_per_l = 87.2
 chloride_mg_per_l = 18.0
 sulfate_mg_per_l = 15.8
 
@@ -21,4 +21,74 @@ sulfate_mg_per_l = 15.8
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "Balanced general-purpose freshwater profile. GH ~6.0, KH ~3.5, TDS ~160."
+notes = """
+Balanced community-tank water modeled after a typical treated municipal tap. \
+GH ~5.8, KH ~4.0, and moderate DIC keep the carbonate preview in the pH \
+7.0-7.5 band: clearly buffered, but still exhaustible under sustained \
+nitrification load. The preset carries 5 mg N/L nitrate and 0.1 mg P/L \
+phosphate to emulate a light nutrient floor from incoming water. \
+Post-normalization (6e5.2.6) the medium_planted and warm_room scenarios \
+use this profile as their default tap-water baseline."""
+
+# ── Per-parameter provenance metadata ────────────────────────────────
+# Representative carbonate chemistry params annotated per tanksim-6e5.7.2.
+
+[param_meta.dic_mg_c_per_l]
+unit = "mg C/L"
+source = "Derived from target KH ~4.0 and carbonate equilibrium at pH ~7.2"
+confidence = "heuristic"
+valid_range = [10.0, 35.0]
+notes = """\
+20 mg C/L DIC for moderate tap water. At pH ~7.2 most DIC is HCO₃⁻. \
+Provides enough buffer to survive light nitrification load but can be \
+exhausted under sustained cycling without water changes."""
+
+[param_meta.alkalinity_meq_per_l]
+unit = "meq/L"
+source = "Derived from target KH ~4.0 (1 KH ≈ 0.357 meq/L)"
+confidence = "heuristic"
+valid_range = [0.7, 3.0]
+notes = """\
+1.429 meq/L ≈ KH 4.0. Consistent with dic_mg_c_per_l through carbonate \
+equilibrium. This is the buffer capacity that nitrification consumes at \
+~0.143 meq per mg N oxidized."""
+
+[param_meta.bicarbonate_mg_per_l]
+unit = "mg HCO₃⁻/L"
+source = "Derived from alkalinity_meq_per_l × 61.02 g/eq"
+confidence = "heuristic"
+valid_range = [40.0, 180.0]
+notes = """\
+87.2 mg/L HCO₃⁻ = 1.429 meq/L × 61.02. Kept explicit so future tuning and \
+scenario docs can inspect the carbonate reservoir without recomputing it \
+from alkalinity each time."""
+
+[param_meta.calcium_mg_per_l]
+unit = "mg Ca/L"
+source = "Freshwater shrimp mineral husbandry guidance; Marks 2008"
+confidence = "expert"
+valid_range = [15.0, 40.0]
+notes = """\
+25 mg/L Ca clears the shrimp molt floor (ca_min_mg_per_l = 20 mg/L) with a \
+modest margin while keeping this profile in a community-tank hardness band. \
+Paired with 10 mg/L Mg it yields GH ~5.8 and a Ca:Mg ratio near 2.5:1."""
+
+[param_meta.magnesium_mg_per_l]
+unit = "mg Mg/L"
+source = "Freshwater crustacean mineralization guidance; Greenaway 1985"
+confidence = "expert"
+valid_range = [4.0, 18.0]
+notes = """\
+10 mg/L Mg clears the shrimp molt floor (mg_min_mg_per_l = 5 mg/L) with \
+margin while staying well below remineralized hard-water profiles. The value \
+is intentionally moderate rather than shrimp-specialized."""
+
+[param_meta.chloride_mg_per_l]
+unit = "mg Cl⁻/L"
+source = "Typical treated municipal tap water"
+confidence = "heuristic"
+valid_range = [5.0, 40.0]
+notes = """\
+18 mg/L Cl⁻. Sets the Cl:NO₂ ratio baseline for nitrite toxicity modulation. \
+At 18 mg/L Cl⁻, the protection factor provides meaningful but not complete \
+shielding against nitrite spikes during cycling."""

@@ -1,0 +1,126 @@
+{
+  "payload_id": "run-20260330093843-final_review-aggregate-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:42:08.820282517Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-3-f6292b8a",
+      "fr-3-94619e54"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-3-e17508b1",
+        "normalized_body": "In `breeding_success_state()` (e2e_shrimp_scenario_probes.rs:358-359), `dissolved_organic_carbon_mg_c_total` and `dissolved_organic_nitrogen_mg_n_total` are set to absolute values (5.0 and 0.8) without multiplying by `vol`, unlike every other water parameter in the same function (lines 354-364) and unlike the consistent `X * vol` pattern used across the entire test suite (e.g. e2e_habitat_geometry_probes.rs:1094, denitrification.rs:30, cycling.rs:507). For the ~200L breeding tank this produces concentrations of ~0.025 mg C/L DOC and ~0.004 mg N/L DON instead of the likely intended 5.0 mg C/L and 0.8 mg N/L. Fix: change to `5.0 * vol` and `0.8 * vol`.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-56785ca4",
+        "normalized_body": "The reproductive cycle counting logic (e2e_shrimp_scenario_probes.rs:254-266) uses `berried_days.len().min(hatch_days.len())` where `berried_days` and `hatch_days` are `BTreeSet<u32>` of unique event days. Because `emit_once_per_day` deduplicates events by kind, if multiple cohorts berried on the same simulated day, only one day is recorded. This means the cycle count can undercount, making the `complete_cycle_count >= 2` assertion fragile to simulation parameter changes that shift event timing. Consider counting event log entries directly (they are already deduplicated per day) and pairing berried-to-hatch events by temporal ordering rather than taking the min of unique day counts.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-70ade949",
+        "normalized_body": "In `breeding_success_state()` (e2e_shrimp_scenario_probes.rs:356-361), alkalinity is set to 12.0 meq/L but bicarbonate is 400 mg/L (approx 6.56 meq/L equivalent). The ~5.4 meq/L gap implies non-bicarbonate alkalinity, which is chemically unusual for freshwater. If the carbonate equilibrium solver uses both values, this mismatch could produce unrealistic pH behavior in the breeding fixture. Either reduce alkalinity to match bicarbonate (~6.5 meq/L) or increase bicarbonate to match alkalinity (~732 mg/L), or add a comment explaining why the gap is intentional.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-f6292b8a",
+        "normalized_body": "Strengthen `probe_thermal_suppression` so the cool control must itself reproduce. In `crates/tank_harness/tests/e2e_shrimp_scenario_probes.rs:572-576`, the test falls back to `warm_readiness <= cool_readiness` whenever both arms finish with zero juveniles, and the only control-arm check in `crates/tank_harness/tests/e2e_shrimp_scenario_probes.rs:611-624` covers health, not breeding. A regression that suppresses spawning or hatching in both tanks can still pass as long as the warm arm is slightly worse and drops one clutch. Add a positive-control assertion on the cool arm (juveniles, hatch events, berried cycles, or a minimum readiness floor) so this probe actually verifies thermal suppression relative to a working breeding baseline.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-94619e54",
+        "normalized_body": "Make the summary run emit structured traces on successful executions instead of keeping them in memory only. `enable_probe_instrumentation()` attaches `SimTracer::new(Verbosity::Trace)` with no sink in `crates/tank_harness/tests/e2e_shrimp_scenario_probes.rs:103-107`, and `HarnessRun::finish()` returns immediately for successful non-verbose runs in `crates/tank_harness/src/lib.rs:649-656`. In practice `all_shrimp_probes_summary` prints the population summary but does not log any trace output unless callers remember `TANK_E2E_VERBOSE=1`. Persist a JSONL sink or write the trace bundle from the summary path unconditionally.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-b144e01e",
+        "normalized_body": "Extend the persisted checkpoint/trace payloads so failures include per-tick, per-stage shrimp diagnostics instead of only aggregate shrimp fields. The only per-stage formatter is the ad hoc `shrimp_diag()` string in `crates/tank_harness/tests/e2e_shrimp_scenario_probes.rs:136-171`, but `TankSnapshot` checkpoints only serialize aggregate shrimp fields in `crates/tank_core/src/types/snapshot.rs:58-66`, and the tracer records aggregate condition/reserve rather than per-stage condition/reserve in `crates/tank_core/src/tracing.rs:315-368`. That means a failing artifact cannot reconstruct the requested adult/sub-adult/juvenile condition and reserve state for each tick. Add explicit per-stage fields to the snapshot, tracer, or a shrimp-specific failure attachment written by `HarnessRun::finish()`.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-3-f6292b8a",
+        "normalized_body": "Strengthen `probe_thermal_suppression` so the cool control must itself reproduce. In `crates/tank_harness/tests/e2e_shrimp_scenario_probes.rs:572-576`, the test falls back to `warm_readiness <= cool_readiness` whenever both arms finish with zero juveniles, and the only control-arm check in `crates/tank_harness/tests/e2e_shrimp_scenario_probes.rs:611-624` covers health, not breeding. A regression that suppresses spawning or hatching in both tanks can still pass as long as the warm arm is slightly worse and drops one clutch. Add a positive-control assertion on the cool arm (juveniles, hatch events, berried cycles, or a minimum readiness floor) so this probe actually verifies thermal suppression relative to a working breeding baseline.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-3-94619e54",
+        "normalized_body": "Make the summary run emit structured traces on successful executions instead of keeping them in memory only. `enable_probe_instrumentation()` attaches `SimTracer::new(Verbosity::Trace)` with no sink in `crates/tank_harness/tests/e2e_shrimp_scenario_probes.rs:103-107`, and `HarnessRun::finish()` returns immediately for successful non-verbose runs in `crates/tank_harness/src/lib.rs:649-656`. In practice `all_shrimp_probes_summary` prints the population summary but does not log any trace output unless callers remember `TANK_E2E_VERBOSE=1`. Persist a JSONL sink or write the trace bundle from the summary path unconditionally.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 3,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-3-e17508b1",
+      "fr-3-56785ca4",
+      "fr-3-70ade949",
+      "fr-3-b144e01e"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 2 amendment(s); restart required.",
+    "total_proposed_amendments": 6,
+    "total_reviewers": 2,
+    "unique_amendment_count": 6
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 3
+}

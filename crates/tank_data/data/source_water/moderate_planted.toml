@@ -1,0 +1,28 @@
+id = "moderate_planted"
+name = "Moderate Planted"
+temperature_c = 24.0
+ammonia_mg_n_per_l = 0.0
+nitrite_mg_n_per_l = 0.0
+nitrate_mg_n_per_l = 5.0
+phosphate_mg_p_per_l = 0.1
+dic_mg_c_per_l = 12.5
+doc_mg_c_per_l = 0.0
+don_mg_n_per_l = 0.0
+alkalinity_meq_per_l = 0.58
+calcium_mg_per_l = 25.0
+magnesium_mg_per_l = 10.0
+sodium_mg_per_l = 12.0
+potassium_mg_per_l = 3.0
+bicarbonate_mg_per_l = 35.4
+chloride_mg_per_l = 18.0
+sulfate_mg_per_l = 15.8
+
+[provenance]
+source_title = "Starter preset pack"
+source_year = 2026
+confidence = "medium"
+notes = """
+Planted-tank variant of the moderate profile. Keeps the same mineral load as \
+the general-purpose profile but trims KH/DIC so open-top planted scenarios can \
+show a visible day/night carbonate swing without drifting into persistent \
+high-pH peaks under atmospheric equilibrium."""

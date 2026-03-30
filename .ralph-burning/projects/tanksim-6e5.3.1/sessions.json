@@ -1,0 +1,13 @@
+{
+  "sessions": [
+    {
+      "role": "reviewer",
+      "backend_family": "claude",
+      "model_id": "claude-opus-4-6",
+      "session_id": "08eadefa-224a-4802-926f-5a371a96380c",
+      "created_at": "2026-03-27T15:42:01.836011835Z",
+      "last_used_at": "2026-03-27T15:42:01.836011835Z",
+      "invocation_count": 1
+    }
+  ]
+}

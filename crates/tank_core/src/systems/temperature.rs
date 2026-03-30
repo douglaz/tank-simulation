@@ -37,7 +37,7 @@ pub fn do_sat_mg_l(temp_c: f64) -> f64 {
 /// and tank geometry. Records heater output on `state.hardware.heater.last_output_w`.
 pub fn step_temperature(state: &mut TankState) {
     let dt_s = 3600.0_f64;
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     if volume_l <= f64::EPSILON {
         return;
     }

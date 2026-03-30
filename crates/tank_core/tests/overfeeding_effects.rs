@@ -13,7 +13,7 @@ fn overfeeding_effects() -> Result<(), tank_core::SimError> {
 
     for _day in 0..14 {
         control.apply_action(PlayerAction::Feed { grams: 0.18 })?;
-        overfed.apply_action(PlayerAction::Feed { grams: 0.85 })?;
+        overfed.apply_action(PlayerAction::Feed { grams: 1.50 })?;
 
         for _hour in 0..24 {
             control.step_hours(1)?;
@@ -55,15 +55,26 @@ fn overfeeding_effects() -> Result<(), tank_core::SimError> {
 fn configured_state(seed: SimSeed) -> tank_core::TankState {
     let mut state =
         tank_scenarios::seeded_state(seed, "warm_room").expect("scenario should materialize");
-    state.hardware.aeration.enabled = true;
-    state.hardware.aeration.intensity = 0.05;
+    state.hardware.aeration.enabled = false;
+    state.hardware.aeration.intensity = 0.0;
+    state.hardware.filter.enabled = false;
     state.hardware.light.photoperiod_hours = 12.0;
     state.hardware.light.intensity_index = 1.0;
-    state.process_params.reaeration_kla_base *= 0.4;
-    state.process_params.aeration_kla_boost *= 0.25;
+    state.process_params.reaeration_kla_base = 0.0;
+    state.process_params.aeration_kla_boost = 0.0;
+    state
+        .process_params
+        .background_bod_mg_o2_per_g_biomass_per_hour = 0.15;
     state.environment.ambient_temp_c = 29.5;
     state.algae.suspended_biomass_g = 0.08;
-    state.algae.periphyton_biomass_g = 0.6;
+    state.algae.set_periphyton_total(0.6);
+    // Zero out turbidity-driven extinction so self-shading doesn't mask
+    // the nutrient-driven algae response this test is designed to verify.
+    state
+        .process_params
+        .detritus_extinction_coeff_per_cm_per_g_l = 0.0;
+    state.process_params.doc_extinction_coeff_per_cm_per_mg_c_l = 0.0;
+    state.process_params.algae_extinction_coeff_per_cm_per_g_l = 0.0;
     for plant in &mut state.plant_guilds {
         plant.biomass_g *= 0.5;
     }

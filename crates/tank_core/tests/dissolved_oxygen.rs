@@ -1,6 +1,6 @@
 use tank_core::{
     systems::{light::is_light_on, temperature::do_sat_mg_l},
-    Engine, ProcessParams, SimSeed, SimulationEngine, TankState,
+    Engine, ProcessParams, SimSeed, SimTracer, SimulationEngine, TankState, Verbosity,
 };
 
 fn oxygen_test_state(seed: SimSeed) -> TankState {
@@ -9,8 +9,8 @@ fn oxygen_test_state(seed: SimSeed) -> TankState {
     state.hardware.light.intensity_index = 1.0;
     state.hardware.aeration.enabled = false;
     state.hardware.aeration.intensity = 0.0;
-    state.animal.adults_count = 30;
-    state.algae.periphyton_biomass_g = 3.0;
+    state.animal.adult.count = 30;
+    state.algae.set_periphyton_total(3.0);
     state.plant_guilds[0].biomass_g = 18.0;
     state.plant_guilds[1].biomass_g = 10.0;
     state.process_params = ProcessParams {
@@ -58,18 +58,18 @@ fn dissolved_oxygen_dips_at_night_relative_to_lit_hours() -> Result<(), tank_cor
 #[test]
 fn aeration_recovers_do_faster_than_passive_exchange() -> Result<(), tank_core::SimError> {
     let mut base_state = oxygen_test_state(SimSeed(3100));
-    base_state.water.dissolved_oxygen_mg_total = 2.0 * base_state.geometry.water_volume_l();
+    base_state.water.dissolved_oxygen_mg_total = 2.0 * base_state.water_volume_l();
     base_state
         .process_params
         .background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
     base_state
         .process_params
         .plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
-    base_state.algae.periphyton_biomass_g = 0.0;
+    base_state.algae.set_periphyton_total(0.0);
     for plant in &mut base_state.plant_guilds {
         plant.biomass_g = 0.0;
     }
-    base_state.animal.adults_count = 0;
+    base_state.animal.adult.count = 0;
 
     let mut no_aeration = base_state.clone();
     no_aeration.hardware.aeration.enabled = false;
@@ -105,11 +105,11 @@ fn reaeration_converges_toward_saturation() -> Result<(), tank_core::SimError> {
         .process_params
         .plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
     state.process_params.reaeration_kla_base = 0.5;
-    state.algae.periphyton_biomass_g = 0.0;
+    state.algae.set_periphyton_total(0.0);
     for plant in &mut state.plant_guilds {
         plant.biomass_g = 0.0;
     }
-    state.animal.adults_count = 0;
+    state.animal.adult.count = 0;
 
     let mut engine = Engine::from_parts(state, vec![]);
     engine.step_hours(24)?;
@@ -121,6 +121,72 @@ fn reaeration_converges_toward_saturation() -> Result<(), tank_core::SimError> {
         (do_sat - do_now).abs() < 0.25,
         "DO should converge toward saturation: do={do_now:.2}, sat={do_sat:.2}"
     );
+
+    Ok(())
+}
+
+#[test]
+fn dissolved_oxygen_budget_preserves_gross_in_and_out_terms() {
+    let mut state = oxygen_test_state(SimSeed(3_250));
+    state.environment.hour_of_day = 12;
+    state.hardware.aeration.enabled = true;
+    state.hardware.aeration.intensity = 1.0;
+    state.water.dissolved_oxygen_mg_total = 4.0 * state.water_volume_l();
+
+    let oxygen_before = state.water.dissolved_oxygen_mg_total;
+    let delta =
+        tank_core::systems::dissolved_oxygen::step_dissolved_oxygen_with_budget(&mut state, true);
+
+    assert!(
+        delta.oxygen.in_mg > 0.0 && delta.oxygen.out_mg > 0.0,
+        "dissolved_oxygen budget should keep gross O2 in/out terms when reaeration/photosynthesis and respiration coincide: {:?}",
+        delta.oxygen
+    );
+    assert!(
+        ((state.water.dissolved_oxygen_mg_total - oxygen_before) - delta.oxygen.net_mg()).abs()
+            <= 1e-6,
+        "recorded gross O2 budget should reconcile to the observed inventory delta"
+    );
+}
+
+/// Retrofitted test: uses tracing output to verify that the dissolved_oxygen
+/// system produces positive DO deltas during reaeration from zero.
+#[test]
+fn tracing_shows_do_system_positive_deltas_during_reaeration() -> Result<(), tank_core::SimError> {
+    let mut state = oxygen_test_state(SimSeed(3300));
+    state.water.dissolved_oxygen_mg_total = 0.0;
+    state
+        .process_params
+        .background_bod_mg_o2_per_g_biomass_per_hour = 0.0;
+    state
+        .process_params
+        .plant_photosynthesis_o2_mg_per_g_per_hour = 0.0;
+    state.process_params.reaeration_kla_base = 0.5;
+    state.algae.set_periphyton_total(0.0);
+    for plant in &mut state.plant_guilds {
+        plant.biomass_g = 0.0;
+    }
+    state.animal.adult.count = 0;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_tracing(SimTracer::new(Verbosity::Detail));
+    engine.step_hours(6)?;
+
+    let tracer = engine.tracer().unwrap();
+    assert_eq!(tracer.tick_count(), 6);
+
+    // Every tick's dissolved_oxygen system should show a positive water.do_mg delta
+    // because we started at zero and reaeration drives DO upward.
+    for (i, tick) in tracer.ticks().iter().enumerate() {
+        let do_system = tick
+            .system("system:dissolved_oxygen")
+            .unwrap_or_else(|| panic!("tick {i}: dissolved_oxygen system missing from trace"));
+        let do_delta = do_system.delta_for("water.do_mg");
+        assert!(
+            do_delta > 0.0,
+            "tick {i}: dissolved_oxygen system should increase water.do_mg during reaeration, got delta={do_delta}"
+        );
+    }
 
     Ok(())
 }

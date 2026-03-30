@@ -1,0 +1,149 @@
+{
+  "payload_id": "run-20260330074452-final_review-aggregate-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T11:39:33.026916241Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-5-9c45024c",
+      "fr-5-cc8c6a3c",
+      "fr-5-c4b32107",
+      "fr-5-b6b25d90"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-5-9c45024c",
+        "normalized_body": "In `update_condition()` (shrimp.rs:414-421), three condition sub-factors use hardcoded magic numbers instead of named parameters: `do_factor` divides by `6.0` mg/L, `nh3_factor` multiplies by `3.0`, and `nitrite_factor` multiplies by `0.5`. The acceptance criteria require that 'all named parameters' are tunable via species/process data, not hardcoded. These should be extracted to `ShrimpRuntimeParams` fields (e.g., `condition_do_reference_mg_l`, `condition_nh3_sensitivity`, `condition_nitrite_sensitivity`) alongside the existing `egg_oxygen_reference_mg_l` which already models the same pattern correctly for hatch success.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-bbc523c8",
+        "normalized_body": "In `temp_condition_factor()` (shrimp.rs:1602-1609), the general condition temperature curve uses hardcoded divisors `10.0` (cold) and `8.0` (hot) and a hardcoded floor of `0.2`. These should be configurable parameters in `ShrimpRuntimeParams` to match the requirement that all suppression factors are tunable.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-cc8c6a3c",
+        "normalized_body": "The `test_egg_dropping_from_sudden_change` test (reproduction_factors.rs:558-563) uses an OR assertion (`!drop_events.is_empty() || berried_after < 10 || egg_count < 10`) that can pass even if the egg-dropping mechanism is completely broken, as long as berried count or egg count happens to decrease for any other reason (e.g., natural hatching or mortality). The assertion should require that egg-drop events were actually emitted AND that egg counts decreased, using AND conditions rather than OR.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-c4b32107",
+        "normalized_body": "The `test_neglected_tank_breeding_stalls` integration test (reproduction_factors.rs:1501-1508) uses an assertion that permits the neglected tank population to grow up to 5 above initial count (`neglected_snap.total_shrimp_count <= initial_total + 5`). This is inconsistent with the acceptance criteria which require that the neglected tank 'stalls breeding and flattens or reverses population growth.' The tolerance should be tightened to require final population <= initial, or the test should assert a meaningful decline from peak.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-b6b25d90",
+        "normalized_body": "The `stress_penalty * 0.5` subtraction in `update_condition()` (shrimp.rs:441) uses a hardcoded weight (`0.5`) for the hourly stress penalty applied to condition. This blending factor controls how much hourly stress events (NH3 exposure, heat stress, low DO, instability) penalize the condition index beyond the multiplicative factors, and should be a named parameter.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-8b6f09f7",
+        "normalized_body": "The patch does not implement the bead it is being reviewed against. The changed files are all alkalinity/budget plumbing (`crates/tank_core/src/engine.rs:229`, `crates/tank_core/src/systems/nitrogen_cycle.rs:12`, `crates/tank_core/src/types/process.rs:6`), but the breeding logic that actually controls success/failure is still the existing code in `crates/tank_core/src/systems/shrimp.rs:419-507`: readiness and hatch rate only use temperature, condition, instability, molt stress/oxygen, and GH. There is still no density term, no TAN/NO2 suppression, no egg-drop path tied to sudden instability, and no new factor breakdown emitted for failed reproduction. The species data is likewise unchanged in `crates/tank_data/data/shrimp/neocaridina_davidi.toml:4-22`, so the required named parameters for density/chemistry/stability tuning are still absent. As submitted, this leaves the acceptance criteria for tanksim-6e5.6.4 unmet.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [
+      "fr-5-bbc523c8"
+    ],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-5-9c45024c",
+        "normalized_body": "In `update_condition()` (shrimp.rs:414-421), three condition sub-factors use hardcoded magic numbers instead of named parameters: `do_factor` divides by `6.0` mg/L, `nh3_factor` multiplies by `3.0`, and `nitrite_factor` multiplies by `0.5`. The acceptance criteria require that 'all named parameters' are tunable via species/process data, not hardcoded. These should be extracted to `ShrimpRuntimeParams` fields (e.g., `condition_do_reference_mg_l`, `condition_nh3_sensitivity`, `condition_nitrite_sensitivity`) alongside the existing `egg_oxygen_reference_mg_l` which already models the same pattern correctly for hatch success.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-cc8c6a3c",
+        "normalized_body": "The `test_egg_dropping_from_sudden_change` test (reproduction_factors.rs:558-563) uses an OR assertion (`!drop_events.is_empty() || berried_after < 10 || egg_count < 10`) that can pass even if the egg-dropping mechanism is completely broken, as long as berried count or egg count happens to decrease for any other reason (e.g., natural hatching or mortality). The assertion should require that egg-drop events were actually emitted AND that egg counts decreased, using AND conditions rather than OR.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-c4b32107",
+        "normalized_body": "The `test_neglected_tank_breeding_stalls` integration test (reproduction_factors.rs:1501-1508) uses an assertion that permits the neglected tank population to grow up to 5 above initial count (`neglected_snap.total_shrimp_count <= initial_total + 5`). This is inconsistent with the acceptance criteria which require that the neglected tank 'stalls breeding and flattens or reverses population growth.' The tolerance should be tightened to require final population <= initial, or the test should assert a meaningful decline from peak.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-5-b6b25d90",
+        "normalized_body": "The `stress_penalty * 0.5` subtraction in `update_condition()` (shrimp.rs:441) uses a hardcoded weight (`0.5`) for the hourly stress penalty applied to condition. This blending factor controls how much hourly stress events (NH3 exposure, heat stress, low DO, instability) penalize the condition index beyond the multiplicative factors, and should be a named parameter.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 5,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-5-8b6f09f7"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 4 amendment(s); restart required.",
+    "total_proposed_amendments": 6,
+    "total_reviewers": 2,
+    "unique_amendment_count": 6
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 5
+}

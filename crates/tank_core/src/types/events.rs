@@ -17,7 +17,10 @@ pub enum EventKind {
     AlgaeBloom,
     BiofilmMaturityIncrease,
     ShrimpBerried,
+    ShrimpHatched,
     EggFailure,
+    MoltFailure,
+    EggDropping,
     MoltStressWarning,
     FilterCleaningSetback,
     SubstrateFoulingWarning,
@@ -33,8 +36,10 @@ pub enum EventCause {
     HighAmmonia,
     HighNitrite,
     LowOxygen,
+    LowTemperature,
     HighTemperature,
     LowMinerals,
+    HighMinerals,
     BiofilterImmature,
     SurfaceExchangeRestricted,
     HighNutrients,
@@ -42,8 +47,11 @@ pub enum EventCause {
     SurfaceSaturation,
     SubstrateExhausted,
     ChemistryInstability,
+    HighDensity,
     Starvation,
     PoorCondition,
+    MarginalFailure,
+    PlantTrimming,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

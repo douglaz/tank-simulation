@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260327225238-final_review-aggregate-c2-a1-cr6-artifact",
+  "payload_id": "run-20260327225238-final_review-aggregate-c2-a1-cr6-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-28T01:02:11.259755507Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 1 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 1\n**Final Review Restarts:** 6/20\n\n## Accepted\n\n- `fr-6-e15be02d`\n\n## Rejected\n\nNone.\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-6-e15be02d`\n\n`crates/tank_core/src/save.rs:172-184` and `crates/tank_core/src/save.rs:350-361` currently treat “the `stability_tracker` field exists” as “the tracker baselines are valid.” That breaks real schema-2 saves created before tracker seeding was added: those payloads can serialize the `StabilityTracker::default()` sentinel values, and the load path preserves them unchanged instead of repairing them. After migration, `prev_temp_c`/`prev_ph`/`prev_gh_d`/`prev_do_mg_l` can still be out of sync with the migrated water state, so the first daily stability update reports a fake swing. In a repro with a schema-2 save taken immediately after tank creation, the file loads with `instability_index == 0` but jumps to `0.3` after the next 24-hour step solely from stale tracker baselines. Please detect/reseed this legacy-default tracker case (while still preserving valid historical trackers) and add a regression test for a v2 payload where the tracker is present but uninitialized.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 6
+}

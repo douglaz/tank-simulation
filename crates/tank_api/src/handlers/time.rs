@@ -1,8 +1,9 @@
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::Deserialize;
-use tank_core::{SimulationEngine, TankSnapshot};
+use serde_json::Value;
+use tank_core::SimulationEngine;
 
-use crate::{error::ApiError, state::AppState};
+use crate::{error::ApiError, handlers::snapshot::snapshot_response_json, state::AppState};
 
 const MAX_STEP_HOURS: u32 = 24 * 365; // 1 year
 
@@ -23,6 +24,7 @@ pub async fn post_step(
     }
     let mut engine = state.engine.lock().unwrap();
     engine.step_hours(req.hours).map_err(ApiError::from)?;
-    let snapshot: TankSnapshot = engine.snapshot();
-    Ok(Json(snapshot))
+    let snapshot = engine.snapshot();
+    let response: Value = snapshot_response_json(&snapshot);
+    Ok(Json(response))
 }

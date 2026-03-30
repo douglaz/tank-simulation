@@ -1,0 +1,146 @@
+{
+  "payload_id": "run-20260328125548-final_review-aggregate-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T15:29:10.185738594Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-4-5f46d44d",
+      "fr-4-6586f129",
+      "fr-4-fae98202",
+      "fr-4-66f7e16d",
+      "fr-4-c056464d"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-4-5f46d44d",
+        "normalized_body": "PlantPreset and SubstratePreset do not implement param_meta support. The acceptance criteria states the schema should be 'flexible enough for both chemistry and biology parameters.' The ParamMeta schema itself is flexible, but plant parameters like growth_rate_index and water_column_uptake_bias — which are biology-relevant scientific parameters — cannot carry provenance at the preset level. Consider adding param_meta to PlantPreset (at minimum) for consistency, since the next bead (tanksim-6e5.7.2: 'Attach provenance to high-value chemistry and ecology parameters') will need to annotate plant params.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-6586f129",
+        "normalized_body": "The acceptance criteria requires 'Decide how provenance is stored for code-defined defaults versus data-file parameters.' The implementation correctly uses TOML-level provenance for data-file params, and ProcessParams::Default has no inline provenance. However, this design decision is not documented anywhere — there is no comment in provenance.rs, process.rs, or the TOML files explicitly stating that code-defined defaults inherit provenance only when loaded through a TOML preset file, and that ProcessParams::Default values constructed without TOML have no provenance path. Add a brief design note (e.g., in provenance.rs or ROUTING.md) so downstream contributors understand the provenance boundary.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-fae98202",
+        "normalized_body": "Update the shrimp provenance path so omitted optional fields fall back to the runtime defaults before formatting and range checks. Today `ShrimpPreset::lookup_param_value` returns `None` for optional fields such as `body_*`, `juvenile_to_subadult_days`, `base_clutch_size`, and `min_clutch_condition` when the TOML omits them (`crates/tank_data/src/presets.rs:304-317`, `crates/tank_data/src/presets.rs:476-502`), but `shrimp_preset_to_params` later injects real defaults from `ShrimpRuntimeParams::default()` (`crates/tank_scenarios/src/lib.rs:550-597`). That makes provenance on code-defined shrimp defaults effectively write-only: `format_param()` and `check_ranges()` never surface it even though the runtime uses a concrete value.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-66f7e16d",
+        "normalized_body": "Make the new process-parameter formatter stop renormalizing legacy `_mg` / `_mg_total` values unless it can also show the corresponding metadata/unit, or automatically attach that derived unit. `ParamMetaPreset::format_param` currently calls `provenance_param_value()` before it checks whether any `param_meta` exists (`crates/tank_data/src/presets.rs:59-64`), and `ProcessParamsPreset::provenance_param_value` always rewrites legacy compatibility fields into reference-tank concentrations (`crates/tank_data/src/presets.rs:1144-1150`). Because the shipped default process preset intentionally has no `param_meta` (`crates/tank_data/src/presets.rs:1857-1864`) but still stores `aob_k_tan_mg = 0.5` (`crates/tank_data/data/process/default.toml:31`), the debug helper can print a transformed value like `0.025` with no unit/source context, which is misleading.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-c056464d",
+        "normalized_body": "Tighten `ProcessParamsPreset::validate` to reject `shrimp_juvenile_maturation_days <= 0`. The validator only rejects negative values today (`crates/tank_data/src/presets.rs:1334-1387`), but scenario materialization immediately splits that legacy total into stage durations (`crates/tank_scenarios/src/lib.rs:546-564`; `crates/tank_core/src/types/biology.rs:342-354`) and runtime invariants require both resulting fields to be strictly positive (`crates/tank_core/src/invariants.rs:316-323`). A custom process preset with `shrimp_juvenile_maturation_days = 0.0` will therefore load successfully and only fail later when the engine is stepped.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-4-5f46d44d",
+        "normalized_body": "PlantPreset and SubstratePreset do not implement param_meta support. The acceptance criteria states the schema should be 'flexible enough for both chemistry and biology parameters.' The ParamMeta schema itself is flexible, but plant parameters like growth_rate_index and water_column_uptake_bias — which are biology-relevant scientific parameters — cannot carry provenance at the preset level. Consider adding param_meta to PlantPreset (at minimum) for consistency, since the next bead (tanksim-6e5.7.2: 'Attach provenance to high-value chemistry and ecology parameters') will need to annotate plant params.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-6586f129",
+        "normalized_body": "The acceptance criteria requires 'Decide how provenance is stored for code-defined defaults versus data-file parameters.' The implementation correctly uses TOML-level provenance for data-file params, and ProcessParams::Default has no inline provenance. However, this design decision is not documented anywhere — there is no comment in provenance.rs, process.rs, or the TOML files explicitly stating that code-defined defaults inherit provenance only when loaded through a TOML preset file, and that ProcessParams::Default values constructed without TOML have no provenance path. Add a brief design note (e.g., in provenance.rs or ROUTING.md) so downstream contributors understand the provenance boundary.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-fae98202",
+        "normalized_body": "Update the shrimp provenance path so omitted optional fields fall back to the runtime defaults before formatting and range checks. Today `ShrimpPreset::lookup_param_value` returns `None` for optional fields such as `body_*`, `juvenile_to_subadult_days`, `base_clutch_size`, and `min_clutch_condition` when the TOML omits them (`crates/tank_data/src/presets.rs:304-317`, `crates/tank_data/src/presets.rs:476-502`), but `shrimp_preset_to_params` later injects real defaults from `ShrimpRuntimeParams::default()` (`crates/tank_scenarios/src/lib.rs:550-597`). That makes provenance on code-defined shrimp defaults effectively write-only: `format_param()` and `check_ranges()` never surface it even though the runtime uses a concrete value.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-66f7e16d",
+        "normalized_body": "Make the new process-parameter formatter stop renormalizing legacy `_mg` / `_mg_total` values unless it can also show the corresponding metadata/unit, or automatically attach that derived unit. `ParamMetaPreset::format_param` currently calls `provenance_param_value()` before it checks whether any `param_meta` exists (`crates/tank_data/src/presets.rs:59-64`), and `ProcessParamsPreset::provenance_param_value` always rewrites legacy compatibility fields into reference-tank concentrations (`crates/tank_data/src/presets.rs:1144-1150`). Because the shipped default process preset intentionally has no `param_meta` (`crates/tank_data/src/presets.rs:1857-1864`) but still stores `aob_k_tan_mg = 0.5` (`crates/tank_data/data/process/default.toml:31`), the debug helper can print a transformed value like `0.025` with no unit/source context, which is misleading.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-4-c056464d",
+        "normalized_body": "Tighten `ProcessParamsPreset::validate` to reject `shrimp_juvenile_maturation_days <= 0`. The validator only rejects negative values today (`crates/tank_data/src/presets.rs:1334-1387`), but scenario materialization immediately splits that legacy total into stage durations (`crates/tank_scenarios/src/lib.rs:546-564`; `crates/tank_core/src/types/biology.rs:342-354`) and runtime invariants require both resulting fields to be strictly positive (`crates/tank_core/src/invariants.rs:316-323`). A custom process preset with `shrimp_juvenile_maturation_days = 0.0` will therefore load successfully and only fail later when the engine is stepped.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 4,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [],
+    "restart_required": true,
+    "summary": "Final review accepted 5 amendment(s); restart required.",
+    "total_proposed_amendments": 5,
+    "total_reviewers": 2,
+    "unique_amendment_count": 5
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 4
+}

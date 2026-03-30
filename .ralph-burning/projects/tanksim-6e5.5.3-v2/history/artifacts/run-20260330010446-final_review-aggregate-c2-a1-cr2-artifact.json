@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260330010446-final_review-aggregate-c2-a1-cr2-artifact",
+  "payload_id": "run-20260330010446-final_review-aggregate-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T02:27:44.982519553Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 3 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 5\n**Final Review Restarts:** 2/20\n\n## Accepted\n\n- `fr-2-b79c3c25`\n- `fr-2-c9744d27`\n- `fr-2-3782b77a`\n\n## Rejected\n\n- `fr-2-56410374`\n- `fr-2-7b7aa6d2`\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-2-b79c3c25`\n\nIn `crates/tank_core/tests/end_to_end.rs` lines 276-289 (uncommitted working change), the `happy_plants_grow_with_light_and_nutrients` assertion was relaxed from `>= initial_biomass` to `>= initial_biomass * 0.80`. If geometry-scaled initial biomass causes plants to self-shade and decline by 20% under 'happy' conditions (good light, good nutrients), this suggests the PLANT_BIOMASS_G_PER_1000_CM2_FOOTPRINT constant (6.0 g/1000cm²) may overshoot for smaller tanks or the self-shading model is too aggressive. Validate the constant against actual scenario footprints before committing the relaxed assertion.\n\n### `fr-2-c9744d27`\n\n`crates/tank_scenarios/src/lib.rs:503-516` and `crates/tank_scenarios/src/lib.rs:744-752` stop scaling `filter.media_area_cm2`, but seeded scenarios still have no way to supply a replacement hardware-specific value (`crates/tank_scenarios/src/lib.rs:220-234`, `crates/tank_data/src/presets.rs:1864-1877`). Because `FilterHardware::default()` hard-codes 2000 cm2 (`crates/tank_core/src/types/hardware.rs:77-90`), every seeded tank now materializes with the same filter-media habitat area regardless of size while flow still scales with volume. That collapses size-dependent biofilter/habitat differences and makes startup scenarios ecologically incorrect. Restore geometry scaling or add an explicit scenario/startup media-area parameter before removing the old rule.\n\n### `fr-2-3782b77a`\n\n`crates/tank_core/tests/end_to_end.rs:257-289` weakens `happy_plants_grow_with_light_and_nutrients` from a growth assertion to an `>= 80%` survivability check without fixing the underlying regression. The test name and doc comment still say plants grow under good light and nutrients, but the suite now passes even when that happy-path scenario loses 20% of its biomass. This removes an important end-to-end guard for a user-visible regression instead of addressing the cause.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 2
+}

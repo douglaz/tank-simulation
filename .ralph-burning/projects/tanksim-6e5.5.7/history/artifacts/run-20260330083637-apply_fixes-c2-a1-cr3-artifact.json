@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330083637-apply_fixes-c2-a1-cr3-artifact",
+  "payload_id": "run-20260330083637-apply_fixes-c2-a1-cr3",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-30T10:35:48.117024490Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nImproved the habitat/geometry biofilter probe reporting so runs that never clear reduced nitrogen no longer print ambiguous `None` values. The probe now formats clearance as `not-cleared` and explicitly notes when the terminal reduced-nitrogen fallback check was used in both the per-probe debug line and the aggregate summary output.\n\n## Steps\n\n1. [Completed] Reviewed the latest approved findings and isolated the remaining actionable issue as a readability gap in the biofilter probe's clearance summary.\n2. [Completed] Added a small clearance-formatting helper and wired it into the biofilter probe's detailed metrics line and aggregate observed summary so non-clearing runs are described explicitly.\n3. [Completed] Reformatted the workspace and reran targeted habitat/geometry validation plus clippy for the affected test target.\n\n## Validation Evidence\n\n- `cargo fmt --all` completed successfully.\n- `cargo test -p tank_harness --test e2e_habitat_geometry_probes all_habitat_geometry_probes_summary -- --nocapture` passed: the summary test was green and still reported all 5 habitat/geometry probes passing.\n- The updated biofilter output now reads `clearance not-cleared->not-cleared (terminal reduced-N fallback)` when neither arm clears within the horizon, removing the prior ambiguous `None` reporting.\n- `cargo clippy -p tank_harness --test e2e_habitat_geometry_probes -- -D warnings` completed successfully.\n\n## Outstanding Risks\n\n- This pass only changed probe/reporting text; validation was targeted to the affected habitat/geometry test target plus clippy, not the full workspace test matrix.\n- The worktree already contains unrelated existing changes in `.claude/worktrees/tanksim-6e5.4.7`, `crates/tank_data/src/presets.rs`, and `.ralph-burning/`; I left them untouched, so staging/commit flow still needs to avoid mixing scopes.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

@@ -12,11 +12,33 @@ pub struct TankGeometry {
     pub open_top: bool,
     #[serde(default = "default_lid_exchange_factor")]
     pub lid_exchange_factor: f64,
+    /// Configurable hardscape surface area (rocks, driftwood) in cm².
+    #[serde(default)]
+    pub hardscape_area_cm2: f64,
 }
 
 impl TankGeometry {
-    pub fn water_volume_l(&self) -> f64 {
+    /// Gross filled-prism volume before substrate displacement.
+    pub fn gross_water_volume_l(&self) -> f64 {
         self.length_cm * self.width_cm * self.fill_height_cm / 1000.0
+    }
+
+    /// Returns the liters displaced by substrate, assuming 100% of the
+    /// substrate column excludes water. This intentionally ignores real-world
+    /// pore volume until substrate porosity is modeled explicitly.
+    pub fn substrate_displacement_l(&self, substrate_depth_cm: f64) -> f64 {
+        if !substrate_depth_cm.is_finite() {
+            return 0.0;
+        }
+
+        let capped_depth_cm = substrate_depth_cm.clamp(0.0, self.fill_height_cm.max(0.0));
+        self.footprint_area_cm2() * capped_depth_cm / 1000.0
+    }
+
+    /// Net water volume after subtracting substrate displacement under the
+    /// current 100%-displacement / 0%-porosity assumption.
+    pub fn water_volume_l_with_substrate_depth(&self, substrate_depth_cm: f64) -> f64 {
+        (self.gross_water_volume_l() - self.substrate_displacement_l(substrate_depth_cm)).max(0.0)
     }
 
     pub fn surface_area_cm2(&self) -> f64 {
@@ -27,6 +49,10 @@ impl TankGeometry {
         self.length_cm * self.width_cm
     }
 
+    pub fn footprint_area_m2(&self) -> f64 {
+        (self.footprint_area_cm2() / 10_000.0).max(0.0)
+    }
+
     pub fn wall_area_cm2(&self) -> f64 {
         2.0 * self.fill_height_cm * (self.length_cm + self.width_cm)
     }
@@ -35,8 +61,10 @@ impl TankGeometry {
         self.fill_height_cm
     }
 
-    pub fn surface_area_to_volume_ratio(&self) -> f64 {
-        let volume_l = self.water_volume_l();
+    /// Surface area divided by gross filled-prism volume before substrate
+    /// displacement.
+    pub fn surface_area_to_gross_volume_ratio(&self) -> f64 {
+        let volume_l = self.gross_water_volume_l();
         if volume_l <= f64::EPSILON {
             0.0
         } else {
@@ -44,8 +72,10 @@ impl TankGeometry {
         }
     }
 
-    pub fn wall_area_to_volume_ratio(&self) -> f64 {
-        let volume_l = self.water_volume_l();
+    /// Wall area divided by gross filled-prism volume before substrate
+    /// displacement.
+    pub fn wall_area_to_gross_volume_ratio(&self) -> f64 {
+        let volume_l = self.gross_water_volume_l();
         if volume_l <= f64::EPSILON {
             0.0
         } else {
@@ -72,6 +102,7 @@ impl Default for TankGeometry {
             glass_thickness_mm: 5.0,
             open_top: true,
             lid_exchange_factor: DEFAULT_LID_EXCHANGE_FACTOR,
+            hardscape_area_cm2: 0.0,
         }
     }
 }

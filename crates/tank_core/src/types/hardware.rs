@@ -25,6 +25,9 @@ pub struct FilterHardware {
     pub flow_lph: f64,
     /// 1.0 is freshly cleaned media; lower values indicate detritus-driven fouling.
     pub cleanliness_index: f64,
+    /// Configurable biological media surface area (cm²) for habitat registry.
+    #[serde(default = "default_filter_media_area_cm2")]
+    pub media_area_cm2: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -71,12 +74,19 @@ impl Default for HeaterState {
     }
 }
 
+const DEFAULT_FILTER_MEDIA_AREA_CM2: f64 = 2000.0;
+
+fn default_filter_media_area_cm2() -> f64 {
+    DEFAULT_FILTER_MEDIA_AREA_CM2
+}
+
 impl Default for FilterHardware {
     fn default() -> Self {
         Self {
             enabled: true,
             flow_lph: 200.0,
             cleanliness_index: 1.0,
+            media_area_cm2: DEFAULT_FILTER_MEDIA_AREA_CM2,
         }
     }
 }

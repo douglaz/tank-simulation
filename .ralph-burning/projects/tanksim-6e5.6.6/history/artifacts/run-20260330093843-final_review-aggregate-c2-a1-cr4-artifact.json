@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260330093843-final_review-aggregate-c2-a1-cr4-artifact",
+  "payload_id": "run-20260330093843-final_review-aggregate-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T12:09:26.946560120Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 1 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 5\n**Final Review Restarts:** 4/20\n\n## Accepted\n\n- `fr-4-87d566aa`\n\n## Rejected\n\n- `fr-4-5a2e1e96`\n- `fr-4-beaf754d`\n- `fr-4-c6a42041`\n- `fr-4-4fc13edd`\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-4-87d566aa`\n\nIn `e2e_validation_suite.rs:1034-1037`, the VS-07 bare-bottom arm uses `seeded_state_with_full_overrides(SimSeed(7307), \"medium_planted\", bare_overrides)` — note the scenario template is `\"medium_planted\"` even though `plant_selection` is `None`. While this works because the overrides strip plants, using `\"medium_planted\"` as the template name is misleading for future maintainers reading the test. Consider introducing a more neutral template or adding a comment explaining why `medium_planted` is used as the base for a bare-bottom, plantless arm.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 4
+}

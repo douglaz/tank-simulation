@@ -1,18 +1,21 @@
 use crate::{
-    systems::chemistry::compute_nh3_mg_l,
+    systems::chemistry::compute_nh3_mg_n_per_l,
+    systems::shrimp::compute_nitrite_stress_diagnostics,
     types::{EventCause, EventKind, EventSeverity, SimEvent, TankState},
 };
 
 pub fn emit_hourly_threshold_events(state: &mut TankState) {
-    let volume_l = state.geometry.water_volume_l();
+    let chemistry = state.concentrations();
+    let volume_l = chemistry.volume_l();
     if volume_l <= f64::EPSILON {
         return;
     }
 
-    let tan_mg_l = state.water.ammonia_total_mg_n_total / volume_l;
-    let nh3_mg_l = compute_nh3_mg_l(tan_mg_l, state.water.ph, state.water.temperature_c);
-    let nitrite_mg_l = state.water.nitrite_mg_n_total / volume_l;
-    let do_mg_l = state.water.dissolved_oxygen_mg_total / volume_l;
+    let tan_mg_l = chemistry.tan_mg_n_per_l();
+    let nh3_mg_l = compute_nh3_mg_n_per_l(tan_mg_l, state.water.ph, state.water.temperature_c);
+    let nitrite_mg_l = chemistry.nitrite_mg_n_per_l();
+    let chloride_mg_l = chemistry.chloride_mg_per_l();
+    let do_mg_l = chemistry.do_mg_per_l();
 
     if nh3_mg_l >= 0.02 {
         emit_once_per_day(
@@ -20,16 +23,32 @@ pub fn emit_hourly_threshold_events(state: &mut TankState) {
             EventSeverity::Warning,
             EventKind::AmmoniaWarning,
             vec![EventCause::HighAmmonia],
-            format!("Free ammonia reached {nh3_mg_l:.3} mg/L"),
+            format!("Free ammonia (NH3-N) reached {nh3_mg_l:.3} mg NH3-N/L"),
         );
     }
     if nitrite_mg_l >= 0.5 {
+        let nitrite_diagnostics = compute_nitrite_stress_diagnostics(
+            nitrite_mg_l,
+            chloride_mg_l,
+            state.shrimp_params.chloride_protection_factor,
+        );
+        let cl_no2_ratio = if nitrite_mg_l > f64::EPSILON {
+            chloride_mg_l / nitrite_mg_l
+        } else {
+            0.0
+        };
         emit_once_per_day(
             state,
             EventSeverity::Warning,
             EventKind::NitriteWarning,
             vec![EventCause::HighNitrite],
-            format!("Nitrite reached {nitrite_mg_l:.2} mg/L"),
+            format!(
+                "Nitrite-N {nitrite_mg_l:.2} mg N/L, Cl {chloride_mg_l:.1} mg/L \
+                 (Cl:NO2 {cl_no2_ratio:.1}:1), effective hazard \
+                 {effective_hazard:.3}, nitrite stress +{stress_increment:.4}/h",
+                effective_hazard = nitrite_diagnostics.effective_hazard_mg_l,
+                stress_increment = nitrite_diagnostics.hourly_stress_increment,
+            ),
         );
     }
     if do_mg_l < 4.0 {
@@ -58,7 +77,7 @@ pub fn emit_daily_algae_events(
     previous_nuisance_index: f64,
     periphyton_capacity_g: f64,
 ) {
-    let volume_l = state.geometry.water_volume_l();
+    let volume_l = state.water_volume_l();
     if previous_nuisance_index < 0.5 && state.algae.nuisance_index >= 0.5 {
         let mut causes = vec![EventCause::HighNutrients];
         // Only attribute PlantCrowding if the tank actually has significant plant biomass.

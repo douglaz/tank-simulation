@@ -1,0 +1,45 @@
+{
+  "payload_id": "run-20260329204233-apply_fixes-c2-a1-cr3",
+  "stage_id": "apply_fixes",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-29T22:25:31.087150806Z",
+  "payload": {
+    "data": {
+      "change_summary": "Hardened the remaining conservation coverage gaps in the regression suites. In `crates/tank_core/tests/budget_tracking.rs`, the weekly trim-and-remove budget test now calls the shared `close_budget_gas_exchange()` helper after loading `ProcessParams::default()`, so future non-zero DIC shortcut defaults cannot create a false carbon leak in that closed-system assertion. In `crates/tank_core/tests/conservation_regression.rs` and `crates/tank_harness/tests/e2e_conservation.rs`, the water-change fixtures now seed a non-zero `source.nitrite_mg_n_per_l`, so the already-present nitrogen import formula and action accounting are exercised end to end instead of only covering the zero-nitrite case.",
+      "outstanding_risks": [],
+      "steps": [
+        {
+          "description": "Inspected the reviewed gaps in the weekly trim-export budget test and the conservation water-change fixtures to confirm the exact closure and coverage changes required.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Patched the trim-export test to reuse the shared gas-exchange closure helper and updated both conservation water-change fixtures to use non-zero source nitrite.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Ran formatting plus targeted budget and conservation regressions to verify the tightened coverage passes with the updated water-change expectations.",
+          "order": 3,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo fmt --all` completed successfully.",
+        "`cargo test -p tank_core --test budget_tracking test_weekly_trim_and_remove_exports_nutrients_over_500_hours -- --nocapture` passed: 1 test passed, 0 failed.",
+        "`cargo test -p tank_core --test conservation_regression -- --nocapture` passed: 6 tests passed, 0 failed.",
+        "`cargo test -p tank_harness --test e2e_conservation -- --nocapture` passed: 1 test passed, 0 failed; the summary reported all 6 scenarios as PASS.",
+        "The updated e2e summary now exercises non-zero source nitrite in `water_change`, reporting `dN=+21.187500000 mg` and `dC=+97.500000000 mg`, matching the fixture-backed import/export expectations."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

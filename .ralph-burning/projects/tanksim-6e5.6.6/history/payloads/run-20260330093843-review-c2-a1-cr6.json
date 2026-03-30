@@ -1,0 +1,44 @@
+{
+  "payload_id": "run-20260330093843-review-c2-a1-cr6",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T12:46:17.465342294Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All 6 shrimp probe tests pass: `test result: ok. 6 passed; 0 failed` — 5 individual probes + all_shrimp_probes_summary runner.",
+        "AC1 (5 named tests with doc comments): Confirmed — probe_successful_breeding (line 205), probe_thermal_suppression (line 464), probe_chemistry_stress (line 726), probe_chloride_protection (line 904), probe_crash_mode (line 1194) each have multi-line doc comments explaining the husbandry story being validated.",
+        "AC2 (failure dumps per-stage shrimp state and water chemistry per tick): Confirmed — emit_tick_snapshot (engine.rs:116-212) emits per-tick structured notes for adult/sub_adult/juvenile counts, condition, and reserve_g individually, plus berried_females, molt_stress, molt_readiness, failed_molt_accum, last_molt_success, reproductive_readiness, and water chemistry (GH, pH, NO2, Cl, DO, temp) gated at Verbosity::Trace. shrimp_diag() (lines 157-188) formats all per-stage data into failure messages.",
+        "AC3 (e2e script with summary, structured traces, non-zero exit on envelope violation): Confirmed — all_shrimp_probes_summary (line 1358) runs all 5 probes via catch_unwind, prints PASS/FAIL per probe with observed metrics, persists trace.jsonl artifacts for summary runs, and panics (non-zero exit) via line 1420 on any failure. Test output shows 8 trace artifact files persisted.",
+        "AC4 (directional/envelope assertions, no frozen exact counts): Confirmed — all probes use directional comparisons (<, >, >=, <=) and Envelope ranges (pH 6.8-8.6, temp 23-26.5, TAN 0-0.6, NO2 0-0.6, DO min 7.0, etc.). No exact count assertions.",
+        "AC5 (breeding 1000+ hours with 2+ cycles): Confirmed — 60 days x 24h = 1440 hours, event-backed ShrimpBerried/ShrimpHatched counting via BTreeSet (lines 271-283), complete_cycle_count >= 2 assertion at line 295. Test output shows cycles=10, berried_days=19, hatch_days=10, population 10->260.",
+        "Clippy: `cargo clippy -p tank_harness --test e2e_shrimp_scenario_probes -- -D warnings` passes with zero warnings.",
+        "All 23 tracing tests pass including trace_verbosity_reports_tick_snapshot_for_shrimp_probe_debugging.",
+        "Amendment fr-5-dde06aca (stale pH in fixtures) applied: resolve_carbonate_state(&mut state.water, vol) confirmed at lines 389, 493, 760, 1006, 1223 — all five fixtures now re-solve carbonate equilibrium after custom overrides and before reseed_stability_tracker().",
+        "Breeding probe uses event-driven cycle counting via BTreeSet of berried_days and hatch_days from EventKind events (lines 271-283), with complete_cycle_count = berried_days.len().min(hatch_days.len()). Output: cycles=10, population 10->260.",
+        "Thermal suppression: cool arm (25°C) reuses breeding_success_state fixture, warm arm (31°C) starts with seeded berried females and prev_temp_c=25 for heat shock. Cool arm finishes healthy (cond=0.918, molt_stress=0.005, 258 juveniles, 11 hatches), warm arm shows suppression (readiness=0.017, 0 juveniles, 0 hatches, 1 egg drop). Cool-control health guard requires hatch evidence.",
+        "Chemistry stress: low GH (Ca 5 mg/L, Mg 2 mg/L) + high NO2 (4 mg N/L), adults seeded at end of intermolt cycle (lines 785-786), colony collapses 20->0, molt_failures=1, failed_molt_accum=0.300.",
+        "Chloride protection: real 3-phase branched design — 3 days pre-treatment crisis, state cloned into salt-treated (200 mg/L Cl) and matched-control branches with 50% water changes, 3-day recovery. Output: treated_deaths=0 < control_deaths=3, treated_hazard=0.3518 < control_hazard=4.3736.",
+        "Crash mode: 40 shrimp in ~15L, 1g/day overfeeding, no water changes for 30 days. Colony crashes 40->0 (100% mortality), TAN=77.068, NO2=12.774, DO=8.04, cond=0.000.",
+        "Summary runner persists trace.jsonl artifacts with deterministic paths for all 8 runs (breeding, 2 thermal arms, chemistry, 3 chloride branches, crash)."
+      ],
+      "findings_or_gaps": [
+        "Pre-existing clippy warnings in e2e_geometry_scaling.rs (manual_range_contains) and calibration_report.rs (needless_borrows_for_generic_args) are outside this deliverable's scope.",
+        "Unstaged changes in crates/tank_harness/src/calibration.rs from a different project (tanksim-6e5.7.3) modify FieldCheck to use Option<f64>; these are outside this deliverable's scope and were correctly left untouched.",
+        "Two pre-existing test failures in tank_data::presets (from unstaged tanksim-6e5.7.2 param_meta changes to default.toml) remain outside this deliverable's scope.",
+        "The thermal-suppression probe depends on seeded berried females plus a first-day 25->31°C heat shock; substantial future retunes to hatch timing or thermal egg-drop behavior may require fixture adjustment, but this is acceptable coupling given the scenario's purpose."
+      ],
+      "follow_up_or_amendments": [],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 6
+}

@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330083637-final_review-vote-0-c2-a1-cr3-artifact",
+  "payload_id": "run-20260330083637-final_review-vote-0-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T10:52:14.075589675Z",
+  "content": "# Final Review Votes\n**Producer:** agent:claude/claude-opus-4-6\n\n## Summary\n\nAccept both documentation-fix amendments (error message text and doc comment clarification) as they address real inaccuracies. Reject both blocking amendments because the habitat/geometry probe suite, summary runner, and per-habitat debug output all exist in crates/tank_harness/tests/e2e_habitat_geometry_probes.rs — the amendments appear to be describing a different (alkalinity-focused) change set.\n\n## Votes\n\n- `fr-3-dd96264b`: Accept\n  Verified: SMALL_MEDIA_CM2=500 and LARGE_MEDIA_CM2=4000 (line 292-293), making the ratio 8×, not 2×. The error message at line 497 reads '2× media should expand filter habitat area by >1.5×' which is objectively wrong. A developer debugging a failure would be misled about the test configuration. Simple, safe string fix.\n- `fr-3-703dc756`: Accept\n  Verified: configure_redox_baseline sets aeration.enabled=false (line 1101), the planted arm does not override this, but the inert arm explicitly sets aeration.enabled=true and intensity=0.6 (lines 1167-1168). The doc comment at line 1027 claims the comparison is 'about substrate geometry and root-zone effects' without acknowledging the aeration asymmetry. Adding a note that the inert arm also has aeration enabled (and explaining why this strengthens the test) makes the documentation technically accurate without changing any behavior.\n- `fr-3-b63c4158`: Reject\n  The amendment's claim that no habitat/geometry probes exist is factually incorrect. crates/tank_harness/tests/e2e_habitat_geometry_probes.rs (1640 lines) contains all five required probes: biofilter_scaling (line 289), light_depth, habitat_fouling, substrate_redox (line ~1017), and equipment_scaling, plus the all_habitat_geometry_probes_summary runner (line 1561). The amendment appears to describe a different alkalinity-focused diff, not the actual habitat/geometry implementation.\n- `fr-3-49996a37`: Reject\n  The claim that per-habitat diagnostics are missing is incorrect. e2e_habitat_geometry_probes.rs contains format_habitat_debug (line 44) and dump_habitat_debug (line 133), which emit per-habitat biomass, colonizable area, and habitat modifiers. These are called at 11 locations throughout the probe suite (e.g., lines 464-465, 730-731, 886-888, 1226-1227, 1461-1462). The engine.rs and budget_helpers.rs files being aggregate-only is irrelevant — the bead's per-habitat diagnostic requirement is fulfilled by the harness-level debug functions.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 3
+}

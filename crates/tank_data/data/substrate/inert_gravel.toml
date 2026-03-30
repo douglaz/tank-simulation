@@ -13,5 +13,9 @@ nutrient_charge_mg_p_total = 0.0
 source_title = "Starter preset pack"
 source_year = 2026
 confidence = "medium"
-notes = "Coarser inert gravel with more interstitial flow."
+notes = """
+Coarser inert gravel with more interstitial flow. Zero nutrient charge. \
+Higher colonizable_area_factor (0.6) than fine sand provides slightly more \
+nitrifier habitat. Low detritus_trapping_index (0.2) means less organic \
+matter accumulation. Used by warm_room scenario."""
 

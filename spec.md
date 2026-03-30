@@ -190,14 +190,15 @@ pub struct TankGeometry {
 
 The engine MUST derive:
 
-- `water_volume_l`
+- `gross_water_volume_l`
+- `water_volume_l_with_substrate_depth(...)`
 - `surface_area_cm2` = length * width
 - `footprint_area_cm2`
 - `wall_area_cm2`
 - `substrate_plan_area_cm2`
 - `mean_depth_cm`
-- `surface_area_to_volume_ratio`
-- `wall_area_to_volume_ratio`
+- `surface_area_to_gross_volume_ratio`
+- `wall_area_to_gross_volume_ratio`
 
 ## 6.3 Why geometry matters
 
@@ -1382,6 +1383,22 @@ A large water change with very different GH/KH/TDS must improve some waste metri
 
 ---
 
+## 20.10 Post-v1 scientific-core upgrades
+
+The following concepts were added after the original v0.1 spec was written. Each is documented in a dedicated file; this section provides cross-references.
+
+**Carbonate equilibrium** — canonical state is DIC + alkalinity + temperature. A closed-form quadratic solver derives CO2(aq), HCO3-, CO3--, and pH each chemistry step, replacing the section 10.5 log-linear fallback. Contract and derivation: [docs/carbonate_state_contract.md](docs/carbonate_state_contract.md).
+
+**Habitat registry** — five ecological zones (FilterMedia, GlassHardscape, PlantSurfaces, SubstrateSurface, SubstrateDeep) with colonizable area and exposure modifiers derived from geometry, hardware, and plant biomass. This addresses the section 10.2 biofilter capacity concern and the section 2.3 "habitatized ecology" goal. Implementation: `crates/tank_core/src/types/habitat.rs`.
+
+**Stage-structured shrimp** — the flat `ShrimpPopulationState` from section 8.11 has been replaced by a three-stage model (Juvenile, Sub-adult, Adult) with per-stage reserves, condition, maturation accumulator, molt cycle, and reproduction mechanics. Contract: [docs/shrimp_state_contract.md](docs/shrimp_state_contract.md).
+
+**Parameter provenance** — each tunable parameter in TOML presets can carry `ParamMeta` with confidence tier, source citation, valid range, and notes. The `ConfidenceLevel` enum (Literature, Expert, Heuristic, Placeholder) is defined in `crates/tank_core/src/types/provenance.rs`. Coverage summary: [docs/PROVENANCE_STATUS.md](docs/PROVENANCE_STATUS.md).
+
+**Calibration harness** — eight validation scenarios verify directional behavior (fishless cycling, aeration effects, pH swings, source-water differentiation, shrimp breeding, algae-plant competition, denitrification, stocking crashes). Scenario definitions and envelope bounds: [docs/validation_scenarios.md](docs/validation_scenarios.md). Calibration-report workflow: `crates/tank_harness/`.
+
+---
+
 ## 21. Milestone plan for an implementation agent
 
 ## Milestone 0 — repository skeleton
@@ -1489,12 +1506,12 @@ The first data pack must include:
 These simplifications are acceptable if documented:
 
 - aggregated microfauna guilds instead of species
-- approximate carbonate chemistry rather than full equilibrium across all acid/base systems
+- ~~approximate carbonate chemistry rather than full equilibrium across all acid/base systems~~ — **upgraded**: closed-form quadratic solver with temperature-corrected pKa1 now replaces the log-linear shortcut; activity corrections are still omitted (sufficient for freshwater 15-35 C)
 - no explicit bacterial taxonomy beyond guilds
 - no spatial CFD
 - one well-mixed water column compartment
 - substrate represented as 1–3 layers rather than continuous depth
-- simple sex-ratio proxy for shrimp rather than individual mating model
+- ~~simple sex-ratio proxy for shrimp rather than individual mating model~~ — **upgraded**: stage-structured model (juvenile/sub-adult/adult) with per-stage reserves and condition, though still no explicit individual sex assignment
 
 These are acceptable because the target is realistic aquarium dynamics, not full ecological omniscience.
 

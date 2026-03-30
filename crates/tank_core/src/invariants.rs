@@ -1,9 +1,82 @@
-use crate::types::{SimError, TankState};
+use crate::systems::chemistry::{CARBONATE_PH_MAX, CARBONATE_PH_MIN};
+use crate::types::{ShrimpRuntimeParams, SimError, TankState};
+
+const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
+
+pub fn validate_invariants(state: &TankState) -> Result<(), SimError> {
+    validate_invariants_inner(state)
+}
 
 pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
-    if state.water.dissolved_oxygen_mg_total.is_finite() {
-        state.water.dissolved_oxygen_mg_total = state.water.dissolved_oxygen_mg_total.max(0.0);
+    validate_invariants_inner(state)?;
+
+    state.water.dissolved_oxygen_mg_total =
+        normalized_non_negative_if_finite(state.water.dissolved_oxygen_mg_total);
+    state.water.ph = state.water.ph.clamp(CARBONATE_PH_MIN, CARBONATE_PH_MAX);
+    state.geometry.lid_exchange_factor = state.geometry.lid_exchange_factor.clamp(0.0, 1.0);
+    state.hardware.light.intensity_index = state.hardware.light.intensity_index.clamp(0.0, 1.0);
+    state.hardware.filter.cleanliness_index =
+        state.hardware.filter.cleanliness_index.clamp(0.0, 1.0);
+    state.hardware.aeration.intensity = state.hardware.aeration.intensity.clamp(0.0, 1.0);
+    state.filter_state.biofilter_maturity_index =
+        state.filter_state.biofilter_maturity_index.clamp(0.0, 1.0);
+    state.filter_state.clogging_index = state.filter_state.clogging_index.clamp(0.0, 1.0);
+    state.filter_state.seeded_biomass_index =
+        state.filter_state.seeded_biomass_index.clamp(0.0, 1.0);
+    state.algae.nuisance_index = state.algae.nuisance_index.clamp(0.0, 1.0);
+    state.microbe.maturity_index = state.microbe.maturity_index.clamp(0.0, 1.0);
+    state.microfauna.population_index = state.microfauna.population_index.clamp(0.0, 1.0);
+    state.microfauna.grazing_pressure_index =
+        state.microfauna.grazing_pressure_index.clamp(0.0, 1.0);
+    state.animal.adult.condition_index = state.animal.adult.condition_index.clamp(0.0, 1.0);
+    state.animal.sub_adult.condition_index = state.animal.sub_adult.condition_index.clamp(0.0, 1.0);
+    state.animal.juvenile.condition_index = state.animal.juvenile.condition_index.clamp(0.0, 1.0);
+    state.animal.molt_stress_index = state.animal.molt_stress_index.clamp(0.0, 1.0);
+    state.animal.reproductive_readiness_index =
+        state.animal.reproductive_readiness_index.clamp(0.0, 1.0);
+    state.animal.molt_readiness = state.animal.molt_readiness.clamp(0.0, 1.0);
+    state.animal.failed_molt_accum = state.animal.failed_molt_accum.clamp(0.0, 1.0);
+    state.animal.daily_food_consumed_g = state.animal.daily_food_consumed_g.max(0.0);
+    state.animal.spawn_progress_accum = state.animal.spawn_progress_accum.clamp(-1.0, 1.0);
+    state.animal.hatch_success_carry = state.animal.hatch_success_carry.clamp(-1.0, 1.0);
+    state.animal.clamp_berried_to_adults();
+    state.animal.egg_progress_days = state.animal.egg_progress_days.max(0.0);
+    state.animal.egg_cohorts.retain(|c| c.count > 0);
+    state.animal.adult.clamp_maturation_accum_to_count();
+    state.animal.sub_adult.clamp_maturation_accum_to_count();
+    state.animal.juvenile.clamp_maturation_accum_to_count();
+    state.stability_tracker.instability_index =
+        state.stability_tracker.instability_index.clamp(0.0, 1.0);
+    state.microbe.denitrifier_activity_index =
+        state.microbe.denitrifier_activity_index.clamp(0.0, 1.0);
+
+    for plant in &mut state.plant_guilds {
+        plant.health_index = plant.health_index.clamp(0.0, 1.0);
+        plant.crowding_index = plant.crowding_index.clamp(0.0, 1.0);
+        plant.habitat_index = plant.habitat_index.clamp(0.0, 1.0);
     }
+    for layer in &mut state.substrate_layers {
+        layer.cation_exchange_capacity_index = layer.cation_exchange_capacity_index.clamp(0.0, 1.0);
+        layer.detritus_trapping_index = layer.detritus_trapping_index.clamp(0.0, 1.0);
+        layer.low_oxygen_tendency_index = layer.low_oxygen_tendency_index.clamp(0.0, 1.0);
+        layer.grazing_surface_index = layer.grazing_surface_index.clamp(0.0, 1.0);
+    }
+    for habitat in &mut state.habitat_registry {
+        habitat.colonizable_area_cm2 = habitat.colonizable_area_cm2.max(0.0);
+        habitat.flow_exposure = habitat.flow_exposure.clamp(0.0, 1.0);
+        habitat.oxygen_exposure = habitat.oxygen_exposure.clamp(0.0, 1.0);
+        habitat.light_exposure = habitat.light_exposure.clamp(0.0, 1.0);
+    }
+
+    if state.event_log.len() > 200 {
+        let keep_from = state.event_log.len() - 200;
+        state.event_log.drain(0..keep_from);
+    }
+
+    Ok(())
+}
+
+fn validate_invariants_inner(state: &TankState) -> Result<(), SimError> {
     check_non_negative(
         "ammonia_total_mg_n_total",
         state.water.ammonia_total_mg_n_total,
@@ -13,7 +86,7 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
     check_non_negative("phosphate_mg_p_total", state.water.phosphate_mg_p_total)?;
     check_non_negative(
         "dissolved_oxygen_mg_total",
-        state.water.dissolved_oxygen_mg_total,
+        normalized_non_negative_if_finite(state.water.dissolved_oxygen_mg_total),
     )?;
     check_non_negative(
         "dissolved_inorganic_carbon_mg_c_total",
@@ -57,6 +130,7 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
         state.microbe.nitrite_oxidizer_biomass_g,
     )?;
     check_non_negative("comammox_biomass_g", state.microbe.comammox_biomass_g)?;
+    check_non_negative("cumulative_n2_export_mg_n", state.cumulative_n2_export_mg_n)?;
     for plant in &state.plant_guilds {
         check_non_negative("plant.biomass_g", plant.biomass_g)?;
     }
@@ -65,6 +139,12 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
         "algae.periphyton_biomass_g",
         state.algae.periphyton_biomass_g,
     )?;
+    for biomass in state.algae.periphyton_by_habitat.values() {
+        check_non_negative("algae.periphyton_by_habitat[*]", *biomass)?;
+    }
+    for biomass in state.microbe.decomposer_by_habitat.values() {
+        check_non_negative("microbe.decomposer_by_habitat[*]", *biomass)?;
+    }
     for layer in &state.substrate_layers {
         check_non_negative("substrate.depth_cm", layer.depth_cm)?;
         check_non_negative(
@@ -74,6 +154,10 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
         check_non_negative(
             "substrate.nutrient_store_mg_p_total",
             layer.nutrient_store_mg_p_total,
+        )?;
+        check_non_negative(
+            "substrate.colonizable_area_factor",
+            layer.colonizable_area_factor,
         )?;
         check_non_negative("substrate.colonizable_area_cm2", layer.colonizable_area_cm2)?;
     }
@@ -90,7 +174,6 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
             value: state.water.ph,
         });
     }
-    state.water.ph = state.water.ph.clamp(5.5, 8.5);
 
     // Geometry: reject non-positive dimensions and impossible fill levels
     check_positive("geometry.length_cm", state.geometry.length_cm)?;
@@ -103,45 +186,36 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
             value: state.geometry.fill_height_cm,
         });
     }
-
-    state.geometry.lid_exchange_factor = state.geometry.lid_exchange_factor.clamp(0.0, 1.0);
-    state.hardware.light.intensity_index = state.hardware.light.intensity_index.clamp(0.0, 1.0);
-    state.hardware.filter.cleanliness_index =
-        state.hardware.filter.cleanliness_index.clamp(0.0, 1.0);
-    state.hardware.aeration.intensity = state.hardware.aeration.intensity.clamp(0.0, 1.0);
-    state.filter_state.biofilter_maturity_index =
-        state.filter_state.biofilter_maturity_index.clamp(0.0, 1.0);
-    state.filter_state.clogging_index = state.filter_state.clogging_index.clamp(0.0, 1.0);
-    state.filter_state.seeded_biomass_index =
-        state.filter_state.seeded_biomass_index.clamp(0.0, 1.0);
-    state.algae.nuisance_index = state.algae.nuisance_index.clamp(0.0, 1.0);
-    state.microbe.maturity_index = state.microbe.maturity_index.clamp(0.0, 1.0);
-    state.microfauna.population_index = state.microfauna.population_index.clamp(0.0, 1.0);
-    state.microfauna.grazing_pressure_index =
-        state.microfauna.grazing_pressure_index.clamp(0.0, 1.0);
-    state.animal.condition_index = state.animal.condition_index.clamp(0.0, 1.0);
-    state.animal.molt_stress_index = state.animal.molt_stress_index.clamp(0.0, 1.0);
-    state.animal.reproductive_readiness_index =
-        state.animal.reproductive_readiness_index.clamp(0.0, 1.0);
-    state.animal.daily_food_consumed_g = state.animal.daily_food_consumed_g.max(0.0);
-    // Shrimp population invariants: berried <= adults, no negative egg progress
-    state.animal.clamp_berried_to_adults();
-    state.animal.egg_progress_days = state.animal.egg_progress_days.max(0.0);
-    // Remove any empty cohorts
-    state.animal.egg_cohorts.retain(|c| c.count > 0);
-    state.stability_tracker.instability_index =
-        state.stability_tracker.instability_index.clamp(0.0, 1.0);
-
-    for plant in &mut state.plant_guilds {
-        plant.health_index = plant.health_index.clamp(0.0, 1.0);
-        plant.crowding_index = plant.crowding_index.clamp(0.0, 1.0);
-        plant.habitat_index = plant.habitat_index.clamp(0.0, 1.0);
+    check_non_negative("animal.adult.reserve_g", state.animal.adult.reserve_g)?;
+    check_non_negative(
+        "animal.adult.molt_timer_days",
+        state.animal.adult.molt_timer_days,
+    )?;
+    check_non_negative(
+        "animal.sub_adult.reserve_g",
+        state.animal.sub_adult.reserve_g,
+    )?;
+    check_non_negative(
+        "animal.sub_adult.molt_timer_days",
+        state.animal.sub_adult.molt_timer_days,
+    )?;
+    check_non_negative("animal.juvenile.reserve_g", state.animal.juvenile.reserve_g)?;
+    check_non_negative(
+        "animal.juvenile.molt_timer_days",
+        state.animal.juvenile.molt_timer_days,
+    )?;
+    if state.animal.berried_females_count > state.animal.adult.count {
+        return Err(SimError::InvariantViolation {
+            field: "animal.berried_females_count",
+            value: f64::from(state.animal.berried_females_count),
+        });
     }
-    for layer in &mut state.substrate_layers {
-        layer.cation_exchange_capacity_index = layer.cation_exchange_capacity_index.clamp(0.0, 1.0);
-        layer.detritus_trapping_index = layer.detritus_trapping_index.clamp(0.0, 1.0);
-        layer.low_oxygen_tendency_index = layer.low_oxygen_tendency_index.clamp(0.0, 1.0);
-        layer.grazing_surface_index = layer.grazing_surface_index.clamp(0.0, 1.0);
+    let egg_cohort_total = state.animal.egg_cohort_count_total();
+    if egg_cohort_total != state.animal.berried_females_count {
+        return Err(SimError::InvariantViolation {
+            field: "animal.egg_cohort_count_total",
+            value: f64::from(egg_cohort_total),
+        });
     }
 
     // Process parameters: reject negative coefficients that would produce
@@ -179,13 +253,456 @@ pub fn enforce_invariants(state: &mut TankState) -> Result<(), SimError> {
         "process.plant_photosynthesis_o2_mg_per_g_per_hour",
         pp.plant_photosynthesis_o2_mg_per_g_per_hour,
     )?;
-
-    if state.event_log.len() > 200 {
-        let keep_from = state.event_log.len() - 200;
-        state.event_log.drain(0..keep_from);
-    }
+    check_non_negative(
+        "process.denitrification_vmax_mg_n_per_l_per_hour",
+        pp.denitrification_vmax_mg_n_per_l_per_hour,
+    )?;
+    check_non_negative(
+        "process.denitrification_k_no3_mg_n_per_l",
+        pp.denitrification_k_no3_mg_n_per_l,
+    )?;
+    check_non_negative(
+        "process.denitrification_k_doc_mg_c_per_l",
+        pp.denitrification_k_doc_mg_c_per_l,
+    )?;
+    check_non_negative(
+        "process.denitrification_pore_water_mixing_factor",
+        pp.denitrification_pore_water_mixing_factor,
+    )?;
+    check_non_negative(
+        "process.denitrification_activity_maturation_days",
+        pp.denitrification_activity_maturation_days,
+    )?;
+    check_non_negative("process.rol_rate_cm_per_g", pp.rol_rate_cm_per_g)?;
+    check_open_unit_interval(
+        "process.shrimp_assimilation_efficiency",
+        pp.shrimp_assimilation_efficiency,
+    )?;
+    check_unit_interval(
+        "process.shrimp_respiration_fraction_of_assimilated",
+        pp.shrimp_respiration_fraction_of_assimilated,
+    )?;
+    check_unit_interval(
+        "process.shrimp_excretion_fraction_of_assimilated",
+        pp.shrimp_excretion_fraction_of_assimilated,
+    )?;
+    check_unit_interval(
+        "process.shrimp_growth_fraction_of_assimilated",
+        pp.shrimp_growth_fraction_of_assimilated,
+    )?;
+    check_unit_interval(
+        "process.death_biomass_to_detritus_fraction",
+        pp.death_biomass_to_detritus_fraction,
+    )?;
+    // Mortality routing stays closed-loop until the engine has an explicit
+    // export destination for carcass removal.
+    check_sum_close_to_one(
+        "process.death_biomass_to_detritus_fraction",
+        pp.death_biomass_to_detritus_fraction,
+    )?;
+    check_positive(
+        "process.shrimp_o2_per_mg_c_respired",
+        pp.shrimp_o2_per_mg_c_respired,
+    )?;
+    check_sum_close_to_one(
+        "process.shrimp_assimilated_partition_sum",
+        pp.shrimp_respiration_fraction_of_assimilated
+            + pp.shrimp_excretion_fraction_of_assimilated
+            + pp.shrimp_growth_fraction_of_assimilated,
+    )?;
+    validate_shrimp_runtime_params(&state.shrimp_params)?;
 
     Ok(())
+}
+
+fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), SimError> {
+    check_positive(
+        "shrimp_params.optimal_temp_min_c",
+        params.optimal_temp_min_c,
+    )?;
+    check_positive(
+        "shrimp_params.optimal_temp_max_c",
+        params.optimal_temp_max_c,
+    )?;
+    check_strictly_increasing(
+        "shrimp_params.optimal_temp_min_c",
+        params.optimal_temp_min_c,
+        "shrimp_params.optimal_temp_max_c",
+        params.optimal_temp_max_c,
+    )?;
+    check_non_negative("shrimp_params.gh_min_d", params.gh_min_d)?;
+    check_non_negative("shrimp_params.gh_max_d", params.gh_max_d)?;
+    check_strictly_increasing(
+        "shrimp_params.gh_min_d",
+        params.gh_min_d,
+        "shrimp_params.gh_max_d",
+        params.gh_max_d,
+    )?;
+    check_unit_interval("shrimp_params.base_spawn_rate", params.base_spawn_rate)?;
+    if params.egg_duration_days == 0 {
+        return Err(SimError::InvariantViolation {
+            field: "shrimp_params.egg_duration_days",
+            value: 0.0,
+        });
+    }
+    check_unit_interval(
+        "shrimp_params.hatch_success_base",
+        params.hatch_success_base,
+    )?;
+    check_non_negative(
+        "shrimp_params.juvenile_sensitivity",
+        params.juvenile_sensitivity,
+    )?;
+    check_positive(
+        "shrimp_params.high_temp_repro_penalty_start_c",
+        params.high_temp_repro_penalty_start_c,
+    )?;
+    check_positive(
+        "shrimp_params.high_temp_repro_penalty_full_c",
+        params.high_temp_repro_penalty_full_c,
+    )?;
+    check_strictly_increasing(
+        "shrimp_params.high_temp_repro_penalty_start_c",
+        params.high_temp_repro_penalty_start_c,
+        "shrimp_params.high_temp_repro_penalty_full_c",
+        params.high_temp_repro_penalty_full_c,
+    )?;
+    check_positive(
+        "shrimp_params.low_temp_repro_ramp_width_c",
+        params.low_temp_repro_ramp_width_c,
+    )?;
+    check_positive(
+        "shrimp_params.body_nitrogen_mg_per_g_wet_mass",
+        params.body_nitrogen_mg_per_g_wet_mass,
+    )?;
+    check_positive(
+        "shrimp_params.body_carbon_mg_per_g_wet_mass",
+        params.body_carbon_mg_per_g_wet_mass,
+    )?;
+    check_positive(
+        "shrimp_params.juvenile_to_subadult_days",
+        params.juvenile_to_subadult_days,
+    )?;
+    check_positive(
+        "shrimp_params.subadult_to_adult_days",
+        params.subadult_to_adult_days,
+    )?;
+    check_unit_interval(
+        "shrimp_params.juvenile_maturation_condition_threshold",
+        params.juvenile_maturation_condition_threshold,
+    )?;
+    check_unit_interval(
+        "shrimp_params.subadult_maturation_condition_threshold",
+        params.subadult_maturation_condition_threshold,
+    )?;
+    check_positive(
+        "shrimp_params.base_molt_interval_days",
+        params.base_molt_interval_days,
+    )?;
+    check_non_negative(
+        "shrimp_params.failed_molt_mortality_scale",
+        params.failed_molt_mortality_scale,
+    )?;
+    check_non_negative(
+        "shrimp_params.failed_molt_accum_increase_per_failed_stage",
+        params.failed_molt_accum_increase_per_failed_stage,
+    )?;
+    check_non_negative(
+        "shrimp_params.failed_molt_accum_recovery_per_successful_stage",
+        params.failed_molt_accum_recovery_per_successful_stage,
+    )?;
+    check_unit_interval(
+        "shrimp_params.failed_molt_stress_blend",
+        params.failed_molt_stress_blend,
+    )?;
+    check_non_negative(
+        "shrimp_params.sub_adult_sensitivity",
+        params.sub_adult_sensitivity,
+    )?;
+    if params.base_clutch_size == 0 {
+        return Err(SimError::InvariantViolation {
+            field: "shrimp_params.base_clutch_size",
+            value: 0.0,
+        });
+    }
+    check_unit_interval(
+        "shrimp_params.min_clutch_condition",
+        params.min_clutch_condition,
+    )?;
+    check_positive("shrimp_params.ca_min_mg_per_l", params.ca_min_mg_per_l)?;
+    check_positive("shrimp_params.mg_min_mg_per_l", params.mg_min_mg_per_l)?;
+    check_positive(
+        "shrimp_params.molt_reserve_fraction",
+        params.molt_reserve_fraction,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_reserve_factor_floor",
+        params.molt_reserve_factor_floor,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_condition_weight",
+        params.molt_condition_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_reserve_weight",
+        params.molt_reserve_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_failure_poor_condition_threshold",
+        params.molt_failure_poor_condition_threshold,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_failure_instability_threshold",
+        params.molt_failure_instability_threshold,
+    )?;
+    check_positive(
+        "shrimp_params.temp_condition_low_divisor_c",
+        params.temp_condition_low_divisor_c,
+    )?;
+    check_positive(
+        "shrimp_params.temp_condition_high_divisor_c",
+        params.temp_condition_high_divisor_c,
+    )?;
+    check_unit_interval(
+        "shrimp_params.temp_condition_min_factor",
+        params.temp_condition_min_factor,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_warning_threshold",
+        params.molt_stress_warning_threshold,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_mortality_threshold",
+        params.molt_stress_mortality_threshold,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_mineral_gh_weight",
+        params.molt_stress_mineral_gh_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_mineral_ca_weight",
+        params.molt_stress_mineral_ca_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_mineral_mg_weight",
+        params.molt_stress_mineral_mg_weight,
+    )?;
+    check_sum_close_to_one(
+        "shrimp_params.molt_stress_mineral_gh_weight + shrimp_params.molt_stress_mineral_ca_weight + shrimp_params.molt_stress_mineral_mg_weight",
+        params.molt_stress_mineral_gh_weight
+            + params.molt_stress_mineral_ca_weight
+            + params.molt_stress_mineral_mg_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_pressure_mineral_weight",
+        params.molt_stress_pressure_mineral_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_pressure_instability_weight",
+        params.molt_stress_pressure_instability_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_pressure_condition_weight",
+        params.molt_stress_pressure_condition_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_condition_midpoint",
+        params.molt_stress_condition_midpoint,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_pressure_thermal_weight",
+        params.molt_stress_pressure_thermal_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_thermal_cap",
+        params.molt_stress_thermal_cap,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_pressure_hourly_weight",
+        params.molt_stress_pressure_hourly_weight,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_rise_smoothing",
+        params.molt_stress_rise_smoothing,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_stress_decay_smoothing",
+        params.molt_stress_decay_smoothing,
+    )?;
+    check_positive(
+        "shrimp_params.molt_gh_excess_penalty_divisor",
+        params.molt_gh_excess_penalty_divisor,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_mineral_factor_floor",
+        params.molt_mineral_factor_floor,
+    )?;
+    check_sum_close_to_one(
+        "shrimp_params.molt_condition_weight + shrimp_params.molt_reserve_weight",
+        params.molt_condition_weight + params.molt_reserve_weight,
+    )?;
+    check_positive(
+        "shrimp_params.juvenile_molt_interval_days",
+        params.juvenile_molt_interval_days,
+    )?;
+    check_positive(
+        "shrimp_params.sub_adult_molt_interval_days",
+        params.sub_adult_molt_interval_days,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_success_threshold",
+        params.molt_success_threshold,
+    )?;
+    check_unit_interval(
+        "shrimp_params.critical_molt_gh_ratio",
+        params.critical_molt_gh_ratio,
+    )?;
+    check_non_negative(
+        "shrimp_params.chloride_protection_factor",
+        params.chloride_protection_factor,
+    )?;
+    check_non_negative(
+        "shrimp_params.nh3_stress_threshold_mg_n_per_l",
+        params.nh3_stress_threshold_mg_n_per_l,
+    )?;
+    check_non_negative(
+        "shrimp_params.nh3_stress_response_scale",
+        params.nh3_stress_response_scale,
+    )?;
+    check_positive(
+        "shrimp_params.condition_do_reference_mg_l",
+        params.condition_do_reference_mg_l,
+    )?;
+    check_non_negative(
+        "shrimp_params.condition_nh3_sensitivity",
+        params.condition_nh3_sensitivity,
+    )?;
+    check_non_negative(
+        "shrimp_params.condition_nitrite_sensitivity",
+        params.condition_nitrite_sensitivity,
+    )?;
+    check_unit_interval(
+        "shrimp_params.condition_hourly_stress_penalty_weight",
+        params.condition_hourly_stress_penalty_weight,
+    )?;
+    check_non_negative(
+        "shrimp_params.density_repro_threshold_per_l",
+        params.density_repro_threshold_per_l,
+    )?;
+    check_positive(
+        "shrimp_params.density_repro_half_suppression_per_l",
+        params.density_repro_half_suppression_per_l,
+    )?;
+    check_strictly_increasing(
+        "shrimp_params.density_repro_threshold_per_l",
+        params.density_repro_threshold_per_l,
+        "shrimp_params.density_repro_half_suppression_per_l",
+        params.density_repro_half_suppression_per_l,
+    )?;
+    check_non_negative(
+        "shrimp_params.tan_repro_threshold_mg_n_per_l",
+        params.tan_repro_threshold_mg_n_per_l,
+    )?;
+    check_positive(
+        "shrimp_params.tan_repro_full_suppression_mg_n_per_l",
+        params.tan_repro_full_suppression_mg_n_per_l,
+    )?;
+    check_strictly_increasing(
+        "shrimp_params.tan_repro_threshold_mg_n_per_l",
+        params.tan_repro_threshold_mg_n_per_l,
+        "shrimp_params.tan_repro_full_suppression_mg_n_per_l",
+        params.tan_repro_full_suppression_mg_n_per_l,
+    )?;
+    check_non_negative(
+        "shrimp_params.no2_repro_threshold_mg_n_per_l",
+        params.no2_repro_threshold_mg_n_per_l,
+    )?;
+    check_positive(
+        "shrimp_params.no2_repro_full_suppression_mg_n_per_l",
+        params.no2_repro_full_suppression_mg_n_per_l,
+    )?;
+    check_strictly_increasing(
+        "shrimp_params.no2_repro_threshold_mg_n_per_l",
+        params.no2_repro_threshold_mg_n_per_l,
+        "shrimp_params.no2_repro_full_suppression_mg_n_per_l",
+        params.no2_repro_full_suppression_mg_n_per_l,
+    )?;
+    check_positive(
+        "shrimp_params.egg_drop_temp_swing_c",
+        params.egg_drop_temp_swing_c,
+    )?;
+    check_unit_interval(
+        "shrimp_params.egg_drop_instability_threshold",
+        params.egg_drop_instability_threshold,
+    )?;
+    check_unit_interval(
+        "shrimp_params.egg_drop_max_probability",
+        params.egg_drop_max_probability,
+    )?;
+    check_positive(
+        "shrimp_params.egg_oxygen_reference_mg_l",
+        params.egg_oxygen_reference_mg_l,
+    )?;
+    check_unit_interval(
+        "shrimp_params.reproductive_readiness_smoothing",
+        params.reproductive_readiness_smoothing,
+    )?;
+    check_unit_interval(
+        "shrimp_params.full_clutch_condition_threshold",
+        params.full_clutch_condition_threshold,
+    )?;
+    check_strictly_increasing(
+        "shrimp_params.min_clutch_condition",
+        params.min_clutch_condition,
+        "shrimp_params.full_clutch_condition_threshold",
+        params.full_clutch_condition_threshold,
+    )?;
+    check_positive(
+        "shrimp_params.instability_temp_swing_c",
+        params.instability_temp_swing_c,
+    )?;
+    check_positive(
+        "shrimp_params.instability_ph_swing",
+        params.instability_ph_swing,
+    )?;
+    check_positive(
+        "shrimp_params.instability_gh_swing_d",
+        params.instability_gh_swing_d,
+    )?;
+    check_positive(
+        "shrimp_params.instability_do_swing_mg_l",
+        params.instability_do_swing_mg_l,
+    )?;
+    check_unit_interval(
+        "shrimp_params.instability_rise_smoothing",
+        params.instability_rise_smoothing,
+    )?;
+    check_unit_interval(
+        "shrimp_params.instability_decay_smoothing",
+        params.instability_decay_smoothing,
+    )?;
+    check_strictly_increasing(
+        "shrimp_params.juvenile_molt_interval_days",
+        params.juvenile_molt_interval_days,
+        "shrimp_params.sub_adult_molt_interval_days",
+        params.sub_adult_molt_interval_days,
+    )?;
+    check_strictly_increasing(
+        "shrimp_params.sub_adult_molt_interval_days",
+        params.sub_adult_molt_interval_days,
+        "shrimp_params.base_molt_interval_days",
+        params.base_molt_interval_days,
+    )?;
+
+    Ok(())
+}
+
+fn normalized_non_negative_if_finite(value: f64) -> f64 {
+    if value.is_finite() {
+        value.max(0.0)
+    } else {
+        value
+    }
 }
 
 fn check_non_negative(field: &'static str, value: f64) -> Result<(), SimError> {
@@ -199,6 +716,48 @@ fn check_non_negative(field: &'static str, value: f64) -> Result<(), SimError> {
 fn check_positive(field: &'static str, value: f64) -> Result<(), SimError> {
     if !value.is_finite() || value <= 0.0 {
         Err(SimError::InvariantViolation { field, value })
+    } else {
+        Ok(())
+    }
+}
+
+fn check_unit_interval(field: &'static str, value: f64) -> Result<(), SimError> {
+    if !value.is_finite() || !(0.0..=1.0).contains(&value) {
+        Err(SimError::InvariantViolation { field, value })
+    } else {
+        Ok(())
+    }
+}
+
+fn check_open_unit_interval(field: &'static str, value: f64) -> Result<(), SimError> {
+    if !value.is_finite() || value <= 0.0 || value >= 1.0 {
+        Err(SimError::InvariantViolation { field, value })
+    } else {
+        Ok(())
+    }
+}
+
+fn check_sum_close_to_one(field: &'static str, value: f64) -> Result<(), SimError> {
+    if !value.is_finite() || (value - 1.0).abs() > SHRIMP_ROUTE_SUM_TOLERANCE {
+        Err(SimError::InvariantViolation { field, value })
+    } else {
+        Ok(())
+    }
+}
+
+fn check_strictly_increasing(
+    lower_field: &'static str,
+    lower_value: f64,
+    upper_field: &'static str,
+    upper_value: f64,
+) -> Result<(), SimError> {
+    if lower_value >= upper_value {
+        Err(SimError::OrderingViolation {
+            lower_field,
+            lower_value,
+            upper_field,
+            upper_value,
+        })
     } else {
         Ok(())
     }

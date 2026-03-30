@@ -6,7 +6,7 @@ fn filter_cleanliness_decay() -> Result<(), tank_core::SimError> {
     fed_state.hardware.filter.cleanliness_index = 1.0;
     fed_state.hardware.filter.enabled = true;
     fed_state.hardware.filter.flow_lph = 200.0;
-    fed_state.animal.adults_count = 12;
+    fed_state.animal.adult.count = 12;
 
     let unfed_state = fed_state.clone();
 

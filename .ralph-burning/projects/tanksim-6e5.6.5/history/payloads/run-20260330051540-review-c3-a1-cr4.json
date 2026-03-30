@@ -1,0 +1,36 @@
+{
+  "payload_id": "run-20260330051540-review-c3-a1-cr4",
+  "stage_id": "review",
+  "cycle": 3,
+  "attempt": 1,
+  "created_at": "2026-03-30T07:07:31.101214336Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "Inspected crates/tank_core/src/types/snapshot.rs:46-47 and :268-313: TankSnapshot now carries chloride_mg_per_l and effective_nitrite_hazard_mg_per_l, computed from current chemistry and the species chloride_protection_factor.",
+        "Inspected crates/tank_api/src/handlers/snapshot.rs:32-79: chemistry_response_json still hand-builds the /chemistry payload without chloride_mg_per_l or effective_nitrite_hazard_mg_per_l, so the dedicated chemistry API surface omits the new diagnostics.",
+        "Inspected crates/tank_tui/src/screens/chemistry.rs:22-65: the Chemistry screen still renders only pH/TAN/NH3/nitrite/nitrate/phosphate/DIC plus derived DO/GH/KH/TDS/conductivity lines, and never displays snapshot.chloride_mg_per_l or snapshot.effective_nitrite_hazard_mg_per_l.",
+        "cargo test -p tank_core --lib --test shrimp_chloride_protection --test tracing --test events passed (120 tests across those targets).",
+        "cargo test passed for the full workspace."
+      ],
+      "findings_or_gaps": [
+        "Medium: the latest amendment is incomplete. Although the snapshot model contains chloride and effective nitrite hazard, the dedicated chemistry surfaces still do not expose them. crates/tank_api/src/handlers/snapshot.rs:32-79 drops both fields from /chemistry, and crates/tank_tui/src/screens/chemistry.rs:22-65 never renders them, so chloride-adjusted hazard is still not visible on the API/TUI chemistry screen between event firings.",
+        "Coverage gap: current tests exercise snapshot serialization, tracing, events, and the salt-treatment scenario, but there is no regression test asserting that /chemistry or the TUI chemistry screen surfaces the new chloride/effective-hazard fields, which is why the omission slipped through."
+      ],
+      "follow_up_or_amendments": [
+        "Add chloride_mg_per_l and effective_nitrite_hazard_mg_per_l to crates/tank_api/src/handlers/snapshot.rs::chemistry_response_json and extend chemistry_field_semantics_json with explicit descriptions/units for both fields.",
+        "Update crates/tank_tui/src/screens/chemistry.rs to render chloride and effective nitrite hazard on the Chemistry screen so the values are visible between event emissions.",
+        "Add regression coverage for both surfaces: an API handler test that asserts /chemistry includes the new fields, and a TUI screen test or equivalent render assertion that verifies the Chemistry screen shows them."
+      ],
+      "outcome": "request_changes"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}
