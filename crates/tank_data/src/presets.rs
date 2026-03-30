@@ -947,6 +947,10 @@ pub struct ProcessParamsPreset {
     #[serde(default = "default_comammox_decay_rate")]
     pub comammox_decay_rate_per_hour: f64,
 
+    // Root-zone oxygenation (radial oxygen loss)
+    #[serde(default = "default_rol_rate_cm_per_g")]
+    pub rol_rate_cm_per_g: f64,
+
     // Stoichiometric constants
     #[serde(default = "default_o2_per_mg_n")]
     pub o2_per_mg_n_nitrified: f64,
@@ -1154,6 +1158,9 @@ fn default_comammox_growth_yield() -> f64 {
 }
 fn default_comammox_decay_rate() -> f64 {
     0.004
+}
+fn default_rol_rate_cm_per_g() -> f64 {
+    0.15
 }
 fn default_o2_per_mg_n() -> f64 {
     4.57
@@ -1555,6 +1562,7 @@ impl ParamMetaPreset for ProcessParamsPreset {
             "comammox_k_do_mg_per_l" => Some(self.comammox_k_do_mg_per_l),
             "comammox_growth_yield" => Some(self.comammox_growth_yield),
             "comammox_decay_rate_per_hour" => Some(self.comammox_decay_rate_per_hour),
+            "rol_rate_cm_per_g" => Some(self.rol_rate_cm_per_g),
             "o2_per_mg_n_nitrified" => Some(self.o2_per_mg_n_nitrified),
             "alkalinity_meq_per_mg_n_nitrified" => Some(self.alkalinity_meq_per_mg_n_nitrified),
             "plant_max_growth_rate_fast_stem_per_day" => {
@@ -1717,6 +1725,7 @@ impl ProcessParamsPreset {
                 "comammox_decay_rate_per_hour",
                 self.comammox_decay_rate_per_hour,
             ),
+            ("rol_rate_cm_per_g", self.rol_rate_cm_per_g),
             ("o2_per_mg_n_nitrified", self.o2_per_mg_n_nitrified),
             (
                 "alkalinity_meq_per_mg_n_nitrified",
