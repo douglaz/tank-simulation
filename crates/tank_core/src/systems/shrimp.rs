@@ -1488,11 +1488,6 @@ pub(crate) fn dominant_repro_suppression_label(state: &TankState) -> &'static st
     }
 }
 
-/// Public accessor for the temperature reproduction factor.
-pub fn temp_repro_factor_pub(temp: f64, params: &ShrimpRuntimeParams) -> f64 {
-    temp_repro_factor(temp, params)
-}
-
 /// Temperature factor for reproduction.
 /// Best 22-26 C, clearly worse by 30 C, near-zero by 33 C.
 fn temp_repro_factor(temp: f64, params: &ShrimpRuntimeParams) -> f64 {
