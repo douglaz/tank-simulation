@@ -7,9 +7,9 @@ use crate::{
     tracing::{PoolSnapshot, SimTracer, SystemTraceEntry, TickTraceBuilder, Verbosity},
     types::{
         live_biomass_carbon_mg, live_biomass_nitrogen_mg, BudgetDelta, BudgetEntry, BudgetLedger,
-        BudgetMetric, BudgetRecordingKind, BudgetSnapshot, ElementBudget, EventCause, EventKind,
-        EventSeverity, HabitatKind, PlayerAction, SimError, SimEvent, TankSnapshot, TankState,
-        TickBudgetRecord,
+        BudgetMetric, BudgetMetricUnit, BudgetRecordingKind, BudgetSnapshot, ElementBudget,
+        EventCause, EventKind, EventSeverity, HabitatKind, PlayerAction, SimError, SimEvent,
+        TankSnapshot, TankState, TickBudgetRecord,
     },
 };
 
@@ -97,11 +97,12 @@ impl StageTrace {
         }
     }
 
-    fn metric(&mut self, label: impl Into<String>, value: f64) {
+    fn metric_with_unit(&mut self, label: impl Into<String>, value: f64, unit: BudgetMetricUnit) {
         if self.budget_metrics_enabled {
             self.budget_metrics.push(BudgetMetric {
                 label: label.into(),
                 value,
+                unit,
             });
         }
     }
@@ -248,22 +249,30 @@ impl Engine {
             let alkalinity_before = engine.state.water.alkalinity_meq_total;
             let output = systems::nitrogen_cycle::step_nitrogen_cycle(&mut engine.state);
             let alkalinity_after = engine.state.water.alkalinity_meq_total;
-            stage_trace.metric(
+            stage_trace.metric_with_unit(
                 "water.alkalinity_meq.delta",
                 alkalinity_after - alkalinity_before,
+                BudgetMetricUnit::MilliEquivalents,
             );
-            stage_trace.metric("nitrogen_cycle.tan_oxidized_mg", output.tan_oxidized_mg);
-            stage_trace.metric(
+            stage_trace.metric_with_unit(
+                "nitrogen_cycle.tan_oxidized_mg",
+                output.tan_oxidized_mg,
+                BudgetMetricUnit::Milligrams,
+            );
+            stage_trace.metric_with_unit(
                 "nitrogen_cycle.nitrate_produced_mg_n",
                 output.nitrate_produced_mg_n,
+                BudgetMetricUnit::Milligrams,
             );
-            stage_trace.metric(
+            stage_trace.metric_with_unit(
                 "nitrogen_cycle.alkalinity_consumed_meq",
                 output.alkalinity_consumed_meq,
+                BudgetMetricUnit::MilliEquivalents,
             );
-            stage_trace.metric(
+            stage_trace.metric_with_unit(
                 "nitrogen_cycle.alkalinity_produced_meq",
                 output.alkalinity_produced_meq,
+                BudgetMetricUnit::MilliEquivalents,
             );
             if stage_trace.is_enabled() {
                 stage_trace.note(format!(
@@ -311,13 +320,15 @@ impl Engine {
                     output.denitrification_doc_consumed_mg_c
                 ));
             }
-            stage_trace.metric(
+            stage_trace.metric_with_unit(
                 "nitrogen_cycle.denitrification_n2_export_mg_n",
                 output.denitrification_n2_export_mg_n,
+                BudgetMetricUnit::Milligrams,
             );
-            stage_trace.metric(
+            stage_trace.metric_with_unit(
                 "nitrogen_cycle.denitrification_doc_consumed_mg_c",
                 output.denitrification_doc_consumed_mg_c,
+                BudgetMetricUnit::Milligrams,
             );
         });
 
@@ -398,21 +409,25 @@ impl Engine {
         self.maybe_record_stage(&mut ctx, "system:substrate_zones", |engine, stage_trace| {
             let breakdown = systems::substrate::substrate_oxygenation_breakdown(&engine.state);
             systems::substrate::step_substrate_zones(&mut engine.state);
-            stage_trace.metric(
+            stage_trace.metric_with_unit(
                 "substrate.base_o2_penetration_depth_cm",
                 breakdown.base_penetration_cm,
+                BudgetMetricUnit::Centimeters,
             );
-            stage_trace.metric(
+            stage_trace.metric_with_unit(
                 "substrate.root_oxygenation_active_biomass_g",
                 breakdown.active_root_biomass_g,
+                BudgetMetricUnit::Grams,
             );
-            stage_trace.metric(
+            stage_trace.metric_with_unit(
                 "substrate.root_oxygenation_bonus_cm",
                 breakdown.root_oxygenation_bonus_cm,
+                BudgetMetricUnit::Centimeters,
             );
-            stage_trace.metric(
+            stage_trace.metric_with_unit(
                 "substrate.o2_penetration_depth_cm",
                 breakdown.effective_penetration_cm,
+                BudgetMetricUnit::Centimeters,
             );
             stage_trace.note(format!(
                 "substrate.base_o2_penetration_depth_cm={:.6}",
@@ -1161,7 +1176,9 @@ fn element_budget_has_flux(budget: ElementBudget) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{BudgetEntry, BudgetMetric, BudgetRecordingKind, BudgetTotals};
+    use crate::types::{
+        BudgetEntry, BudgetMetric, BudgetMetricUnit, BudgetRecordingKind, BudgetTotals,
+    };
 
     fn synthetic_entry(label: &str, delta: BudgetDelta) -> BudgetEntry {
         BudgetEntry {
@@ -1196,7 +1213,11 @@ mod tests {
         let mut stage_trace = StageTrace::new(true, false);
 
         stage_trace.note("kept");
-        stage_trace.metric("nitrogen_cycle.tan_oxidized_mg", 1.25);
+        stage_trace.metric_with_unit(
+            "nitrogen_cycle.tan_oxidized_mg",
+            1.25,
+            BudgetMetricUnit::Milligrams,
+        );
 
         let (notes, metrics) = stage_trace.into_parts();
 
@@ -1209,7 +1230,11 @@ mod tests {
         let mut stage_trace = StageTrace::new(false, true);
 
         stage_trace.note("suppressed");
-        stage_trace.metric("nitrogen_cycle.tan_oxidized_mg", 1.25);
+        stage_trace.metric_with_unit(
+            "nitrogen_cycle.tan_oxidized_mg",
+            1.25,
+            BudgetMetricUnit::Milligrams,
+        );
 
         let (notes, metrics) = stage_trace.into_parts();
 
@@ -1219,8 +1244,25 @@ mod tests {
             vec![BudgetMetric {
                 label: "nitrogen_cycle.tan_oxidized_mg".to_owned(),
                 value: 1.25,
+                unit: BudgetMetricUnit::Milligrams,
             }]
         );
+    }
+
+    #[test]
+    fn stage_trace_preserves_metric_units() {
+        let mut stage_trace = StageTrace::new(false, true);
+
+        stage_trace.metric_with_unit(
+            "water.alkalinity_meq.delta",
+            -0.42,
+            BudgetMetricUnit::MilliEquivalents,
+        );
+
+        let (_, metrics) = stage_trace.into_parts();
+
+        assert_eq!(metrics.len(), 1);
+        assert_eq!(metrics[0].unit, BudgetMetricUnit::MilliEquivalents);
     }
 
     #[test]

@@ -61,7 +61,11 @@ use crate::{
     SimulationEngine,
 };
 
-/// Which element to query or assert on.
+/// Which conserved mass element to query or assert on.
+///
+/// This helper surface is intentionally limited to the mg-based N/C/O ledger.
+/// Scalar diagnostics with other units, such as alkalinity in meq, stay on
+/// `BudgetMetric` instead of flowing through this enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Element {
     Nitrogen,
@@ -69,7 +73,7 @@ pub enum Element {
     Oxygen,
 }
 
-/// Per-system delta for a single element, returned by
+/// Per-system delta for a single conserved element, returned by
 /// [`InspectionResult::system_deltas`].
 #[derive(Debug, Clone)]
 pub struct SystemElementDelta {

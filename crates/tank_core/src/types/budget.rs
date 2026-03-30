@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use super::{
     TankState, DEFAULT_SHRIMP_BODY_CARBON_MG_PER_G_WET_MASS,
@@ -134,15 +134,75 @@ impl BudgetSnapshot {
     }
 }
 
+/// Unit tag for scalar budget metrics that sit alongside the conserved element
+/// ledger.
+///
+/// `ElementBudget` remains mg-only because it is limited to conserved nitrogen,
+/// carbon, and oxygen mass. Scalar diagnostics such as alkalinity therefore use
+/// `BudgetMetric` plus an explicit unit tag instead of overloading the element
+/// budget surface.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum BudgetMetricUnit {
+    #[default]
+    Unitless,
+    Milligrams,
+    MilliEquivalents,
+    Grams,
+    Centimeters,
+}
+
+impl BudgetMetricUnit {
+    pub fn infer_from_label(label: &str) -> Self {
+        if label.contains("_meq") || label.contains(".alkalinity_meq.") {
+            Self::MilliEquivalents
+        } else if label.contains("_mg") {
+            Self::Milligrams
+        } else if label.ends_with("_g") {
+            Self::Grams
+        } else if label.ends_with("_cm") {
+            Self::Centimeters
+        } else {
+            Self::Unitless
+        }
+    }
+}
+
 /// Optional per-stage scalar diagnostics that complement element budgets.
 ///
 /// These are for tracked quantities that matter for attribution and debugging
 /// but are not part of the conserved N/C/O element ledger, such as alkalinity
 /// deltas or future denitrification return bookkeeping.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct BudgetMetric {
     pub label: String,
     pub value: f64,
+    pub unit: BudgetMetricUnit,
+}
+
+impl<'de> Deserialize<'de> for BudgetMetric {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct BudgetMetricRepr {
+            label: String,
+            value: f64,
+            #[serde(default)]
+            unit: Option<BudgetMetricUnit>,
+        }
+
+        let repr = BudgetMetricRepr::deserialize(deserializer)?;
+        let unit = repr
+            .unit
+            .unwrap_or_else(|| BudgetMetricUnit::infer_from_label(&repr.label));
+
+        Ok(Self {
+            label: repr.label,
+            value: repr.value,
+            unit,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -641,4 +701,32 @@ fn delta_net_matches_totals(delta: BudgetDelta, before: BudgetTotals, after: Bud
     (delta.nitrogen.net_mg() - (after.nitrogen_mg - before.nitrogen_mg)).abs() <= TOLERANCE_MG
         && (delta.carbon.net_mg() - (after.carbon_mg - before.carbon_mg)).abs() <= TOLERANCE_MG
         && (delta.oxygen.net_mg() - (after.oxygen_mg - before.oxygen_mg)).abs() <= TOLERANCE_MG
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{BudgetMetric, BudgetMetricUnit};
+
+    #[test]
+    fn legacy_budget_metrics_infer_units_from_labels() {
+        let metric: BudgetMetric =
+            serde_json::from_str(r#"{"label":"water.alkalinity_meq.delta","value":-0.25}"#)
+                .expect("legacy budget metric should deserialize");
+
+        assert_eq!(metric.unit, BudgetMetricUnit::MilliEquivalents);
+    }
+
+    #[test]
+    fn explicit_budget_metric_units_roundtrip() {
+        let metric = BudgetMetric {
+            label: "nitrogen_cycle.tan_oxidized_mg".to_owned(),
+            value: 1.25,
+            unit: BudgetMetricUnit::Milligrams,
+        };
+
+        let json = serde_json::to_string(&metric).expect("serialize metric");
+        let parsed: BudgetMetric = serde_json::from_str(&json).expect("deserialize metric");
+
+        assert_eq!(parsed, metric);
+    }
 }

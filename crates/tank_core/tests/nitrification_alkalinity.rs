@@ -10,8 +10,8 @@
 
 use tank_core::{
     systems::{chemistry::resolve_carbonate_state, nitrogen_cycle::step_nitrogen_cycle},
-    Engine, ProcessParams, SimSeed, SimTracer, SimulationEngine, TankState, Verbosity,
-    NITRIFICATION_ALK_MEQ_PER_MG_N,
+    BudgetMetricUnit, Engine, ProcessParams, SimSeed, SimTracer, SimulationEngine, TankState,
+    Verbosity, NITRIFICATION_ALK_MEQ_PER_MG_N,
 };
 
 /// Build a state primed for active nitrification: elevated TAN, mature biofilter,
@@ -428,17 +428,36 @@ fn tracing_shows_alkalinity_attribution() -> Result<(), tank_core::SimError> {
         "budget alkalinity delta should be negative (consumed): {:.6}",
         alk_budget_metric.value
     );
+    assert_eq!(
+        alk_budget_metric.unit,
+        BudgetMetricUnit::MilliEquivalents,
+        "alkalinity budget metrics should serialize with meq units instead of the mg-based element budget surface"
+    );
     assert!(
         budget_entry
             .metric("nitrogen_cycle.alkalinity_consumed_meq")
             .is_some(),
         "nitrogen_cycle budget entry should expose alkalinity_consumed_meq"
     );
+    assert_eq!(
+        budget_entry
+            .metric("nitrogen_cycle.alkalinity_consumed_meq")
+            .expect("nitrogen_cycle budget entry should expose alkalinity_consumed_meq")
+            .unit,
+        BudgetMetricUnit::MilliEquivalents
+    );
     assert!(
         budget_entry
             .metric("nitrogen_cycle.alkalinity_produced_meq")
             .is_some(),
         "nitrogen_cycle budget entry should expose alkalinity_produced_meq"
+    );
+    assert_eq!(
+        budget_entry
+            .metric("nitrogen_cycle.tan_oxidized_mg")
+            .expect("nitrogen_cycle budget entry should expose tan_oxidized_mg")
+            .unit,
+        BudgetMetricUnit::Milligrams
     );
     assert!(
         budget_entry
