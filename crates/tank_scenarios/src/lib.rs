@@ -232,6 +232,9 @@ pub struct StartupOverrides {
     pub substrate_preset: Option<StartupSubstratePreset>,
     pub plant_selection: Option<StartupPlantSelection>,
     pub filter_enabled: Option<bool>,
+    /// Optional explicit biomedia area (cm²). When `None`, starter hardware
+    /// scales the default filter media area with the tank footprint.
+    pub filter_media_area_cm2: Option<f64>,
     pub light_preset: Option<StartupLightPreset>,
     pub heater_preset: Option<StartupHeaterPreset>,
     pub aeration_enabled: Option<bool>,
@@ -290,7 +293,12 @@ pub fn seeded_state_with_full_overrides(
     let area_scale = overrides.geometry.size_scale * overrides.geometry.size_scale;
 
     let mut state = materialize_scenario(seed, scenario)?;
-    apply_startup_overrides(&mut state, &scenario_source_water_id, overrides)?;
+    apply_startup_overrides(
+        &mut state,
+        scenario_id,
+        &scenario_source_water_id,
+        overrides,
+    )?;
     if (area_scale - 1.0).abs() > f64::EPSILON {
         for layer in &mut state.substrate_layers {
             layer.nutrient_store_mg_n_total *= area_scale;
@@ -356,6 +364,7 @@ pub fn startup_defaults_for_scenario(
         substrate_preset: Some(substrate_preset),
         plant_selection: Some(plant_selection),
         filter_enabled: Some(true),
+        filter_media_area_cm2: scenario.filter_media_area_cm2,
         light_preset: Some(light_preset),
         heater_preset: Some(heater_preset),
         aeration_enabled: Some(aeration_enabled),
@@ -508,6 +517,9 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
 ///
 /// **Scaling rules applied:**
 /// - Filter flow: `volume_l × FILTER_FLOW_TURNOVERS_PER_HOUR` (10 turnovers/hr)
+/// - Filter media area: default biomedia scales with footprint area relative to
+///   the 1000 cm² reference tank unless the scenario/startup config supplies an
+///   explicit hardware-specific media area.
 /// - Heater max watts: `volume_l × HEATER_WATTS_PER_LITER` (0.75 W/L)
 /// - Initial microbe biomass: scaled proportionally with footprint area relative
 ///   to the 1000 cm² reference, floored at 1.0× (tanks ≤ 1000 cm² keep defaults).
@@ -515,19 +527,20 @@ fn process_preset_to_params(preset: &tank_data::ProcessParamsPreset) -> ProcessP
 ///   capacity scales, keeping maturity ratios consistent across tank sizes.
 ///
 /// Properties that do **not** scale automatically:
-/// - Filter media area (hardware specification; kept at default or scenario-authored
-///   value — scaling media dilutes nitrifier density and disrupts biofilter maturation)
 /// - Light intensity/photoperiod (fixture property, independent of tank size)
 /// - Aeration intensity (setting property; physical effect already scales via
 ///   the habitat registry's surface-area calculations)
 /// - Substrate depth (preset property, independent of tank footprint)
 fn scale_hardware_to_geometry(state: &mut TankState) {
     let volume_l = state.geometry.gross_water_volume_l();
+    let footprint_cm2 = state.geometry.footprint_area_cm2();
+    let footprint_scale = (footprint_cm2 / MICROBE_REFERENCE_FOOTPRINT_CM2).max(0.0);
 
     // Filter: flow scales with volume (turnovers stay constant per hour)
     if state.hardware.filter.enabled {
         state.hardware.filter.flow_lph = volume_l * FILTER_FLOW_TURNOVERS_PER_HOUR;
     }
+    state.hardware.filter.media_area_cm2 *= footprint_scale;
 
     // Heater: max wattage scales with volume (thermal mass)
     state.hardware.heater.max_watts = volume_l * HEATER_WATTS_PER_LITER;
@@ -538,8 +551,7 @@ fn scale_hardware_to_geometry(state: &mut TankState) {
     // is the right proxy. Without this, larger tanks start with the same
     // bacterial inoculum but much higher carrying capacity, depressing
     // maturity and creating a negative feedback loop via maturity_factor.
-    let footprint_cm2 = state.geometry.footprint_area_cm2();
-    let microbe_scale = (footprint_cm2 / MICROBE_REFERENCE_FOOTPRINT_CM2).max(1.0);
+    let microbe_scale = footprint_scale.max(1.0);
     if microbe_scale > 1.0 {
         state.microbe.ammonia_oxidizer_biomass_g *= microbe_scale;
         state.microbe.nitrite_oxidizer_biomass_g *= microbe_scale;
@@ -569,6 +581,9 @@ fn materialize_scenario(
     seed: SimSeed,
     scenario: ScenarioPreset,
 ) -> Result<TankState, tank_data::PresetError> {
+    let scenario_id = scenario.id.clone();
+    let scenario_name = scenario.name.clone();
+
     // Geometry
     let geometry = TankGeometry {
         length_cm: scenario.tank_length_cm,
@@ -611,8 +626,12 @@ fn materialize_scenario(
     let process_params = process_preset_to_params(&process_preset);
 
     // Plant guilds — biomass scales with substrate footprint
-    let plant_guilds =
-        build_plant_guilds(&scenario.plant_ids, &substrate_layers, true, geometry.footprint_area_cm2())?;
+    let plant_guilds = build_plant_guilds(
+        &scenario.plant_ids,
+        &substrate_layers,
+        true,
+        geometry.footprint_area_cm2(),
+    )?;
 
     // Shrimp species parameters
     let shrimp_preset = tank_data::load_shrimp(&scenario.shrimp_profile_id)?;
@@ -629,11 +648,15 @@ fn materialize_scenario(
 
     let mut state = TankState::new(seed);
     state.meta = SimMeta {
-        scenario_id: Some(scenario.id),
-        notes: Some(scenario.name),
+        scenario_id: Some(scenario_id.clone()),
+        notes: Some(scenario_name),
     };
     state.geometry = geometry;
     scale_hardware_to_geometry(&mut state);
+    if let Some(filter_media_area_cm2) = scenario.filter_media_area_cm2 {
+        state.hardware.filter.media_area_cm2 =
+            validate_filter_media_area_cm2(filter_media_area_cm2, "scenarios", &scenario_id)?;
+    }
     state.environment = environment;
     state.water = water;
     state.substrate_layers = substrate_layers;
@@ -708,6 +731,7 @@ fn shrimp_preset_to_params(
 
 fn apply_startup_overrides(
     state: &mut TankState,
+    scenario_id: &str,
     scenario_source_water_id: &str,
     overrides: StartupOverrides,
 ) -> Result<(), tank_data::PresetError> {
@@ -717,6 +741,7 @@ fn apply_startup_overrides(
         substrate_preset,
         plant_selection,
         filter_enabled,
+        filter_media_area_cm2,
         light_preset,
         heater_preset,
         aeration_enabled,
@@ -785,6 +810,13 @@ fn apply_startup_overrides(
         } else {
             state.hardware.filter.flow_lph = 0.0;
         }
+    }
+    if let Some(filter_media_area_cm2) = filter_media_area_cm2 {
+        state.hardware.filter.media_area_cm2 = validate_filter_media_area_cm2(
+            filter_media_area_cm2,
+            "startup_overrides",
+            scenario_id,
+        )?;
     }
 
     if let Some(light_preset) = light_preset {
@@ -915,8 +947,7 @@ fn build_plant_guilds(
                 });
             }
         };
-        let biomass_g =
-            (footprint_cm2 * PLANT_BIOMASS_G_PER_1000_CM2_FOOTPRINT / 1000.0).max(1.0);
+        let biomass_g = (footprint_cm2 * PLANT_BIOMASS_G_PER_1000_CM2_FOOTPRINT / 1000.0).max(1.0);
         plant_guilds.push(PlantGuildState {
             guild,
             biomass_g,
@@ -972,6 +1003,25 @@ fn validate_geometry_overrides(
     }
 
     Ok(())
+}
+
+fn validate_filter_media_area_cm2(
+    area_cm2: f64,
+    category: &'static str,
+    id: &str,
+) -> Result<f64, tank_data::PresetError> {
+    if !area_cm2.is_finite() || area_cm2 < 0.0 {
+        return Err(tank_data::PresetError::Validation {
+            category,
+            id: id.to_string(),
+            message: format!(
+                "filter_media_area_cm2 must be finite and >= 0.0, got {}",
+                area_cm2
+            ),
+        });
+    }
+
+    Ok(area_cm2)
 }
 
 /// Creates a deterministic cycling fixture pair: one seeded, one unseeded.
@@ -1069,8 +1119,11 @@ fn cycling_base_state(seed: SimSeed) -> TankState {
 
 #[cfg(test)]
 mod tests {
-    use super::{process_preset_to_params, shrimp_preset_to_params, source_water_to_profile};
-    use tank_core::WaterState;
+    use super::{
+        materialize_scenario, process_preset_to_params, shrimp_preset_to_params,
+        source_water_to_profile,
+    };
+    use tank_core::{SimSeed, WaterState};
 
     #[test]
     fn process_preset_mapping_carries_shrimp_routing_fields() {
@@ -1181,5 +1234,16 @@ mod tests {
             "expected ro_like to land in the low-buffer acidic band, got {:.3}",
             ro_water.ph
         );
+    }
+
+    #[test]
+    fn materialize_scenario_honors_authored_filter_media_area() {
+        let mut scenario = tank_data::load_scenario("nano_cycle").expect("nano_cycle should load");
+        scenario.filter_media_area_cm2 = Some(4321.0);
+
+        let state = materialize_scenario(SimSeed(55), scenario)
+            .expect("scenario-authored filter media area should materialize");
+
+        assert_eq!(state.hardware.filter.media_area_cm2, 4321.0);
     }
 }

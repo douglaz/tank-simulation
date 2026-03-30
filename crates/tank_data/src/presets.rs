@@ -1874,6 +1874,10 @@ pub struct ScenarioPreset {
     pub tank_height_cm: f64,
     pub fill_height_cm: f64,
     pub ambient_temp_c: f64,
+    /// Optional scenario-authored biomedia area (cm²). When absent, startup
+    /// materialization scales the default hardware media area with footprint.
+    #[serde(default)]
+    pub filter_media_area_cm2: Option<f64>,
     pub provenance: Option<Provenance>,
 }
 

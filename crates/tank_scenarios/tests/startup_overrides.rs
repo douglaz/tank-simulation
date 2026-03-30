@@ -113,3 +113,26 @@ fn startup_overrides_keep_habitat_registry_current() {
 
     assert_eq!(state.habitat_registry, compute_habitat_registry(&state));
 }
+
+#[test]
+fn startup_overrides_can_override_filter_media_area() {
+    let explicit_media_area_cm2 = 4321.0;
+    let state = seeded_state_with_full_overrides(
+        SimSeed(505),
+        "nano_cycle",
+        StartupOverrides {
+            geometry: ScenarioGeometryOverrides {
+                size_scale: 1.3,
+                fill_ratio: 1.0,
+            },
+            filter_media_area_cm2: Some(explicit_media_area_cm2),
+            ..StartupOverrides::default()
+        },
+    )
+    .expect("startup overrides should materialize");
+
+    assert!(
+        (state.hardware.filter.media_area_cm2 - explicit_media_area_cm2).abs() < f64::EPSILON,
+        "explicit filter media area should override geometry-scaled default"
+    );
+}

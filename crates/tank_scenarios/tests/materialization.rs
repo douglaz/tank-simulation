@@ -96,6 +96,74 @@ fn medium_planted_materializes_with_two_substrates_and_plants() {
 }
 
 #[test]
+fn initial_plant_biomass_matches_scenario_footprint_density() {
+    let nano = tank_scenarios::seeded_state(SimSeed(46), "nano_cycle")
+        .expect("nano_cycle should materialize");
+    let medium = tank_scenarios::seeded_state(SimSeed(47), "medium_planted")
+        .expect("medium_planted should materialize");
+
+    let expected_nano = nano.plant_guilds.len() as f64
+        * (nano.geometry.footprint_area_cm2()
+            * tank_scenarios::PLANT_BIOMASS_G_PER_1000_CM2_FOOTPRINT
+            / 1000.0)
+            .max(1.0);
+    let expected_medium = medium.plant_guilds.len() as f64
+        * (medium.geometry.footprint_area_cm2()
+            * tank_scenarios::PLANT_BIOMASS_G_PER_1000_CM2_FOOTPRINT
+            / 1000.0)
+            .max(1.0);
+    let total_nano = nano
+        .plant_guilds
+        .iter()
+        .map(|plant| plant.biomass_g)
+        .sum::<f64>();
+    let total_medium = medium
+        .plant_guilds
+        .iter()
+        .map(|plant| plant.biomass_g)
+        .sum::<f64>();
+
+    assert!(
+        (total_nano - expected_nano).abs() < 1e-9,
+        "nano_cycle plant biomass should follow footprint density: expected {expected_nano}, got {total_nano}"
+    );
+    assert!(
+        (total_medium - expected_medium).abs() < 1e-9,
+        "medium_planted plant biomass should follow footprint density: expected {expected_medium}, got {total_medium}"
+    );
+}
+
+#[test]
+fn default_filter_media_area_scales_with_scenario_footprint() {
+    let nano = tank_scenarios::seeded_state(SimSeed(48), "nano_cycle")
+        .expect("nano_cycle should materialize");
+    let medium = tank_scenarios::seeded_state(SimSeed(49), "medium_planted")
+        .expect("medium_planted should materialize");
+
+    let reference_footprint = tank_core::TankGeometry::default().footprint_area_cm2();
+    let reference_media_area = tank_core::FilterHardware::default().media_area_cm2;
+    let expected_nano =
+        reference_media_area * nano.geometry.footprint_area_cm2() / reference_footprint;
+    let expected_medium =
+        reference_media_area * medium.geometry.footprint_area_cm2() / reference_footprint;
+
+    assert!(
+        (nano.hardware.filter.media_area_cm2 - expected_nano).abs() < 1e-9,
+        "nano_cycle filter media should scale with footprint: expected {expected_nano}, got {}",
+        nano.hardware.filter.media_area_cm2
+    );
+    assert!(
+        (medium.hardware.filter.media_area_cm2 - expected_medium).abs() < 1e-9,
+        "medium_planted filter media should scale with footprint: expected {expected_medium}, got {}",
+        medium.hardware.filter.media_area_cm2
+    );
+    assert!(
+        medium.hardware.filter.media_area_cm2 > nano.hardware.filter.media_area_cm2,
+        "larger footprint should materialize more default biomedia"
+    );
+}
+
+#[test]
 fn warm_room_materializes_with_high_ambient() {
     let state = tank_scenarios::seeded_state(SimSeed(44), "warm_room")
         .expect("warm_room should materialize");

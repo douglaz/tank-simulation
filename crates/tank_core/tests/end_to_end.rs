@@ -276,13 +276,9 @@ fn happy_plants_grow_with_light_and_nutrients() {
     print_status("Day 30 (plant growth)", &s, &engine);
     assert_finite_snapshot(&s);
 
-    // With geometry-scaled initial biomass, plants at higher density may
-    // self-shade and equilibrate slightly below their starting mass.
-    // A ≥80% threshold verifies plants remain viable rather than demanding
-    // strict growth from any starting density.
     assert!(
-        s.total_plant_biomass_g >= initial_biomass * 0.80,
-        "plants should remain viable under good conditions: initial {:.3} -> {:.3} ({:.1}%)",
+        s.total_plant_biomass_g >= initial_biomass,
+        "plants should grow under good conditions: initial {:.3} -> {:.3} ({:.1}%)",
         initial_biomass,
         s.total_plant_biomass_g,
         (s.total_plant_biomass_g / initial_biomass) * 100.0,
