@@ -19,6 +19,7 @@ pub enum EventKind {
     ShrimpBerried,
     EggFailure,
     MoltStressWarning,
+    MoltFailure,
     FilterCleaningSetback,
     SubstrateFoulingWarning,
     StabilityImproving,
