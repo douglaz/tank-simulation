@@ -43,8 +43,8 @@ pub fn emit_hourly_threshold_events(state: &mut TankState) {
             EventKind::NitriteWarning,
             vec![EventCause::HighNitrite],
             format!(
-                "Nitrite-N {nitrite_mg_l:.2} mg/L, Cl {chloride_mg_l:.1} mg/L \
-                 (Cl:NO2 {cl_no2_ratio:.1}:1), effective hazard {effective_hazard:.3} mg/L"
+                "Nitrite-N {nitrite_mg_l:.2} mg N/L, Cl {chloride_mg_l:.1} mg/L \
+                 (Cl:NO2 {cl_no2_ratio:.1}:1), effective hazard {effective_hazard:.3}"
             ),
         );
     }

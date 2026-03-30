@@ -42,9 +42,8 @@ fn nitrite_crash_state(seed: SimSeed) -> TankState {
     state.hardware.light.intensity_index = 0.6;
     state.hardware.light.photoperiod_hours = 8.0;
 
-    // Start with elevated nitrite (cycling crash)
-    state.water.nitrite_mg_n_total = 4.0 * vol; // 4 mg/L — dangerous
-    // No chloride protection initially
+    // Start with elevated nitrite (cycling crash) and no chloride protection
+    state.water.nitrite_mg_n_total = 4.0 * vol;
     state.water.chloride_mg_total = 0.0;
 
     state.animal.adult.count = 20;
@@ -75,7 +74,7 @@ fn nitrite_crash_state(seed: SimSeed) -> TankState {
 #[test]
 fn test_salt_treatment_emergency_scenario() -> Result<(), SimError> {
     // Phase 1: High nitrite, no chloride — observe mortality
-    let mut state_before = nitrite_crash_state(SimSeed(30_001));
+    let state_before = nitrite_crash_state(SimSeed(30_001));
     let mut engine_before = Engine::from_parts(state_before.clone(), vec![]);
 
     let initial_count = engine_before.full_state().animal.total_count();
@@ -115,7 +114,10 @@ fn test_salt_treatment_emergency_scenario() -> Result<(), SimError> {
 
     // Verify nitrite is still elevated in the salt-treated tank
     // (the protection is from chloride competition, not from nitrite removal)
-    let final_nitrite_mg_l = engine_with_salt.full_state().concentrations().nitrite_mg_n_per_l();
+    let final_nitrite_mg_l = engine_with_salt
+        .full_state()
+        .concentrations()
+        .nitrite_mg_n_per_l();
     assert!(
         final_nitrite_mg_l > 0.5,
         "nitrite should still be elevated after salt treatment: {final_nitrite_mg_l:.2} mg/L"

@@ -293,6 +293,10 @@ pub struct ShrimpRuntimeParams {
     /// Minimum overall molt score required for a molt to succeed.
     #[serde(default = "default_molt_success_threshold")]
     pub molt_success_threshold: f64,
+    /// Ratio of `gh_min_d` below which molt attempts fail regardless of the
+    /// blended success score.
+    #[serde(default = "default_critical_molt_gh_ratio")]
+    pub critical_molt_gh_ratio: f64,
     /// Species-specific factor governing how strongly chloride inhibits nitrite
     /// uptake at the gills. Higher values mean stronger protection per unit of
     /// Cl:NO2 ratio. Used in the effective nitrite hazard formula:
@@ -659,6 +663,7 @@ impl Default for ShrimpRuntimeParams {
             juvenile_molt_interval_days: default_juvenile_molt_interval_days(),
             sub_adult_molt_interval_days: default_sub_adult_molt_interval_days(),
             molt_success_threshold: default_molt_success_threshold(),
+            critical_molt_gh_ratio: default_critical_molt_gh_ratio(),
             chloride_protection_factor: default_chloride_protection_factor(),
         }
     }
@@ -745,6 +750,10 @@ fn default_sub_adult_molt_interval_days() -> f64 {
 
 fn default_molt_success_threshold() -> f64 {
     0.55
+}
+
+fn default_critical_molt_gh_ratio() -> f64 {
+    0.3
 }
 
 fn default_chloride_protection_factor() -> f64 {

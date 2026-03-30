@@ -25,6 +25,7 @@ mg_min_mg_per_l = 5.0
 juvenile_molt_interval_days = 14.0
 sub_adult_molt_interval_days = 21.0
 molt_success_threshold = 0.55
+critical_molt_gh_ratio = 0.3
 chloride_protection_factor = 0.5
 
 [provenance]

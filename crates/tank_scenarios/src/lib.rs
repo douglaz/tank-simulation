@@ -810,6 +810,9 @@ fn shrimp_preset_to_params(
     if let Some(value) = shrimp_preset.molt_success_threshold {
         params.molt_success_threshold = value;
     }
+    if let Some(value) = shrimp_preset.critical_molt_gh_ratio {
+        params.critical_molt_gh_ratio = value;
+    }
     if let Some(value) = shrimp_preset.chloride_protection_factor {
         params.chloride_protection_factor = value;
     }
@@ -1274,6 +1277,7 @@ mod tests {
         preset.juvenile_molt_interval_days = Some(11.0);
         preset.sub_adult_molt_interval_days = Some(17.0);
         preset.molt_success_threshold = Some(0.61);
+        preset.critical_molt_gh_ratio = Some(0.22);
 
         let params = shrimp_preset_to_params(&preset, 40.0);
         assert_eq!(params.body_nitrogen_mg_per_g_wet_mass, 31.0);
@@ -1292,6 +1296,7 @@ mod tests {
         assert_eq!(params.juvenile_molt_interval_days, 11.0);
         assert_eq!(params.sub_adult_molt_interval_days, 17.0);
         assert_eq!(params.molt_success_threshold, 0.61);
+        assert_eq!(params.critical_molt_gh_ratio, 0.22);
 
         preset.juvenile_to_subadult_days = Some(15.0);
         preset.subadult_to_adult_days = Some(9.0);

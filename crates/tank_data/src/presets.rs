@@ -98,6 +98,7 @@ fn shrimp_runtime_default_param_value(name: &str) -> Option<f64> {
         "juvenile_molt_interval_days" => Some(defaults.juvenile_molt_interval_days),
         "sub_adult_molt_interval_days" => Some(defaults.sub_adult_molt_interval_days),
         "molt_success_threshold" => Some(defaults.molt_success_threshold),
+        "critical_molt_gh_ratio" => Some(defaults.critical_molt_gh_ratio),
         "chloride_protection_factor" => Some(defaults.chloride_protection_factor),
         _ => None,
     }
@@ -486,6 +487,8 @@ pub struct ShrimpPreset {
     #[serde(default)]
     pub molt_success_threshold: Option<f64>,
     #[serde(default)]
+    pub critical_molt_gh_ratio: Option<f64>,
+    #[serde(default)]
     pub chloride_protection_factor: Option<f64>,
     pub provenance: Option<Provenance>,
 
@@ -623,6 +626,7 @@ impl ShrimpPreset {
                 self.sub_adult_molt_interval_days,
             ),
             ("molt_success_threshold", self.molt_success_threshold),
+            ("critical_molt_gh_ratio", self.critical_molt_gh_ratio),
             (
                 "chloride_protection_factor",
                 self.chloride_protection_factor,
@@ -678,6 +682,7 @@ impl ShrimpPreset {
             ),
             ("min_clutch_condition", self.min_clutch_condition),
             ("molt_success_threshold", self.molt_success_threshold),
+            ("critical_molt_gh_ratio", self.critical_molt_gh_ratio),
         ] {
             if let Some(value) = value {
                 if value > 1.0 {
@@ -779,6 +784,9 @@ impl ParamMetaPreset for ShrimpPreset {
             "molt_success_threshold" => self
                 .molt_success_threshold
                 .or_else(|| shrimp_runtime_default_param_value(name)),
+            "critical_molt_gh_ratio" => self
+                .critical_molt_gh_ratio
+                .or_else(|| shrimp_runtime_default_param_value(name)),
             "chloride_protection_factor" => self
                 .chloride_protection_factor
                 .or_else(|| shrimp_runtime_default_param_value(name)),
@@ -815,6 +823,7 @@ impl ParamMetaPreset for ShrimpPreset {
                 | "juvenile_molt_interval_days"
                 | "sub_adult_molt_interval_days"
                 | "molt_success_threshold"
+                | "critical_molt_gh_ratio"
                 | "chloride_protection_factor"
         )
     }

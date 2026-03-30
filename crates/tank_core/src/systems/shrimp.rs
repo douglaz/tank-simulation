@@ -1617,7 +1617,11 @@ mod tests {
         // Zero nitrite regardless of chloride level
         assert_close(compute_effective_nitrite_hazard(0.0, 0.0, cpf), 0.0, 1e-15);
         assert_close(compute_effective_nitrite_hazard(0.0, 50.0, cpf), 0.0, 1e-15);
-        assert_close(compute_effective_nitrite_hazard(0.0, 200.0, cpf), 0.0, 1e-15);
+        assert_close(
+            compute_effective_nitrite_hazard(0.0, 200.0, cpf),
+            0.0,
+            1e-15,
+        );
     }
 
     #[test]
@@ -1719,8 +1723,7 @@ mod tests {
         }
 
         assert!(
-            low_cl.animal.hourly_nitrite_stress_accum
-                > high_cl.animal.hourly_nitrite_stress_accum,
+            low_cl.animal.hourly_nitrite_stress_accum > high_cl.animal.hourly_nitrite_stress_accum,
             "low chloride should produce more nitrite stress: low_cl={}, high_cl={}",
             low_cl.animal.hourly_nitrite_stress_accum,
             high_cl.animal.hourly_nitrite_stress_accum

@@ -222,7 +222,9 @@ fn test_failed_molt_increases_mortality() -> Result<(), SimError> {
         state.animal.set_population_condition_index(0.75);
         seed_molt_reserves(&mut state);
         state.process_params.shrimp_condition_smoothing = 0.0;
-        state.process_params.shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+        state
+            .process_params
+            .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
         state.shrimp_params.base_molt_interval_days = 7.0;
         state.shrimp_params.sub_adult_molt_interval_days = 5.0;
         state.shrimp_params.juvenile_molt_interval_days = 3.0;
@@ -368,7 +370,9 @@ fn test_soft_vs_hard_water_shrimp_survival() -> Result<(), SimError> {
         state.animal.set_population_condition_index(0.8);
         seed_molt_reserves(&mut state);
         state.process_params.shrimp_condition_smoothing = 0.0;
-        state.process_params.shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+        state
+            .process_params
+            .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
         run_hours_with_daily_feed(state, 1000, 0.0)
     };
 

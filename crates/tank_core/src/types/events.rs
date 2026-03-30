@@ -34,6 +34,7 @@ pub enum EventCause {
     HighAmmonia,
     HighNitrite,
     LowOxygen,
+    LowTemperature,
     HighTemperature,
     LowMinerals,
     BiofilterImmature,
