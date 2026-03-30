@@ -464,6 +464,10 @@ fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), Si
         params.temp_condition_high_divisor_c,
     )?;
     check_unit_interval(
+        "shrimp_params.temp_condition_min_factor",
+        params.temp_condition_min_factor,
+    )?;
+    check_unit_interval(
         "shrimp_params.molt_stress_warning_threshold",
         params.molt_stress_warning_threshold,
     )?;

@@ -114,6 +114,7 @@ fn shrimp_runtime_default_param_value(name: &str) -> Option<f64> {
         "molt_failure_instability_threshold" => Some(defaults.molt_failure_instability_threshold),
         "temp_condition_low_divisor_c" => Some(defaults.temp_condition_low_divisor_c),
         "temp_condition_high_divisor_c" => Some(defaults.temp_condition_high_divisor_c),
+        "temp_condition_min_factor" => Some(defaults.temp_condition_min_factor),
         "molt_stress_warning_threshold" => Some(defaults.molt_stress_warning_threshold),
         "molt_stress_mortality_threshold" => Some(defaults.molt_stress_mortality_threshold),
         "molt_stress_mineral_gh_weight" => Some(defaults.molt_stress_mineral_gh_weight),
@@ -576,6 +577,8 @@ pub struct ShrimpPreset {
     #[serde(default)]
     pub temp_condition_high_divisor_c: Option<f64>,
     #[serde(default)]
+    pub temp_condition_min_factor: Option<f64>,
+    #[serde(default)]
     pub molt_stress_warning_threshold: Option<f64>,
     #[serde(default)]
     pub molt_stress_mortality_threshold: Option<f64>,
@@ -907,6 +910,7 @@ impl ShrimpPreset {
                 "condition_hourly_stress_penalty_weight",
                 self.condition_hourly_stress_penalty_weight,
             ),
+            ("temp_condition_min_factor", self.temp_condition_min_factor),
             (
                 "density_repro_threshold_per_l",
                 self.density_repro_threshold_per_l,
@@ -998,6 +1002,7 @@ impl ShrimpPreset {
                 "temp_condition_high_divisor_c",
                 self.temp_condition_high_divisor_c,
             ),
+            ("temp_condition_min_factor", self.temp_condition_min_factor),
             ("ca_min_mg_per_l", self.ca_min_mg_per_l),
             ("mg_min_mg_per_l", self.mg_min_mg_per_l),
             ("molt_reserve_fraction", self.molt_reserve_fraction),
@@ -1348,6 +1353,9 @@ impl ParamMetaPreset for ShrimpPreset {
             "temp_condition_high_divisor_c" => self
                 .temp_condition_high_divisor_c
                 .or_else(|| shrimp_runtime_default_param_value(name)),
+            "temp_condition_min_factor" => self
+                .temp_condition_min_factor
+                .or_else(|| shrimp_runtime_default_param_value(name)),
             "molt_stress_warning_threshold" => self
                 .molt_stress_warning_threshold
                 .or_else(|| shrimp_runtime_default_param_value(name)),
@@ -1525,6 +1533,7 @@ impl ParamMetaPreset for ShrimpPreset {
                 | "molt_failure_instability_threshold"
                 | "temp_condition_low_divisor_c"
                 | "temp_condition_high_divisor_c"
+                | "temp_condition_min_factor"
                 | "molt_stress_warning_threshold"
                 | "molt_stress_mortality_threshold"
                 | "molt_stress_mineral_gh_weight"
@@ -3819,6 +3828,16 @@ valid_range = [20.0, 40.0]
             assert!(meta.source.is_some(), "source should be documented");
             assert!(meta.notes.is_some(), "notes should be documented");
         }
+
+        let porous_notes = porous
+            .param_meta
+            .get("colonizable_area_factor")
+            .and_then(|meta| meta.notes.as_deref())
+            .expect("coarse porous note should explain porous-media scaling");
+        assert!(
+            porous_notes.contains("surface area") && porous_notes.contains("projected footprint"),
+            "coarse_porous colonizable_area_factor note should explain why porous media may exceed projected footprint"
+        );
     }
 
     #[test]
@@ -3877,5 +3896,53 @@ valid_range = [20.0, 40.0]
             assert_eq!(meta.confidence, Some(ConfidenceLevel::Heuristic));
             assert!(meta.notes.is_some(), "{name} should explain the derivation");
         }
+    }
+
+    #[test]
+    fn shipped_shrimp_condition_and_nh3_tunables_have_provenance_metadata() {
+        let preset = shrimp_preset(include_str!("../data/shrimp/neocaridina_davidi.toml"));
+
+        preset
+            .validate()
+            .expect("shipped shrimp preset should validate");
+
+        for name in [
+            "temp_condition_low_divisor_c",
+            "temp_condition_high_divisor_c",
+            "temp_condition_min_factor",
+            "molt_stress_condition_midpoint",
+            "molt_stress_thermal_cap",
+            "nh3_stress_response_scale",
+        ] {
+            let meta = preset
+                .param_meta
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} metadata should exist"));
+            assert_eq!(
+                meta.confidence,
+                Some(ConfidenceLevel::Heuristic),
+                "{name} should stay heuristic"
+            );
+            assert!(meta.source.is_some(), "{name} should document a source");
+            assert!(meta.notes.is_some(), "{name} should document rationale");
+        }
+
+        let nh3_threshold = preset
+            .param_meta
+            .get("nh3_stress_threshold_mg_n_per_l")
+            .expect("NH3 threshold metadata should exist");
+        assert_eq!(
+            nh3_threshold.confidence,
+            Some(ConfidenceLevel::Expert),
+            "NH3 threshold should stay expert-curated"
+        );
+        assert!(
+            nh3_threshold.source.is_some(),
+            "NH3 threshold should document a source"
+        );
+        assert!(
+            nh3_threshold.notes.is_some(),
+            "NH3 threshold should document rationale"
+        );
     }
 }

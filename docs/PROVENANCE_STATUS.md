@@ -87,7 +87,7 @@ registry exists.
 |----------|-------|------------|--------|-------|
 | `KH_CO2_25C_MOL_PER_L_ATM` | `3.4e-2 mol/(L·atm)` | literature | Stumm & Morgan 1996 | 25°C Henry-law anchor for atmospheric CO₂ coupling |
 | `KH_TEMP_FACTOR_K` | `2400 K` | expert | First-pass van 't Hoff fit for the 15-35°C aquarium envelope | Revisit if salinity or temperature envelope expands |
-| `pKa1(T)` | `3404.71/T + 0.032786*T - 14.8435` (`T` in K) | literature | Harned & Davis 1943 | Full temperature correction across the current freshwater range |
+| `pKa1(T)` | `3404.71/T + 0.032786*T - 14.8435` (`T` in K); `pKa1(25°C) ≈ 6.35` | literature | Harned & Davis 1943 | Full temperature correction across the current freshwater range |
 | `PKA2` | `10.33` | expert | 25°C freshwater carbonate tables; `docs/carbonate_state_contract.md` | Literature-consistent anchor, but the fixed-temperature use is still a first-pass simplification |
 
 ### Not Yet Annotated
@@ -103,7 +103,7 @@ registry exists.
 | Preset | Parameter | Value | Confidence | Notes |
 |--------|-----------|-------|------------|-------|
 | `active_planted.toml` | `colonizable_area_factor` | 0.8 | heuristic | Rooted aquasoil sits above inert gravel but below dedicated porous media for attachment area |
-| `coarse_porous.toml` | `colonizable_area_factor` | 0.9 | heuristic | Highest shipped factor; directly signals this preset's role as the strongest nitrifier habitat substrate |
+| `coarse_porous.toml` | `colonizable_area_factor` | 0.9 | heuristic | Highest shipped factor; directly signals this preset's role as the strongest nitrifier habitat substrate, with >1.0 still physically meaningful for pore-wall surface area beyond projected footprint |
 
 `colonizable_area_factor` is the current load-bearing substrate scaling knob because
 `footprint × colonizable_area_factor` feeds colonizable area and downstream biofilm/periphyton
@@ -127,15 +127,21 @@ capacity. Other substrate indices and nutrient-charge fields are still pending a
 | `mg_min_mg_per_l` | 5.0 | mg/L | Less studied than Ca for dwarf shrimp |
 | `tan_repro_threshold_mg_n_per_l` | 1.0 | mg N/L | EPA criteria + invertebrate sensitivity |
 | `no2_repro_threshold_mg_n_per_l` | 0.5 | mg N/L | Precautionary; species data sparse |
+| `nh3_stress_threshold_mg_n_per_l` | 0.02 | mg NH3-N/L | Conservative unionized-ammonia onset anchor; species-specific Neocaridina data remain sparse |
 
 ### Provisional (heuristic / placeholder)
 | Parameter | Value | Confidence | Why provisional |
 |-----------|-------|------------|-----------------|
 | `high_temp_repro_penalty_full_c` | 33.0 | heuristic | Near lethal limit; exact cessation point unknown |
 | `low_temp_repro_ramp_width_c` | 4.0 | **placeholder** | Pure tuning parameter; no literature support |
+| `temp_condition_low_divisor_c` / `temp_condition_high_divisor_c` | 10.0 / 8.0 | heuristic | Broad condition-envelope shape controls; calibrated for gradual cold/hot taper rather than measured physiology slopes |
+| `temp_condition_min_factor` | 0.2 | heuristic | Floor that keeps temperature stress from forcing condition fully to zero by itself |
+| `molt_stress_condition_midpoint` | 0.5 | heuristic | Model threshold that turns low condition into daily molt-stress pressure |
+| `molt_stress_thermal_cap` | 0.5 | heuristic | Blend cap preventing heat alone from saturating daily molt stress |
 | `tan_repro_full_suppression_mg_n_per_l` | 3.0 | heuristic | Derived from the corrected TAN onset threshold plus the legacy decline-span formula |
 | `no2_repro_full_suppression_mg_n_per_l` | 1.5 | heuristic | Derived from the corrected NO₂ onset threshold plus the legacy decline-span formula |
 | `chloride_protection_factor` | 0.5 | heuristic | Mechanism well-established in fish; transfer to Neocaridina is medium-confidence |
+| `nh3_stress_response_scale` | 2.0 | heuristic | Converts NH3 excess into hourly stress; curve-shape calibration, not a toxicology datum |
 | `molt_stress_mineral_*_weight` | 0.5/0.3/0.2 | heuristic | Calibration weights, not derived from data |
 
 ---

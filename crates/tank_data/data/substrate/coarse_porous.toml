@@ -28,4 +28,6 @@ notes = """\
 Primary habitat/biofilter scaling knob for porous media. 0.9 intentionally \
 sits at the top of the shipped substrate range so footprint-scaled \
 colonizable area tracks this preset's role as the strongest nitrifier \
-attachment substrate in the starter pack."""
+attachment substrate in the starter pack. The 1.1 upper bound is intentional: \
+porous media can expose internal pore-wall surface area that exceeds the \
+geometric projected footprint used by the simplified substrate model."""

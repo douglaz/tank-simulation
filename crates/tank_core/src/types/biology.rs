@@ -338,6 +338,10 @@ pub struct ShrimpRuntimeParams {
     /// `molt_stress_index`.
     #[serde(default = "default_temp_condition_high_divisor_c")]
     pub temp_condition_high_divisor_c: f64,
+    /// Minimum temperature-support factor allowed by `temp_condition_factor`
+    /// once the cold/hot penalty ramps have fully saturated.
+    #[serde(default = "default_temp_condition_min_factor")]
+    pub temp_condition_min_factor: f64,
     /// Molt-stress index threshold above which a `MoltStressWarning` event
     /// should fire.
     #[serde(default = "default_molt_stress_warning_threshold")]
@@ -889,6 +893,7 @@ impl Default for ShrimpRuntimeParams {
             molt_failure_instability_threshold: default_molt_failure_instability_threshold(),
             temp_condition_low_divisor_c: default_temp_condition_low_divisor_c(),
             temp_condition_high_divisor_c: default_temp_condition_high_divisor_c(),
+            temp_condition_min_factor: default_temp_condition_min_factor(),
             molt_stress_warning_threshold: default_molt_stress_warning_threshold(),
             molt_stress_mortality_threshold: default_molt_stress_mortality_threshold(),
             molt_stress_mineral_gh_weight: default_molt_stress_mineral_gh_weight(),
@@ -1057,6 +1062,10 @@ fn default_temp_condition_low_divisor_c() -> f64 {
 
 fn default_temp_condition_high_divisor_c() -> f64 {
     8.0
+}
+
+fn default_temp_condition_min_factor() -> f64 {
+    0.2
 }
 
 fn default_molt_stress_warning_threshold() -> f64 {

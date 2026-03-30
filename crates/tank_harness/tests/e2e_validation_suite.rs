@@ -1299,12 +1299,11 @@ fn run_vs08_stocking_density_crash() -> Result<ProbeResult, Box<dyn std::error::
 // Summary runner: executes all 8 probes and prints a validation report
 // ===========================================================================
 
+type ProbeFn = Box<dyn Fn() -> Result<ProbeResult, Box<dyn std::error::Error>>>;
+
 #[test]
 fn validation_suite_summary() {
-    let probes: Vec<(
-        &str,
-        Box<dyn Fn() -> Result<ProbeResult, Box<dyn std::error::Error>>>,
-    )> = vec![
+    let probes: Vec<(&str, ProbeFn)> = vec![
         (
             "VS-01 Cycling timeline",
             Box::new(run_vs01_cycling_timeline),

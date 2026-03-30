@@ -35,6 +35,7 @@ molt_failure_poor_condition_threshold = 0.65
 molt_failure_instability_threshold = 0.3
 temp_condition_low_divisor_c = 10.0
 temp_condition_high_divisor_c = 8.0
+temp_condition_min_factor = 0.2
 molt_stress_warning_threshold = 0.6
 molt_stress_mortality_threshold = 0.5
 molt_stress_mineral_gh_weight = 0.5
@@ -137,6 +138,62 @@ gradually ramps up. 4.0°C means reproduction starts at 18°C (22-4) and reaches
 full rate at 22°C. This is a tuning parameter without direct literature support; \
 Neocaridina are known to breed in the 18-22°C range at reduced rates."""
 
+# ── Condition and thermal stress curve tuning ───────────────────────
+[param_meta.temp_condition_low_divisor_c]
+unit = "°C"
+source = "Calibration heuristic aligned to temp_condition_factor()"
+confidence = "heuristic"
+valid_range = [6.0, 16.0]
+notes = """\
+Degrees below optimal_temp_min_c needed for the general condition factor to \
+reach its 0.2 floor. 10.0°C gives Neocaridina a broad cold-side taper (22°C \
+down to roughly 12°C) instead of an abrupt collapse. Curve-shape heuristic, \
+not a measured physiology slope."""
+
+[param_meta.temp_condition_high_divisor_c]
+unit = "°C"
+source = "Calibration heuristic aligned to temp_condition_factor()"
+confidence = "heuristic"
+valid_range = [5.0, 12.0]
+notes = """\
+Degrees above optimal_temp_max_c needed for the general condition factor to \
+reach its 0.2 hot-side floor. 8.0°C keeps condition losses gradual through the \
+upper 20s while still allowing sustained low-30s heat to register as severe \
+stress. Curve-shape heuristic, not a direct literature fit."""
+
+[param_meta.temp_condition_min_factor]
+unit = "condition factor floor"
+source = "Model calibration aligned to temp_condition_factor()"
+confidence = "heuristic"
+valid_range = [0.05, 0.4]
+notes = """\
+Minimum condition-support factor allowed once the cold or hot penalty ramps \
+fully saturate. 0.2 prevents temperature stress alone from forcing condition \
+to zero, leaving room for shrimp to survive but remain clearly impaired. \
+Model floor, not a direct physiology measurement."""
+
+[param_meta.molt_stress_condition_midpoint]
+unit = "condition index"
+source = "Model calibration for molt-stress pressure blending"
+confidence = "heuristic"
+valid_range = [0.3, 0.7]
+notes = """\
+Population condition threshold below which low condition contributes to daily \
+molt stress. 0.5 means the bottom half of the condition scale begins adding \
+pressure, which keeps persistent underfeeding or chemistry stress relevant \
+without turning brief dips into immediate molt crises."""
+
+[param_meta.molt_stress_thermal_cap]
+unit = "stress index"
+source = "Model calibration for heat-driven molt stress"
+confidence = "heuristic"
+valid_range = [0.2, 0.8]
+notes = """\
+Upper clamp on the thermal contribution before it is blended into the daily \
+molt-stress pressure score. 0.5 lets heat explain at most half of the \
+pressure on its own so mineral deficits, instability, and hourly stress can \
+still materially change the outcome."""
+
 # ── Molt mineral thresholds ──────────────────────────────────────────
 [param_meta.ca_min_mg_per_l]
 unit = "mg Ca/L"
@@ -194,6 +251,29 @@ so Cl:NO₂ > 10:1 yields < 20% of unprotected nitrite hazard. The mechanism \
 (competitive inhibition at branchial chloride cells) is well-established in \
 fish; quantitative transfer to Neocaridina is medium-confidence. Directionally \
 supported but species-specific dose-response data is lacking."""
+
+# ── NH3 toxicology / hourly stress routing ───────────────────────────
+[param_meta.nh3_stress_threshold_mg_n_per_l]
+unit = "mg NH3-N/L"
+source = "EPA 2013 ammonia criteria; Camargo & Alonso 2006; freshwater invertebrate toxicity reviews"
+confidence = "expert"
+valid_range = [0.005, 0.05]
+notes = """\
+Unionized ammonia threshold where hourly NH3 stress begins accumulating. \
+0.02 mg NH3-N/L is a conservative invertebrate-safe anchor close to common \
+chronic warning levels. Species-specific Neocaridina data are sparse, so this \
+is expert-curated rather than a directly measured species constant."""
+
+[param_meta.nh3_stress_response_scale]
+unit = "stress index per mg NH3-N/L excess"
+source = "Model calibration around hourly NH3 stress accumulation"
+confidence = "heuristic"
+valid_range = [0.5, 4.0]
+notes = """\
+Converts NH3 excess above nh3_stress_threshold_mg_n_per_l into hourly stress \
+accumulation. 2.0 was tuned so sub-threshold pH noise stays quiet while \
+sustained free-ammonia spikes still register quickly in mortality and molt \
+channels. Response-shape coefficient, not a toxicology datum."""
 
 # ── Body stoichiometric constants ────────────────────────────────────
 [param_meta.body_nitrogen_mg_per_g_wet_mass]

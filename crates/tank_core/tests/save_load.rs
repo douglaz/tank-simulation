@@ -1110,6 +1110,7 @@ fn malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected() -> 
         ("shrimp_params.molt_failure_instability_threshold", -0.1),
         ("shrimp_params.temp_condition_low_divisor_c", 0.0),
         ("shrimp_params.temp_condition_high_divisor_c", 0.0),
+        ("shrimp_params.temp_condition_min_factor", 1.2),
         ("shrimp_params.molt_stress_warning_threshold", 1.2),
         ("shrimp_params.molt_stress_mortality_threshold", 1.2),
         ("shrimp_params.molt_stress_mineral_gh_weight", 1.2),
@@ -1180,6 +1181,9 @@ fn malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected() -> 
             }
             "shrimp_params.temp_condition_high_divisor_c" => {
                 state.shrimp_params.temp_condition_high_divisor_c = value;
+            }
+            "shrimp_params.temp_condition_min_factor" => {
+                state.shrimp_params.temp_condition_min_factor = value;
             }
             "shrimp_params.molt_stress_warning_threshold" => {
                 state.shrimp_params.molt_stress_warning_threshold = value;

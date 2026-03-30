@@ -1609,14 +1609,15 @@ fn temp_repro_factor(temp: f64, params: &ShrimpRuntimeParams) -> f64 {
 
 /// Temperature factor for general condition (broader bell than reproduction).
 fn temp_condition_factor(temp: f64, params: &ShrimpRuntimeParams) -> f64 {
+    let min_factor = params.temp_condition_min_factor;
     if temp >= params.optimal_temp_min_c && temp <= params.optimal_temp_max_c {
         1.0
     } else if temp < params.optimal_temp_min_c {
         (1.0 - (params.optimal_temp_min_c - temp) / params.temp_condition_low_divisor_c.max(0.01))
-            .clamp(0.2, 1.0)
+            .clamp(min_factor, 1.0)
     } else {
         (1.0 - (temp - params.optimal_temp_max_c) / params.temp_condition_high_divisor_c.max(0.01))
-            .clamp(0.2, 1.0)
+            .clamp(min_factor, 1.0)
     }
 }
 
@@ -2348,7 +2349,7 @@ mod tests {
     }
 
     #[test]
-    fn test_temp_condition_divisors_are_named_parameters() {
+    fn test_temp_condition_parameters_are_named_parameters() {
         let params = crate::types::ShrimpRuntimeParams::default();
         let cold_temp = params.optimal_temp_min_c - 2.0;
         let hot_temp = params.optimal_temp_max_c + 2.0;
@@ -2367,6 +2368,21 @@ mod tests {
         assert!(
             temp_condition_factor(hot_temp, &relaxed) > baseline_hot,
             "widening the named hot divisor should soften high-temperature penalties"
+        );
+
+        let severe_cold = params.optimal_temp_min_c - params.temp_condition_low_divisor_c * 3.0;
+        let floor_baseline = temp_condition_factor(severe_cold, &params);
+
+        let mut lowered_floor = params;
+        lowered_floor.temp_condition_min_factor = 0.05;
+
+        assert!(
+            (floor_baseline - 0.2).abs() < 1e-9,
+            "default temperature condition floor should remain at the species-backed value"
+        );
+        assert!(
+            (temp_condition_factor(severe_cold, &lowered_floor) - 0.05).abs() < 1e-9,
+            "lowering the named temperature-condition floor should allow deeper thermal suppression"
         );
     }
 

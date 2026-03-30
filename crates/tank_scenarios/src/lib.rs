@@ -844,6 +844,9 @@ fn shrimp_preset_to_params(
     if let Some(value) = shrimp_preset.temp_condition_high_divisor_c {
         params.temp_condition_high_divisor_c = value;
     }
+    if let Some(value) = shrimp_preset.temp_condition_min_factor {
+        params.temp_condition_min_factor = value;
+    }
     if let Some(value) = shrimp_preset.molt_stress_warning_threshold {
         params.molt_stress_warning_threshold = value;
     }
@@ -1490,6 +1493,7 @@ mod tests {
         preset.molt_failure_instability_threshold = Some(0.24);
         preset.temp_condition_low_divisor_c = Some(8.5);
         preset.temp_condition_high_divisor_c = Some(6.5);
+        preset.temp_condition_min_factor = Some(0.12);
         preset.molt_stress_warning_threshold = Some(0.58);
         preset.molt_stress_mortality_threshold = Some(0.42);
         preset.molt_stress_mineral_gh_weight = Some(0.4);
@@ -1543,6 +1547,7 @@ mod tests {
         assert_eq!(params.molt_failure_instability_threshold, 0.24);
         assert_eq!(params.temp_condition_low_divisor_c, 8.5);
         assert_eq!(params.temp_condition_high_divisor_c, 6.5);
+        assert_eq!(params.temp_condition_min_factor, 0.12);
         assert_eq!(params.molt_stress_warning_threshold, 0.58);
         assert_eq!(params.molt_stress_mortality_threshold, 0.42);
         assert_eq!(params.molt_stress_mineral_gh_weight, 0.4);
