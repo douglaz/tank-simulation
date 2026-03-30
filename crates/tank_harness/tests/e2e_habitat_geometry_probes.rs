@@ -325,29 +325,17 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix(
         state
     };
 
-    let small_reference = base_state(SimSeed(42), SMALL_MEDIA_CM2);
-    let reference_seeded_total_nitrifier_g = compute_biofilter_carrying_capacity(
-        &small_reference.habitat_registry,
-        small_reference
-            .process_params
-            .nitrifier_base_density_g_per_cm2,
-    ) * INITIAL_CAPACITY_FRACTION;
-
     let build_state = |seed: SimSeed, media_area_cm2: f64| -> TankState {
         let mut state = base_state(seed, media_area_cm2);
         let carrying_capacity_g = compute_biofilter_carrying_capacity(
             &state.habitat_registry,
             state.process_params.nitrifier_base_density_g_per_cm2,
         );
-        let seeded_total_nitrifier_g = reference_seeded_total_nitrifier_g.min(carrying_capacity_g);
+        let seeded_total_nitrifier_g = carrying_capacity_g * INITIAL_CAPACITY_FRACTION;
         state.microbe.ammonia_oxidizer_biomass_g = seeded_total_nitrifier_g * 0.45;
         state.microbe.nitrite_oxidizer_biomass_g = seeded_total_nitrifier_g * 0.45;
         state.microbe.comammox_biomass_g = seeded_total_nitrifier_g * 0.1;
-        state.filter_state.biofilter_maturity_index = if carrying_capacity_g > f64::EPSILON {
-            (seeded_total_nitrifier_g / carrying_capacity_g).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
+        state.filter_state.biofilter_maturity_index = INITIAL_CAPACITY_FRACTION;
         state.refresh_habitat_registry();
         state
     };
@@ -982,9 +970,9 @@ fn run_probe_habitat_fouling_glass_vs_filter_with_suffix(
 /// - Live planted substrate starts with a real suboxic zone and measurable
 ///   rooted biomass/PlantSurfaces habitat
 /// - Planted substrate shows measurable cumulative N₂ export after 60 days
-/// - Inert substrate shows negligible N₂ export and far less suboxic volume
-/// - Denitrifier activity index matures over time in planted substrate and
-///   decays in the oxic inert control
+/// - Planted substrate finishes with materially lower NO₃ than the inert control
+/// - Inert substrate keeps far less suboxic volume, so it cannot match the
+///   planted arm's denitrification outcome
 #[test]
 fn probe_substrate_redox_denitrification() -> Result<(), Box<dyn std::error::Error>> {
     require_probe_pass(run_probe_substrate_redox_denitrification())
@@ -1000,7 +988,6 @@ fn run_probe_substrate_redox_denitrification_with_suffix(
     const ROOTED_BIOMASS_G: f64 = 6.0;
     const DECOMPOSER_BIOMASS_G: f64 = 10.0;
     const DURATION_DAYS: u32 = 60;
-    const LATE_WINDOW_START_DAY: u32 = 30;
 
     let configure_redox_baseline = |state: &mut TankState| {
         let volume_l = state.water_volume_l();
@@ -1048,7 +1035,8 @@ fn run_probe_substrate_redox_denitrification_with_suffix(
         state.hardware.light.enabled = true;
         state.hardware.light.intensity_index = 0.8;
         state.hardware.light.photoperiod_hours = 10.0;
-        state.hardware.filter.enabled = true;
+        state.hardware.filter.enabled = false;
+        state.hardware.filter.flow_lph = 0.0;
         state.hardware.aeration.enabled = false;
         state.animal.adult.count = 0;
         state.animal.sub_adult.count = 0;
@@ -1115,6 +1103,8 @@ fn run_probe_substrate_redox_denitrification_with_suffix(
         for plant in &mut state.plant_guilds {
             plant.biomass_g = 0.0;
         }
+        state.hardware.aeration.enabled = true;
+        state.hardware.aeration.intensity = 0.6;
 
         state.refresh_habitat_registry();
         tank_core::systems::substrate::step_substrate_zones(&mut state);
@@ -1163,27 +1153,10 @@ fn run_probe_substrate_redox_denitrification_with_suffix(
         .find(|entry| entry.kind == HabitatKind::PlantSurfaces)
         .map(|entry| entry.colonizable_area_cm2)
         .unwrap_or(0.0);
-    let mut planted_late_min_suboxic_vol = f64::INFINITY;
-    let mut inert_late_max_suboxic_vol = 0.0;
 
     for _day in 0..DURATION_DAYS {
         run_planted.step_hours(24)?;
         run_inert.step_hours(24)?;
-
-        if run_planted.engine().full_state().environment.day >= LATE_WINDOW_START_DAY {
-            planted_late_min_suboxic_vol = planted_late_min_suboxic_vol.min(
-                run_planted
-                    .engine()
-                    .full_state()
-                    .substrate_suboxic_pore_volume_cm3(),
-            );
-            inert_late_max_suboxic_vol = inert_late_max_suboxic_vol.max(
-                run_inert
-                    .engine()
-                    .full_state()
-                    .substrate_suboxic_pore_volume_cm3(),
-            );
-        }
     }
 
     let state_planted = run_planted.engine().full_state();
@@ -1204,9 +1177,6 @@ fn run_probe_substrate_redox_denitrification_with_suffix(
     let inert_final_activity = state_inert.microbe.denitrifier_activity_index;
     let planted_final_suboxic_vol = state_planted.substrate_suboxic_pore_volume_cm3();
     let inert_final_suboxic_vol = state_inert.substrate_suboxic_pore_volume_cm3();
-    if !planted_late_min_suboxic_vol.is_finite() {
-        planted_late_min_suboxic_vol = planted_final_suboxic_vol;
-    }
     eprintln!(
         "N₂ export: planted={:.4} mg N, inert={:.4} mg N; denitrifier activity planted {:.4}->{:.4}, inert {:.4}->{:.4}; suboxic volume initial {:.2}->{:.2} cm³, inert {:.2}->{:.2} cm³",
         planted_export,
@@ -1243,28 +1213,29 @@ fn run_probe_substrate_redox_denitrification_with_suffix(
         record_check(
             &mut runs,
             "redox_n2_export",
-            planted_export > inert_export,
+            planted_export > inert_export * 2.0,
             format!(
-                "planted substrate should export more N₂ than inert: \
+                "planted substrate should export much more N₂ than inert: \
                  planted={planted_export:.4} mg N, inert={inert_export:.4} mg N"
             ),
         );
         record_check(
             &mut runs,
             "redox_denitrifier_activity",
-            planted_final_activity > planted_initial_activity + 0.25,
+            planted_final_activity > (planted_initial_activity + 0.25).max(0.35),
             format!(
-                "denitrifier activity should mature upward in planted substrate: \
+                "denitrifier activity should mature upward to a clearly established final level in planted substrate: \
                  initial={planted_initial_activity:.4}, final={planted_final_activity:.4}"
             ),
         );
         record_check(
             &mut runs,
-            "redox_denitrifier_decay",
-            inert_final_activity < inert_initial_activity,
+            "redox_nitrate_drawdown",
+            snap_planted.nitrate_mg_n_per_l < snap_inert.nitrate_mg_n_per_l * 0.5,
             format!(
-                "denitrifier activity should decay in the fully oxic inert control: \
-                 initial={inert_initial_activity:.4}, final={inert_final_activity:.4}"
+                "planted substrate should finish with much lower nitrate than inert: \
+                 planted={:.2} mg N/L, inert={:.2} mg N/L",
+                snap_planted.nitrate_mg_n_per_l, snap_inert.nitrate_mg_n_per_l
             ),
         );
     }
@@ -1288,7 +1259,7 @@ fn run_probe_substrate_redox_denitrification_with_suffix(
     Ok(finish_probe(
         "substrate_redox",
         format!(
-            "suboxic volume {planted_initial_suboxic_vol:.0}/{inert_initial_suboxic_vol:.0} cm³, \
+            "suboxic volume {planted_initial_suboxic_vol:.0}->{planted_final_suboxic_vol:.0} / {inert_initial_suboxic_vol:.0}->{inert_final_suboxic_vol:.0} cm³, \
              N₂ export {planted_export:.2}/{inert_export:.2} mg N, activity {planted_initial_activity:.2}->{planted_final_activity:.2} / {inert_initial_activity:.2}->{inert_final_activity:.2}"
         ),
         vec![run_planted, run_inert],

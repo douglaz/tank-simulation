@@ -889,6 +889,8 @@ fn egg_development(state: &mut TankState) {
     let f_no2 = no2_repro_factor(nitrite_mg_n_per_l, params);
 
     let gh_d = chemistry.gh_d();
+    // Hatch success still depends on today's GH directly because incubation does
+    // not flow through the smoothed reproductive-readiness EMA used for spawning.
     let f_mineral = gh_mineral_factor(gh_d, params);
 
     let hatch_rate = (params.hatch_success_base

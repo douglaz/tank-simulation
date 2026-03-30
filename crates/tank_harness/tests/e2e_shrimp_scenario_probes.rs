@@ -35,10 +35,6 @@ use tank_core::{
     TankGeometry, TankSnapshot, TankState, WaterState,
 };
 use tank_harness::{Envelope, HarnessRun};
-use tank_scenarios::{
-    StartupHeaterPreset, StartupLightPreset, StartupOverrides, StartupPlantSelection,
-    StartupSubstratePreset,
-};
 
 // ---------------------------------------------------------------------------
 // Probe result tracking for the summary report
