@@ -1,7 +1,0 @@
-id = "tanksim-6e5.4.4"
-name = "DIC photosynthesis coupling"
-flow = "quick_dev"
-prompt_reference = "prompt.md"
-prompt_hash = "dab1b2a4a27f250e"
-created_at = "2026-03-29T21:34:38.436470643Z"
-status_summary = "created"

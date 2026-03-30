@@ -1,7 +1,0 @@
-{"timestamp":"2026-03-29T22:47:17.181135781Z","level":"info","source":"engine","message":"stage_entered: plan_and_implement cycle=1 attempt=1"}
-{"timestamp":"2026-03-29T23:03:41.405069894Z","level":"info","source":"engine","message":"stage_completed: plan_and_implement"}
-{"timestamp":"2026-03-29T23:03:41.506494066Z","level":"info","source":"engine","message":"stage_entered: review cycle=1 attempt=1"}
-{"timestamp":"2026-03-29T23:07:28.851492754Z","level":"info","source":"engine","message":"stage_completed: review"}
-{"timestamp":"2026-03-29T23:07:28.973395604Z","level":"info","source":"engine","message":"stage_entered: apply_fixes cycle=2 attempt=1"}
-{"timestamp":"2026-03-29T23:15:00.621896015Z","level":"info","source":"engine","message":"stage_completed: apply_fixes"}
-{"timestamp":"2026-03-29T23:15:00.724088542Z","level":"info","source":"engine","message":"final_review panel: 2 reviewers, threshold=0.66, max_restarts=20"}
