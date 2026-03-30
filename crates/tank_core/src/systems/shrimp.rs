@@ -345,14 +345,30 @@ fn update_condition(state: &mut TankState) {
 }
 
 fn update_molt_stress(state: &mut TankState) {
-    let gh_d = state.concentrations().gh_d();
+    let chemistry = state.concentrations();
+    let gh_d = chemistry.gh_d();
+    let ca_mg_per_l = chemistry.calcium_mg_per_l();
+    let mg_mg_per_l = chemistry.magnesium_mg_per_l();
     let params = &state.shrimp_params;
 
-    let gh_stress = if gh_d < params.gh_min_d {
-        (params.gh_min_d - gh_d) / params.gh_min_d
+    // Compute mineral stress directly (no 0.3 floor) so very poor water
+    // produces correspondingly high stress values.
+    let gh_deficit = if gh_d < params.gh_min_d {
+        (params.gh_min_d - gh_d) / params.gh_min_d.max(0.01)
     } else {
         0.0
     };
+    let ca_deficit = if ca_mg_per_l < params.ca_min_mg_per_l {
+        (params.ca_min_mg_per_l - ca_mg_per_l) / params.ca_min_mg_per_l.max(0.01)
+    } else {
+        0.0
+    };
+    let mg_deficit = if mg_mg_per_l < params.mg_min_mg_per_l {
+        (params.mg_min_mg_per_l - mg_mg_per_l) / params.mg_min_mg_per_l.max(0.01)
+    } else {
+        0.0
+    };
+    let gh_stress = (gh_deficit * 0.50 + ca_deficit * 0.25 + mg_deficit * 0.25).clamp(0.0, 1.0);
 
     let instability_stress = state.stability_tracker.instability_index;
     let condition_stress = (0.5 - state.animal.population_condition_index()).max(0.0);
@@ -381,54 +397,187 @@ fn update_molt_stress(state: &mut TankState) {
     state.animal.molt_stress_index = state.animal.molt_stress_index.clamp(0.0, 1.0);
 }
 
-/// Explicit molt cycle: timer-based readiness, success/failure resolution,
-/// and failed_molt_accum penalty tracking.
+/// Explicit molt cycle: per-stage timer-based readiness, success/failure
+/// resolution with mineral budget (GH + Ca + Mg), and failed_molt_accum
+/// penalty tracking.
 fn molt_cycle(state: &mut TankState) {
     if state.animal.total_count() == 0 {
         return;
     }
 
-    let gh_d = state.concentrations().gh_d();
-    let params = &state.shrimp_params;
-    let base_interval = params.base_molt_interval_days.max(1.0);
-    let temp_factor = temp_condition_factor(state.water.temperature_c, params).max(0.25);
-    let effective_interval = (base_interval / temp_factor).max(1.0);
+    // Migration: seed per-stage timers from the population-wide timer when
+    // all stage timers are zero (old save files or pre-set test state).
+    if state.animal.inter_molt_timer_days > 0.0
+        && state.animal.adult.molt_timer_days == 0.0
+        && state.animal.sub_adult.molt_timer_days == 0.0
+        && state.animal.juvenile.molt_timer_days == 0.0
+    {
+        let legacy = state.animal.inter_molt_timer_days;
+        state.animal.adult.molt_timer_days = legacy;
+        state.animal.sub_adult.molt_timer_days = legacy;
+        state.animal.juvenile.molt_timer_days = legacy;
+    }
 
-    let timer_factor = (state.animal.inter_molt_timer_days / effective_interval).clamp(0.0, 1.0);
-    let mineral_factor = gh_mineral_factor(gh_d, params);
-    let condition_factor = state.animal.population_condition_index();
+    let chemistry = state.concentrations();
+    let gh_d = chemistry.gh_d();
+    let ca_mg_per_l = chemistry.calcium_mg_per_l();
+    let mg_mg_per_l = chemistry.magnesium_mg_per_l();
+    let params = &state.shrimp_params;
+    let temp_factor = temp_condition_factor(state.water.temperature_c, params).max(0.25);
+    let mineral_factor = molt_mineral_modifier(gh_d, ca_mg_per_l, mg_mg_per_l, params);
     let instability_factor = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
     let thermal_factor = temp_condition_factor(state.water.temperature_c, params);
+    let threshold = params.molt_success_threshold;
 
-    state.animal.molt_readiness = timer_factor;
+    // Per-stage molt intervals: juveniles molt most frequently, adults least.
+    let stage_intervals = [
+        (
+            params.juvenile_molt_interval_days.max(1.0),
+            state.animal.juvenile.condition_index,
+            state.animal.juvenile.count,
+        ),
+        (
+            params.sub_adult_molt_interval_days.max(1.0),
+            state.animal.sub_adult.condition_index,
+            state.animal.sub_adult.count,
+        ),
+        (
+            params.base_molt_interval_days.max(1.0),
+            state.animal.adult.condition_index,
+            state.animal.adult.count,
+        ),
+    ];
 
-    if timer_factor >= 1.0 {
-        let success_score = (0.45 * mineral_factor
-            + 0.35 * condition_factor
-            + 0.10 * instability_factor
-            + 0.10 * thermal_factor)
-            .clamp(0.0, 1.0);
-        state.animal.inter_molt_timer_days = 0.0;
+    let mut any_resolved = false;
+    let mut any_failed = false;
+    let mut any_succeeded = false;
+    let mut max_readiness: f64 = 0.0;
 
-        if success_score >= 0.55 {
-            state.animal.last_molt_success = true;
-            state.animal.failed_molt_accum = (state.animal.failed_molt_accum - 0.35).max(0.0);
-        } else {
-            state.animal.last_molt_success = false;
-            state.animal.failed_molt_accum = (state.animal.failed_molt_accum + 0.3).min(1.0);
+    let stage_timers = [
+        state.animal.juvenile.molt_timer_days,
+        state.animal.sub_adult.molt_timer_days,
+        state.animal.adult.molt_timer_days,
+    ];
+
+    for (i, &(base_interval, condition, count)) in stage_intervals.iter().enumerate() {
+        if count == 0 {
+            continue;
+        }
+        let effective_interval = (base_interval / temp_factor).max(1.0);
+        let timer = stage_timers[i];
+        let timer_factor = (timer / effective_interval).clamp(0.0, 1.0);
+        max_readiness = max_readiness.max(timer_factor);
+
+        if timer_factor >= 1.0 {
+            let base_score = 0.45 * mineral_factor
+                + 0.35 * condition
+                + 0.10 * instability_factor
+                + 0.10 * thermal_factor;
+            // Condition gate: very low condition forces failure regardless of
+            // water chemistry — a starved shrimp lacks reserves to molt.
+            let condition_gate = (condition * 3.0).clamp(0.0, 1.0);
+            let success_score = (base_score * condition_gate).clamp(0.0, 1.0);
+
+            any_resolved = true;
+            if success_score >= threshold {
+                any_succeeded = true;
+            } else {
+                any_failed = true;
+            }
+
+            match i {
+                0 => state.animal.juvenile.molt_timer_days = 0.0,
+                1 => state.animal.sub_adult.molt_timer_days = 0.0,
+                _ => state.animal.adult.molt_timer_days = 0.0,
+            }
         }
     }
 
-    // Advance timer
-    state.animal.inter_molt_timer_days += 1.0;
+    state.animal.molt_readiness = max_readiness;
+
+    // Advance all stage timers
+    if state.animal.juvenile.count > 0 {
+        state.animal.juvenile.molt_timer_days += 1.0;
+    }
+    if state.animal.sub_adult.count > 0 {
+        state.animal.sub_adult.molt_timer_days += 1.0;
+    }
+    if state.animal.adult.count > 0 {
+        state.animal.adult.molt_timer_days += 1.0;
+    }
+
+    // Update population-wide molt state from per-stage results
+    if any_resolved {
+        if any_failed {
+            state.animal.last_molt_success = false;
+            state.animal.failed_molt_accum = (state.animal.failed_molt_accum + 0.3).min(1.0);
+        }
+        if any_succeeded {
+            if !any_failed {
+                state.animal.last_molt_success = true;
+            }
+            state.animal.failed_molt_accum = (state.animal.failed_molt_accum - 0.35).max(0.0);
+        }
+    }
+
+    // Sync population-wide inter_molt_timer from adult stage for backward compat
+    state.animal.inter_molt_timer_days = state.animal.adult.molt_timer_days;
+
+    // Emit MoltFailure event with cause diagnosis
+    if any_failed {
+        emit_molt_failure(state, gh_d, ca_mg_per_l, mg_mg_per_l, mineral_factor);
+    }
 
     // Derive molt_stress_index from failed_molt_accum and current factors.
-    // This grounds the existing index in explicit state rather than independent
-    // integration. The update_molt_stress call has already set a baseline; we
-    // blend in the failed_molt_accum contribution.
     let accum_stress = state.animal.failed_molt_accum * 0.5;
     state.animal.molt_stress_index =
         (state.animal.molt_stress_index + accum_stress).clamp(0.0, 1.0);
+}
+
+fn emit_molt_failure(
+    state: &mut TankState,
+    gh_d: f64,
+    ca_mg_per_l: f64,
+    mg_mg_per_l: f64,
+    mineral_factor: f64,
+) {
+    let params = &state.shrimp_params;
+    let mut causes = Vec::new();
+
+    if gh_d < params.gh_min_d {
+        causes.push(EventCause::LowMinerals);
+    }
+    if ca_mg_per_l < params.ca_min_mg_per_l && !causes.contains(&EventCause::LowMinerals) {
+        causes.push(EventCause::LowMinerals);
+    }
+    if mg_mg_per_l < params.mg_min_mg_per_l && !causes.contains(&EventCause::LowMinerals) {
+        causes.push(EventCause::LowMinerals);
+    }
+    if state.stability_tracker.instability_index > 0.3 {
+        causes.push(EventCause::ChemistryInstability);
+    }
+    if state.water.temperature_c > params.optimal_temp_max_c {
+        causes.push(EventCause::HighTemperature);
+    }
+    if state.animal.population_condition_index() < 0.4 {
+        causes.push(EventCause::PoorCondition);
+    }
+    if causes.is_empty() {
+        causes.push(EventCause::PoorCondition);
+    }
+
+    let detail = format!(
+        "Molt failed: GH {gh_d:.1}\u{00b0}, Ca {ca_mg_per_l:.1} mg/L, Mg {mg_mg_per_l:.1} mg/L, mineral score {mineral_factor:.2}, accum {:.2}",
+        state.animal.failed_molt_accum
+    );
+
+    crate::systems::events::emit_once_per_day_pub(
+        state,
+        EventSeverity::Warning,
+        EventKind::MoltFailure,
+        causes,
+        detail,
+    );
 }
 
 fn update_reproductive_readiness(state: &mut TankState) {
@@ -1019,6 +1168,24 @@ fn gh_mineral_factor(gh_d: f64, params: &ShrimpRuntimeParams) -> f64 {
     } else {
         (1.0 - (gh_d - params.gh_max_d) / 10.0).clamp(0.3, 1.0)
     }
+}
+
+/// Mineral modifier for molt success that uses GH, Ca, and Mg individually.
+///
+/// GH provides the dominant signal (50%), while individual Ca and Mg
+/// concentrations each contribute 25%. This ensures both ions are checked
+/// independently — a tank with adequate GH from magnesium alone but
+/// insufficient calcium will still penalize molt success.
+pub fn molt_mineral_modifier(
+    gh_d: f64,
+    ca_mg_per_l: f64,
+    mg_mg_per_l: f64,
+    params: &ShrimpRuntimeParams,
+) -> f64 {
+    let gh_factor = gh_mineral_factor(gh_d, params);
+    let ca_factor = (ca_mg_per_l / params.ca_min_mg_per_l.max(0.01)).clamp(0.3, 1.0);
+    let mg_factor = (mg_mg_per_l / params.mg_min_mg_per_l.max(0.01)).clamp(0.3, 1.0);
+    (gh_factor * 0.50 + ca_factor * 0.25 + mg_factor * 0.25).clamp(0.0, 1.0)
 }
 
 #[cfg(test)]
