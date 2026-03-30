@@ -105,7 +105,7 @@ rol_rate_cm_per_g = 0.15
 
 # Stoichiometric constants
 o2_per_mg_n_nitrified = 4.57
-alkalinity_meq_per_mg_n_nitrified = 0.1428
+alkalinity_meq_per_mg_n_nitrified = 0.1427857499821518 # 2 / 14.007
 
 # ── Daily plant growth ────────────────────────────────────────────────
 # Half-saturation constants are concentration-based:

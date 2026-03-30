@@ -8,6 +8,7 @@ use tank_core::systems::chemistry::{
 use tank_core::types::{
     check_all_ranges, format_param, legacy_total_param_to_mg_per_l,
     legacy_total_param_to_mg_per_m2, ParamMeta, RangeWarning, ShrimpRuntimeParams,
+    NITRIFICATION_ALK_MEQ_PER_MG_N,
 };
 
 const SHRIMP_ROUTE_SUM_TOLERANCE: f64 = 1e-9;
@@ -1671,7 +1672,7 @@ fn default_o2_per_mg_n() -> f64 {
     4.57
 }
 fn default_alk_per_mg_n() -> f64 {
-    0.1428
+    NITRIFICATION_ALK_MEQ_PER_MG_N
 }
 fn default_plant_max_growth_fast_stem() -> f64 {
     0.08
@@ -3053,6 +3054,16 @@ k_wall_w_per_m2_k = 5.0
         assert_eq!(preset.microfauna_excretion_fraction_of_assimilated, 0.10);
         assert_eq!(preset.microfauna_growth_fraction_of_assimilated, 0.20);
         Ok(())
+    }
+
+    #[test]
+    fn default_process_preset_alkalinity_matches_core_constant() {
+        let preset = default_process_preset();
+        assert!(
+            (preset.alkalinity_meq_per_mg_n_nitrified - NITRIFICATION_ALK_MEQ_PER_MG_N).abs()
+                < 1e-12,
+            "default process preset should stay synchronized with the core nitrification alkalinity constant"
+        );
     }
 
     #[test]

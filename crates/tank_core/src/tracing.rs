@@ -324,6 +324,8 @@ impl PoolSnapshot {
                     state.animal.population_condition_index(),
                 ),
                 ("animal.molt_stress", state.animal.molt_stress_index),
+                ("animal.molt_readiness", state.animal.molt_readiness),
+                ("animal.failed_molt_accum", state.animal.failed_molt_accum),
                 (
                     "animal.reproductive_readiness",
                     state.animal.reproductive_readiness_index,
@@ -629,6 +631,8 @@ const TRACKED_POOL_NAMES: &[&str] = &[
     "animal.berried_females",
     "animal.condition",
     "animal.molt_stress",
+    "animal.molt_readiness",
+    "animal.failed_molt_accum",
     "animal.reproductive_readiness",
     "animal.egg_progress_days",
     "animal.egg_cohort_count",

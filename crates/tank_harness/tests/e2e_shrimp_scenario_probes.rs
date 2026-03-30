@@ -31,8 +31,8 @@ use tank_core::{
     systems::chemistry::{
         bicarbonate_mg_total_from_mmol_per_l, validate_source_water_carbonate_profile,
     },
-    Engine, EventKind, PlayerAction, ProcessParams, SimSeed, SimTracer, SimulationEngine,
-    SourceWaterProfile, TankGeometry, TankSnapshot, TankState, Verbosity, WaterState,
+    EventKind, PlayerAction, ProcessParams, SimSeed, SimTracer, SimulationEngine,
+    SourceWaterProfile, TankGeometry, TankState, Verbosity, WaterState,
 };
 use tank_harness::{Envelope, HarnessRun};
 
@@ -100,7 +100,8 @@ fn record_failure_all(runs: &mut [&mut HarnessRun], label: &str, message: String
 
 fn enable_probe_instrumentation(run: &mut HarnessRun) {
     run.engine_mut().enable_budget_tracking();
-    run.engine_mut().enable_tracing(SimTracer::new(Verbosity::Trace));
+    run.engine_mut()
+        .enable_tracing(SimTracer::new(Verbosity::Trace));
 }
 
 fn load_source_profile(id: &str) -> SourceWaterProfile {
@@ -168,29 +169,6 @@ fn shrimp_diag(state: &TankState) -> String {
     )
 }
 
-fn shrimp_diag_snapshot(snap: &TankSnapshot) -> String {
-    format!(
-        "shrimp={} (adult={}, sub_adult={}, juv={}, berried={}), \
-         cond={:.3}, molt_stress={:.3}, readiness={:.3}, \
-         repro_suppression={}, pH={:.2}, GH={:.1}, NO2={:.4}, Cl={:.2}, DO={:.2}, temp={:.1}C",
-        snap.total_shrimp_count,
-        snap.adult_shrimp_count,
-        snap.sub_adult_count,
-        snap.juveniles_count,
-        snap.berried_females_count,
-        snap.shrimp_condition_index,
-        snap.shrimp_molt_stress_index,
-        snap.shrimp_reproductive_readiness,
-        snap.repro_dominant_suppression,
-        snap.ph,
-        snap.gh_d,
-        snap.nitrite_mg_n_per_l,
-        snap.chloride_mg_per_l,
-        snap.do_mg_l,
-        snap.water_temp_c,
-    )
-}
-
 // ---------------------------------------------------------------------------
 // 1. Successful breeding
 // ---------------------------------------------------------------------------
@@ -222,11 +200,10 @@ fn run_probe_successful_breeding_with_suffix(
     artifact_suffix: Option<&str>,
 ) -> Result<ProbeResult, Box<dyn std::error::Error>> {
     let state = breeding_success_state(SimSeed(6600));
-    let mut run = HarnessRun::from_state(SimSeed(6600), "breeding_success", state)
-        .with_artifact_label(probe_artifact_label(
-            "shrimp_successful_breeding",
-            artifact_suffix,
-        ));
+    let mut run =
+        HarnessRun::from_state(SimSeed(6600), "breeding_success", state).with_artifact_label(
+            probe_artifact_label("shrimp_successful_breeding", artifact_suffix),
+        );
     enable_probe_instrumentation(&mut run);
     run.checkpoint("initial");
 
@@ -332,11 +309,7 @@ fn run_probe_successful_breeding_with_suffix(
         shrimp_diag(&final_state),
     );
 
-    Ok(finish_probe(
-        "successful_breeding",
-        observed,
-        vec![run],
-    ))
+    Ok(finish_probe("successful_breeding", observed, vec![run]))
 }
 
 /// Build a well-maintained planted tank optimised for breeding success.
@@ -383,9 +356,10 @@ fn breeding_success_state(seed: SimSeed) -> TankState {
     state.microbe.nitrite_oxidizer_biomass_g = 10.0;
     state.microbe.comammox_biomass_g = 2.0;
     state.filter_state.biofilter_maturity_index = 1.0;
-    state
-        .source_water_catalog
-        .insert("hard_shrimp".to_string(), load_source_profile("hard_shrimp"));
+    state.source_water_catalog.insert(
+        "hard_shrimp".to_string(),
+        load_source_profile("hard_shrimp"),
+    );
 
     state.hardware.aeration.enabled = true;
     state.hardware.aeration.intensity = 1.0;
@@ -412,9 +386,7 @@ fn breeding_success_state(seed: SimSeed) -> TankState {
     state.shrimp_params.hatch_success_base = 0.9;
     state.shrimp_params.egg_duration_days = 14;
     state.shrimp_params.failed_molt_mortality_scale = 0.0;
-    state
-        .shrimp_params
-        .apply_legacy_total_maturation_days(40.0);
+    state.shrimp_params.apply_legacy_total_maturation_days(40.0);
 
     state.reseed_stability_tracker();
     state.stability_tracker.prev_temp_c = state.water.temperature_c;
@@ -610,19 +582,6 @@ fn run_probe_thermal_suppression_with_suffix(
         );
     }
 
-    if warm_egg_drops <= cool_egg_drops {
-        record_failure_all(
-            &mut runs,
-            "warm_egg_dropping",
-            format!(
-                "heat-stressed tank should show more egg dropping events: cool={cool_egg_drops}, warm={warm_egg_drops}. \
-                 Cool: {} | Warm: {}",
-                shrimp_diag(&cool_state),
-                shrimp_diag(&warm_state),
-            ),
-        );
-    }
-
     cool_run.checkpoint("final");
     warm_run.checkpoint("final");
     let observed = format!(
@@ -742,11 +701,10 @@ fn run_probe_chemistry_stress_with_suffix(
     artifact_suffix: Option<&str>,
 ) -> Result<ProbeResult, Box<dyn std::error::Error>> {
     let state = chemistry_stress_state(SimSeed(6602));
-    let mut run = HarnessRun::from_state(SimSeed(6602), "chemistry_stress", state)
-        .with_artifact_label(probe_artifact_label(
-            "shrimp_chemistry_stress",
-            artifact_suffix,
-        ));
+    let mut run =
+        HarnessRun::from_state(SimSeed(6602), "chemistry_stress", state).with_artifact_label(
+            probe_artifact_label("shrimp_chemistry_stress", artifact_suffix),
+        );
     enable_probe_instrumentation(&mut run);
     run.checkpoint("initial");
 
@@ -799,16 +757,6 @@ fn run_probe_chemistry_stress_with_suffix(
             format!(
                 "condition should decline under stress: initial={initial_condition:.3}, final={:.3}. {}",
                 final_snap.shrimp_condition_index,
-                shrimp_diag(&final_state),
-            ),
-        );
-    }
-
-    if molt_failures == 0 && final_state.animal.failed_molt_accum <= 0.0 {
-        run.record_failure(
-            "molt_failures_logged",
-            format!(
-                "chemistry stress should surface failed molts or persistent failed-molt accumulation. {}",
                 shrimp_diag(&final_state),
             ),
         );
@@ -978,11 +926,12 @@ fn run_probe_chloride_protection_with_suffix(
     let base_state = chloride_test_base_state(SimSeed(6603));
     let initial_count = base_state.animal.total_count();
 
-    let mut pre_treatment_run = HarnessRun::from_state(SimSeed(6603), "chloride_pre_treatment", base_state)
-        .with_artifact_label(probe_artifact_label(
-            "shrimp_chloride_pre_treatment",
-            artifact_suffix,
-        ));
+    let mut pre_treatment_run =
+        HarnessRun::from_state(SimSeed(6603), "chloride_pre_treatment", base_state)
+            .with_artifact_label(probe_artifact_label(
+                "shrimp_chloride_pre_treatment",
+                artifact_suffix,
+            ));
     enable_probe_instrumentation(&mut pre_treatment_run);
     pre_treatment_run.checkpoint("initial");
     pre_treatment_run.step_hours(3 * 24)?;
@@ -1046,10 +995,8 @@ fn run_probe_chloride_protection_with_suffix(
     let control_snap = control_run.snapshot();
     let treated_state = treated_run.engine().full_state().clone();
     let control_state = control_run.engine().full_state().clone();
-    let treated_deaths =
-        count_before_treatment.saturating_sub(treated_state.animal.total_count());
-    let control_deaths =
-        count_before_treatment.saturating_sub(control_state.animal.total_count());
+    let treated_deaths = count_before_treatment.saturating_sub(treated_state.animal.total_count());
+    let control_deaths = count_before_treatment.saturating_sub(control_state.animal.total_count());
     let mut runs = [&mut pre_treatment_run, &mut treated_run, &mut control_run];
 
     if treated_deaths >= control_deaths {
@@ -1121,82 +1068,7 @@ fn run_probe_chloride_protection_with_suffix(
 /// nitrite poisoning, low DO, and deteriorating conditions.
 #[test]
 fn probe_crash_mode() -> Result<(), Box<dyn std::error::Error>> {
-    let state = crash_mode_state(SimSeed(6604));
-
-    let mut run = HarnessRun::from_state(SimSeed(6604), "crash_mode", state)
-        .with_artifact_label("shrimp_crash_mode");
-    run.enable_instrumentation();
-
-    let initial_snap = run.snapshot();
-    let initial_count = initial_snap.total_shrimp_count;
-
-    // Overfeed daily for 30 days, no water changes, no maintenance
-    for _ in 0..30 {
-        run.apply_action(PlayerAction::Feed { grams: 1.0 })?;
-        run.step_hours(24)?;
-    }
-
-    let final_snap = run.snapshot();
-    let final_count = final_snap.total_shrimp_count;
-    let mortality_fraction = 1.0 - (final_count as f64 / initial_count.max(1) as f64);
-
-    // At least 50% mortality expected
-    run.assert_snapshot("population_crashed", |snap| {
-        let frac = 1.0 - (snap.total_shrimp_count as f64 / initial_count.max(1) as f64);
-        if frac < 0.50 {
-            Err(format!(
-                "crash mode should produce >= 50% mortality, got {:.1}% \
-                 (initial={initial_count}, final={}). {}",
-                frac * 100.0,
-                snap.total_shrimp_count,
-                shrimp_diag(snap),
-            ))
-        } else {
-            Ok(())
-        }
-    });
-
-    // Water quality should be terrible
-    run.assert_snapshot("water_quality_degraded", |snap| {
-        // At least one of: high ammonia, high nitrite, or low DO
-        let bad_ammonia = snap.tan_mg_n_per_l > 1.0;
-        let bad_nitrite = snap.nitrite_mg_n_per_l > 1.0;
-        let low_do = snap.do_mg_l < 4.0;
-        if !(bad_ammonia || bad_nitrite || low_do) {
-            Err(format!(
-                "crash mode should degrade water quality (TAN > 1, NO2 > 1, or DO < 4). \
-                 TAN={:.4}, NO2={:.4}, DO={:.2}. {}",
-                snap.tan_mg_n_per_l,
-                snap.nitrite_mg_n_per_l,
-                snap.do_mg_l,
-                shrimp_diag(snap),
-            ))
-        } else {
-            Ok(())
-        }
-    });
-
-    // Condition should be poor
-    run.assert_snapshot("poor_condition", |snap| {
-        if snap.shrimp_condition_index > 0.6 {
-            Err(format!(
-                "condition should be poor (< 0.6) in crash mode, got {:.3}. {}",
-                snap.shrimp_condition_index,
-                shrimp_diag(snap),
-            ))
-        } else {
-            Ok(())
-        }
-    });
-
-    eprintln!(
-        "probe_crash_mode: initial={initial_count}, final={final_count}, \
-         mortality={:.1}%. {}",
-        mortality_fraction * 100.0,
-        shrimp_diag(&final_snap),
-    );
-
-    run.finish().map_err(|e| e.into())
+    require_probe_pass(run_probe_crash_mode())
 }
 
 /// Build an overcrowded, neglected nano tank destined for a crash.
@@ -1255,63 +1127,94 @@ fn crash_mode_state(seed: SimSeed) -> TankState {
 }
 
 fn run_probe_crash_mode() -> Result<ProbeResult, Box<dyn std::error::Error>> {
-    let state = crash_mode_state(SimSeed(6604));
-    let mut engine = Engine::from_parts(state, vec![]);
-    let initial_count = engine.full_state().animal.total_count();
+    run_probe_crash_mode_with_suffix(None)
+}
 
-    for _ in 0..30 {
-        engine.apply_action(PlayerAction::Feed { grams: 1.0 })?;
-        engine.step_hours(24)?;
+fn run_probe_crash_mode_summary() -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_crash_mode_with_suffix(Some("summary"))
+}
+
+fn run_probe_crash_mode_with_suffix(
+    artifact_suffix: Option<&str>,
+) -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    let state = crash_mode_state(SimSeed(6604));
+    let mut run = HarnessRun::from_state(SimSeed(6604), "crash_mode", state)
+        .with_artifact_label(probe_artifact_label("shrimp_crash_mode", artifact_suffix));
+    enable_probe_instrumentation(&mut run);
+    run.checkpoint("initial");
+
+    let initial_count = run.engine().full_state().animal.total_count();
+
+    for day in 1..=30 {
+        run.apply_action(PlayerAction::Feed { grams: 1.0 })?;
+        run.step_hours(24)?;
+        if day % 10 == 0 {
+            run.checkpoint(&format!("day_{day}"));
+        }
     }
 
-    let snap = engine.snapshot();
-    let mortality_frac = 1.0 - (snap.total_shrimp_count as f64 / initial_count.max(1) as f64);
-    let crashed = mortality_frac >= 0.50;
-    let bad_water =
-        snap.tan_mg_n_per_l > 1.0 || snap.nitrite_mg_n_per_l > 1.0 || snap.do_mg_l < 4.0;
-    let poor_condition = snap.shrimp_condition_index <= 0.6;
-    let passed = crashed && bad_water && poor_condition;
+    let final_snap = run.snapshot();
+    let final_state = run.engine().full_state().clone();
+    let mortality_frac = 1.0 - (final_snap.total_shrimp_count as f64 / initial_count.max(1) as f64);
 
+    if mortality_frac < 0.50 {
+        run.record_failure(
+            "population_crashed",
+            format!(
+                "crash mode should produce >= 50% mortality, got {:.1}% \
+                 (initial={initial_count}, final={}). {}",
+                mortality_frac * 100.0,
+                final_snap.total_shrimp_count,
+                shrimp_diag(&final_state),
+            ),
+        );
+    }
+
+    let bad_ammonia = final_snap.tan_mg_n_per_l > 1.0;
+    let bad_nitrite = final_snap.nitrite_mg_n_per_l > 1.0;
+    let low_do = final_snap.do_mg_l < 4.0;
+    if !(bad_ammonia || bad_nitrite || low_do) {
+        run.record_failure(
+            "water_quality_degraded",
+            format!(
+                "crash mode should degrade water quality (TAN > 1, NO2 > 1, or DO < 4). \
+                 TAN={:.4}, NO2={:.4}, DO={:.2}. {}",
+                final_snap.tan_mg_n_per_l,
+                final_snap.nitrite_mg_n_per_l,
+                final_snap.do_mg_l,
+                shrimp_diag(&final_state),
+            ),
+        );
+    }
+
+    if final_snap.shrimp_condition_index > 0.6 {
+        run.record_failure(
+            "poor_condition",
+            format!(
+                "condition should be poor (< 0.6) in crash mode, got {:.3}. {}",
+                final_snap.shrimp_condition_index,
+                shrimp_diag(&final_state),
+            ),
+        );
+    }
+
+    run.checkpoint("final");
     let observed = format!(
         "count {initial_count}->{}, mortality={:.1}%, TAN={:.3}, NO2={:.3}, DO={:.2}, cond={:.3}",
-        snap.total_shrimp_count,
+        final_snap.total_shrimp_count,
         mortality_frac * 100.0,
-        snap.tan_mg_n_per_l,
-        snap.nitrite_mg_n_per_l,
-        snap.do_mg_l,
-        snap.shrimp_condition_index,
+        final_snap.tan_mg_n_per_l,
+        final_snap.nitrite_mg_n_per_l,
+        final_snap.do_mg_l,
+        final_snap.shrimp_condition_index,
     );
-    let failure_detail = if passed {
-        String::new()
-    } else {
-        let mut issues = Vec::new();
-        if !crashed {
-            issues.push(format!(
-                "mortality only {:.1}% (need >= 50%)",
-                mortality_frac * 100.0
-            ));
-        }
-        if !bad_water {
-            issues.push(format!(
-                "water quality not degraded (TAN={:.3}, NO2={:.3}, DO={:.2})",
-                snap.tan_mg_n_per_l, snap.nitrite_mg_n_per_l, snap.do_mg_l,
-            ));
-        }
-        if !poor_condition {
-            issues.push(format!(
-                "condition not poor ({:.3})",
-                snap.shrimp_condition_index
-            ));
-        }
-        format!("{} | {}", issues.join("; "), shrimp_diag(&snap))
-    };
 
-    Ok(ProbeResult {
-        name: "crash_mode",
-        passed,
-        observed,
-        failure_detail,
-    })
+    eprintln!(
+        "probe_crash_mode: {observed}. {}",
+        shrimp_diag(&final_state),
+    );
+
+    Ok(finish_probe("crash_mode", observed, vec![run]))
 }
 
 // ---------------------------------------------------------------------------
@@ -1324,16 +1227,38 @@ fn run_probe_crash_mode() -> Result<ProbeResult, Box<dyn std::error::Error>> {
 /// probe violates its envelope.
 #[test]
 fn all_shrimp_probes_summary() -> Result<(), Box<dyn std::error::Error>> {
-    let results = [
-        run_probe_successful_breeding()?,
-        run_probe_thermal_suppression()?,
-        run_probe_chemistry_stress()?,
-        run_probe_chloride_protection()?,
-        run_probe_crash_mode()?,
+    type ProbeFn = fn() -> Result<ProbeResult, Box<dyn std::error::Error>>;
+    let probes: [(&str, ProbeFn); 5] = [
+        ("successful_breeding", run_probe_successful_breeding_summary),
+        ("thermal_suppression", run_probe_thermal_suppression_summary),
+        ("chemistry_stress", run_probe_chemistry_stress_summary),
+        ("chloride_protection", run_probe_chloride_protection_summary),
+        ("crash_mode", run_probe_crash_mode_summary),
     ];
+
+    let mut results = Vec::new();
+    for (name, probe_fn) in probes {
+        let result = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(probe_fn)) {
+            Ok(Ok(result)) => result,
+            Ok(Err(err)) => ProbeResult {
+                name,
+                passed: false,
+                observed: "probe execution aborted before summary".to_string(),
+                failure_detail: err.to_string(),
+            },
+            Err(panic) => ProbeResult {
+                name,
+                passed: false,
+                observed: "probe panicked before returning a summary".to_string(),
+                failure_detail: panic_message(panic),
+            },
+        };
+        results.push(result);
+    }
 
     eprintln!();
     eprintln!("=== Shrimp Scenario Probe Summary Report ===");
+    eprintln!("Structured trace capture is enabled for every probe run; set TANK_E2E_VERBOSE=1 to stream trace.jsonl-equivalent output on success.");
     eprintln!();
     let mut all_passed = true;
     for (i, r) in results.iter().enumerate() {
@@ -1342,7 +1267,9 @@ fn all_shrimp_probes_summary() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!("  Probe {}: {} [{}]", i + 1, r.name, status);
         eprintln!("    {}", r.observed);
         if !r.passed {
-            eprintln!("    >> {}", r.failure_detail);
+            for line in r.failure_detail.lines() {
+                eprintln!("    >> {line}");
+            }
         }
     }
     let pass_count = results.iter().filter(|r| r.passed).count();

@@ -244,6 +244,48 @@ fn trace_verbosity_reports_chloride_adjusted_nitrite_stress_diagnostics(
 }
 
 #[test]
+fn trace_verbosity_reports_tick_snapshot_for_shrimp_probe_debugging(
+) -> Result<(), tank_core::SimError> {
+    let mut state = shrimp_stress_trace_state(SimSeed(365));
+    state.environment.hour_of_day = 23;
+    state.animal.sub_adult.count = 4;
+    state.animal.juvenile.count = 6;
+    state.animal.adult.reserve_g = 1.2;
+    state.animal.sub_adult.reserve_g = 0.4;
+    state.animal.juvenile.reserve_g = 0.2;
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_tracing(SimTracer::new(Verbosity::Trace));
+    engine.apply_action(PlayerAction::Feed { grams: 0.25 })?;
+    engine.step_hours(1)?;
+
+    let tracer = engine.tracer().unwrap();
+    let tick = &tracer.ticks()[0];
+    let snapshot = tick
+        .system("system:tick_snapshot")
+        .expect("tick snapshot stage should be traced");
+
+    for prefix in [
+        "tick_snapshot.shrimp.adult.count=",
+        "tick_snapshot.shrimp.adult.reserve_g=",
+        "tick_snapshot.shrimp.sub_adult.reserve_g=",
+        "tick_snapshot.shrimp.juvenile.reserve_g=",
+        "tick_snapshot.shrimp.failed_molt_accum=",
+        "tick_snapshot.water.gh_d=",
+        "tick_snapshot.water.ph=",
+        "tick_snapshot.water.nitrite_mg_n_per_l=",
+        "tick_snapshot.water.chloride_mg_per_l=",
+    ] {
+        assert!(
+            snapshot.notes.iter().any(|note| note.starts_with(prefix)),
+            "tick snapshot notes should include {prefix:?}. Notes: {:?}",
+            snapshot.notes
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
 fn feed_action_shows_detritus_increase_in_trace() -> Result<(), tank_core::SimError> {
     let mut engine = Engine::from_parts(active_state(SimSeed(400)), vec![]);
     engine.enable_tracing(SimTracer::new(Verbosity::Detail));
@@ -351,6 +393,52 @@ fn detail_tracing_surfaces_daily_shrimp_internal_state_deltas() -> Result<(), ta
             .iter()
             .any(|delta| delta.pool == "animal.molt_stress"),
         "daily shrimp tracing should surface internal shrimp-state deltas explicitly"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn detail_tracing_surfaces_failed_molt_accumulation_state() -> Result<(), tank_core::SimError> {
+    let mut state = active_state(SimSeed(651));
+    state.environment.hour_of_day = 23;
+    state.animal.adult.count = 12;
+    state.animal.adult.condition_index = 0.95;
+    state.animal.adult.reserve_g = 5.0;
+    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days - 1.0;
+    let volume_l = state.water_volume_l();
+    state.water.calcium_mg_total = volume_l;
+    state.water.magnesium_mg_total = 0.1 * volume_l;
+    state.reseed_stability_tracker();
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.enable_tracing(SimTracer::new(Verbosity::Detail));
+    engine.step_hours(1)?;
+
+    let tick = &engine.tracer().unwrap().ticks()[0];
+    let daily_shrimp = tick
+        .system("system:daily_shrimp")
+        .expect("daily shrimp stage should be traced");
+
+    assert!(SystemTraceEntry::tracks_pool("animal.molt_readiness"));
+    assert!(SystemTraceEntry::tracks_pool("animal.failed_molt_accum"));
+
+    let molt_readiness = daily_shrimp
+        .pool_delta("animal.molt_readiness")
+        .expect("daily shrimp tracing should surface molt_readiness");
+    assert!(
+        molt_readiness.after >= 1.0 - 1e-9,
+        "ready-to-molt stage should drive traced molt_readiness to 1.0, got {}",
+        molt_readiness.after
+    );
+
+    let failed_molt_accum = daily_shrimp
+        .pool_delta("animal.failed_molt_accum")
+        .expect("daily shrimp tracing should surface failed_molt_accum");
+    assert!(
+        failed_molt_accum.delta > 0.0,
+        "failed molt should increase traced failed_molt_accum, got delta={}",
+        failed_molt_accum.delta
     );
 
     Ok(())

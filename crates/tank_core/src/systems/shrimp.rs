@@ -495,6 +495,10 @@ fn update_molt_stress(state: &mut TankState) {
     let hourly_pressure =
         state.animal.hourly_heat_stress_accum + state.animal.hourly_instability_stress_accum;
 
+    // These pressure weights are sensitivity coefficients rather than a
+    // normalized partition. Allowing them to sum above 1.0 lets overlapping
+    // moderate stressors saturate the blended pressure sooner; clamp keeps the
+    // resulting index bounded.
     let stress_pressure = (mineral_stress * params.molt_stress_pressure_mineral_weight
         + instability_stress * params.molt_stress_pressure_instability_weight
         + condition_stress * params.molt_stress_pressure_condition_weight

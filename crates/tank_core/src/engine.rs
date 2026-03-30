@@ -113,6 +113,104 @@ impl StageTrace {
     }
 }
 
+fn emit_tick_snapshot(stage_trace: &mut StageTrace, state: &TankState) {
+    if !stage_trace.is_enabled() {
+        return;
+    }
+
+    let chemistry = state.concentrations();
+    let carbonate_eq = state
+        .water
+        .projected_carbonate_equilibrium(chemistry.volume_l());
+
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.total_count={}",
+        state.animal.total_count()
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.adult.count={}",
+        state.animal.adult.count
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.adult.condition={:.6}",
+        state.animal.adult.condition_index
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.adult.reserve_g={:.6}",
+        state.animal.adult.reserve_g
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.sub_adult.count={}",
+        state.animal.sub_adult.count
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.sub_adult.condition={:.6}",
+        state.animal.sub_adult.condition_index
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.sub_adult.reserve_g={:.6}",
+        state.animal.sub_adult.reserve_g
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.juvenile.count={}",
+        state.animal.juvenile.count
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.juvenile.condition={:.6}",
+        state.animal.juvenile.condition_index
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.juvenile.reserve_g={:.6}",
+        state.animal.juvenile.reserve_g
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.berried_females={}",
+        state.animal.berried_females_count
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.population_condition={:.6}",
+        state.animal.population_condition_index()
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.molt_stress={:.6}",
+        state.animal.molt_stress_index
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.molt_readiness={:.6}",
+        state.animal.molt_readiness
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.failed_molt_accum={:.6}",
+        state.animal.failed_molt_accum
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.last_molt_success={}",
+        state.animal.last_molt_success
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.shrimp.reproductive_readiness={:.6}",
+        state.animal.reproductive_readiness_index
+    ));
+    stage_trace.note(format!("tick_snapshot.water.gh_d={:.6}", chemistry.gh_d()));
+    stage_trace.note(format!("tick_snapshot.water.ph={:.6}", carbonate_eq.ph));
+    stage_trace.note(format!(
+        "tick_snapshot.water.nitrite_mg_n_per_l={:.6}",
+        chemistry.nitrite_mg_n_per_l()
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.water.chloride_mg_per_l={:.6}",
+        chemistry.chloride_mg_per_l()
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.water.do_mg_l={:.6}",
+        chemistry.do_mg_per_l()
+    ));
+    stage_trace.note(format!(
+        "tick_snapshot.water.temperature_c={:.6}",
+        state.water.temperature_c
+    ));
+}
+
 impl Engine {
     pub fn new(seed: SimSeed) -> Self {
         Self {
@@ -507,6 +605,9 @@ impl Engine {
         self.maybe_record_stage(&mut ctx, "system:invariants", |engine, _stage_trace| {
             enforce_invariants(&mut engine.state)
         })?;
+        self.maybe_record_stage(&mut ctx, "system:tick_snapshot", |engine, stage_trace| {
+            emit_tick_snapshot(stage_trace, &engine.state);
+        });
 
         if let Some(tick_record) = ctx.budget.as_ref() {
             enforce_tracked_tick_budget_guard(tick_record)?;

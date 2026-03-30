@@ -1341,7 +1341,7 @@ mod tests {
         materialize_scenario, process_preset_to_params, shrimp_preset_to_params,
         source_water_to_profile,
     };
-    use tank_core::{SimSeed, WaterState};
+    use tank_core::{ProcessParams, SimSeed, WaterState, NITRIFICATION_ALK_MEQ_PER_MG_N};
 
     #[test]
     fn process_preset_mapping_carries_shrimp_routing_fields() {
@@ -1379,6 +1379,32 @@ mod tests {
         assert_eq!(params.microfauna_respiration_fraction_of_assimilated, 0.64);
         assert_eq!(params.microfauna_excretion_fraction_of_assimilated, 0.11);
         assert_eq!(params.microfauna_growth_fraction_of_assimilated, 0.25);
+    }
+
+    #[test]
+    fn process_preset_mapping_keeps_default_alkalinity_constant_in_sync() {
+        let preset =
+            tank_data::load_process_params("default").expect("default process preset should load");
+        let params = process_preset_to_params(&preset);
+        let runtime_default = ProcessParams::default();
+
+        assert!(
+            (preset.alkalinity_meq_per_mg_n_nitrified - NITRIFICATION_ALK_MEQ_PER_MG_N).abs()
+                < 1e-12,
+            "shipped process preset should match the core nitrification alkalinity constant"
+        );
+        assert!(
+            (params.alkalinity_meq_per_mg_n_nitrified - NITRIFICATION_ALK_MEQ_PER_MG_N).abs()
+                < 1e-12,
+            "scenario materialization should preserve the synchronized alkalinity constant"
+        );
+        assert!(
+            (params.alkalinity_meq_per_mg_n_nitrified
+                - runtime_default.alkalinity_meq_per_mg_n_nitrified)
+                .abs()
+                < 1e-12,
+            "scenario-mapped process params should match runtime defaults for alkalinity consumption"
+        );
     }
 
     #[test]
