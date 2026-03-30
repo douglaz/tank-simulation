@@ -43,22 +43,17 @@ tuning and validation work can focus on the weakest assumptions first.
 |-----------|-------|------|-------|-------|
 | `algae_max_growth_rate_per_day` | 0.2 | per day | 0.1–0.5 | Conservative within Eppley curve predictions |
 
-### Not Yet in Preset Layer (TODO)
-The following denitrification parameters are present in `default.toml` but are not carried by
-`ProcessParamsPreset` — the runtime reads code defaults from `tank_core::types::process`.
-Their provenance cannot be attached via `param_meta` until the preset struct is extended.
+### Denitrification Parameters (`process/default.toml`)
+These fields now load through `ProcessParamsPreset`, carry `param_meta`, and map through
+scenario materialization without falling back to runtime defaults.
 
-| Parameter | Value | Unit | Literature range | Confidence estimate |
-|-----------|-------|------|-----------------|---------------------|
-| `denitrification_vmax_mg_n_per_l_per_hour` | 0.1 | mg N/L/h | 0.01–0.5 | literature (mid-range) |
-| `denitrification_k_no3_mg_n_per_l` | 2.0 | mg N/L | 0.5–5.0 | literature |
-| `denitrification_k_doc_mg_c_per_l` | 5.0 | mg C/L | 1.0–10.0 | literature |
-| `denitrification_pore_water_mixing_factor` | 0.5 | fraction | 0.3–0.7 | heuristic |
-| `denitrification_activity_maturation_days` | 60.0 | days | 30–90 | expert |
-
-**Action**: Extend `ProcessParamsPreset` to include denitrification fields, then attach
-formal `param_meta` entries. The literature ranges above are documented in the TOML comments
-and in `tank_core::types::process` default-value doc comments.
+| Parameter | Value | Unit | Confidence | Notes |
+|-----------|-------|------|------------|-------|
+| `denitrification_vmax_mg_n_per_l_per_hour` | 0.1 | mg N/L/h | literature | Conservative mid-range freshwater sediment anchor for mature suboxic pore water |
+| `denitrification_k_no3_mg_n_per_l` | 2.0 | mg N/L | literature | Middle-of-range Monod constant to avoid nitrate-unlimited denitrification at trace NO₃ |
+| `denitrification_k_doc_mg_c_per_l` | 5.0 | mg C/L | literature | Assumes mixed aquarium DOC quality rather than acetate-like lab substrates |
+| `denitrification_pore_water_mixing_factor` | 0.5 | fraction | heuristic | Geometry/flow proxy for pore-water access, not a directly measured constant |
+| `denitrification_activity_maturation_days` | 60.0 | days | expert | Encodes the slower establishment of denitrifiers versus nitrifiers in new tanks |
 
 ---
 
@@ -138,6 +133,8 @@ capacity. Other substrate indices and nutrient-charge fields are still pending a
 |-----------|-------|------------|-----------------|
 | `high_temp_repro_penalty_full_c` | 33.0 | heuristic | Near lethal limit; exact cessation point unknown |
 | `low_temp_repro_ramp_width_c` | 4.0 | **placeholder** | Pure tuning parameter; no literature support |
+| `tan_repro_full_suppression_mg_n_per_l` | 3.0 | heuristic | Derived from the corrected TAN onset threshold plus the legacy decline-span formula |
+| `no2_repro_full_suppression_mg_n_per_l` | 1.5 | heuristic | Derived from the corrected NO₂ onset threshold plus the legacy decline-span formula |
 | `chloride_protection_factor` | 0.5 | heuristic | Mechanism well-established in fish; transfer to Neocaridina is medium-confidence |
 | `molt_stress_mineral_*_weight` | 0.5/0.3/0.2 | heuristic | Calibration weights, not derived from data |
 

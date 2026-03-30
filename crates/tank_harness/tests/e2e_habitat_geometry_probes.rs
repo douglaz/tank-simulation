@@ -277,17 +277,18 @@ fn probe_artifact_label(base: &str, suffix: Option<&str>) -> String {
 // already executes each multi-day scenario once in ordinary `cargo test` runs.
 #[test]
 #[ignore = "run explicitly with -- --ignored when iterating on a single habitat probe"]
-fn probe_biofilter_scaling_bigger_media_higher_capacity() -> Result<(), Box<dyn std::error::Error>>
+fn probe_biofilter_scaling_bigger_media_higher_capacity_lower_reduced_n(
+) -> Result<(), Box<dyn std::error::Error>> 
 {
-    require_probe_pass(run_probe_biofilter_scaling_bigger_media_higher_capacity())
+    require_probe_pass(run_probe_biofilter_scaling_bigger_media_higher_capacity_lower_reduced_n())
 }
 
-fn run_probe_biofilter_scaling_bigger_media_higher_capacity(
+fn run_probe_biofilter_scaling_bigger_media_higher_capacity_lower_reduced_n(
 ) -> Result<ProbeResult, Box<dyn std::error::Error>> {
-    run_probe_biofilter_scaling_bigger_media_higher_capacity_with_suffix(None)
+    run_probe_biofilter_scaling_bigger_media_higher_capacity_lower_reduced_n_with_suffix(None)
 }
 
-fn run_probe_biofilter_scaling_bigger_media_higher_capacity_with_suffix(
+fn run_probe_biofilter_scaling_bigger_media_higher_capacity_lower_reduced_n_with_suffix(
     artifact_suffix: Option<&str>,
 ) -> Result<ProbeResult, Box<dyn std::error::Error>> {
     const SMALL_MEDIA_CM2: f64 = 500.0;
@@ -589,7 +590,8 @@ fn run_probe_biofilter_scaling_bigger_media_higher_capacity_with_suffix(
              {nitrifier_small:.3}->{nitrifier_large:.3} g, final TAN \
              {tan_small:.3}->{tan_large:.3}, final NO₂ {no2_small:.3}->{no2_large:.3}, \
              final reduced-N {final_reduced_n_small:.3}->{final_reduced_n_large:.3}, \
-             clearance {clearance_summary}",
+             no clearance inside horizon ({clearance_summary}); fallback passed on \
+             higher nitrifier biomass plus lower terminal TAN/NO₂",
             tan_small = snap_small.tan_mg_n_per_l,
             tan_large = snap_large.tan_mg_n_per_l,
             no2_small = snap_small.nitrite_mg_n_per_l,
@@ -1583,9 +1585,11 @@ fn run_probe_equipment_scaling_1x_vs_2x_with_suffix(
     ))
 }
 
-fn run_probe_biofilter_scaling_bigger_media_higher_capacity_summary(
+fn run_probe_biofilter_scaling_bigger_media_higher_capacity_lower_reduced_n_summary(
 ) -> Result<ProbeResult, Box<dyn std::error::Error>> {
-    run_probe_biofilter_scaling_bigger_media_higher_capacity_with_suffix(Some("summary"))
+    run_probe_biofilter_scaling_bigger_media_higher_capacity_lower_reduced_n_with_suffix(Some(
+        "summary",
+    ))
 }
 
 fn run_probe_light_depth_shallow_vs_deep_growth_summary(
@@ -1620,7 +1624,7 @@ fn all_habitat_geometry_probes_summary() -> Result<(), Box<dyn std::error::Error
     let probes: [(&str, ProbeFn); 5] = [
         (
             "biofilter_scaling",
-            run_probe_biofilter_scaling_bigger_media_higher_capacity_summary,
+            run_probe_biofilter_scaling_bigger_media_higher_capacity_lower_reduced_n_summary,
         ),
         (
             "light_depth",
