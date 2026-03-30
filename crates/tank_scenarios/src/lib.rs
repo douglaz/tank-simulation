@@ -913,6 +913,18 @@ fn shrimp_preset_to_params(
     if let Some(value) = shrimp_preset.nh3_stress_response_scale {
         params.nh3_stress_response_scale = value;
     }
+    if let Some(value) = shrimp_preset.condition_do_reference_mg_l {
+        params.condition_do_reference_mg_l = value;
+    }
+    if let Some(value) = shrimp_preset.condition_nh3_sensitivity {
+        params.condition_nh3_sensitivity = value;
+    }
+    if let Some(value) = shrimp_preset.condition_nitrite_sensitivity {
+        params.condition_nitrite_sensitivity = value;
+    }
+    if let Some(value) = shrimp_preset.condition_hourly_stress_penalty_weight {
+        params.condition_hourly_stress_penalty_weight = value;
+    }
     if let Some(value) = shrimp_preset.density_repro_threshold_per_l {
         params.density_repro_threshold_per_l = value;
     }
@@ -1500,6 +1512,10 @@ mod tests {
         preset.critical_molt_gh_ratio = Some(0.22);
         preset.nh3_stress_threshold_mg_n_per_l = Some(0.03);
         preset.nh3_stress_response_scale = Some(1.4);
+        preset.condition_do_reference_mg_l = Some(5.5);
+        preset.condition_nh3_sensitivity = Some(2.2);
+        preset.condition_nitrite_sensitivity = Some(0.35);
+        preset.condition_hourly_stress_penalty_weight = Some(0.65);
         preset.tan_repro_threshold_mg_n_per_l = Some(0.8);
         preset.tan_repro_full_suppression_mg_n_per_l = Some(1.7);
         preset.no2_repro_threshold_mg_n_per_l = Some(0.3);
@@ -1549,6 +1565,10 @@ mod tests {
         assert_eq!(params.critical_molt_gh_ratio, 0.22);
         assert_eq!(params.nh3_stress_threshold_mg_n_per_l, 0.03);
         assert_eq!(params.nh3_stress_response_scale, 1.4);
+        assert_eq!(params.condition_do_reference_mg_l, 5.5);
+        assert_eq!(params.condition_nh3_sensitivity, 2.2);
+        assert_eq!(params.condition_nitrite_sensitivity, 0.35);
+        assert_eq!(params.condition_hourly_stress_penalty_weight, 0.65);
         assert_eq!(params.tan_repro_threshold_mg_n_per_l, 0.8);
         assert_eq!(params.tan_repro_full_suppression_mg_n_per_l, 1.7);
         assert_eq!(params.no2_repro_threshold_mg_n_per_l, 0.3);

@@ -58,6 +58,10 @@ critical_molt_gh_ratio = 0.3
 chloride_protection_factor = 0.5
 nh3_stress_threshold_mg_n_per_l = 0.02
 nh3_stress_response_scale = 2.0
+condition_do_reference_mg_l = 6.0
+condition_nh3_sensitivity = 3.0
+condition_nitrite_sensitivity = 0.5
+condition_hourly_stress_penalty_weight = 0.5
 
 # Reproduction suppression parameters
 density_repro_threshold_per_l = 10.0
