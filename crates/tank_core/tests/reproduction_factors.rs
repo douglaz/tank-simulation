@@ -1052,6 +1052,148 @@ fn test_extracted_reproduction_tuning_parameters_change_behavior() {
         slow_smoothing.animal.reproductive_readiness_index,
     );
 
+    // Cold-ramp width should tune how punishing cool-but-not-freezing water is.
+    let mut narrow_cold = breeding_fixture(SimSeed(8022));
+    narrow_cold.animal.reproductive_readiness_index = 1.0;
+    narrow_cold.animal.adult.condition_index = 1.0;
+    narrow_cold.animal.molt_stress_index = 0.0;
+    narrow_cold.process_params.shrimp_condition_smoothing = 0.0;
+    narrow_cold.shrimp_params.base_spawn_rate = 0.0;
+    narrow_cold.shrimp_params.reproductive_readiness_smoothing = 1.0;
+    narrow_cold.shrimp_params.low_temp_repro_ramp_width_c = 2.0;
+    narrow_cold.water.temperature_c = 20.0;
+    narrow_cold.environment.ambient_temp_c = 20.0;
+    narrow_cold.stability_tracker.prev_temp_c = 20.0;
+    narrow_cold.hardware.heater.enabled = false;
+
+    let mut wide_cold = narrow_cold.clone();
+    wide_cold.shrimp_params.low_temp_repro_ramp_width_c = 6.0;
+
+    step_daily_shrimp(&mut narrow_cold);
+    step_daily_shrimp(&mut wide_cold);
+
+    assert!(
+        wide_cold.animal.reproductive_readiness_index
+            > narrow_cold.animal.reproductive_readiness_index,
+        "Wider low-temp ramp should preserve more readiness at the same cool temperature: wide={:.4}, narrow={:.4}",
+        wide_cold.animal.reproductive_readiness_index,
+        narrow_cold.animal.reproductive_readiness_index,
+    );
+
+    // Full-suppression TAN point should tune the steepness above the onset threshold.
+    let mut tan_steep = breeding_fixture(SimSeed(8023));
+    tan_steep.animal.reproductive_readiness_index = 1.0;
+    tan_steep.animal.adult.condition_index = 1.0;
+    tan_steep.animal.molt_stress_index = 0.0;
+    tan_steep.process_params.shrimp_condition_smoothing = 0.0;
+    tan_steep.shrimp_params.base_spawn_rate = 0.0;
+    tan_steep.shrimp_params.reproductive_readiness_smoothing = 1.0;
+    tan_steep.shrimp_params.tan_repro_threshold_mg_n_per_l = 1.0;
+    tan_steep
+        .shrimp_params
+        .tan_repro_full_suppression_mg_n_per_l = 1.6;
+    tan_steep.water.ammonia_total_mg_n_total = 1.4 * tan_steep.water_volume_l();
+
+    let mut tan_shallow = tan_steep.clone();
+    tan_shallow
+        .shrimp_params
+        .tan_repro_full_suppression_mg_n_per_l = 3.0;
+
+    step_daily_shrimp(&mut tan_steep);
+    step_daily_shrimp(&mut tan_shallow);
+
+    assert!(
+        tan_shallow.animal.reproductive_readiness_index
+            > tan_steep.animal.reproductive_readiness_index,
+        "Higher TAN full-suppression point should soften the same TAN load: shallow={:.4}, steep={:.4}",
+        tan_shallow.animal.reproductive_readiness_index,
+        tan_steep.animal.reproductive_readiness_index,
+    );
+
+    // Full-suppression NO2 point should do the same for nitrite stress.
+    let mut no2_steep = breeding_fixture(SimSeed(8024));
+    no2_steep.animal.reproductive_readiness_index = 1.0;
+    no2_steep.animal.adult.condition_index = 1.0;
+    no2_steep.animal.molt_stress_index = 0.0;
+    no2_steep.process_params.shrimp_condition_smoothing = 0.0;
+    no2_steep.shrimp_params.base_spawn_rate = 0.0;
+    no2_steep.shrimp_params.reproductive_readiness_smoothing = 1.0;
+    no2_steep.shrimp_params.no2_repro_threshold_mg_n_per_l = 0.5;
+    no2_steep
+        .shrimp_params
+        .no2_repro_full_suppression_mg_n_per_l = 0.8;
+    no2_steep.water.nitrite_mg_n_total = 0.7 * no2_steep.water_volume_l();
+
+    let mut no2_shallow = no2_steep.clone();
+    no2_shallow
+        .shrimp_params
+        .no2_repro_full_suppression_mg_n_per_l = 1.5;
+
+    step_daily_shrimp(&mut no2_steep);
+    step_daily_shrimp(&mut no2_shallow);
+
+    assert!(
+        no2_shallow.animal.reproductive_readiness_index
+            > no2_steep.animal.reproductive_readiness_index,
+        "Higher NO2 full-suppression point should soften the same nitrite load: shallow={:.4}, steep={:.4}",
+        no2_shallow.animal.reproductive_readiness_index,
+        no2_steep.animal.reproductive_readiness_index,
+    );
+
+    // The shared mineral floor should tune low-GH reproduction pressure.
+    let mut low_floor = breeding_fixture(SimSeed(8025));
+    low_floor.animal.reproductive_readiness_index = 1.0;
+    low_floor.animal.adult.condition_index = 1.0;
+    low_floor.animal.molt_stress_index = 0.0;
+    low_floor.process_params.shrimp_condition_smoothing = 0.0;
+    low_floor.shrimp_params.base_spawn_rate = 0.0;
+    low_floor.shrimp_params.reproductive_readiness_smoothing = 1.0;
+    low_floor.shrimp_params.molt_mineral_factor_floor = 0.2;
+    low_floor.water.calcium_mg_total = 10.0 * low_floor.water_volume_l();
+    low_floor.water.magnesium_mg_total = 2.0 * low_floor.water_volume_l();
+
+    let mut high_floor = low_floor.clone();
+    high_floor.shrimp_params.molt_mineral_factor_floor = 0.6;
+
+    step_daily_shrimp(&mut low_floor);
+    step_daily_shrimp(&mut high_floor);
+
+    assert!(
+        high_floor.animal.reproductive_readiness_index
+            > low_floor.animal.reproductive_readiness_index,
+        "Higher shared mineral floor should soften low-GH suppression: high_floor={:.4}, low_floor={:.4}",
+        high_floor.animal.reproductive_readiness_index,
+        low_floor.animal.reproductive_readiness_index,
+    );
+
+    // The shared high-GH divisor should tune high-mineral reproduction pressure.
+    let mut strict_high_gh = breeding_fixture(SimSeed(8026));
+    strict_high_gh.animal.reproductive_readiness_index = 1.0;
+    strict_high_gh.animal.adult.condition_index = 1.0;
+    strict_high_gh.animal.molt_stress_index = 0.0;
+    strict_high_gh.process_params.shrimp_condition_smoothing = 0.0;
+    strict_high_gh.shrimp_params.base_spawn_rate = 0.0;
+    strict_high_gh
+        .shrimp_params
+        .reproductive_readiness_smoothing = 1.0;
+    strict_high_gh.shrimp_params.molt_gh_excess_penalty_divisor = 4.0;
+    strict_high_gh.water.calcium_mg_total = 80.0 * strict_high_gh.water_volume_l();
+    strict_high_gh.water.magnesium_mg_total = 20.0 * strict_high_gh.water_volume_l();
+
+    let mut relaxed_high_gh = strict_high_gh.clone();
+    relaxed_high_gh.shrimp_params.molt_gh_excess_penalty_divisor = 12.0;
+
+    step_daily_shrimp(&mut strict_high_gh);
+    step_daily_shrimp(&mut relaxed_high_gh);
+
+    assert!(
+        relaxed_high_gh.animal.reproductive_readiness_index
+            > strict_high_gh.animal.reproductive_readiness_index,
+        "Larger shared GH excess divisor should soften high-GH suppression: relaxed={:.4}, strict={:.4}",
+        relaxed_high_gh.animal.reproductive_readiness_index,
+        strict_high_gh.animal.reproductive_readiness_index,
+    );
+
     // Egg-drop cap should tune clutch-loss severity under the same shock.
     let mut low_cap = breeding_fixture(SimSeed(8019));
     low_cap.animal.adult.count = 120;

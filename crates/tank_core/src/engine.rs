@@ -227,6 +227,7 @@ impl Engine {
         // so callers still get the expected pre-simulation validation error
         // without incidental mutation from engine construction.
         if validate_invariants(&state).is_ok() {
+            state.refresh_habitat_registry();
             systems::substrate::step_substrate_zones(&mut state);
         }
         state.refresh_habitat_registry();
