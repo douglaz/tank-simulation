@@ -962,6 +962,17 @@ fn egg_development(state: &mut TankState) {
             0.0,
             state.animal.adult.condition_index,
         );
+
+        crate::systems::events::emit_once_per_day_pub(
+            state,
+            EventSeverity::Info,
+            EventKind::ShrimpHatched,
+            vec![EventCause::RoutineAction],
+            format!(
+                "{total_successful} clutch(es) hatched into {} juvenile(s)",
+                total_successful * effective_clutch_size
+            ),
+        );
     }
 
     // Only resolved clutches leave berried_females_count

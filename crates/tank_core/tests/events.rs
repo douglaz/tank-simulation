@@ -258,6 +258,57 @@ fn shrimp_berried_event_has_cause_codes() -> Result<(), tank_core::SimError> {
 }
 
 #[test]
+fn shrimp_hatched_event_has_cause_codes() -> Result<(), tank_core::SimError> {
+    let mut state = TankState::new(SimSeed(5350));
+    state.water.temperature_c = 24.0;
+    state.environment.ambient_temp_c = 24.0;
+    let volume_l = state.water_volume_l();
+    state.water.dissolved_oxygen_mg_total = 8.0 * volume_l;
+    state.water.calcium_mg_total = 40.0 * volume_l;
+    state.water.magnesium_mg_total = 10.0 * volume_l;
+    state.water.alkalinity_meq_total = 10.0 * volume_l;
+    state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * volume_l;
+
+    state.animal.adult.count = 6;
+    state.animal.adult.condition_index = 0.95;
+    state.animal.adult.reserve_g = 1.0;
+    state.animal.berried_females_count = 2;
+    state.animal.egg_progress_days = 20.0;
+    state.animal.egg_cohorts = vec![EggCohort {
+        count: 2,
+        progress_days: 20.0,
+    }];
+    state.animal.molt_stress_index = 0.0;
+    state.animal.reproductive_readiness_index = 1.0;
+    state.stability_tracker.instability_index = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.shrimp_params.hatch_success_base = 1.0;
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    engine.step_hours(24)?;
+
+    let hatch_events: Vec<_> = engine
+        .full_state()
+        .event_log
+        .iter()
+        .filter(|event| event.kind == EventKind::ShrimpHatched)
+        .collect();
+
+    assert!(
+        !hatch_events.is_empty(),
+        "Should emit ShrimpHatched under favorable hatch conditions"
+    );
+    for event in &hatch_events {
+        assert!(
+            !event.cause_codes.is_empty(),
+            "ShrimpHatched events must have non-empty cause_codes"
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
 fn egg_failure_event_has_cause_codes() -> Result<(), tank_core::SimError> {
     let mut state = TankState::new(SimSeed(5400));
     state.water.temperature_c = 32.0;

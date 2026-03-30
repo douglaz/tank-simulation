@@ -17,6 +17,7 @@ pub enum EventKind {
     AlgaeBloom,
     BiofilmMaturityIncrease,
     ShrimpBerried,
+    ShrimpHatched,
     EggFailure,
     MoltFailure,
     EggDropping,

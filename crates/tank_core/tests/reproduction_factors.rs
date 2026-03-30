@@ -1375,11 +1375,18 @@ fn test_mature_stable_tank_breeds_well() -> Result<(), SimError> {
         .iter()
         .filter(|e| e.kind == EventKind::ShrimpBerried)
         .count();
+    let hatched_events = events
+        .iter()
+        .filter(|e| e.kind == EventKind::ShrimpHatched)
+        .count();
 
-    // At least 3 reproductive cycles observed (ShrimpBerried events)
     assert!(
         berried_events >= 3,
-        "Stable tank should show at least 3 reproductive cycles in 2000 hours. Got {berried_events}"
+        "Stable tank should enter berried state at least 3 times in 2000 hours. Got {berried_events}"
+    );
+    assert!(
+        hatched_events >= 3,
+        "Stable tank should complete at least 3 hatch cycles in 2000 hours. Got {hatched_events}"
     );
 
     let snap = engine.snapshot();
