@@ -902,7 +902,9 @@ mod tests {
 
         run.record_failure("capacity_check", "expected higher nitrifier capacity");
 
-        let err = run.finish().expect_err("recorded failure should fail finish");
+        let err = run
+            .finish()
+            .expect_err("recorded failure should fail finish");
         assert!(err.contains("capacity_check"));
         assert!(err.contains("expected higher nitrifier capacity"));
         assert!(artifact_dir.join("metadata.json").exists());
