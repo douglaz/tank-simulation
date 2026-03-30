@@ -1,0 +1,44 @@
+{
+  "payload_id": "run-20260328125548-final_review-vote-0-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T15:25:53.613646071Z",
+  "payload": {
+    "summary": "All five amendments verified against the codebase. Each identifies a genuine gap—either a correctness issue, a misleading behavior, or a missing consistency/documentation concern. The planner positions are well-reasoned and I concur with all five accept recommendations after independent code verification.",
+    "votes": [
+      {
+        "amendment_id": "fr-4-5f46d44d",
+        "decision": "accept",
+        "rationale": "Verified: PlantPreset (lines 238-246) and SubstratePreset (lines 223-235) lack param_meta fields and do not implement the ParamMetaPreset trait, while SourceWaterPreset, ShrimpPreset, and ProcessParamsPreset all do. Plant parameters like growth_rate_index and water_column_uptake_bias are biology-relevant scientific parameters that should be able to carry per-parameter provenance. The inconsistency will force ad-hoc workarounds when tanksim-6e5.7.2 needs to annotate plant params. Adding param_meta to PlantPreset (and ideally SubstratePreset) is a straightforward structural extension of the existing pattern."
+      },
+      {
+        "amendment_id": "fr-4-6586f129",
+        "decision": "accept",
+        "rationale": "Verified: There is no documentation in provenance.rs, process.rs, or ROUTING.md explaining that code-defined defaults (ProcessParams::Default) carry no inline provenance while TOML-loaded presets do. The only relevant notes exist in scientific_inventory.md (lines 130-135), which is a scientific catalog rather than a developer-facing design document. A brief design note in the source where contributors will look (provenance.rs or the presets module) would prevent incorrect assumptions about provenance propagation paths."
+      },
+      {
+        "amendment_id": "fr-4-fae98202",
+        "decision": "accept",
+        "rationale": "Verified: ShrimpPreset::lookup_param_value (lines 476-502) returns None for optional fields like body_nitrogen_mg_per_g_wet_mass, juvenile_to_subadult_days, base_clutch_size, etc. when the TOML omits them. But shrimp_preset_to_params (lib.rs:546-597) fills those with concrete values from ShrimpRuntimeParams::default(). Meanwhile, format_param (presets.rs:59-60) uses the ? operator on provenance_param_value(), so it silently skips these defaulted parameters. This means provenance helpers never surface metadata for parameters that the runtime actually uses with real values—a genuine mismatch that makes provenance write-only for code-defined shrimp defaults."
+      },
+      {
+        "amendment_id": "fr-4-66f7e16d",
+        "decision": "accept",
+        "rationale": "Verified: provenance_param_value (presets.rs:1144-1150) unconditionally calls normalize_process_param_for_provenance, which transforms legacy _mg fields (e.g., aob_k_tan_mg=0.5 becomes 0.025 via reference-tank normalization). format_param (presets.rs:59-60) calls this before checking param_meta. Since the shipped default.toml has empty param_meta (confirmed by test at line 1860), the debug helper can emit the transformed value 0.025 with no unit or source context—no way for the reader to know it was derived from a 0.5 raw value. Normalization should either be gated on metadata presence or auto-attach a derived unit annotation."
+      },
+      {
+        "amendment_id": "fr-4-c056464d",
+        "decision": "accept",
+        "rationale": "Verified: ProcessParamsPreset::validate (presets.rs:1384-1386) checks `value < 0.0`, allowing zero to pass. However, apply_legacy_total_maturation_days (biology.rs:388-393) splits this total into juvenile_to_subadult_days and subadult_to_adult_days using a 30:20 ratio—both zero when the input is zero. The runtime invariants (invariants.rs:320-327) call check_positive on both fields, which rejects values <= 0.0. This creates a fail-late scenario: a preset with shrimp_juvenile_maturation_days=0.0 loads and validates successfully but fails only when the engine steps. Tightening the preset validator to reject <= 0 is the correct fix to catch this at load time."
+      }
+    ]
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 4
+}

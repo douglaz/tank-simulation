@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-7-dd2544eb",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 7,
+  "body": "Hardcoded magic numbers in `update_molt_stress` (shrimp.rs:480,493-497,502,504): the blend weights (0.5/0.3/0.2 for mineral stress components, 0.3/0.3/0.2/0.2/0.3 for stress pressure), and smoothing constants (rise=0.2, decay=0.05) are all hardcoded. These directly shape how mineral deficits translate into molt stress, which is a primary channel of the molt mechanics. Extract at least the rise/decay rates and the mineral-stress component weights into named parameters.",
+  "created_at": "2026-03-30T09:35:16.952862178Z",
+  "batch_sequence": 2,
+  "source": "workflow_stage",
+  "dedup_key": "135111a0cef85254a67c6ce12f6739d231009e9b7c8ac3089cc5a1fdc817361a"
+}

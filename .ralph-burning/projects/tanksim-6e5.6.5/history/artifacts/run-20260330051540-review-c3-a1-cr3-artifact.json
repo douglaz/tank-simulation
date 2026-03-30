@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330051540-review-c3-a1-cr3-artifact",
+  "payload_id": "run-20260330051540-review-c3-a1-cr3",
+  "stage_id": "review",
+  "created_at": "2026-03-30T06:44:17.802397078Z",
+  "content": "# Review\n\n## Outcome\n\n**Approved**\n\n## Evidence\n\n- Inspected the chloride-aware nitrite path in `crates/tank_core/src/systems/shrimp.rs`, `crates/tank_core/src/systems/events.rs`, `crates/tank_core/src/engine.rs`, and `crates/tank_core/src/types/biology.rs`: `chloride_protection_factor` is a named shrimp parameter, the effective hazard formula matches the bead spec, nitrite stress still flows through `hourly_nitrite_stress_accum`, and trace/event output exposes nitrite, chloride, effective hazard, and stress increment.\n- Acceptance-criteria coverage is present in tests: unit coverage in `crates/tank_core/src/systems/shrimp.rs`, scenario coverage in `crates/tank_core/tests/shrimp_chloride_protection.rs`, event coverage in `crates/tank_core/tests/events.rs`, and trace coverage in `crates/tank_core/tests/tracing.rs`.\n- Reviewed the follow-on denitrification fixes in `crates/tank_core/src/invariants.rs`, `crates/tank_core/src/types/budget.rs`, `crates/tank_core/tests/budget_tracking.rs`, `crates/tank_core/tests/denitrification.rs`, and `crates/tank_core/src/types/process.rs`: N2 export is now part of the nitrogen ledger, invariant guards cover the new denitrification state/params, and the denitrification export conservation assertion matches the tracked-budget behavior.\n- `cargo test -p tank_core --test denitrification --test budget_tracking --test shrimp_chloride_protection --test tracing --test events --test validation --test save_load` passed with 122 tests passed and 0 failed.\n- Workspace-level `cargo test` surfaced no new failures in the reviewed area; the only failing test remains the previously known unrelated `crates/tank_core/tests/thermal_reproduction_penalty.rs` case.\n\n## Findings and Gaps\n\n- No new correctness, regression, or completeness issues found in the scoped change set.\n\n## Follow-up and Amendments\n\nNone.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

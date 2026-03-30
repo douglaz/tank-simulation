@@ -1,0 +1,35 @@
+{
+  "payload_id": "run-20260329204233-final_review-reviewer-1-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-29T23:16:02.525401117Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "crates/tank_core/src/types/process.rs:313-317 and crates/tank_data/data/process/default.toml:16-22 make the default DIC respiration/photosynthesis terms non-zero, but crates/tank_core/src/systems/chemistry.rs:552-558 explicitly documents those terms as an open-system shortcut that only preserves closed-system carbon accounting when they are zeroed or separately budgeted. The closed-budget fixtures still only disable gas exchange (crates/tank_core/tests/budget_tracking.rs:21-30 and 101-134), so this patch now breaks multiple carbon-conservation checks in the shipped budget suite, including the assertions at crates/tank_core/tests/budget_tracking.rs:15-18 and 1422-1427. Either keep these defaults at zero for generic TankState::new / closed-budget paths, or teach the budget accounting/helpers to subtract these chemistry-stage DIC sources and sinks before merging.",
+        "rationale": "This directly violates the repository’s conservation contract and currently makes the budget_tracking test target fail in several places."
+      },
+      {
+        "body": "On this patch, exact save/load replay is no longer preserved for an active cycle state. The new defaults in crates/tank_core/src/types/process.rs:313-317 make cargo test -p tank_core --test save_load fail save_load_with_active_cycle_state at crates/tank_core/tests/save_load.rs:368-372: running 48 hours, serializing, restoring, and running 48 more does not reproduce the uninterrupted state exactly. Re-establish the save/load determinism contract before merging, either by recalibrating these defaults or by fixing whatever restored-state recomputation now diverges after resume.",
+        "rationale": "Losing exact replay breaks a core robustness invariant and makes future regression/debug work much harder."
+      },
+      {
+        "body": "The shipped planted-tank chemistry envelope is no longer satisfied after the process-pack retune in crates/tank_data/data/process/default.toml:16-22. cargo test -p tank_core --test photosynthesis_dic now fails test_planted_tank_day_night_cycle at crates/tank_core/tests/photosynthesis_dic.rs:556-561 because pH reaches 8.048 by hour 10, above the documented 6.0-8.0 band for the medium_planted scenario. Recalibrate the new DIC rates against the shipped scenario/source-water presets, or update the scenario contract explicitly, before landing this change.",
+        "rationale": "This is a user-visible behavioral regression in a shipped scenario, not just a test-only mismatch."
+      },
+      {
+        "body": "Adding tank_data as a dev-dependency in crates/tank_core/Cargo.toml:14-17 makes crates/tank_core/tests/source_water_carbonate.rs part of the tank_core test matrix, but that binary is still flaky under the default parallel test runner. cargo test -p tank_core --test source_water_carbonate fails under normal threading with contradictory assertions at crates/tank_core/tests/source_water_carbonate.rs:63-67, 141-145, and 453-458, yet passes when rerun with --test-threads=1. Do not land the dependency bump without fixing the shared-state race or otherwise serializing that test target, because the default cargo invocation remains unreliable.",
+        "rationale": "A newly-enabled flaky test target will destabilize CI and obscure real regressions."
+      }
+    ],
+    "summary": "Review found 4 robustness/correctness regressions: the DIC default/preset retune breaks closed-system carbon conservation, exact save/load replay, and the planted-tank pH envelope, and the newly-enabled source_water_carbonate test target is still flaky under default parallel execution."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

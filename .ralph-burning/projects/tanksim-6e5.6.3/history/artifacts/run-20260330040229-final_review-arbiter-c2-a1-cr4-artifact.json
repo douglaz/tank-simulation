@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330040229-final_review-arbiter-c2-a1-cr4-artifact",
+  "payload_id": "run-20260330040229-final_review-arbiter-c2-a1-cr4-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-30T07:30:49.497007591Z",
+  "content": "# Final Review Arbiter\n**Producer:** agent:codex/gpt-5.4\n\n## Summary\n\nRejected the disputed GH amendment because the zero-denominator case is not reachable under the current `gh_d()` contract, making this optional hardening rather than a demonstrated bug.\n\n## Rulings\n\n- `fr-4-6dd70b19`: Reject\n  `gh_min_d` can be `0.0` (`invariants.rs`), but the cited divisions in `update_molt_stress` and `molt_mineral_modifier` only execute inside `gh_d < params.gh_min_d` branches. `gh_d()` is derived from calcium/magnesium concentrations and clamped nonnegative in `water.rs`, so on valid/internal paths `gh_d >= 0.0`; when `gh_min_d == 0.0`, those branches are unreachable and no divide-by-zero occurs. The guarded sister sites show inconsistent defensive style, and adding `.max(0.01)` would be harmless hardening, but the amendment's core claim of a real NaN/Inf correctness defect is not established by the code evidence.\n",
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

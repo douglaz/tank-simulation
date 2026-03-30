@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-7-63a03cd8",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 7,
+  "body": "Avoid running the same habitat probes twice under identical seeds/artifact labels. `all_habitat_geometry_probes_summary` re-invokes every probe in `crates/tank_harness/tests/e2e_habitat_geometry_probes.rs:1342-1405`, even though those same probes are still standalone `#[test]`s at `:249`, `:521`, `:712`, `:900`, and `:1185`. `HarnessRun::artifact_dir` is derived only from `scenario_id`, `artifact_label`, and seed in `crates/tank_harness/src/lib.rs:624-640`, so under Rust's default parallel test execution the summary test and the corresponding individual test can race on the same temp directory and clobber failure artifacts.",
+  "created_at": "2026-03-30T09:35:16.952876705Z",
+  "batch_sequence": 5,
+  "source": "workflow_stage",
+  "dedup_key": "68502627c2d960c9bc02a882997dc98e84800ccaf510b8c8bd1a0356c85e5a1d"
+}

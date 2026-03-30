@@ -1,0 +1,7 @@
+id = "tanksim-6e5.1.2.4"
+name = "Simulation tracing"
+flow = "quick_dev"
+prompt_reference = "prompt.md"
+prompt_hash = "aef5d1e47d56b4bd"
+created_at = "2026-03-28T02:35:13.771276575Z"
+status_summary = "created"

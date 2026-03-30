@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260329191454-final_review-aggregate-c2-a1-cr2-artifact",
+  "payload_id": "run-20260329191454-final_review-aggregate-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-29T20:16:20.038864022Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 1 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 5\n**Final Review Restarts:** 2/20\n\n## Accepted\n\n- `fr-2-f86e4833`\n\n## Rejected\n\n- `fr-2-1cbd2690`\n- `fr-2-0f6e9beb`\n- `fr-2-7ee0abfa`\n- `fr-2-aff4afaf`\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-2-f86e4833`\n\nThe `debug_assert` at nitrogen_cycle.rs:352-355 is vacuous: it checks `alk_budget <= state.water.alkalinity_meq_total + EPSILON`, but at that point `alk_budget` has been decremented (and clamped to ≥0) while `state.water.alkalinity_meq_total` has NOT yet been mutated (the actual pool deduction happens later at line 433-435). The condition `max(initial - costs, 0) <= initial + epsilon` is trivially true for any non-negative costs. Either replace with a meaningful check (e.g., assert that `aob_alk_cost + comammox_alk_cost <= state.water.alkalinity_meq_total + EPSILON` before the `.max(0.0)` clamp, which would catch an over-deduction) or remove it.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 2
+}

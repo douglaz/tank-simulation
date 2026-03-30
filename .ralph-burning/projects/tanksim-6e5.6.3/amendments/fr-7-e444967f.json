@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-7-e444967f",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 7,
+  "body": "Remove the built-in nitrifier advantage from the biofilter-scaling setup. In `crates/tank_harness/tests/e2e_habitat_geometry_probes.rs:310-317`, each run seeds nitrifier biomass as `carrying_capacity * INITIAL_CAPACITY_FRACTION`, and `carrying_capacity` itself depends on filter-media area. Because the larger-media run is constructed with the same seed path at `:322-335`, it starts with more nitrifier biomass before any simulation dynamics occur, then the assertions at `:435-457` check for lower reduced-N exposure and higher final nitrifier biomass. That makes the probe partially tautological and weakens its ability to catch regressions in the actual biofilter growth/capacity behavior.",
+  "created_at": "2026-03-30T09:35:16.952887846Z",
+  "batch_sequence": 7,
+  "source": "workflow_stage",
+  "dedup_key": "410589001e4bf446fef2ba7f3672f778904ba71288815b43b8e9d75f702f337b"
+}

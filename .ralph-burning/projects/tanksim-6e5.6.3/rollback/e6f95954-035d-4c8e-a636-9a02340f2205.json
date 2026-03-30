@@ -1,0 +1,121 @@
+{
+  "rollback_id": "e6f95954-035d-4c8e-a636-9a02340f2205",
+  "created_at": "2026-03-30T08:17:50.759749544Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "065da682beeda98423eabec9c63b624c67dbf48f",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260330040229",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 6
+      },
+      "started_at": "2026-03-30T04:02:29.670494821Z",
+      "prompt_hash_at_cycle_start": "0382c2f612a24a4a",
+      "prompt_hash_at_stage_start": "0382c2f612a24a4a",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 5
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T04:41:52.787819971Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 6,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-5-c0817a06",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 5,
+          "body": "The `egg_drop_temp_swing_c` parameter (defined in `biology.rs:350`, defaulted in `biology.rs:850`, serialized in `neocaridina_davidi.toml`, and tested for `> 0.0` in `reproduction_factors.rs:542`) is never actually used in any logic. The `egg_dropping()` function only reads `egg_drop_instability_threshold` and the instability index. Either remove the unused parameter or wire it into the egg-dropping logic as the comment on `shrimp.rs:743` implies it should be (\"A temperature swing > `egg_drop_temp_swing_c` in 24 hours...\").",
+          "created_at": "2026-03-30T08:17:50.624931962Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "5a83fce357ed95436d368c46e5a58974f419266e6f952e88984659cbaba5d3b1"
+        },
+        {
+          "amendment_id": "fr-5-3d54a6d2",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 5,
+          "body": "`EventCause::HighDensity` (defined at `events.rs:49`) is added by this changeset but never emitted anywhere. If density-dependent reproduction suppression is intended to be observable through events, wire it up (e.g., in spawning or reproductive readiness). Otherwise remove it to avoid dead code.",
+          "created_at": "2026-03-30T08:17:50.624938054Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "66fb5a4222662702b683e17c421c7173485bb66b3a24b792e14c90e19e1c1ac7"
+        },
+        {
+          "amendment_id": "fr-5-82009a69",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 5,
+          "body": "[high] `crates/tank_core/src/systems/shrimp.rs:741-761` regresses sudden egg-drop behavior. The new code no longer reads `egg_drop_temp_swing_c` and only gates on `instability_index`, but `update_stability_tracker()` only moves that index 30% toward the raw swing each day (`crates/tank_core/src/systems/shrimp.rs:194-205`). From a stable baseline, even a 4°C swing produces only ~0.3 instability, which is still below the default `egg_drop_instability_threshold` of 0.5, so first-day temperature shocks no longer drop eggs at all. That also leaves the species parameter declared at `crates/tank_core/src/types/biology.rs:347-353` effectively dead.",
+          "created_at": "2026-03-30T08:17:50.624945207Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "64d35168cf76857ef3ebbe3dfe62299d40ad8214f9b83e4efbc6d59ccff47f0b"
+        },
+        {
+          "amendment_id": "fr-5-98b094a7",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 5,
+          "body": "[high] `crates/tank_core/tests/reproduction_factors.rs:227-245` breaks `test_reproduction_increases_with_condition`. The 'starved' setup zeroes `shrimp_periphyton_grazing_g_per_shrimp_per_day`, and `update_condition()` treats zero food demand as fully satiated (`crates/tank_core/src/systems/shrimp.rs:393-399`). In practice the starved tank ends up healthier than the fed tank, and `cargo test -p tank_core --test reproduction_factors` now fails at `crates/tank_core/tests/reproduction_factors.rs:252-265`.",
+          "created_at": "2026-03-30T08:17:50.624949635Z",
+          "batch_sequence": 4,
+          "source": "workflow_stage",
+          "dedup_key": "b616693add58ad5e2154770c812c48fcb38dc371513a26d7c2c55082bf889860"
+        },
+        {
+          "amendment_id": "fr-5-7f760efe",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 5,
+          "body": "[high] `crates/tank_core/tests/reproduction_factors.rs:560-599` still leaves `test_mature_stable_tank_breeds_well` failing. With the retuned scenario (`adult.count = 20`, `Feed { grams: 0.2 }`, faster maturation, etc.), the run only produces one `ShrimpBerried` event, so the `berried_events >= 3` assertion at `crates/tank_core/tests/reproduction_factors.rs:597-600` trips under `cargo test -p tank_core --test reproduction_factors`.",
+          "created_at": "2026-03-30T08:17:50.624954034Z",
+          "batch_sequence": 5,
+          "source": "workflow_stage",
+          "dedup_key": "fdd957609ad0edd265b54753389c0fd945ff1e0505cee7c3ac39d8de600360e9"
+        }
+      ],
+      "processed_count": 16
+    },
+    "status_summary": "running: final review restart round 6 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-30T08:01:46.098004489Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327232428-apply_fixes-c2-a1-cr7-artifact",
+  "payload_id": "run-20260327232428-apply_fixes-c2-a1-cr7",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-28T03:28:13.896518027Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNo additional source edits were required in this apply-fixes pass. The current workspace already contains the approved explicit carbonate-equilibrium rollout and its later follow-up amendments, so this stage verified the integrated state rather than patching code again.\n\n## Steps\n\n0. [Completed] Review the latest approved carbonate-equilibrium state and inspect the current workspace for unresolved tracked deltas or pending follow-up fixes.\n1. [Skipped] Apply any remaining carbonate/save-path/snapshot follow-up edits; skipped because the workspace already contained the approved implementation and no new actionable review amendments remained.\n2. [Completed] Re-run workspace validation and code-path scans to confirm the approved implementation remains green in the current checkout.\n\n## Validation Evidence\n\n- `git status --short` showed no tracked source deltas; only the unrelated untracked `.ralph-burning/` directory is present.\n- `cargo fmt --all --check` passed.\n- `cargo test -p tank_core -p tank_data -p tank_scenarios` passed across the full tank_core, tank_data, and tank_scenarios suites.\n- `cargo clippy -p tank_core -p tank_data -p tank_scenarios --all-targets -- -D warnings` passed.\n- A code-path scan confirmed the current workspace still routes through `solve_carbonate_equilibrium()`, `normalize_loaded_carbonate_state()`, `validate_source_water_carbonate_profile()`, and `resolve_carbonate_state()`, and the old shortcut appears only in historical docs notes rather than runtime Rust code.\n\n## Outstanding Risks\n\n- `solve_carbonate_equilibrium()` still uses the freshwater-focused approximation with fixed `Ka2`, so any extension beyond the intended pH 5.5-8.5 aquarium envelope should revisit the chemistry model.\n- Legacy saves with custom out-of-range source-water catalog entries still deserialize, but runtime water-change actions against those profiles fail validation until the profile is corrected.\n- The unrelated untracked `.ralph-burning/` directory remains in the worktree and was left untouched.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 7
+}

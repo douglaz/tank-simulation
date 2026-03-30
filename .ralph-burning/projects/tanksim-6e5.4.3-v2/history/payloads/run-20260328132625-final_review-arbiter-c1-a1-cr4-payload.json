@@ -1,0 +1,24 @@
+{
+  "payload_id": "run-20260328132625-final_review-arbiter-c1-a1-cr4-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-28T14:57:18.441046130Z",
+  "payload": {
+    "rulings": [
+      {
+        "amendment_id": "fr-4-0d933f53",
+        "decision": "reject",
+        "rationale": "The claimed bug does not exist in the current codebase. I verified by both reading the code and running the test: `step_hours_leaves_state_untouched_when_clamps_precede_a_validation_error` passes cleanly. The amendment's premise is factually wrong. The code flow is: (1) `Engine::from_parts()` calls `refresh_habitat_registry()` which only updates the `habitat_registry` field, (2) `step_hours()` calls `enforce_invariants()`, (3) `enforce_invariants()` calls `validate_invariants_inner()` FIRST at line 11 before any clamping, (4) validation rejects `shrimp_assimilation_efficiency=1.2` immediately via `check_open_unit_interval()`, returning an error before any clamping mutations execute. The test explicitly calls `state.refresh_habitat_registry()` before cloning the expected state (line 129), so the habitat registry values already match what `from_parts()` will produce. There is no partial mutation, no 2x light_exposure discrepancy, and no bug. The dissenting reviewer who ran the test and found it passes is correct."
+      }
+    ],
+    "summary": "Rejected the disputed amendment fr-4-0d933f53. The claimed pre-existing test failure does not exist: the test passes on the current codebase (confirmed by direct execution). The code correctly validates invariants before performing any clamping mutations in enforce_invariants(), and the test accounts for the habitat registry refresh by calling refresh_habitat_registry() before taking its expected-state clone. The amendment's factual premise — that the test fails due to partial state mutation — is incorrect."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 4
+}

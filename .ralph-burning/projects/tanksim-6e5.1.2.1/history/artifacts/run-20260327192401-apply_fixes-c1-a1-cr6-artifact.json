@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327192401-apply_fixes-c1-a1-cr6-artifact",
+  "payload_id": "run-20260327192401-apply_fixes-c1-a1-cr6",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-27T22:59:50.579253074Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nApplied the one actionable follow-up from the latest review: updated `docs/ROUTING.md` so `CleanFilter` now matches the implemented budget-conserving behavior. The maintenance-routing table and the phase-1 lumping notes now describe filter cleaning as an in-tank reroute of removed decomposer/nitrifier biomass into dissolved organics (`DOC`/`DON`), not as a maintenance export.\n\n## Steps\n\n1. [Completed] Reviewed the latest validation output and identified the remaining documentation drift: `docs/ROUTING.md` still described `CleanFilter` as an export even though the implementation now reroutes removed microbial biomass into dissolved organics.\n2. [Completed] Updated `docs/ROUTING.md` so both the maintenance-routing table and the phase-1 lumping notes reflect the current `CleanFilter` semantics and no longer claim maintenance export behavior.\n3. [Completed] Inspected the resulting diff and confirmed no code-path changes were made, so no test rerun was necessary for this documentation-only fix.\n\n## Validation Evidence\n\n- `git diff -- docs/ROUTING.md` shows the `CleanFilter { intensity }` row now routes removed decomposer/nitrifier biomass into dissolved organics with `Export routing` set to `none`.\n- `sed -n '140,166p' docs/ROUTING.md` confirms the corresponding phase-1 simplification note now says `CleanFilter` reroutes removed microbial biomass into dissolved organics instead of exporting it.\n- No code changed in this Apply Fixes stage, so prior validation remains authoritative: the latest review was `approved`, and the previously recorded `cargo test -p tank_core`, `cargo test -p tank_core --test budget_tracking`, `cargo test -p tank_core --test cycling`, and `cargo clippy -p tank_core -- -D warnings` results still apply.\n\n## Outstanding Risks\n\n- The structural canonical-helper coverage guard remains convention-based rather than reflective; future explicit N/C-bearing fields with non-standard names or fields hidden in empty-by-default collections will require extending the discovery rules and tests.\n- Shrimp eggs remain implicit until hatch; mass is conserved by debiting dissolved pools on hatch and maturation, but a future phase may still want an explicit egg or clutch biomass pool for clearer persistence and tracing.\n- Complex multi-process stages such as `system:nitrogen_cycle` still rely on snapshot-derived gross component budgets, so same-component turnover inside a single pass can remain collapsed until those stages emit fully explicit source/sink deltas.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 6
+}

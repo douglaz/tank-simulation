@@ -1,0 +1,31 @@
+{
+  "payload_id": "run-20260328140833-final_review-reviewer-1-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T15:56:03.016171877Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "crates/tank_scenarios/src/lib.rs:731-755, crates/tank_core/src/types/substrate.rs:24-36, and crates/tank_core/src/types/habitat.rs:220-225 do not actually derive SubstrateDeep area from current geometry. Scenario materialization stores colonizable_area_cm2 as footprint * factor (depth is ignored), the default layer hardcodes 100.0 cm², and the habitat registry then trusts that stored scalar verbatim. Two beds with the same footprint but different depths therefore get the same deep-substrate area, and TankState::new() reports the same 100 cm² regardless of tank size. That breaks the \"geometry-derived colonizable area\" contract for the habitat that downstream redox/biofilm systems are most likely to depend on.",
+        "rationale": "This is a direct correctness bug in the new registry contract: downstream habitatized capacity/redox logic will be scaled from the wrong area on both default/manual states and any scenario that changes substrate depth."
+      },
+      {
+        "body": "crates/tank_core/src/types/habitat.rs:117 and 204-215 compute SubstrateSurface.light_exposure from geometry.mean_depth_cm(), and crates/tank_core/src/types/geometry.rs:60-62 defines that as fill_height_cm. Substrate thickness is therefore ignored: a shallow bed and a deep bed in the same tank get the same substrate-surface light even though the top of the deeper bed sits much closer to the lamp. The bead explicitly calls out depth/light context, so this misses one of the required sensitivities for the substrate habitat.",
+        "rationale": "Later periphyton/root-zone systems will read this canonical light modifier and inherit the wrong attenuation whenever substrate depth changes."
+      },
+      {
+        "body": "crates/tank_core/src/types/habitat.rs:85-94 derives avg_crowding from the stored plant.crowding_index values, but crates/tank_core/src/engine.rs:608-649 trims plant biomass without updating crowding, and crates/tank_core/src/types/state.rs:217-219 refreshes the habitat registry without recomputing crowding from the new biomass/footprint. After a large trim, PlantSurfaces area drops immediately but GlassHardscape/SubstrateSurface light exposure stays over-shaded until the next daily plant update. The registry is therefore still stale with respect to a plant-driven modifier even though it was just \"refreshed.\"",
+        "rationale": "This leaves the serialized habitat registry internally inconsistent after a common player action, which undermines the goal of having one canonical, inspectable source of habitat mechanics."
+      }
+    ],
+    "summary": "Reviewed the habitat-registry task changes across the engine/state/save/scenario wiring. I found three correctness gaps: deep-substrate area is still not fully geometry-derived, substrate-surface light ignores substrate depth, and plant-driven light shading can remain stale after biomass-changing actions because crowding is not recomputed."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

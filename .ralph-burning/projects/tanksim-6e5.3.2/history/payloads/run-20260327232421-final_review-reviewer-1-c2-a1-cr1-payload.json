@@ -1,0 +1,27 @@
+{
+  "payload_id": "run-20260327232421-final_review-reviewer-1-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T00:07:30.484677096Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "Use a consistent mass basis for shrimp ingestion/routing. `crates/tank_core/src/systems/shrimp.rs:153-166` records consumed food in grams, but `route_consumed_food` (`crates/tank_core/src/systems/shrimp.rs:183-235`) only partitions the elemental N+C returned by `algae_nitrogen_mg`/`algae_carbon_mg` (`crates/tank_core/src/types/budget.rs:371-376`). For periphyton, 1 g consumed becomes only 35 mg N + 218.75 mg C = 0.25375 g routed back into feces/reserve/respiration/excretion, so most of the consumed gram mass still disappears relative to `daily_food_consumed_g`. That misses the bead’s “assimilated plus fecal mass equals consumed mass” contract and makes satiation/condition run on a different basis than the routed matter budget.",
+        "rationale": "This is the core conservation promise of the feature. N/C totals stay balanced, but the shipped grams-based feeding signal is still inconsistent for periphyton-backed grazing."
+      },
+      {
+        "body": "Wire the new shrimp routing coefficients through the preset/materialization path instead of silently discarding them. `crates/tank_data/data/process/default.toml:85-94` defines `shrimp_assimilation_efficiency`, the assimilated partition fractions, and `shrimp_o2_per_mg_c_respired`, but `crates/tank_data/src/presets.rs:191-335` has no matching `ProcessParamsPreset` fields and `crates/tank_scenarios/src/lib.rs:427-435` still fills `ProcessParams` from `ProcessParams::default()`. As shipped, tuning those TOML values has no effect and bad preset values are ignored instead of validated, so the new named controls are not actually data-backed.",
+        "rationale": "The acceptance criteria explicitly require named parameters to control the pathway. Right now they only work if code mutates `ProcessParams` directly; scenario/process presets cannot drive them."
+      }
+    ],
+    "summary": "Reviewed the shrimp routing end state by diffing the project commits and reading the implementation/tests around `shrimp.rs`, `process.rs`, `invariants.rs`, `engine.rs`, and the relevant data/preset paths. I found two correctness gaps: the periphyton path still loses consumed grams on the new routing basis, and the new routing parameters are not actually connected to preset/scenario loading."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

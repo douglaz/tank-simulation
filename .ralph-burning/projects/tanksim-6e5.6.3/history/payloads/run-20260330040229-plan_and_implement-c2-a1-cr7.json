@@ -1,0 +1,53 @@
+{
+  "payload_id": "run-20260330040229-plan_and_implement-c2-a1-cr7",
+  "stage_id": "plan_and_implement",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T09:07:28.356643285Z",
+  "payload": {
+    "data": {
+      "change_summary": "Promoted the remaining hardcoded molt knobs into named shrimp runtime/species parameters, including failed-molt accumulation increase/recovery, failed-molt stress blending, and the poor-condition/instability diagnostic thresholds. I wired those fields through invariant validation, preset parsing/materialization, and `neocaridina_davidi.toml`, then updated molt failure reporting so marginal misses no longer default to `PoorCondition`: failures now surface an explicit `MarginalFailure` cause when no concrete threshold trips and include the relevant score or critical-GH gap in the event summary. I also tightened the mineral/reproduction regressions by making the 1000-hour soft-water integration use explicit Ca/Mg-deficient source chemistry, adding coverage that the new accumulation/diagnostic parameters change behavior, sampling stable-tank chemistry hourly instead of once per day, and isolating lingering instability as the readiness suppressor in the post-swing reproduction test.",
+      "outstanding_risks": [],
+      "steps": [
+        {
+          "description": "Parameterized the remaining failed-molt accumulation, stress-blend, and diagnostic-threshold constants on `ShrimpRuntimeParams`, then threaded them through invariants, preset loading, scenario materialization, and shipped shrimp data.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Updated molt failure diagnostics to avoid misleading fallback attribution by emitting `MarginalFailure` when no specific threshold fires and by including score/critical-GH details in the event summary.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Strengthened the mineral and reproduction regressions so the soft-water survival case exercises GH plus Ca/Mg deficiency explicitly, stable-tank chemistry checks capture intra-day peaks, and post-swing readiness suppression is isolated to lingering instability.",
+          "order": 3,
+          "status": "completed"
+        },
+        {
+          "description": "Ran formatting plus targeted and full-suite regression coverage across `tank_core`, `tank_data`, and `tank_scenarios` to confirm the amendments end to end.",
+          "order": 4,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo fmt --all`",
+        "`cargo test -p tank_core --test molt_mineral_budget -- --nocapture`",
+        "`cargo test -p tank_core --test reproduction_factors -- --nocapture`",
+        "`cargo test -p tank_core --test validation -- --nocapture`",
+        "`cargo test -p tank_core --test save_load -- --nocapture`",
+        "`cargo test -p tank_data`",
+        "`cargo test -p tank_scenarios`",
+        "`cargo test -p tank_core -- --nocapture`"
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 7
+}

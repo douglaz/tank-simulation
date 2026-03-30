@@ -1,0 +1,23 @@
+{
+  "payload_id": "run-20260327225238-final_review-reviewer-0-c2-a1-cr5-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T00:32:06.011985305Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "In `crates/tank_core/src/types/actions.rs:78-80`, the `SchemaVersionTooOld` error message says \"save file version {actual} is too old; minimum supported version is {min_supported}\" but unlike `SchemaVersionTooNew` (which suggests \"upgrade the application\"), it gives no remediation guidance. Consider adding actionable text like \"re-create this save with a newer version of the application\" so users know what to do when they encounter a v1 save.",
+        "rationale": "The acceptance criteria explicitly require \"clear error message (not silent data loss)\" for unknown versions. While the message avoids silent data loss, it's asymmetric with SchemaVersionTooNew — a user seeing 'too old' with no next step may be confused about whether the save is recoverable or permanently lost. This is a minor UX gap, not a correctness bug."
+      }
+    ],
+    "summary": "The save-schema versioning and migration scaffolding is well-designed and correctly implemented. All 18 save_load tests pass. Key strengths: (1) compile-time `const` assert guarantees the MIGRATIONS array stays in sync with SCHEMA_VERSION; (2) the `MigrationFn` type operating on raw `serde_json::Value` enables arbitrary field renames, additions, removals, and transforms independent of current Rust struct shape; (3) version bounds checking rejects both future (SchemaVersionTooNew) and too-old (SchemaVersionTooOld) saves with clear errors; (4) the real v2→v3 migration (net-volume rescaling) has thorough error handling for malformed legacy geometry/substrate data; (5) the v3→v4 no-op migration correctly relies on `#[serde(default)]` while maintaining a contiguous migration chain; (6) post-migration normalization handles carbonate state consistency and stability tracker seeding for saves that predate those fields; (7) the migration contract documentation in MIGRATIONS is detailed enough for later contributors to follow. The `from_value` public API avoids redundant serialization round-trips for the HTTP handler path. The invariants module correctly separates validation (check-only) from enforcement (check + clamp). One minor UX asymmetry found in error messaging."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 5
+}

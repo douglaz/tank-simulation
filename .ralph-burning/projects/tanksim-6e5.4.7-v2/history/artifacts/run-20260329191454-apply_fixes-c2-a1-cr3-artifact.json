@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260329191454-apply_fixes-c2-a1-cr3-artifact",
+  "payload_id": "run-20260329191454-apply_fixes-c2-a1-cr3",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-29T20:20:50.401594781Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNo additional code edits were required in this apply-fixes pass. The round-3 review approved the existing patch set, including the meaningful pre-clamp comammox alkalinity-budget assertion, the StageTrace budget-metric gating, the symmetric alkalinity consumed/produced diagnostics, and the strengthened nitrification budget/tracing regression coverage.\n\n## Steps\n\n1. [Completed] Re-read the round-3 review result and confirm whether any follow-up amendments remained after the accepted alkalinity-budget assertion fix.\n2. [Skipped] Apply any remaining review-requested code or test changes.\n3. [Completed] Record the approved validation evidence for the unchanged patch set and carry forward the remaining out-of-scope risks.\n\n## Validation Evidence\n\n- No new validation run was required in this stage because review returned `approved` with no follow-up amendments.\n- `cargo fmt --all` had already passed on the approved patch set.\n- `cargo test -p tank_core --test nitrification_alkalinity` had already passed on the approved patch set.\n- `cargo test -p tank_core stage_trace_` had already passed on the approved patch set.\n- `cargo test -p tank_core --test tracing` had already passed on the approved patch set.\n- `cargo test -p tank_core --test budget_tracking` had already passed on the approved patch set.\n- `cargo test -p tank_core --tests` still reported the pre-existing `save_load_with_active_cycle_state` failure in `crates/tank_core/tests/save_load.rs:368`.\n\n## Outstanding Risks\n\n- `alkalinity_produced_meq` remains a zero-valued placeholder until denitrification work lands; the bookkeeping surface is ready, but the return path is not implemented yet.\n- The broader `cargo test -p tank_core --tests` suite still exposes the pre-existing `save_load_with_active_cycle_state` failure in `crates/tank_core/tests/save_load.rs`; that save/load determinism issue remains unresolved and out of scope for this bead.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

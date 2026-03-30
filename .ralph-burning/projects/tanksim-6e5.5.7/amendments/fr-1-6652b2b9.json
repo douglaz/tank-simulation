@@ -1,0 +1,11 @@
+{
+  "amendment_id": "fr-1-6652b2b9",
+  "source_stage": "final_review",
+  "source_cycle": 2,
+  "source_completion_round": 1,
+  "body": "e2e_habitat_geometry_probes.rs probe_light_depth: the summary shows both shallow and deep tanks have *negative* plant growth (-0.40g and -0.71g respectively). The assertion `growth_shallow > growth_deep` passes only because the shallow tank loses less biomass. The doc comment claims the probe validates 'slower plant growth' in deep water and 'more plant biomass growth' in shallow water, but neither tank actually *grows* plants. This undermines the mechanistic narrative — the probe demonstrates light-driven differential decline rather than the claimed light-driven growth difference. Consider adjusting initial conditions (more nutrients, longer photoperiod, or higher light intensity) so the shallow tank achieves net positive growth, making the directional comparison genuinely demonstrate the Beer-Lambert mechanism.",
+  "created_at": "2026-03-30T09:37:41.888797229Z",
+  "batch_sequence": 2,
+  "source": "workflow_stage",
+  "dedup_key": "b383e48dc168fb7a2b5b320d005c8be20244e278d921871d3a555c1d466b5483"
+}
