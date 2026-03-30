@@ -57,9 +57,10 @@ chloride_protection_factor = 0.5
 density_repro_threshold_per_l = 10.0
 density_repro_half_suppression_per_l = 20.0
 tan_repro_threshold_mg_n_per_l = 1.0
-tan_repro_full_suppression_mg_n_per_l = 2.0
+# Keep the legacy `excess / (threshold * 2.0)` decline span after suppression onset.
+tan_repro_full_suppression_mg_n_per_l = 3.0
 no2_repro_threshold_mg_n_per_l = 0.5
-no2_repro_full_suppression_mg_n_per_l = 1.0
+no2_repro_full_suppression_mg_n_per_l = 1.5
 egg_drop_temp_swing_c = 2.0
 egg_drop_instability_threshold = 0.5
 egg_drop_max_probability = 0.6

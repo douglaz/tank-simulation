@@ -20,7 +20,9 @@ struct MoltConditionBreakdown {
 
 #[derive(Debug, Clone, Copy)]
 struct FailedMoltDiagnostics {
+    min_condition_factor: f64,
     min_condition_index: f64,
+    min_reserve_factor: f64,
     poor_condition_involved: bool,
     reserve_limited: bool,
     min_reserve_per_shrimp_g: f64,
@@ -591,7 +593,9 @@ fn molt_cycle(state: &mut TankState) {
     let mut successful_stage_count = 0u32;
     let mut max_readiness: f64 = 0.0;
     let mut failed_diagnostics = FailedMoltDiagnostics {
+        min_condition_factor: 1.0,
         min_condition_index: 1.0,
+        min_reserve_factor: 1.0,
         poor_condition_involved: false,
         reserve_limited: false,
         min_reserve_per_shrimp_g: f64::INFINITY,
@@ -635,8 +639,11 @@ fn molt_cycle(state: &mut TankState) {
                     failed_diagnostics.min_success_score.min(success_score);
                 failed_diagnostics.poor_condition_involved |=
                     condition_factor < params.molt_failure_poor_condition_threshold;
-                failed_diagnostics.min_condition_index =
-                    failed_diagnostics.min_condition_index.min(condition_index);
+                if condition_factor < failed_diagnostics.min_condition_factor {
+                    failed_diagnostics.min_condition_factor = condition_factor;
+                    failed_diagnostics.min_condition_index = condition_index;
+                    failed_diagnostics.min_reserve_factor = condition_breakdown.reserve_factor;
+                }
                 if condition_breakdown.reserve_factor < 1.0 - f64::EPSILON
                     && condition_breakdown.reserve_per_shrimp_g
                         < failed_diagnostics.min_reserve_per_shrimp_g
@@ -1396,8 +1403,11 @@ fn emit_molt_failure(
     if failed_diagnostics.poor_condition_involved {
         causes.push(EventCause::PoorCondition);
         details.push(format!(
-            "condition {:.2}<{:.2}",
-            failed_diagnostics.min_condition_index, params.molt_failure_poor_condition_threshold
+            "condition factor {:.2}<{:.2} (raw {:.2}, reserve factor {:.2})",
+            failed_diagnostics.min_condition_factor,
+            params.molt_failure_poor_condition_threshold,
+            failed_diagnostics.min_condition_index,
+            failed_diagnostics.min_reserve_factor
         ));
     }
     if critical_gh_failure {

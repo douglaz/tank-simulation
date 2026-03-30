@@ -7,17 +7,32 @@ use tracing::debug;
 // ---------------------------------------------------------------------------
 // CO2 gas exchange constants (Henry's law)
 // ---------------------------------------------------------------------------
+//
+// These coefficients stay code-resident instead of preset-layer `param_meta`
+// because every source-water preset shares the same carbonate solver. Canonical
+// developer-facing provenance lives in the doc comments below and in
+// `docs/PROVENANCE_STATUS.md` until a code-constant metadata registry exists.
 
 /// Atmospheric CO2 concentration in ppm.
 const ATMOSPHERIC_CO2_PPM: f64 = 410.0;
 
 /// Henry's law constant for CO2 at 25°C in mol/(L·atm).
+///
+/// Source: representative freshwater CO2 solubility tables summarized in
+/// Stumm & Morgan, *Aquatic Chemistry*, 3rd ed.
+/// Confidence: literature for the 25°C anchor value.
 const KH_CO2_25C_MOL_PER_L_ATM: f64 = 3.4e-2;
 
 /// Temperature correction coefficient for Henry's law (dimensionless, K).
 ///
-/// Derived from -ΔH_sol/R for CO2 dissolution. Dissolution is exothermic
-/// (ΔH_sol < 0), so this value is positive: warmer water holds less CO2.
+/// Derived from a first-pass `-ΔH_sol / R` van 't Hoff fit for CO2
+/// dissolution across the 15-35°C aquarium target range. Dissolution is
+/// exothermic (`ΔH_sol < 0`), so this value is positive: warmer water holds
+/// less CO2.
+///
+/// Confidence: expert. Good enough for the freshwater target envelope, but not
+/// yet treated as a standalone literature anchor for broader temperature or
+/// salinity regimes.
 const KH_TEMP_FACTOR_K: f64 = 2400.0;
 
 /// Reference temperature for the Henry's law constant (25°C in K).
@@ -64,6 +79,12 @@ pub fn compute_co2_kla(state: &TankState) -> f64 {
 
 /// Temperature-corrected first dissociation constant pKa1 (Harned & Davis, 1943).
 ///
+/// Source: the Harned & Davis freshwater carbonate relation documented in
+/// `docs/carbonate_state_contract.md`.
+/// Confidence: literature.
+/// Storage note: code-resident because this is a solver-wide equilibrium
+/// relation rather than a per-preset tuning value.
+///
 /// Accurate across the 15-35°C freshwater aquarium target range.
 fn pka1(temperature_c: f64) -> f64 {
     let t_k = temperature_c + 273.15;
@@ -71,8 +92,12 @@ fn pka1(temperature_c: f64) -> f64 {
 }
 
 /// Fixed second dissociation constant pKa2 (first-pass approximation).
-/// CO3-- is a minor fraction across pH 5.5-8.5 so temperature correction
-/// is deferred.
+///
+/// Source: 25°C freshwater carbonate tables, with the first-pass usage and
+/// upgrade path documented in `docs/carbonate_state_contract.md`.
+/// Confidence: expert. The 10.33 anchor is literature-consistent at 25°C, but
+/// holding it fixed across 15-35°C is an intentional simplification while
+/// `CO3--` remains a minor fraction in the current pH envelope.
 const PKA2: f64 = 10.33;
 
 /// Storage and gameplay pH bounds. The solver reprojects species at these

@@ -53,6 +53,36 @@ notes = """\
 equilibrium. This is the buffer capacity that nitrification consumes at \
 ~0.143 meq per mg N oxidized."""
 
+[param_meta.bicarbonate_mg_per_l]
+unit = "mg HCO₃⁻/L"
+source = "Derived from alkalinity_meq_per_l × 61.02 g/eq"
+confidence = "heuristic"
+valid_range = [40.0, 180.0]
+notes = """\
+87.2 mg/L HCO₃⁻ = 1.429 meq/L × 61.02. Kept explicit so future tuning and \
+scenario docs can inspect the carbonate reservoir without recomputing it \
+from alkalinity each time."""
+
+[param_meta.calcium_mg_per_l]
+unit = "mg Ca/L"
+source = "Freshwater shrimp mineral husbandry guidance; Marks 2008"
+confidence = "expert"
+valid_range = [15.0, 40.0]
+notes = """\
+25 mg/L Ca clears the shrimp molt floor (ca_min_mg_per_l = 20 mg/L) with a \
+modest margin while keeping this profile in a community-tank hardness band. \
+Paired with 10 mg/L Mg it yields GH ~5.8 and a Ca:Mg ratio near 2.5:1."""
+
+[param_meta.magnesium_mg_per_l]
+unit = "mg Mg/L"
+source = "Freshwater crustacean mineralization guidance; Greenaway 1985"
+confidence = "expert"
+valid_range = [4.0, 18.0]
+notes = """\
+10 mg/L Mg clears the shrimp molt floor (mg_min_mg_per_l = 5 mg/L) with \
+margin while staying well below remineralized hard-water profiles. The value \
+is intentionally moderate rather than shrimp-specialized."""
+
 [param_meta.chloride_mg_per_l]
 unit = "mg Cl⁻/L"
 source = "Typical treated municipal tap water"

@@ -321,7 +321,7 @@ pub struct ShrimpRuntimeParams {
     /// Blend weight for reserve support in the molt condition modifier.
     #[serde(default = "default_molt_reserve_weight")]
     pub molt_reserve_weight: f64,
-    /// Minimum blended molt-condition score that should emit a
+    /// Minimum blended molt-condition modifier that should emit a
     /// `PoorCondition` diagnostic on molt failure.
     #[serde(default = "default_molt_failure_poor_condition_threshold")]
     pub molt_failure_poor_condition_threshold: f64,
@@ -421,14 +421,16 @@ pub struct ShrimpRuntimeParams {
     #[serde(default = "default_tan_repro_threshold_mg_n_per_l")]
     pub tan_repro_threshold_mg_n_per_l: f64,
     /// TAN concentration (mg N/L) at which the reproduction TAN curve reaches
-    /// its fixed minimum factor.
+    /// its fixed minimum factor. The default preserves the legacy
+    /// `excess / (threshold * 2.0)` decline span after suppression begins.
     #[serde(default = "default_tan_repro_full_suppression_mg_n_per_l")]
     pub tan_repro_full_suppression_mg_n_per_l: f64,
     /// NO2 concentration (mg N/L) above which reproduction is suppressed.
     #[serde(default = "default_no2_repro_threshold_mg_n_per_l")]
     pub no2_repro_threshold_mg_n_per_l: f64,
     /// NO2 concentration (mg N/L) at which the reproduction nitrite curve
-    /// reaches its fixed minimum factor.
+    /// reaches its fixed minimum factor. The default preserves the legacy
+    /// `excess / (threshold * 2.0)` decline span after suppression begins.
     #[serde(default = "default_no2_repro_full_suppression_mg_n_per_l")]
     pub no2_repro_full_suppression_mg_n_per_l: f64,
     /// Temperature swing (°C per day) that begins to trigger egg dropping
@@ -1084,7 +1086,8 @@ fn default_tan_repro_threshold_mg_n_per_l() -> f64 {
 }
 
 fn default_tan_repro_full_suppression_mg_n_per_l() -> f64 {
-    2.0
+    // Preserve the pre-parameterization `excess / (threshold * 2.0)` curve.
+    3.0
 }
 
 fn default_no2_repro_threshold_mg_n_per_l() -> f64 {
@@ -1092,7 +1095,8 @@ fn default_no2_repro_threshold_mg_n_per_l() -> f64 {
 }
 
 fn default_no2_repro_full_suppression_mg_n_per_l() -> f64 {
-    1.0
+    // Preserve the pre-parameterization `excess / (threshold * 2.0)` curve.
+    1.5
 }
 
 fn default_egg_drop_temp_swing_c() -> f64 {

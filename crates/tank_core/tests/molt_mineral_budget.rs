@@ -687,7 +687,8 @@ fn test_molt_failure_diagnostic_thresholds_are_named() {
     assert!(failure
         .cause_codes
         .contains(&EventCause::ChemistryInstability));
-    assert!(failure.summary.contains("condition 0.60<0.75"));
+    assert!(failure.summary.contains("condition factor 0.70<0.75"));
+    assert!(failure.summary.contains("raw 0.60"));
     assert!(failure.summary.contains("instability 0.24>0.20"));
 }
 
@@ -788,6 +789,32 @@ fn test_molt_failure_reports_reserve_shortfall() {
         .expect("reserve-limited molt failure should emit an event");
     assert!(failure.cause_codes.contains(&EventCause::Starvation));
     assert!(failure.summary.contains("reserve"));
+}
+
+#[test]
+fn test_reserve_driven_poor_condition_reports_blended_factor() {
+    let mut state = molt_test_state(SimSeed(9_105));
+    configure_stage_locked_population(&mut state, 10, 0, 0);
+    set_minerals(&mut state, 40.0, 10.0);
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.animal.adult.condition_index = 0.70;
+    state.animal.adult.reserve_g = 0.0;
+    state.shrimp_params.molt_failure_poor_condition_threshold = 0.65;
+    state.shrimp_params.molt_success_threshold = 0.70;
+    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days;
+
+    step_daily_shrimp(&mut state);
+
+    let failure = state
+        .event_log
+        .iter()
+        .find(|event| event.kind == EventKind::MoltFailure)
+        .expect("reserve-driven poor-condition molt failure should emit an event");
+    assert!(failure.cause_codes.contains(&EventCause::PoorCondition));
+    assert!(failure.cause_codes.contains(&EventCause::Starvation));
+    assert!(failure.summary.contains("condition factor"));
+    assert!(failure.summary.contains("raw 0.70"));
+    assert!(!failure.summary.contains("condition 0.70<0.65"));
 }
 
 #[test]

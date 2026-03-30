@@ -79,6 +79,12 @@ pub fn step_substrate_zones(state: &mut TankState) -> SubstrateOxygenationBreakd
 }
 
 /// Return the base diffusive depth, active rooted biomass, and saturated ROL bonus.
+///
+/// This read-only accessor recomputes habitat geometry from the raw state
+/// instead of trusting `state.habitat_registry`. That keeps inspectors and
+/// tests accurate after direct topology edits, but it can diverge from
+/// `step_substrate_zones()` until `TankState::refresh_habitat_registry()` is
+/// called to refresh the cached registry used on the simulation hot path.
 pub fn substrate_oxygenation_breakdown(state: &TankState) -> SubstrateOxygenationBreakdown {
     let habitat_registry = compute_habitat_registry(state);
     substrate_oxygenation_breakdown_with_registry(state, &habitat_registry)
@@ -125,7 +131,8 @@ fn substrate_oxygenation_breakdown_with_registry(
                     / remaining_depth_cm.max(f64::MIN_POSITIVE))
                 .exp())
     };
-    let effective_penetration_cm = base_penetration_cm + root_oxygenation_bonus_cm;
+    let effective_penetration_cm =
+        (base_penetration_cm + root_oxygenation_bonus_cm).min(total_depth_cm);
 
     SubstrateOxygenationBreakdown {
         base_penetration_cm,

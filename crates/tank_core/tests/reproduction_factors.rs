@@ -1,7 +1,7 @@
 use tank_core::systems::shrimp::step_daily_shrimp;
 use tank_core::{
-    EggCohort, Engine, EventCause, EventKind, PlayerAction, ProcessParams, SimError, SimSeed,
-    SimulationEngine, SourceWaterProfile, TankGeometry, TankState, WaterState,
+    EggCohort, Engine, EventCause, EventKind, PlayerAction, ProcessParams, ShrimpRuntimeParams,
+    SimError, SimSeed, SimulationEngine, SourceWaterProfile, TankGeometry, TankState, WaterState,
 };
 
 // ── Test fixture ───────────────────────────────────────────────────────────
@@ -1017,6 +1017,32 @@ fn test_all_reproduction_factors_are_named_parameters() -> Result<(), SimError> 
     );
 
     Ok(())
+}
+
+#[test]
+fn test_default_toxic_repro_full_suppression_points_preserve_legacy_span() {
+    let defaults = ShrimpRuntimeParams::default();
+    let preset = tank_data::load_shrimp("neocaridina_davidi")
+        .expect("neocaridina_davidi preset should load with reproduction defaults");
+
+    assert_eq!(defaults.tan_repro_full_suppression_mg_n_per_l, 3.0);
+    assert_eq!(
+        defaults.tan_repro_full_suppression_mg_n_per_l - defaults.tan_repro_threshold_mg_n_per_l,
+        defaults.tan_repro_threshold_mg_n_per_l * 2.0
+    );
+    assert_eq!(defaults.no2_repro_full_suppression_mg_n_per_l, 1.5);
+    assert_eq!(
+        defaults.no2_repro_full_suppression_mg_n_per_l - defaults.no2_repro_threshold_mg_n_per_l,
+        defaults.no2_repro_threshold_mg_n_per_l * 2.0
+    );
+    assert_eq!(
+        preset.param_value("tan_repro_full_suppression_mg_n_per_l"),
+        Some(defaults.tan_repro_full_suppression_mg_n_per_l)
+    );
+    assert_eq!(
+        preset.param_value("no2_repro_full_suppression_mg_n_per_l"),
+        Some(defaults.no2_repro_full_suppression_mg_n_per_l)
+    );
 }
 
 #[test]
