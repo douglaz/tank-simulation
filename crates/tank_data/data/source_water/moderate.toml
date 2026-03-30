@@ -29,3 +29,36 @@ nitrification load. The preset carries 5 mg N/L nitrate and 0.1 mg P/L \
 phosphate to emulate a light nutrient floor from incoming water. \
 Post-normalization (6e5.2.6) the medium_planted and warm_room scenarios \
 use this profile as their default tap-water baseline."""
+
+# ── Per-parameter provenance metadata ────────────────────────────────
+# Representative carbonate chemistry params annotated per tanksim-6e5.7.2.
+
+[param_meta.dic_mg_c_per_l]
+unit = "mg C/L"
+source = "Derived from target KH ~4.0 and carbonate equilibrium at pH ~7.2"
+confidence = "heuristic"
+valid_range = [10.0, 35.0]
+notes = """\
+20 mg C/L DIC for moderate tap water. At pH ~7.2 most DIC is HCO₃⁻. \
+Provides enough buffer to survive light nitrification load but can be \
+exhausted under sustained cycling without water changes."""
+
+[param_meta.alkalinity_meq_per_l]
+unit = "meq/L"
+source = "Derived from target KH ~4.0 (1 KH ≈ 0.357 meq/L)"
+confidence = "heuristic"
+valid_range = [0.7, 3.0]
+notes = """\
+1.429 meq/L ≈ KH 4.0. Consistent with dic_mg_c_per_l through carbonate \
+equilibrium. This is the buffer capacity that nitrification consumes at \
+~0.143 meq per mg N oxidized."""
+
+[param_meta.chloride_mg_per_l]
+unit = "mg Cl⁻/L"
+source = "Typical treated municipal tap water"
+confidence = "heuristic"
+valid_range = [5.0, 40.0]
+notes = """\
+18 mg/L Cl⁻. Sets the Cl:NO₂ ratio baseline for nitrite toxicity modulation. \
+At 18 mg/L Cl⁻, the protection factor provides meaningful but not complete \
+shielding against nitrite spikes during cycling."""
