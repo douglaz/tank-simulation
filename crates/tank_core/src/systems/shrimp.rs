@@ -923,19 +923,19 @@ fn egg_development(state: &mut TankState) {
     let tan_mg_n_per_l = chemistry.tan_mg_n_per_l();
     let nitrite_mg_n_per_l = chemistry.nitrite_mg_n_per_l();
     let temp = state.water.temperature_c;
-    let params = &state.shrimp_params;
+    let params = state.shrimp_params.clone();
 
     let f_condition = state.animal.adult.condition_index;
     let f_oxygen = (do_mg_l / params.egg_oxygen_reference_mg_l.max(0.01)).clamp(0.0, 1.0);
-    let f_temp = temp_repro_factor(temp, params);
+    let f_temp = temp_repro_factor(temp, &params);
     let f_stability = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
-    let f_tan = tan_repro_factor(tan_mg_n_per_l, params);
-    let f_no2 = no2_repro_factor(nitrite_mg_n_per_l, params);
+    let f_tan = tan_repro_factor(tan_mg_n_per_l, &params);
+    let f_no2 = no2_repro_factor(nitrite_mg_n_per_l, &params);
 
     let gh_d = chemistry.gh_d();
     // Hatch success still depends on today's GH directly because incubation does
     // not flow through the smoothed reproductive-readiness EMA used for spawning.
-    let f_mineral = gh_mineral_factor(gh_d, params);
+    let f_mineral = gh_mineral_factor(gh_d, &params);
 
     let hatch_rate = (params.hatch_success_base
         * f_condition
@@ -949,7 +949,7 @@ fn egg_development(state: &mut TankState) {
 
     // Condition-dependent clutch size
     let adult_condition = state.animal.adult.condition_index;
-    let effective_clutch_size = clutch_condition_modifier(adult_condition, params);
+    let effective_clutch_size = clutch_condition_modifier(adult_condition, &params);
 
     let egg_duration = params.egg_duration_days as f64;
     let mut total_successful = 0u32;
@@ -998,7 +998,7 @@ fn egg_development(state: &mut TankState) {
         nitrite: f_no2,
     };
     let hatch_causes =
-        hatch_outcome_causes(hatch_factors, temp, total_resource_limited > 0, params);
+        hatch_outcome_causes(hatch_factors, temp, total_resource_limited > 0, &params);
 
     // Successful hatches produce juveniles
     if total_successful > 0 {
