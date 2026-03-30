@@ -18,6 +18,7 @@ pub enum EventKind {
     BiofilmMaturityIncrease,
     ShrimpBerried,
     EggFailure,
+    MoltFailure,
     MoltStressWarning,
     FilterCleaningSetback,
     SubstrateFoulingWarning,

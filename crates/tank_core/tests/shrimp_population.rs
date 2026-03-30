@@ -784,6 +784,38 @@ fn severe_soft_water_forces_failed_molt_even_for_healthy_shrimp() {
 }
 
 #[test]
+fn severe_soft_water_stage_timer_path_still_forces_failed_molt() {
+    let mut state = shrimp_test_state(SimSeed(7_157));
+    state
+        .process_params
+        .shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+    state.process_params.shrimp_condition_smoothing = 0.0;
+    state.process_params.shrimp_base_mortality_per_day = 0.0;
+    state.process_params.shrimp_stress_mortality_scale = 0.0;
+    state.shrimp_params.base_spawn_rate = 0.0;
+    state.animal.set_population_condition_index(1.0);
+    state.animal.inter_molt_timer_days = 0.0;
+    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days;
+    state.animal.sub_adult.count = 0;
+    state.animal.juvenile.count = 0;
+    state.water.calcium_mg_total = 0.0;
+    state.water.magnesium_mg_total = 0.0;
+    state.stability_tracker.prev_gh_d = state.gh_d();
+
+    step_daily_shrimp(&mut state);
+
+    assert!(
+        !state.animal.last_molt_success,
+        "direct stage-timer molt resolution should still fail under severe soft water"
+    );
+    assert!(
+        state.animal.adult.molt_timer_days <= 1.0 + f64::EPSILON,
+        "resolved stage timer should reset before advancing to the next day"
+    );
+    assert!(state.animal.failed_molt_accum > 0.0);
+}
+
+#[test]
 fn prior_molt_failure_does_not_block_subadult_maturation() {
     let mut state = shrimp_test_state(SimSeed(7_156));
     state

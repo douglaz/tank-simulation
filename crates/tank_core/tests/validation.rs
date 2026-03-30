@@ -336,3 +336,61 @@ fn enforce_invariants_still_trims_zero_count_cohorts_and_clamps_stage_progress(
 
     Ok(())
 }
+
+#[test]
+fn step_hours_rejects_invalid_molt_mineral_parameters_before_simulation() {
+    let invalid_cases = [
+        ("shrimp_params.ca_min_mg_per_l", -1.0),
+        ("shrimp_params.mg_min_mg_per_l", 0.0),
+        ("shrimp_params.juvenile_molt_interval_days", 0.0),
+        ("shrimp_params.sub_adult_molt_interval_days", 0.0),
+        ("shrimp_params.molt_success_threshold", 1.2),
+    ];
+
+    for (index, (field, value)) in invalid_cases.into_iter().enumerate() {
+        let mut state = tank_core::TankState::new(SimSeed(30 + index as u64));
+        match field {
+            "shrimp_params.ca_min_mg_per_l" => state.shrimp_params.ca_min_mg_per_l = value,
+            "shrimp_params.mg_min_mg_per_l" => state.shrimp_params.mg_min_mg_per_l = value,
+            "shrimp_params.juvenile_molt_interval_days" => {
+                state.shrimp_params.juvenile_molt_interval_days = value;
+            }
+            "shrimp_params.sub_adult_molt_interval_days" => {
+                state.shrimp_params.sub_adult_molt_interval_days = value;
+            }
+            "shrimp_params.molt_success_threshold" => {
+                state.shrimp_params.molt_success_threshold = value;
+            }
+            _ => unreachable!(),
+        }
+        let expected = state.clone();
+
+        let mut engine = Engine::from_parts(state, vec![]);
+        let result = engine.step_hours(1);
+
+        assert_eq!(result, Err(SimError::InvariantViolation { field, value }));
+        assert_eq!(engine.full_state(), &expected);
+    }
+}
+
+#[test]
+fn step_hours_rejects_inverted_stage_molt_intervals_before_simulation() {
+    let mut state = tank_core::TankState::new(SimSeed(35));
+    state.shrimp_params.juvenile_molt_interval_days = 12.0;
+    state.shrimp_params.sub_adult_molt_interval_days = 10.0;
+    let expected = state.clone();
+
+    let mut engine = Engine::from_parts(state, vec![]);
+    let result = engine.step_hours(1);
+
+    assert_eq!(
+        result,
+        Err(SimError::OrderingViolation {
+            lower_field: "shrimp_params.juvenile_molt_interval_days",
+            lower_value: 12.0,
+            upper_field: "shrimp_params.sub_adult_molt_interval_days",
+            upper_value: 10.0,
+        })
+    );
+    assert_eq!(engine.full_state(), &expected);
+}

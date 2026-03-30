@@ -185,10 +185,22 @@ fn validate_invariants_inner(state: &TankState) -> Result<(), SimError> {
     }
     check_non_negative("animal.adult.reserve_g", state.animal.adult.reserve_g)?;
     check_non_negative(
+        "animal.adult.molt_timer_days",
+        state.animal.adult.molt_timer_days,
+    )?;
+    check_non_negative(
         "animal.sub_adult.reserve_g",
         state.animal.sub_adult.reserve_g,
     )?;
+    check_non_negative(
+        "animal.sub_adult.molt_timer_days",
+        state.animal.sub_adult.molt_timer_days,
+    )?;
     check_non_negative("animal.juvenile.reserve_g", state.animal.juvenile.reserve_g)?;
+    check_non_negative(
+        "animal.juvenile.molt_timer_days",
+        state.animal.juvenile.molt_timer_days,
+    )?;
     if state.animal.berried_females_count > state.animal.adult.count {
         return Err(SimError::InvariantViolation {
             field: "animal.berried_females_count",
@@ -376,6 +388,32 @@ fn validate_shrimp_runtime_params(params: &ShrimpRuntimeParams) -> Result<(), Si
     check_unit_interval(
         "shrimp_params.min_clutch_condition",
         params.min_clutch_condition,
+    )?;
+    check_positive("shrimp_params.ca_min_mg_per_l", params.ca_min_mg_per_l)?;
+    check_positive("shrimp_params.mg_min_mg_per_l", params.mg_min_mg_per_l)?;
+    check_positive(
+        "shrimp_params.juvenile_molt_interval_days",
+        params.juvenile_molt_interval_days,
+    )?;
+    check_positive(
+        "shrimp_params.sub_adult_molt_interval_days",
+        params.sub_adult_molt_interval_days,
+    )?;
+    check_unit_interval(
+        "shrimp_params.molt_success_threshold",
+        params.molt_success_threshold,
+    )?;
+    check_strictly_increasing(
+        "shrimp_params.juvenile_molt_interval_days",
+        params.juvenile_molt_interval_days,
+        "shrimp_params.sub_adult_molt_interval_days",
+        params.sub_adult_molt_interval_days,
+    )?;
+    check_strictly_increasing(
+        "shrimp_params.sub_adult_molt_interval_days",
+        params.sub_adult_molt_interval_days,
+        "shrimp_params.base_molt_interval_days",
+        params.base_molt_interval_days,
     )?;
 
     Ok(())

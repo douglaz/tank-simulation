@@ -14,7 +14,7 @@ use crate::{
 ///
 /// When you bump from N to N+1, you **must** also append a migration function
 /// to [`MIGRATIONS`]. See the migration contract below.
-pub const SCHEMA_VERSION: u32 = 12;
+pub const SCHEMA_VERSION: u32 = 13;
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Oldest schema version that the migration chain can handle.
@@ -134,6 +134,11 @@ const MIGRATIONS: &[MigrationFn] = &[
     // legacy payloads, so the schema bump only preserves an explicit version
     // boundary for save/load auditing.
     migrate_v11_to_v12,
+    // Index 10: schema 12 → 13
+    // Backfill per-stage molt timers from the legacy population-wide timer so
+    // stage-specific molting continues smoothly when loading saves created
+    // before `StageCohort.molt_timer_days` was persisted.
+    migrate_v12_to_v13,
 ];
 
 // Compile-time check: MIGRATIONS length must equal SCHEMA_VERSION - MIN_SUPPORTED_SCHEMA.
@@ -816,6 +821,48 @@ fn migrate_v11_to_v12(_value: &mut Value) -> Result<(), SimError> {
     Ok(())
 }
 
+/// Schema 12 → 13: backfill per-stage molt timers from the legacy timer.
+///
+/// Earlier saves only persisted `animal.inter_molt_timer_days`. Once per-stage
+/// timers were added, serde defaults alone would deserialize those older saves
+/// with all stage timers reset to zero. Seed each occupied stage from the
+/// legacy timer when its dedicated timer field is absent.
+fn migrate_v12_to_v13(value: &mut Value) -> Result<(), SimError> {
+    let animal = required_object_mut_at(value, 12, 13, "/state/animal")?;
+    let legacy_timer_days = animal
+        .get("inter_molt_timer_days")
+        .and_then(Value::as_f64)
+        .unwrap_or(14.0)
+        .max(0.0);
+
+    for stage_name in ["adult", "sub_adult", "juvenile"] {
+        let stage = animal
+            .get_mut(stage_name)
+            .and_then(Value::as_object_mut)
+            .ok_or_else(|| {
+                schema_migration_error(
+                    12,
+                    13,
+                    format!("expected object at /state/animal/{stage_name}"),
+                )
+            })?;
+
+        let count = stage.get("count").and_then(Value::as_u64).ok_or_else(|| {
+            schema_migration_error(
+                12,
+                13,
+                format!("expected integer at /state/animal/{stage_name}/count"),
+            )
+        })?;
+
+        stage
+            .entry("molt_timer_days".to_string())
+            .or_insert_with(|| Value::from(if count > 0 { legacy_timer_days } else { 0.0 }));
+    }
+
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -887,6 +934,31 @@ fn normalize_loaded_shrimp_reproduction_state(state: &mut TankState) {
     state.animal.egg_cohorts.retain(|cohort| cohort.count > 0);
     state.animal.clamp_berried_to_adults();
     state.animal.repair_egg_cohort_counts_for_load();
+    if state.animal.adult.count == 0 {
+        state.animal.adult.molt_timer_days = 0.0;
+    }
+    if state.animal.sub_adult.count == 0 {
+        state.animal.sub_adult.molt_timer_days = 0.0;
+    }
+    if state.animal.juvenile.count == 0 {
+        state.animal.juvenile.molt_timer_days = 0.0;
+    }
+    if state.animal.inter_molt_timer_days > 0.0
+        && state.animal.adult.molt_timer_days == 0.0
+        && state.animal.sub_adult.molt_timer_days == 0.0
+        && state.animal.juvenile.molt_timer_days == 0.0
+    {
+        let legacy_timer = state.animal.inter_molt_timer_days;
+        if state.animal.adult.count > 0 {
+            state.animal.adult.molt_timer_days = legacy_timer;
+        }
+        if state.animal.sub_adult.count > 0 {
+            state.animal.sub_adult.molt_timer_days = legacy_timer;
+        }
+        if state.animal.juvenile.count > 0 {
+            state.animal.juvenile.molt_timer_days = legacy_timer;
+        }
+    }
 }
 
 fn reconcile_stability_tracker(

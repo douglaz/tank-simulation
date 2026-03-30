@@ -1088,6 +1088,50 @@ fn malformed_current_save_with_invalid_shrimp_stage_duration_is_rejected() -> Re
 }
 
 #[test]
+fn malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected() -> Result<(), SimError>
+{
+    let invalid_cases = [
+        ("shrimp_params.ca_min_mg_per_l", -1.0),
+        ("shrimp_params.mg_min_mg_per_l", 0.0),
+        ("shrimp_params.juvenile_molt_interval_days", 0.0),
+        ("shrimp_params.sub_adult_molt_interval_days", 0.0),
+        ("shrimp_params.molt_success_threshold", 1.2),
+    ];
+
+    for (index, (field, value)) in invalid_cases.into_iter().enumerate() {
+        let mut state = TankState::new(SimSeed(120 + index as u64));
+        match field {
+            "shrimp_params.ca_min_mg_per_l" => state.shrimp_params.ca_min_mg_per_l = value,
+            "shrimp_params.mg_min_mg_per_l" => state.shrimp_params.mg_min_mg_per_l = value,
+            "shrimp_params.juvenile_molt_interval_days" => {
+                state.shrimp_params.juvenile_molt_interval_days = value;
+            }
+            "shrimp_params.sub_adult_molt_interval_days" => {
+                state.shrimp_params.sub_adult_molt_interval_days = value;
+            }
+            "shrimp_params.molt_success_threshold" => {
+                state.shrimp_params.molt_success_threshold = value;
+            }
+            _ => unreachable!(),
+        }
+
+        let json = serde_json::json!({
+            "schema_version": SCHEMA_VERSION,
+            "app_version": APP_VERSION,
+            "state": state,
+            "queued_actions": [],
+        })
+        .to_string();
+
+        let loaded = SaveFile::from_json(&json)?;
+        let err = loaded.into_engine().unwrap_err();
+        assert_eq!(err, SimError::InvariantViolation { field, value });
+    }
+
+    Ok(())
+}
+
+#[test]
 fn malformed_current_save_with_inverted_shrimp_thermal_penalty_range_is_rejected(
 ) -> Result<(), SimError> {
     let mut state = TankState::new(SimSeed(113));
@@ -1112,6 +1156,36 @@ fn malformed_current_save_with_inverted_shrimp_thermal_penalty_range_is_rejected
             lower_value: 33.0,
             upper_field: "shrimp_params.high_temp_repro_penalty_full_c",
             upper_value: 30.0,
+        }
+    );
+
+    Ok(())
+}
+
+#[test]
+fn malformed_current_save_with_inverted_stage_molt_intervals_is_rejected() -> Result<(), SimError> {
+    let mut state = TankState::new(SimSeed(126));
+    state.shrimp_params.juvenile_molt_interval_days = 12.0;
+    state.shrimp_params.sub_adult_molt_interval_days = 10.0;
+
+    let json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
+        "state": state,
+        "queued_actions": [],
+    })
+    .to_string();
+
+    let loaded = SaveFile::from_json(&json)?;
+    let err = loaded.into_engine().unwrap_err();
+
+    assert_eq!(
+        err,
+        SimError::OrderingViolation {
+            lower_field: "shrimp_params.juvenile_molt_interval_days",
+            lower_value: 12.0,
+            upper_field: "shrimp_params.sub_adult_molt_interval_days",
+            upper_value: 10.0,
         }
     );
 
@@ -1305,6 +1379,72 @@ fn save_load_roundtrip_preserves_zero_penetration_depth() -> Result<(), SimError
         loaded.state.substrate_oxic_zone_geometry().volume_cm3.abs() < 1e-12,
         "0 cm penetration should leave no oxic substrate volume after load"
     );
+
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v12_saves_backfill_stage_molt_timers_from_population_timer(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut state = TankState::new(SimSeed(203));
+    state.animal.adult.count = 4;
+    state.animal.sub_adult.count = 2;
+    state.animal.juvenile.count = 0;
+    state.animal.inter_molt_timer_days = 17.5;
+
+    let mut state_json = serde_json::to_value(&state).expect("serialize state");
+    let animal = state_json
+        .get_mut("animal")
+        .and_then(|value| value.as_object_mut())
+        .expect("animal object");
+    for stage_name in ["adult", "sub_adult", "juvenile"] {
+        animal
+            .get_mut(stage_name)
+            .and_then(|value| value.as_object_mut())
+            .expect("stage object")
+            .remove("molt_timer_days");
+    }
+
+    let save_json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION - 1,
+        "app_version": APP_VERSION,
+        "state": state_json,
+        "queued_actions": [],
+    });
+
+    let loaded = SaveFile::from_json(&serde_json::to_string(&save_json)?)?;
+    assert_eq!(loaded.schema_version, SCHEMA_VERSION);
+    assert!((loaded.state.animal.adult.molt_timer_days - 17.5).abs() < 1e-9);
+    assert!((loaded.state.animal.sub_adult.molt_timer_days - 17.5).abs() < 1e-9);
+    assert!(loaded.state.animal.juvenile.molt_timer_days.abs() < 1e-9);
+
+    Ok(())
+}
+
+#[test]
+fn legacy_schema_v12_migration_preserves_explicit_stage_molt_timers(
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut state = TankState::new(SimSeed(204));
+    state.animal.adult.count = 3;
+    state.animal.sub_adult.count = 2;
+    state.animal.juvenile.count = 5;
+    state.animal.inter_molt_timer_days = 14.0;
+    state.animal.adult.molt_timer_days = 21.0;
+    state.animal.sub_adult.molt_timer_days = 9.0;
+    state.animal.juvenile.molt_timer_days = 4.0;
+
+    let save_json = serde_json::json!({
+        "schema_version": SCHEMA_VERSION - 1,
+        "app_version": APP_VERSION,
+        "state": serde_json::to_value(&state)?,
+        "queued_actions": [],
+    });
+
+    let loaded = SaveFile::from_json(&serde_json::to_string(&save_json)?)?;
+    assert_eq!(loaded.schema_version, SCHEMA_VERSION);
+    assert!((loaded.state.animal.adult.molt_timer_days - 21.0).abs() < 1e-9);
+    assert!((loaded.state.animal.sub_adult.molt_timer_days - 9.0).abs() < 1e-9);
+    assert!((loaded.state.animal.juvenile.molt_timer_days - 4.0).abs() < 1e-9);
 
     Ok(())
 }

@@ -670,12 +670,32 @@ impl ShrimpPreset {
                 self.subadult_maturation_condition_threshold,
             ),
             ("min_clutch_condition", self.min_clutch_condition),
+            ("molt_success_threshold", self.molt_success_threshold),
         ] {
             if let Some(value) = value {
                 if value > 1.0 {
                     return Err(format!("field `{name}` must be <= 1.0, got {value}"));
                 }
             }
+        }
+        let juvenile_molt_interval_days = self
+            .juvenile_molt_interval_days
+            .unwrap_or(ShrimpRuntimeParams::default().juvenile_molt_interval_days);
+        let sub_adult_molt_interval_days = self
+            .sub_adult_molt_interval_days
+            .unwrap_or(ShrimpRuntimeParams::default().sub_adult_molt_interval_days);
+        let base_molt_interval_days = self
+            .base_molt_interval_days
+            .unwrap_or(ShrimpRuntimeParams::default().base_molt_interval_days);
+        if juvenile_molt_interval_days >= sub_adult_molt_interval_days {
+            return Err(format!(
+                "juvenile_molt_interval_days ({juvenile_molt_interval_days}) must be < sub_adult_molt_interval_days ({sub_adult_molt_interval_days})"
+            ));
+        }
+        if sub_adult_molt_interval_days >= base_molt_interval_days {
+            return Err(format!(
+                "sub_adult_molt_interval_days ({sub_adult_molt_interval_days}) must be < base_molt_interval_days ({base_molt_interval_days})"
+            ));
         }
         if let Some(base_clutch_size) = self.base_clutch_size {
             if base_clutch_size == 0 {
