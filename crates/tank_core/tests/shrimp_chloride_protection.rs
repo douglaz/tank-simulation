@@ -1,5 +1,6 @@
 use tank_core::{
-    Engine, ProcessParams, SimError, SimSeed, SimulationEngine, TankState, WaterState,
+    Engine, PlayerAction, ProcessParams, SimError, SimSeed, SimulationEngine, SourceWaterProfile,
+    TankState, WaterState,
 };
 
 /// Creates a tank with cycling crash conditions: high nitrite, established shrimp.
@@ -65,6 +66,28 @@ fn nitrite_crash_state(seed: SimSeed) -> TankState {
     state
 }
 
+fn salt_treatment_source_profile(state: &TankState) -> SourceWaterProfile {
+    let base = WaterState::default_for_volume_l(1.0);
+    SourceWaterProfile {
+        temperature_c: state.water.temperature_c,
+        ammonia_mg_n_per_l: 0.0,
+        nitrite_mg_n_per_l: state.nitrite_mg_n_per_l(),
+        nitrate_mg_n_per_l: state.nitrate_mg_n_per_l(),
+        phosphate_mg_p_per_l: 0.0,
+        dic_mg_c_per_l: base.dissolved_inorganic_carbon_mg_c_total,
+        doc_mg_c_per_l: 0.0,
+        don_mg_n_per_l: 0.0,
+        alkalinity_meq_per_l: base.alkalinity_meq_total,
+        calcium_mg_per_l: 40.0,
+        magnesium_mg_per_l: 10.0,
+        sodium_mg_per_l: base.sodium_mg_total + 130.0,
+        potassium_mg_per_l: base.potassium_mg_total,
+        bicarbonate_mg_per_l: base.bicarbonate_mg_total,
+        chloride_mg_per_l: 200.0,
+        sulfate_mg_per_l: base.sulfate_mg_total,
+    }
+}
+
 /// Integration test: salt-treatment emergency scenario.
 ///
 /// Models a cycling crash with high nitrite. Mortality is high before
@@ -73,54 +96,58 @@ fn nitrite_crash_state(seed: SimSeed) -> TankState {
 /// elevated, because chloride inhibits nitrite uptake at the gills.
 #[test]
 fn test_salt_treatment_emergency_scenario() -> Result<(), SimError> {
-    // Phase 1: High nitrite, no chloride — observe mortality
-    let state_before = nitrite_crash_state(SimSeed(30_001));
-    let mut engine_before = Engine::from_parts(state_before.clone(), vec![]);
+    let mut state = nitrite_crash_state(SimSeed(30_001));
+    let salt_treatment_profile = salt_treatment_source_profile(&state);
+    state
+        .source_water_catalog
+        .insert("salt_treatment".to_string(), salt_treatment_profile);
 
-    let initial_count = engine_before.full_state().animal.total_count();
+    let mut engine = Engine::from_parts(state, vec![]);
+    let initial_count = engine.full_state().animal.total_count();
     assert!(initial_count >= 20, "should start with 20 shrimp");
 
-    // Run 7 days with no chloride protection
-    engine_before.step_hours(7 * 24)?;
-
-    let count_after_no_salt = engine_before.full_state().animal.total_count();
-    let deaths_no_salt = initial_count - count_after_no_salt;
-
-    // Phase 2: Same initial conditions but with salt treatment from day 0
-    let mut state_with_salt = nitrite_crash_state(SimSeed(30_001));
-    let vol = state_with_salt.water_volume_l();
-    // Apply NaCl treatment: raise chloride to 100 mg/L
-    // (NaCl is ~60% Cl by weight, so this represents ~167 mg/L NaCl added)
-    state_with_salt.water.chloride_mg_total = 100.0 * vol;
-    // Also add the sodium from NaCl
-    state_with_salt.water.sodium_mg_total += 65.0 * vol;
-
-    let mut engine_with_salt = Engine::from_parts(state_with_salt, vec![]);
-    engine_with_salt.step_hours(7 * 24)?;
-
-    let count_after_salt = engine_with_salt.full_state().animal.total_count();
-    let deaths_with_salt = initial_count - count_after_salt;
-
-    // Salt treatment should measurably reduce mortality even while NO2 is still elevated
+    // Phase 1: run through an active nitrite crash with no chloride protection.
+    engine.step_hours(3 * 24)?;
+    let count_before_treatment = engine.full_state().animal.total_count();
+    let pre_treatment_deaths = initial_count - count_before_treatment;
     assert!(
-        deaths_no_salt > 0,
+        pre_treatment_deaths > 0,
         "high nitrite with no salt should cause some mortality (got 0 deaths)"
     );
+
+    // Phase 2: perform a 50% water change with chloride-rich source water that
+    // keeps nitrite elevated, so the improvement comes from chloride protection
+    // rather than nitrite removal.
+    engine.apply_action(PlayerAction::WaterChangePercent {
+        percent: 50.0,
+        source_profile_id: "salt_treatment".to_string(),
+    })?;
+    engine.step_hours(1)?;
+
+    let treated_state = engine.full_state();
+    let treated_nitrite_mg_l = treated_state.concentrations().nitrite_mg_n_per_l();
+    let treated_chloride_mg_l = treated_state.concentrations().chloride_mg_per_l();
     assert!(
-        deaths_with_salt < deaths_no_salt,
-        "salt treatment should reduce mortality: without_salt={deaths_no_salt} deaths, \
-         with_salt={deaths_with_salt} deaths"
+        treated_nitrite_mg_l > 2.0,
+        "nitrite should remain elevated after salt treatment: {treated_nitrite_mg_l:.2} mg/L"
+    );
+    assert!(
+        treated_chloride_mg_l >= 95.0,
+        "salt treatment should raise chloride near 100 mg/L: {treated_chloride_mg_l:.2} mg/L"
     );
 
-    // Verify nitrite is still elevated in the salt-treated tank
-    // (the protection is from chloride competition, not from nitrite removal)
-    let final_nitrite_mg_l = engine_with_salt
-        .full_state()
-        .concentrations()
-        .nitrite_mg_n_per_l();
+    engine.step_hours(71)?;
+    let count_after_treatment = engine.full_state().animal.total_count();
+    let post_treatment_deaths = count_before_treatment - count_after_treatment;
+    let pre_treatment_mortality_rate = pre_treatment_deaths as f64 / initial_count.max(1) as f64;
+    let post_treatment_mortality_rate =
+        post_treatment_deaths as f64 / count_before_treatment.max(1) as f64;
+
     assert!(
-        final_nitrite_mg_l > 0.5,
-        "nitrite should still be elevated after salt treatment: {final_nitrite_mg_l:.2} mg/L"
+        post_treatment_mortality_rate < pre_treatment_mortality_rate,
+        "salt treatment should lower mortality rate despite persistent nitrite: \
+         pre={pre_treatment_mortality_rate:.3}, post={post_treatment_mortality_rate:.3}, \
+         pre_deaths={pre_treatment_deaths}, post_deaths={post_treatment_deaths}"
     );
 
     Ok(())
