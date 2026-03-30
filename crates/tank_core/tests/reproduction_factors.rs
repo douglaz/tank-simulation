@@ -1,6 +1,6 @@
 use tank_core::{
     EggCohort, Engine, EventCause, EventKind, PlayerAction, ProcessParams, SimError, SimSeed,
-    SimulationEngine, TankGeometry, TankState, WaterState,
+    SimulationEngine, SourceWaterProfile, TankGeometry, TankState, WaterState,
 };
 
 // ── Test fixture ───────────────────────────────────────────────────────────
@@ -148,6 +148,29 @@ fn run_day(engine: &mut Engine, feed_grams: f64) -> Result<(), SimError> {
     Ok(())
 }
 
+fn load_source_profile(id: &str) -> SourceWaterProfile {
+    let preset = tank_data::load_source_water(id)
+        .unwrap_or_else(|e| panic!("failed to load source water preset '{id}': {e}"));
+    SourceWaterProfile {
+        temperature_c: preset.temperature_c,
+        ammonia_mg_n_per_l: preset.ammonia_mg_n_per_l,
+        nitrite_mg_n_per_l: preset.nitrite_mg_n_per_l,
+        nitrate_mg_n_per_l: preset.nitrate_mg_n_per_l,
+        phosphate_mg_p_per_l: preset.phosphate_mg_p_per_l,
+        dic_mg_c_per_l: preset.dic_mg_c_per_l,
+        doc_mg_c_per_l: preset.doc_mg_c_per_l,
+        don_mg_n_per_l: preset.don_mg_n_per_l,
+        alkalinity_meq_per_l: preset.alkalinity_meq_per_l,
+        calcium_mg_per_l: preset.calcium_mg_per_l,
+        magnesium_mg_per_l: preset.magnesium_mg_per_l,
+        sodium_mg_per_l: preset.sodium_mg_per_l,
+        potassium_mg_per_l: preset.potassium_mg_per_l,
+        bicarbonate_mg_per_l: preset.bicarbonate_mg_per_l,
+        chloride_mg_per_l: preset.chloride_mg_per_l,
+        sulfate_mg_per_l: preset.sulfate_mg_per_l,
+    }
+}
+
 /// Run the engine for the given number of days with light feeding.
 fn run_days(engine: &mut Engine, days: u32) -> Result<(), SimError> {
     for _ in 0..days {
@@ -208,64 +231,64 @@ fn test_reproduction_suppressed_above_30c() -> Result<(), SimError> {
 
 #[test]
 fn test_reproduction_suppressed_by_instability() -> Result<(), SimError> {
-    // A tank with pre-elevated instability (simulating recent temp swing)
-    // should have lower readiness than a stable one.
-    let mut unstable_state = breeding_fixture(SimSeed(8002));
-    // Pre-seed instability as if a 3°C swing just occurred
-    unstable_state.stability_tracker.instability_index = 0.6;
+    let stable_state = breeding_fixture_with_volume(SimSeed(8002), 10.0);
+    let swing_state = breeding_fixture_with_volume(SimSeed(8002), 10.0);
 
-    let stable_state = breeding_fixture(SimSeed(8002));
-
-    let mut unstable_engine = Engine::from_parts(unstable_state, vec![]);
     let mut stable_engine = Engine::from_parts(stable_state, vec![]);
-
-    // Run both for 5 days to let readiness integrate the instability
-    run_days(&mut unstable_engine, 5)?;
-    run_days(&mut stable_engine, 5)?;
-
-    let unstable_readiness = unstable_engine
-        .full_state()
-        .animal
-        .reproductive_readiness_index;
-    let stable_readiness = stable_engine
-        .full_state()
-        .animal
-        .reproductive_readiness_index;
-
-    assert!(
-        unstable_readiness < stable_readiness,
-        "Post-swing readiness ({unstable_readiness:.4}) should be lower than \
-         stable readiness ({stable_readiness:.4})"
-    );
-
-    // Instability should still be elevated after 5 days (decays slowly)
-    let instability = unstable_engine
-        .full_state()
-        .stability_tracker
-        .instability_index;
-    assert!(
-        instability > 0.01,
-        "Instability should still be measurable after 5 days: {instability:.4}"
-    );
-
-    // Now use ambient temp change action to test the actual swing path
-    let swing_state = breeding_fixture(SimSeed(8002));
     let mut swing_engine = Engine::from_parts(swing_state, vec![]);
-    // Run 5 stable days first
+
+    run_days(&mut stable_engine, 5)?;
     run_days(&mut swing_engine, 5)?;
 
-    // Change ambient to induce a temperature swing
-    swing_engine.apply_action(PlayerAction::ChangeAmbientTemperature { target_c: 28.0 })?;
-    swing_engine.step_hours(24)?;
+    swing_engine.apply_action(PlayerAction::ChangeAmbientTemperature { target_c: 36.0 })?;
+    run_day(&mut stable_engine, 0.1)?;
+    run_day(&mut swing_engine, 0.1)?;
 
-    let post_swing_instability = swing_engine
+    let shock_state = swing_engine.full_state();
+    let shock_swing = shock_state.stability_tracker.last_temp_swing_c;
+    let shock_instability = shock_state.stability_tracker.instability_index;
+    let shock_readiness = shock_state.animal.reproductive_readiness_index;
+    let stable_shock_readiness = stable_engine
         .full_state()
-        .stability_tracker
-        .instability_index;
+        .animal
+        .reproductive_readiness_index;
     assert!(
-        post_swing_instability > 0.05,
-        "Ambient temp change should elevate instability: {post_swing_instability:.4}"
+        shock_swing >= 3.0,
+        "Expected a real >=3°C swing in 24h, got {shock_swing:.2}°C"
     );
+    assert!(
+        shock_instability > 0.2,
+        "Instability should jump after the swing, got {shock_instability:.4}"
+    );
+    assert!(
+        shock_readiness < stable_shock_readiness,
+        "Readiness should drop on the swing day: swing={shock_readiness:.4}, stable={stable_shock_readiness:.4}"
+    );
+
+    swing_engine.apply_action(PlayerAction::ChangeAmbientTemperature { target_c: 24.0 })?;
+    for post_day in 1..=3 {
+        run_day(&mut stable_engine, 0.1)?;
+        run_day(&mut swing_engine, 0.1)?;
+
+        let stable_state = stable_engine.full_state();
+        let swing_state = swing_engine.full_state();
+        assert!(
+            swing_state.animal.reproductive_readiness_index
+                < stable_state.animal.reproductive_readiness_index,
+            "Readiness should stay suppressed for 2-3 days after the swing (day {post_day}): \
+             swing={:.4}, stable={:.4}",
+            swing_state.animal.reproductive_readiness_index,
+            stable_state.animal.reproductive_readiness_index,
+        );
+        assert!(
+            swing_state.stability_tracker.instability_index
+                > stable_state.stability_tracker.instability_index + 0.01,
+            "Instability should remain elevated after the swing (day {post_day}): \
+             swing={:.4}, stable={:.4}",
+            swing_state.stability_tracker.instability_index,
+            stable_state.stability_tracker.instability_index,
+        );
+    }
 
     Ok(())
 }
@@ -637,37 +660,182 @@ fn test_multiple_stressors_compound() -> Result<(), SimError> {
 }
 
 #[test]
-fn test_all_reproduction_factors_are_named_parameters() {
-    // All reproduction suppression thresholds must be tunable via species data.
-    let params = tank_core::ShrimpRuntimeParams::default();
+fn test_all_reproduction_factors_are_named_parameters() -> Result<(), SimError> {
+    // Temperature curve knobs should change readiness under the same warm state.
+    let mut temp_default = breeding_fixture(SimSeed(8008));
+    temp_default.water.temperature_c = 29.0;
+    temp_default.environment.ambient_temp_c = 29.0;
+    temp_default.stability_tracker.prev_temp_c = 29.0;
+    temp_default.hardware.heater.enabled = false;
+    temp_default.process_params.shrimp_condition_smoothing = 0.0;
 
-    // Temperature curve points
-    assert!(params.optimal_temp_min_c > 0.0);
-    assert!(params.optimal_temp_max_c > params.optimal_temp_min_c);
-    assert!(params.high_temp_repro_penalty_start_c > params.optimal_temp_max_c);
-    assert!(params.high_temp_repro_penalty_full_c > params.high_temp_repro_penalty_start_c);
+    let mut temp_relaxed = temp_default.clone();
+    temp_relaxed.shrimp_params.high_temp_repro_penalty_start_c = 31.0;
+    temp_relaxed.shrimp_params.high_temp_repro_penalty_full_c = 35.0;
 
-    // Density threshold
-    assert!(params.density_repro_threshold_per_l > 0.0);
-    assert!(params.density_repro_half_suppression_per_l > params.density_repro_threshold_per_l);
+    let mut temp_default_engine = Engine::from_parts(temp_default, vec![]);
+    let mut temp_relaxed_engine = Engine::from_parts(temp_relaxed, vec![]);
+    run_days(&mut temp_default_engine, 12)?;
+    run_days(&mut temp_relaxed_engine, 12)?;
+    let temp_default_readiness = temp_default_engine
+        .full_state()
+        .animal
+        .reproductive_readiness_index;
+    let temp_relaxed_readiness = temp_relaxed_engine
+        .full_state()
+        .animal
+        .reproductive_readiness_index;
+    assert!(
+        temp_relaxed_readiness > temp_default_readiness,
+        "Temperature penalty parameters should change reproduction readiness: relaxed={temp_relaxed_readiness:.4}, default={temp_default_readiness:.4}"
+    );
 
-    // Chemistry thresholds
-    assert!(params.tan_repro_threshold_mg_n_per_l > 0.0);
-    assert!(params.no2_repro_threshold_mg_n_per_l > 0.0);
+    // Density threshold knobs should change readiness under the same crowding.
+    let mut density_strict = breeding_fixture_with_volume(SimSeed(8009), 10.0);
+    density_strict.animal.adult.count = 120;
+    density_strict.animal.adult.reserve_g = 60.0;
+    density_strict.animal.adult.condition_index = 1.0;
+    density_strict.animal.reproductive_readiness_index = 0.8;
+    density_strict.animal.molt_stress_index = 0.0;
+    density_strict.process_params.shrimp_condition_smoothing = 0.0;
+    density_strict.shrimp_params.density_repro_threshold_per_l = 4.0;
+    density_strict
+        .shrimp_params
+        .density_repro_half_suppression_per_l = 6.0;
+    density_strict.algae.set_periphyton_total(400.0);
 
-    // Instability sensitivity
-    assert!(params.egg_drop_temp_swing_c > 0.0);
-    assert!(params.egg_drop_instability_threshold > 0.0);
+    let mut density_relaxed = density_strict.clone();
+    density_relaxed.shrimp_params.density_repro_threshold_per_l = 20.0;
+    density_relaxed
+        .shrimp_params
+        .density_repro_half_suppression_per_l = 30.0;
 
-    // Spawning & hatch parameters
-    assert!(params.base_spawn_rate > 0.0);
-    assert!(params.hatch_success_base > 0.0);
-    assert!(params.base_clutch_size > 0);
-    assert!(params.min_clutch_condition > 0.0);
+    let mut density_strict_engine = Engine::from_parts(density_strict, vec![]);
+    let mut density_relaxed_engine = Engine::from_parts(density_relaxed, vec![]);
+    run_days(&mut density_strict_engine, 10)?;
+    run_days(&mut density_relaxed_engine, 10)?;
+    let density_strict_readiness = density_strict_engine
+        .full_state()
+        .animal
+        .reproductive_readiness_index;
+    let density_relaxed_readiness = density_relaxed_engine
+        .full_state()
+        .animal
+        .reproductive_readiness_index;
+    assert!(
+        density_relaxed_readiness > density_strict_readiness,
+        "Density thresholds should change readiness under the same crowding: relaxed={density_relaxed_readiness:.4}, strict={density_strict_readiness:.4}"
+    );
 
-    // GH/mineral thresholds
-    assert!(params.gh_min_d > 0.0);
-    assert!(params.gh_max_d > params.gh_min_d);
+    // TAN and NO2 thresholds should change the same chemistry state.
+    let mut tan_strict = breeding_fixture(SimSeed(8014));
+    tan_strict.water.ammonia_total_mg_n_total = 1.2 * tan_strict.water_volume_l();
+    tan_strict.process_params.shrimp_condition_smoothing = 0.0;
+    tan_strict.microbe.ammonia_oxidizer_biomass_g = 0.0;
+    tan_strict.microbe.nitrite_oxidizer_biomass_g = 0.0;
+    tan_strict.microbe.comammox_biomass_g = 0.0;
+    tan_strict.filter_state.biofilter_maturity_index = 0.0;
+    tan_strict.shrimp_params.tan_repro_threshold_mg_n_per_l = 0.5;
+    let mut tan_relaxed = tan_strict.clone();
+    tan_relaxed.shrimp_params.tan_repro_threshold_mg_n_per_l = 2.0;
+
+    let mut tan_strict_engine = Engine::from_parts(tan_strict, vec![]);
+    let mut tan_relaxed_engine = Engine::from_parts(tan_relaxed, vec![]);
+    run_days(&mut tan_strict_engine, 5)?;
+    run_days(&mut tan_relaxed_engine, 5)?;
+    let tan_strict_readiness = tan_strict_engine
+        .full_state()
+        .animal
+        .reproductive_readiness_index;
+    let tan_relaxed_readiness = tan_relaxed_engine
+        .full_state()
+        .animal
+        .reproductive_readiness_index;
+    assert!(
+        tan_relaxed_readiness > tan_strict_readiness,
+        "TAN threshold should change readiness: relaxed={tan_relaxed_readiness:.4}, strict={tan_strict_readiness:.4}"
+    );
+
+    let mut no2_strict = breeding_fixture(SimSeed(8015));
+    no2_strict.water.nitrite_mg_n_total = 0.8 * no2_strict.water_volume_l();
+    no2_strict.process_params.shrimp_condition_smoothing = 0.0;
+    no2_strict.microbe.ammonia_oxidizer_biomass_g = 0.0;
+    no2_strict.microbe.nitrite_oxidizer_biomass_g = 0.0;
+    no2_strict.microbe.comammox_biomass_g = 0.0;
+    no2_strict.filter_state.biofilter_maturity_index = 0.0;
+    no2_strict.shrimp_params.no2_repro_threshold_mg_n_per_l = 0.2;
+    let mut no2_relaxed = no2_strict.clone();
+    no2_relaxed.shrimp_params.no2_repro_threshold_mg_n_per_l = 1.0;
+
+    let mut no2_strict_engine = Engine::from_parts(no2_strict, vec![]);
+    let mut no2_relaxed_engine = Engine::from_parts(no2_relaxed, vec![]);
+    run_days(&mut no2_strict_engine, 5)?;
+    run_days(&mut no2_relaxed_engine, 5)?;
+    let no2_strict_readiness = no2_strict_engine
+        .full_state()
+        .animal
+        .reproductive_readiness_index;
+    let no2_relaxed_readiness = no2_relaxed_engine
+        .full_state()
+        .animal
+        .reproductive_readiness_index;
+    assert!(
+        no2_relaxed_readiness > no2_strict_readiness,
+        "NO2 threshold should change readiness: relaxed={no2_relaxed_readiness:.4}, strict={no2_strict_readiness:.4}"
+    );
+
+    // Instability tuning should change both the smoothed instability response
+    // and the egg-drop outcome for the same real thermal shock.
+    let mut swing_sensitive = breeding_fixture_with_volume(SimSeed(8016), 10.0);
+    swing_sensitive.animal.adult.count = 80;
+    swing_sensitive.animal.berried_females_count = 40;
+    swing_sensitive.animal.egg_cohorts = vec![EggCohort {
+        count: 40,
+        progress_days: 10.0,
+    }];
+    swing_sensitive.shrimp_params.instability_temp_swing_c = 2.0;
+    swing_sensitive.shrimp_params.egg_drop_temp_swing_c = 2.0;
+    swing_sensitive.shrimp_params.instability_ph_swing = 100.0;
+    swing_sensitive.shrimp_params.instability_gh_swing_d = 100.0;
+    swing_sensitive.shrimp_params.instability_do_swing_mg_l = 100.0;
+
+    let mut swing_tolerant = swing_sensitive.clone();
+    swing_tolerant.shrimp_params.instability_temp_swing_c = 6.0;
+    swing_tolerant.shrimp_params.egg_drop_temp_swing_c = 6.0;
+
+    let mut swing_sensitive_engine = Engine::from_parts(swing_sensitive, vec![]);
+    let mut swing_tolerant_engine = Engine::from_parts(swing_tolerant, vec![]);
+    swing_sensitive_engine
+        .apply_action(PlayerAction::ChangeAmbientTemperature { target_c: 28.0 })?;
+    swing_tolerant_engine
+        .apply_action(PlayerAction::ChangeAmbientTemperature { target_c: 28.0 })?;
+    run_day(&mut swing_sensitive_engine, 0.1)?;
+    run_day(&mut swing_tolerant_engine, 0.1)?;
+
+    let sensitive_state = swing_sensitive_engine.full_state();
+    let tolerant_state = swing_tolerant_engine.full_state();
+    assert!(
+        sensitive_state.stability_tracker.last_temp_swing_c >= 3.0
+            && tolerant_state.stability_tracker.last_temp_swing_c >= 3.0,
+        "Expected both scenarios to see the same >=3°C swing, got sensitive={:.2}°C tolerant={:.2}°C",
+        sensitive_state.stability_tracker.last_temp_swing_c,
+        tolerant_state.stability_tracker.last_temp_swing_c,
+    );
+    assert!(
+        sensitive_state.stability_tracker.instability_index
+            > tolerant_state.stability_tracker.instability_index,
+        "Instability swing tuning should change the tracker response: sensitive={:.4}, tolerant={:.4}",
+        sensitive_state.stability_tracker.instability_index,
+        tolerant_state.stability_tracker.instability_index,
+    );
+    assert!(
+        sensitive_state.animal.berried_females_count < tolerant_state.animal.berried_females_count,
+        "Egg-drop swing tuning should change clutch loss: sensitive={} tolerant={}",
+        sensitive_state.animal.berried_females_count,
+        tolerant_state.animal.berried_females_count,
+    );
+
+    Ok(())
 }
 
 // ── Integration tests ──────────────────────────────────────────────────────
@@ -693,24 +861,43 @@ fn test_mature_stable_tank_breeds_well() -> Result<(), SimError> {
     state.animal.molt_stress_index = 0.0;
     state.animal.last_molt_success = true;
     // Very strong nitrifiers to handle nitrogen load from feeding + shrimp metabolism
-    state.microbe.ammonia_oxidizer_biomass_g = 5.0;
-    state.microbe.nitrite_oxidizer_biomass_g = 5.0;
-    state.microbe.comammox_biomass_g = 1.0;
+    state.microbe.ammonia_oxidizer_biomass_g = 10.0;
+    state.microbe.nitrite_oxidizer_biomass_g = 10.0;
+    state.microbe.comammox_biomass_g = 2.0;
     // Higher nitrification capacity
-    state.process_params.aob_vmax_mg_n_per_g_per_hour = 20.0;
-    state.process_params.nob_vmax_mg_n_per_g_per_hour = 20.0;
+    state.process_params.aob_vmax_mg_n_per_g_per_hour = 30.0;
+    state.process_params.nob_vmax_mg_n_per_g_per_hour = 30.0;
     // Abundant periphyton for natural grazing
-    state.algae.set_periphyton_total(50.0);
+    state.algae.set_periphyton_total(120.0);
+    state.source_water_catalog.insert(
+        "hard_shrimp".to_string(),
+        load_source_profile("hard_shrimp"),
+    );
+    let initial_total = state.animal.total_count();
 
     let mut engine = Engine::from_parts(state, vec![]);
+    let mut max_tan = 0.0_f64;
+    let mut max_no2 = 0.0_f64;
+    let mut max_instability = 0.0_f64;
 
     // Run for 2000 simulated hours (~83 days) with very light feeding
-    // (shrimp primarily graze periphyton; minimal feed to avoid ammonia load)
+    // (shrimp primarily graze periphyton; weekly water changes keep the
+    // "mature, stable tank" chemistry and minerals in range)
     let total_hours = 2000u32;
     let days = total_hours / 24;
-    for _ in 0..days {
-        engine.apply_action(PlayerAction::Feed { grams: 0.02 })?;
-        engine.step_hours(24)?;
+    for day in 0..days {
+        run_day(&mut engine, 0.05)?;
+        if (day + 1) % 5 == 0 {
+            engine.apply_action(PlayerAction::WaterChangePercent {
+                percent: 20.0,
+                source_profile_id: "hard_shrimp".to_string(),
+            })?;
+        }
+        let snapshot = engine.snapshot();
+        max_tan = max_tan.max(snapshot.tan_mg_n_per_l);
+        max_no2 = max_no2.max(snapshot.nitrite_mg_n_per_l);
+        max_instability =
+            max_instability.max(engine.full_state().stability_tracker.instability_index);
     }
     let remaining = total_hours % 24;
     if remaining > 0 {
@@ -730,11 +917,19 @@ fn test_mature_stable_tank_breeds_well() -> Result<(), SimError> {
     );
 
     let snap = engine.snapshot();
-    // Population should be sustained
+    // Population should grow while chemistry stays controlled.
     assert!(
-        snap.total_shrimp_count >= 10,
-        "Population should be sustained. Total: {}",
+        snap.total_shrimp_count > initial_total,
+        "Stable tank should grow beyond the starting population. Initial: {initial_total}, final: {}",
         snap.total_shrimp_count,
+    );
+    assert!(
+        max_tan < 0.6 && max_no2 < 0.6,
+        "Stable tank should keep chemistry in range. peak TAN={max_tan:.3}, peak NO2={max_no2:.3}"
+    );
+    assert!(
+        max_instability < 0.35,
+        "Stable tank should avoid chronic instability. peak instability={max_instability:.3}"
     );
 
     Ok(())
@@ -744,94 +939,113 @@ fn test_mature_stable_tank_breeds_well() -> Result<(), SimError> {
 /// Chemistry degrades, breeding stalls, population plateaus or declines.
 #[test]
 fn test_neglected_tank_breeding_stalls() -> Result<(), SimError> {
-    let mut state = breeding_fixture(SimSeed(9002));
-    // Use realistic mortality
-    state.process_params.shrimp_base_mortality_per_day = 0.002;
-    state.process_params.shrimp_stress_mortality_scale = 0.15;
-    state.animal.adult.count = 15;
-    state.animal.adult.reserve_g = 8.0;
-    state.animal.adult.condition_index = 0.8;
-    state.shrimp_params.base_spawn_rate = 0.12;
-    state.shrimp_params.egg_duration_days = 21;
-    state.shrimp_params.hatch_success_base = 0.7;
-    state.shrimp_params.apply_legacy_total_maturation_days(60.0);
+    let mut baseline_state = breeding_fixture(SimSeed(9002));
+    baseline_state.process_params.shrimp_base_mortality_per_day = 0.002;
+    baseline_state.process_params.shrimp_stress_mortality_scale = 0.15;
+    baseline_state.animal.adult.count = 15;
+    baseline_state.animal.adult.reserve_g = 8.0;
+    baseline_state.animal.adult.condition_index = 0.8;
+    baseline_state.shrimp_params.base_spawn_rate = 0.12;
+    baseline_state.shrimp_params.egg_duration_days = 21;
+    baseline_state.shrimp_params.hatch_success_base = 0.7;
+    baseline_state
+        .shrimp_params
+        .apply_legacy_total_maturation_days(60.0);
+    baseline_state.microbe.ammonia_oxidizer_biomass_g = 8.0;
+    baseline_state.microbe.nitrite_oxidizer_biomass_g = 8.0;
+    baseline_state.microbe.comammox_biomass_g = 1.5;
+    baseline_state.process_params.aob_vmax_mg_n_per_g_per_hour = 25.0;
+    baseline_state.process_params.nob_vmax_mg_n_per_g_per_hour = 25.0;
+    baseline_state.algae.set_periphyton_total(120.0);
+    let initial_total = baseline_state.animal.total_count();
 
-    // Weaken biofilter to simulate neglect: chemistry will degrade faster
-    state.microbe.ammonia_oxidizer_biomass_g = 0.1;
-    state.microbe.nitrite_oxidizer_biomass_g = 0.05;
-    state.microbe.comammox_biomass_g = 0.02;
-    state.filter_state.biofilter_maturity_index = 0.3;
+    let neglected_state = baseline_state.clone();
+    let mut stable_state = baseline_state;
+    stable_state.source_water_catalog.insert(
+        "hard_shrimp".to_string(),
+        load_source_profile("hard_shrimp"),
+    );
 
-    let mut engine = Engine::from_parts(state, vec![]);
+    let mut neglected_engine = Engine::from_parts(neglected_state, vec![]);
+    let mut stable_engine = Engine::from_parts(stable_state, vec![]);
 
-    // Overfeed and don't do water changes
     let total_hours = 2000u32;
     let days = total_hours / 24;
-    for _ in 0..days {
-        engine.apply_action(PlayerAction::Feed { grams: 0.5 })?; // Heavy overfeeding
-        engine.step_hours(24)?;
+    let mut neglected_peak_tan = 0.0_f64;
+    let mut neglected_peak_no2 = 0.0_f64;
+    let mut neglected_peak_instability = 0.0_f64;
+    let mut neglected_peak_population = initial_total;
+
+    for day in 0..days {
+        run_day(&mut neglected_engine, 0.75)?;
+        let neglected_snapshot = neglected_engine.snapshot();
+        neglected_peak_tan = neglected_peak_tan.max(neglected_snapshot.tan_mg_n_per_l);
+        neglected_peak_no2 = neglected_peak_no2.max(neglected_snapshot.nitrite_mg_n_per_l);
+        neglected_peak_instability = neglected_peak_instability.max(
+            neglected_engine
+                .full_state()
+                .stability_tracker
+                .instability_index,
+        );
+        neglected_peak_population =
+            neglected_peak_population.max(neglected_snapshot.total_shrimp_count);
+
+        run_day(&mut stable_engine, 0.05)?;
+        if (day + 1) % 5 == 0 {
+            stable_engine.apply_action(PlayerAction::WaterChangePercent {
+                percent: 20.0,
+                source_profile_id: "hard_shrimp".to_string(),
+            })?;
+        }
     }
     let remaining = total_hours % 24;
     if remaining > 0 {
-        engine.step_hours(remaining)?;
+        neglected_engine.step_hours(remaining)?;
+        stable_engine.step_hours(remaining)?;
     }
 
-    let snap = engine.snapshot();
-
-    // Chemistry should be degraded
-    let chemistry_degraded =
-        snap.tan_mg_n_per_l > 0.5 || snap.nitrite_mg_n_per_l > 0.2 || snap.nh3_mg_n_per_l > 0.01;
-
-    // Reproductive readiness should be suppressed compared to stable scenario
-    // (compare with the mature tank test's expected readiness > 0.3)
-    let readiness_suppressed = snap.shrimp_reproductive_readiness < 0.5;
-
-    // The dominant suppression factor should be identifiable
-    let suppression_identified = snap.repro_dominant_suppression != "none";
-
-    assert!(
-        chemistry_degraded || readiness_suppressed || suppression_identified,
-        "Neglected tank should show chemistry degradation, readiness suppression, \
-         or identifiable suppression factor. TAN: {:.3}, NO2: {:.3}, \
-         readiness: {:.4}, suppression: {}",
-        snap.tan_mg_n_per_l,
-        snap.nitrite_mg_n_per_l,
-        snap.shrimp_reproductive_readiness,
-        snap.repro_dominant_suppression,
-    );
-
-    // Run a stable comparison tank
-    let mut stable_state = breeding_fixture(SimSeed(9002));
-    stable_state.process_params.shrimp_base_mortality_per_day = 0.002;
-    stable_state.process_params.shrimp_stress_mortality_scale = 0.15;
-    stable_state.animal.adult.count = 15;
-    stable_state.animal.adult.reserve_g = 8.0;
-    stable_state.shrimp_params.base_spawn_rate = 0.12;
-    stable_state.shrimp_params.egg_duration_days = 21;
-    stable_state.shrimp_params.hatch_success_base = 0.7;
-    stable_state
-        .shrimp_params
-        .apply_legacy_total_maturation_days(60.0);
-
-    let mut stable_engine = Engine::from_parts(stable_state, vec![]);
-    for _ in 0..days {
-        stable_engine.apply_action(PlayerAction::Feed { grams: 0.15 })?;
-        stable_engine.step_hours(24)?;
-    }
-
+    let neglected_snap = neglected_engine.snapshot();
     let stable_snap = stable_engine.snapshot();
-
-    // Neglected tank should have worse reproductive outcomes than stable tank
-    let neglected_output = snap.berried_females_count + snap.juveniles_count;
-    let stable_output = stable_snap.berried_females_count + stable_snap.juveniles_count;
-    let neglected_readiness = snap.shrimp_reproductive_readiness;
-    let stable_readiness = stable_snap.shrimp_reproductive_readiness;
+    let neglected_berried_events = neglected_engine
+        .full_state()
+        .event_log
+        .iter()
+        .filter(|event| event.kind == EventKind::ShrimpBerried)
+        .count();
+    let stable_berried_events = stable_engine
+        .full_state()
+        .event_log
+        .iter()
+        .filter(|event| event.kind == EventKind::ShrimpBerried)
+        .count();
 
     assert!(
-        neglected_readiness <= stable_readiness || neglected_output <= stable_output,
-        "Neglected tank should have worse reproductive outcomes. \
-         Neglected readiness: {neglected_readiness:.4} vs stable: {stable_readiness:.4}, \
-         Neglected output: {neglected_output} vs stable: {stable_output}"
+        (neglected_peak_tan > 0.5 || neglected_peak_no2 > 0.2) && neglected_peak_instability > 0.15,
+        "Neglected tank should show chemistry and stability degradation. \
+         peak TAN={neglected_peak_tan:.3}, peak NO2={neglected_peak_no2:.3}, \
+         peak instability={neglected_peak_instability:.3}"
+    );
+    assert!(
+        neglected_snap.total_shrimp_count <= initial_total + 5
+            || neglected_snap.total_shrimp_count + 3 <= neglected_peak_population,
+        "Neglected tank should stall or reverse population growth. \
+         initial={initial_total}, peak={}, final={}",
+        neglected_peak_population,
+        neglected_snap.total_shrimp_count,
+    );
+    assert!(
+        neglected_snap.total_shrimp_count + 5 < stable_snap.total_shrimp_count
+            && neglected_berried_events < stable_berried_events,
+        "Neglected tank should underperform the maintained control. \
+         neglected total={} stable total={}, neglected berried={} stable berried={}",
+        neglected_snap.total_shrimp_count,
+        stable_snap.total_shrimp_count,
+        neglected_berried_events,
+        stable_berried_events,
+    );
+    assert!(
+        neglected_snap.repro_dominant_suppression != "none",
+        "Neglected tank should report a dominant suppression factor"
     );
 
     Ok(())

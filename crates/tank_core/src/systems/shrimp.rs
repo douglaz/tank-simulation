@@ -210,8 +210,7 @@ pub fn update_stability_tracker(state: &mut TankState) {
 
     // Rises quickly, decays slowly
     if raw_instability > tracker.instability_index {
-        tracker.instability_index +=
-            rise_smoothing * (raw_instability - tracker.instability_index);
+        tracker.instability_index += rise_smoothing * (raw_instability - tracker.instability_index);
     } else {
         tracker.instability_index +=
             decay_smoothing * (raw_instability - tracker.instability_index);
