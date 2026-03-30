@@ -221,11 +221,13 @@ fn test_failed_molt_increases_mortality() -> Result<(), SimError> {
         set_minerals(&mut state, ca, mg);
         state.animal.set_population_condition_index(0.75);
         seed_molt_reserves(&mut state);
+        state.process_params.shrimp_condition_smoothing = 0.0;
+        state.process_params.shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
         state.shrimp_params.base_molt_interval_days = 7.0;
         state.shrimp_params.sub_adult_molt_interval_days = 5.0;
         state.shrimp_params.juvenile_molt_interval_days = 3.0;
 
-        let final_state = run_hours_with_daily_feed(state, 30 * 24, 0.06)?;
+        let final_state = run_hours_with_daily_feed(state, 30 * 24, 0.0)?;
         Ok((
             final_state.animal.total_count(),
             final_state.animal.failed_molt_accum,
@@ -365,7 +367,9 @@ fn test_soft_vs_hard_water_shrimp_survival() -> Result<(), SimError> {
         configure_stage_locked_population(&mut state, 12, 12, 12);
         state.animal.set_population_condition_index(0.8);
         seed_molt_reserves(&mut state);
-        run_hours_with_daily_feed(state, 1000, 0.06)
+        state.process_params.shrimp_condition_smoothing = 0.0;
+        state.process_params.shrimp_periphyton_grazing_g_per_shrimp_per_day = 0.0;
+        run_hours_with_daily_feed(state, 1000, 0.0)
     };
 
     let hard_state = run_profile("hard_shrimp", 9_000)?;

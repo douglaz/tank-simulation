@@ -201,10 +201,13 @@ fn shrimp_reproduction_budget_state(seed: SimSeed) -> TankState {
     state.hardware.aeration.intensity = 0.4;
     state.environment.ambient_temp_c = 24.0;
     state.water.temperature_c = 24.0;
-    state.water.dissolved_oxygen_mg_total = 8.0 * state.water_volume_l();
+    let volume_l = state.water_volume_l();
+    state.water.dissolved_oxygen_mg_total = 8.0 * volume_l;
     state.water.dissolved_inorganic_carbon_mg_c_total = 420.0;
     state.water.dissolved_organic_carbon_mg_c_total = 260.0;
     state.water.dissolved_organic_nitrogen_mg_n_total = 48.0;
+    state.water.calcium_mg_total = 42.0 * volume_l;
+    state.water.magnesium_mg_total = 15.0 * volume_l;
     state.algae.set_periphyton_total(5.0);
     state.algae.suspended_biomass_g = 0.2;
     state.microbe.set_decomposer_total(0.1);
