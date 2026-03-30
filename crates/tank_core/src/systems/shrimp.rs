@@ -732,6 +732,85 @@ fn spawning(state: &mut TankState) {
     }
 }
 
+/// Egg dropping: berried females may lose their clutch when exposed to
+/// sudden temperature swings or high environmental instability.
+/// Runs after spawning but before egg_development so newly spawned
+/// cohorts can still be affected by an ongoing disturbance.
+fn egg_dropping(state: &mut TankState) {
+    if state.animal.egg_cohorts.is_empty() || state.animal.berried_females_count == 0 {
+        return;
+    }
+
+    let params = &state.shrimp_params;
+    let temp_swing = (state.water.temperature_c - state.stability_tracker.prev_temp_c).abs();
+    let instability = state.stability_tracker.instability_index;
+
+    // Probability from temperature swing exceeding species threshold
+    let temp_drop_prob = if temp_swing > params.egg_drop_temp_swing_c {
+        ((temp_swing - params.egg_drop_temp_swing_c) / params.egg_drop_temp_swing_c.max(0.01))
+            .clamp(0.0, 0.5)
+    } else {
+        0.0
+    };
+
+    // Probability from sustained instability exceeding species threshold
+    let instab_drop_prob = if instability > params.egg_drop_instability_threshold {
+        ((instability - params.egg_drop_instability_threshold) * 0.3).clamp(0.0, 0.3)
+    } else {
+        0.0
+    };
+
+    // Combined probability, capped at 0.6 to leave some clutches intact
+    let drop_prob = (temp_drop_prob + instab_drop_prob).clamp(0.0, 0.6);
+    if drop_prob <= f64::EPSILON {
+        return;
+    }
+
+    let mut total_dropped = 0u32;
+    for cohort in &mut state.animal.egg_cohorts {
+        let mut dropped = 0u32;
+        for _ in 0..cohort.count {
+            if state.rng.next_f64() < drop_prob {
+                dropped += 1;
+            }
+        }
+        dropped = dropped.min(cohort.count);
+        cohort.count -= dropped;
+        total_dropped += dropped;
+    }
+
+    // Remove empty cohorts
+    state.animal.egg_cohorts.retain(|c| c.count > 0);
+
+    if total_dropped > 0 {
+        state.animal.berried_females_count = state
+            .animal
+            .berried_females_count
+            .saturating_sub(total_dropped);
+
+        let mut causes = Vec::new();
+        if temp_drop_prob > 0.0 {
+            causes.push(EventCause::HighTemperature);
+        }
+        if instab_drop_prob > 0.0 {
+            causes.push(EventCause::ChemistryInstability);
+        }
+
+        crate::systems::events::emit_once_per_day_pub(
+            state,
+            EventSeverity::Warning,
+            EventKind::EggDropping,
+            causes,
+            format!(
+                "{total_dropped} berried female(s) dropped eggs \
+                 (temp swing {temp_swing:.1}°C, instability {instability:.2})"
+            ),
+        );
+    }
+
+    state.animal.sync_egg_progress_from_cohorts();
+}
+
 fn egg_development(state: &mut TankState) {
     if state.animal.egg_cohorts.is_empty() {
         // Legacy path: if berried females exist without cohorts (e.g. from old save),
@@ -749,6 +828,8 @@ fn egg_development(state: &mut TankState) {
 
     let chemistry = state.concentrations();
     let do_mg_l = chemistry.do_mg_per_l();
+    let tan_mg_n_per_l = chemistry.tan_mg_n_per_l();
+    let nitrite_mg_n_per_l = chemistry.nitrite_mg_n_per_l();
     let temp = state.water.temperature_c;
     let params = &state.shrimp_params;
 
@@ -756,13 +837,21 @@ fn egg_development(state: &mut TankState) {
     let f_oxygen = (do_mg_l / 6.0).clamp(0.0, 1.0);
     let f_temp = temp_repro_factor(temp, params);
     let f_stability = (1.0 - state.stability_tracker.instability_index).clamp(0.0, 1.0);
+    let f_tan = tan_repro_factor(tan_mg_n_per_l, params);
+    let f_no2 = no2_repro_factor(nitrite_mg_n_per_l, params);
 
     let gh_d = chemistry.gh_d();
     let f_mineral = gh_mineral_factor(gh_d, params);
 
-    let hatch_rate =
-        (params.hatch_success_base * f_condition * f_oxygen * f_temp * f_stability * f_mineral)
-            .clamp(0.0, 1.0);
+    let hatch_rate = (params.hatch_success_base
+        * f_condition
+        * f_oxygen
+        * f_temp
+        * f_stability
+        * f_mineral
+        * f_tan
+        * f_no2)
+        .clamp(0.0, 1.0);
 
     // Condition-dependent clutch size
     let adult_condition = state.animal.adult.condition_index;
