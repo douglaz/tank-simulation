@@ -325,17 +325,32 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix(
         state
     };
 
+    let fixed_seeded_total_nitrifier_g = {
+        let reference_state = base_state(SimSeed(42), SMALL_MEDIA_CM2);
+        compute_biofilter_carrying_capacity(
+            &reference_state.habitat_registry,
+            reference_state
+                .process_params
+                .nitrifier_base_density_g_per_cm2,
+        ) * INITIAL_CAPACITY_FRACTION
+    };
+
     let build_state = |seed: SimSeed, media_area_cm2: f64| -> TankState {
         let mut state = base_state(seed, media_area_cm2);
         let carrying_capacity_g = compute_biofilter_carrying_capacity(
             &state.habitat_registry,
             state.process_params.nitrifier_base_density_g_per_cm2,
         );
-        let seeded_total_nitrifier_g = carrying_capacity_g * INITIAL_CAPACITY_FRACTION;
+        let seeded_total_nitrifier_g = fixed_seeded_total_nitrifier_g.min(carrying_capacity_g);
+        let seeded_capacity_fraction = if carrying_capacity_g > 0.0 {
+            seeded_total_nitrifier_g / carrying_capacity_g
+        } else {
+            0.0
+        };
         state.microbe.ammonia_oxidizer_biomass_g = seeded_total_nitrifier_g * 0.45;
         state.microbe.nitrite_oxidizer_biomass_g = seeded_total_nitrifier_g * 0.45;
         state.microbe.comammox_biomass_g = seeded_total_nitrifier_g * 0.1;
-        state.filter_state.biofilter_maturity_index = INITIAL_CAPACITY_FRACTION;
+        state.filter_state.biofilter_maturity_index = seeded_capacity_fraction;
         state.refresh_habitat_registry();
         state
     };
@@ -371,6 +386,8 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix(
 
     let filter_area_small = filter_area(run_small.engine().full_state());
     let filter_area_large = filter_area(run_large.engine().full_state());
+    let initial_nitrifier_small = nitrifier_biomass(run_small.engine().full_state());
+    let initial_nitrifier_large = nitrifier_biomass(run_large.engine().full_state());
     let capacity_small = compute_biofilter_carrying_capacity(
         &run_small.engine().full_state().habitat_registry,
         run_small
@@ -441,6 +458,15 @@ fn run_probe_biofilter_scaling_bigger_media_faster_cycling_with_suffix(
 
     {
         let mut runs = [&mut run_small, &mut run_large];
+        record_check(
+            &mut runs,
+            "biofilter_seeded_biomass",
+            (initial_nitrifier_large - initial_nitrifier_small).abs() <= 1.0e-9,
+            format!(
+                "both media packs should start from the same absolute seeded nitrifier biomass: \
+                 small={initial_nitrifier_small:.4} g, large={initial_nitrifier_large:.4} g"
+            ),
+        );
         record_check(
             &mut runs,
             "biofilter_filter_area",
