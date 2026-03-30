@@ -120,7 +120,7 @@ pub struct BudgetComponent {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct BudgetSnapshot {
     pub(crate) totals: BudgetTotals,
-    nitrogen_components: [BudgetComponent; 19],
+    nitrogen_components: [BudgetComponent; 20],
     carbon_components: [BudgetComponent; 16],
 }
 
@@ -226,7 +226,7 @@ impl BudgetLedger {
 /// When adding a new explicit nitrogen-bearing field, update this function in
 /// the same change. If the field uses a non-standard name, also extend the
 /// budget-path discovery rules used by the coverage test.
-pub fn nitrogen_budget_components(state: &TankState) -> [BudgetComponent; 19] {
+pub fn nitrogen_budget_components(state: &TankState) -> [BudgetComponent; 20] {
     let n_to_c_ratio = state.process_params.feed_n_to_c_ratio;
     let substrate_n_mg: f64 = state
         .substrate_layers
