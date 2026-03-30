@@ -315,11 +315,17 @@ fn shrimp_hatched_event_reports_limiting_causes_when_suppressed() -> Result<(), 
     state.water.temperature_c = 24.0;
     state.environment.ambient_temp_c = 24.0;
     let volume_l = state.water_volume_l();
-    state.water.dissolved_oxygen_mg_total = 3.0 * volume_l;
+    state.water.dissolved_oxygen_mg_total = 1.5 * volume_l;
     state.water.calcium_mg_total = 10.0 * volume_l;
     state.water.magnesium_mg_total = 2.0 * volume_l;
     state.water.alkalinity_meq_total = 10.0 * volume_l;
     state.water.dissolved_inorganic_carbon_mg_c_total = 5.0 * volume_l;
+    state.hardware.aeration.enabled = false;
+    state.process_params = ProcessParams {
+        reaeration_kla_base: 0.0,
+        aeration_kla_boost: 0.0,
+        ..ProcessParams::default()
+    };
 
     state.animal.adult.count = 12;
     state.animal.adult.condition_index = 0.95;

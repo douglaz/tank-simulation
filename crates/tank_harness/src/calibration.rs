@@ -324,32 +324,48 @@ impl CalibrationRun {
     /// Finish the run and produce a [`ScenarioRow`].
     ///
     /// Persists artifacts for non-passing scenarios, then consumes the
-    /// underlying harness run.
+    /// underlying harness run. Any failures accumulated directly on the shared
+    /// [`HarnessRun`] override the checkpoint-derived scenario status.
     pub fn finish(self) -> ScenarioRow {
-        let scenario_id = self.inner.scenario_id().to_owned();
-        let seed = self.inner.seed().0;
-        let overall_status = self
-            .checkpoint_rows
+        let Self {
+            inner,
+            parameter_variant,
+            checkpoint_rows,
+        } = self;
+
+        let scenario_id = inner.scenario_id().to_owned();
+        let seed = inner.seed().0;
+        let checkpoint_status = checkpoint_rows
             .iter()
             .map(|c| c.status)
             .fold(CheckStatus::Pass, CheckStatus::worst);
-
-        let artifact_path = if overall_status != CheckStatus::Pass {
-            let dir = self.inner.persist_artifacts();
-            Some(dir.display().to_string())
+        let harness_has_failures = !inner.failures().is_empty();
+        let artifact_path = if checkpoint_status != CheckStatus::Pass || harness_has_failures {
+            Some(inner.artifact_dir().display().to_string())
         } else {
             None
         };
 
-        // Consume the harness (verbose trace dump, cleanup).
-        let _ = self.inner.finish();
+        if checkpoint_status == CheckStatus::Marginal && !harness_has_failures {
+            inner.persist_artifacts();
+        }
+
+        // Consume the harness (verbose trace dump, cleanup) and escalate the
+        // scenario if the shared harness accumulated failures outside envelope
+        // checkpoints (for example via `inner_mut().assert_snapshot()`).
+        let finish_result = inner.finish();
+        let overall_status = if finish_result.is_err() {
+            CheckStatus::Fail
+        } else {
+            checkpoint_status
+        };
 
         ScenarioRow {
             scenario_id,
             seed,
-            parameter_variant: self.parameter_variant,
+            parameter_variant,
             status: overall_status,
-            checkpoints: self.checkpoint_rows,
+            checkpoints: checkpoint_rows,
             artifact_path,
         }
     }

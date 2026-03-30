@@ -147,7 +147,55 @@ fn test_report_includes_artifact_paths() -> Result<(), Box<dyn std::error::Error
 }
 
 // ---------------------------------------------------------------------------
-// 4. test_report_comparison_across_runs
+// 4. test_finish_propagates_shared_harness_failures
+// ---------------------------------------------------------------------------
+
+/// Calibration rows fail if the shared harness records assertions outside the
+/// checkpoint envelope workflow.
+#[test]
+fn test_finish_propagates_shared_harness_failures() -> Result<(), Box<dyn std::error::Error>> {
+    let run = HarnessRun::new(SimSeed(9004), "medium_planted")?
+        .with_artifact_label("shared_harness_failures");
+    let artifact_dir = run.artifact_dir();
+    let _ = std::fs::remove_dir_all(&artifact_dir);
+
+    let mut cal = CalibrationRun::new(run, "test_params");
+    cal.step_hours(24)?;
+    cal.check_envelope("day_1", &Envelope::default().ph(4.0, 10.0));
+    cal.inner_mut().assert_snapshot("custom_assertion", |_| {
+        Err("synthetic shared-harness failure".to_owned())
+    });
+
+    let row = cal.finish();
+    let artifact_dir_string = artifact_dir.display().to_string();
+
+    assert_eq!(
+        row.status,
+        CheckStatus::Fail,
+        "shared harness failures must escalate the scenario row"
+    );
+    assert_eq!(
+        row.checkpoints[0].status,
+        CheckStatus::Pass,
+        "checkpoint classification should remain independent from scenario-level harness failures"
+    );
+    assert_eq!(
+        row.artifact_path.as_deref(),
+        Some(artifact_dir_string.as_str()),
+        "scenario row should expose the harness artifact path"
+    );
+    assert!(
+        artifact_dir.exists(),
+        "artifact directory should exist at {}",
+        artifact_dir.display()
+    );
+
+    let _ = std::fs::remove_dir_all(artifact_dir);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// 5. test_report_comparison_across_runs
 // ---------------------------------------------------------------------------
 
 /// Two reports from different parameter sets can be compared: same scenario_id
@@ -215,7 +263,7 @@ fn test_report_comparison_across_runs() -> Result<(), Box<dyn std::error::Error>
 }
 
 // ---------------------------------------------------------------------------
-// 5. test_marginal_classification
+// 6. test_marginal_classification
 // ---------------------------------------------------------------------------
 
 /// A result within envelope but within 10% of the boundary is classified as
@@ -286,7 +334,7 @@ fn test_marginal_classification() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // ---------------------------------------------------------------------------
-// 6. test_report_uses_shared_harness
+// 7. test_report_uses_shared_harness
 // ---------------------------------------------------------------------------
 
 /// The calibration workflow calls the regression harness (A2e) rather than
@@ -317,7 +365,7 @@ fn test_report_uses_shared_harness() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // ---------------------------------------------------------------------------
-// 7. test_full_calibration_workflow (integration)
+// 8. test_full_calibration_workflow (integration)
 // ---------------------------------------------------------------------------
 
 /// Run calibration report on all shipped scenarios with current parameters.
