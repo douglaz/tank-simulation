@@ -164,6 +164,10 @@ impl WaterState {
         concentration_from_total(self.nitrite_mg_n_total, volume_l)
     }
 
+    pub fn chloride_mg_per_l(&self, volume_l: f64) -> f64 {
+        concentration_from_total(self.chloride_mg_total, volume_l)
+    }
+
     pub fn nitrate_mg_n_per_l(&self, volume_l: f64) -> f64 {
         concentration_from_total(self.nitrate_mg_n_total, volume_l)
     }
@@ -410,6 +414,10 @@ impl<'a> ConcentrationView<'a> {
 
     pub fn conductivity_us_cm(&self) -> f64 {
         self.water.conductivity_us_cm(self.volume_l)
+    }
+
+    pub fn chloride_mg_per_l(&self) -> f64 {
+        self.water.chloride_mg_per_l(self.volume_l)
     }
 }
 

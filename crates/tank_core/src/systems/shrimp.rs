@@ -13,6 +13,32 @@ const CRITICAL_MOLT_GH_RATIO: f64 = 0.3;
 
 // ── Hourly ──────────────────────────────────────────────────────────────────
 
+/// Computes the effective nitrite hazard after chloride protection.
+///
+/// Chloride competes with nitrite for uptake at crustacean gill sites.
+/// High chloride relative to nitrite reduces the effective toxic dose.
+///
+/// Formula: `effective = [NO2] / (1 + chloride_protection_factor × [Cl] / [NO2])`
+///
+/// Properties:
+/// - Returns 0.0 when nitrite is zero regardless of chloride.
+/// - Returns raw nitrite when chloride is zero (no protection).
+/// - Monotonically decreasing in chloride for fixed nitrite > 0.
+///
+/// Confidence: medium. Directionally well-supported by freshwater crustacean
+/// literature; scalar calibrated so Cl:NO2 > 10:1 yields < 20% hazard.
+pub fn compute_effective_nitrite_hazard(
+    nitrite_mg_l: f64,
+    chloride_mg_l: f64,
+    chloride_protection_factor: f64,
+) -> f64 {
+    if nitrite_mg_l <= 0.0 {
+        return 0.0;
+    }
+    let cl_no2_ratio = chloride_mg_l.max(0.0) / nitrite_mg_l;
+    nitrite_mg_l / (1.0 + chloride_protection_factor.max(0.0) * cl_no2_ratio)
+}
+
 /// Accumulates NH3, nitrite, low-DO, heat, and instability stress each hour.
 /// Runs after chemistry/DO updates, before hourly event emission.
 pub fn step_hourly_shrimp_stress(state: &mut TankState) {
@@ -29,6 +55,7 @@ pub fn step_hourly_shrimp_stress(state: &mut TankState) {
     let tan_mg_l = chemistry.tan_mg_n_per_l();
     let nh3_mg_l = compute_nh3_mg_n_per_l(tan_mg_l, state.water.ph, state.water.temperature_c);
     let nitrite_mg_l = chemistry.nitrite_mg_n_per_l();
+    let chloride_mg_l = chemistry.chloride_mg_per_l();
     let do_mg_l = chemistry.do_mg_per_l();
     let temp = state.water.temperature_c;
 
@@ -37,9 +64,14 @@ pub fn step_hourly_shrimp_stress(state: &mut TankState) {
         state.animal.hourly_nh3_stress_accum += (nh3_mg_l - 0.02) * 2.0 / 24.0;
     }
 
-    // Nitrite stress (threshold 0.5 mg/L)
-    if nitrite_mg_l > 0.5 {
-        state.animal.hourly_nitrite_stress_accum += (nitrite_mg_l - 0.5) * 0.5 / 24.0;
+    // Nitrite stress with chloride protection (threshold 0.5 mg/L effective hazard)
+    let effective_nitrite = compute_effective_nitrite_hazard(
+        nitrite_mg_l,
+        chloride_mg_l,
+        state.shrimp_params.chloride_protection_factor,
+    );
+    if effective_nitrite > 0.5 {
+        state.animal.hourly_nitrite_stress_accum += (effective_nitrite - 0.5) * 0.5 / 24.0;
     }
 
     // Low DO stress (threshold 5.0 mg/L)
@@ -292,6 +324,7 @@ fn update_condition(state: &mut TankState) {
     let tan_mg_l = chemistry.tan_mg_n_per_l();
     let nh3_mg_l = compute_nh3_mg_n_per_l(tan_mg_l, state.water.ph, state.water.temperature_c);
     let nitrite_mg_l = chemistry.nitrite_mg_n_per_l();
+    let chloride_mg_l = chemistry.chloride_mg_per_l();
     let do_mg_l = chemistry.do_mg_per_l();
     let temp = state.water.temperature_c;
     let gh_d = chemistry.gh_d();
@@ -307,7 +340,12 @@ fn update_condition(state: &mut TankState) {
     };
     let do_factor = (do_mg_l / 6.0).clamp(0.0, 1.0);
     let nh3_factor = (1.0 - nh3_mg_l * 3.0).clamp(0.0, 1.0);
-    let nitrite_factor = (1.0 - nitrite_mg_l * 0.5).clamp(0.0, 1.0);
+    let effective_nitrite = compute_effective_nitrite_hazard(
+        nitrite_mg_l,
+        chloride_mg_l,
+        state.shrimp_params.chloride_protection_factor,
+    );
+    let nitrite_factor = (1.0 - effective_nitrite * 0.5).clamp(0.0, 1.0);
 
     let params = &state.shrimp_params;
     let temp_factor = temp_condition_factor(temp, params);

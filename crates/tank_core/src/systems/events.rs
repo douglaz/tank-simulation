@@ -1,5 +1,6 @@
 use crate::{
     systems::chemistry::compute_nh3_mg_n_per_l,
+    systems::shrimp::compute_effective_nitrite_hazard,
     types::{EventCause, EventKind, EventSeverity, SimEvent, TankState},
 };
 
@@ -13,6 +14,7 @@ pub fn emit_hourly_threshold_events(state: &mut TankState) {
     let tan_mg_l = chemistry.tan_mg_n_per_l();
     let nh3_mg_l = compute_nh3_mg_n_per_l(tan_mg_l, state.water.ph, state.water.temperature_c);
     let nitrite_mg_l = chemistry.nitrite_mg_n_per_l();
+    let chloride_mg_l = chemistry.chloride_mg_per_l();
     let do_mg_l = chemistry.do_mg_per_l();
 
     if nh3_mg_l >= 0.02 {
@@ -25,12 +27,25 @@ pub fn emit_hourly_threshold_events(state: &mut TankState) {
         );
     }
     if nitrite_mg_l >= 0.5 {
+        let effective_hazard = compute_effective_nitrite_hazard(
+            nitrite_mg_l,
+            chloride_mg_l,
+            state.shrimp_params.chloride_protection_factor,
+        );
+        let cl_no2_ratio = if nitrite_mg_l > f64::EPSILON {
+            chloride_mg_l / nitrite_mg_l
+        } else {
+            0.0
+        };
         emit_once_per_day(
             state,
             EventSeverity::Warning,
             EventKind::NitriteWarning,
             vec![EventCause::HighNitrite],
-            format!("Nitrite-N reached {nitrite_mg_l:.2} mg N/L"),
+            format!(
+                "Nitrite-N {nitrite_mg_l:.2} mg/L, Cl {chloride_mg_l:.1} mg/L \
+                 (Cl:NO2 {cl_no2_ratio:.1}:1), effective hazard {effective_hazard:.3} mg/L"
+            ),
         );
     }
     if do_mg_l < 4.0 {

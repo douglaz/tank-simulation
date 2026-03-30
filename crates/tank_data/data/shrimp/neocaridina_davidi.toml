@@ -25,6 +25,7 @@ mg_min_mg_per_l = 5.0
 juvenile_molt_interval_days = 14.0
 sub_adult_molt_interval_days = 21.0
 molt_success_threshold = 0.55
+chloride_protection_factor = 0.5
 
 [provenance]
 source_title = "Starter preset pack"
@@ -36,4 +37,8 @@ body_nitrogen (27.6 mg N/g wet) and body_carbon (172.4 mg C/g wet) are \
 stoichiometric constants used for N/C budget accounting when shrimp die — \
 they are not affected by the kinetics normalization. Thermal penalty starts \
 at 28°C, which drives the warm_room scenario's shrimp mortality story. \
+chloride_protection_factor (0.5) models Cl- competition with NO2- at gill \
+uptake sites; calibrated so Cl:NO2 > 10:1 yields < 20% of unprotected \
+nitrite hazard. Directionally supported by freshwater crustacean literature; \
+scalar is medium-confidence. \
 Unchanged in 6e5.2.6 retuning — no kinetic Ks values here."""

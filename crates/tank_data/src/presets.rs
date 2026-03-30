@@ -98,6 +98,7 @@ fn shrimp_runtime_default_param_value(name: &str) -> Option<f64> {
         "juvenile_molt_interval_days" => Some(defaults.juvenile_molt_interval_days),
         "sub_adult_molt_interval_days" => Some(defaults.sub_adult_molt_interval_days),
         "molt_success_threshold" => Some(defaults.molt_success_threshold),
+        "chloride_protection_factor" => Some(defaults.chloride_protection_factor),
         _ => None,
     }
 }
@@ -484,6 +485,8 @@ pub struct ShrimpPreset {
     pub sub_adult_molt_interval_days: Option<f64>,
     #[serde(default)]
     pub molt_success_threshold: Option<f64>,
+    #[serde(default)]
+    pub chloride_protection_factor: Option<f64>,
     pub provenance: Option<Provenance>,
 
     /// Per-parameter provenance metadata keyed by parameter name.
@@ -620,6 +623,10 @@ impl ShrimpPreset {
                 self.sub_adult_molt_interval_days,
             ),
             ("molt_success_threshold", self.molt_success_threshold),
+            (
+                "chloride_protection_factor",
+                self.chloride_protection_factor,
+            ),
         ] {
             let Some(value) = value else {
                 continue;
@@ -772,6 +779,9 @@ impl ParamMetaPreset for ShrimpPreset {
             "molt_success_threshold" => self
                 .molt_success_threshold
                 .or_else(|| shrimp_runtime_default_param_value(name)),
+            "chloride_protection_factor" => self
+                .chloride_protection_factor
+                .or_else(|| shrimp_runtime_default_param_value(name)),
             _ => None,
         }
     }
@@ -805,6 +815,7 @@ impl ParamMetaPreset for ShrimpPreset {
                 | "juvenile_molt_interval_days"
                 | "sub_adult_molt_interval_days"
                 | "molt_success_threshold"
+                | "chloride_protection_factor"
         )
     }
 }

@@ -810,6 +810,9 @@ fn shrimp_preset_to_params(
     if let Some(value) = shrimp_preset.molt_success_threshold {
         params.molt_success_threshold = value;
     }
+    if let Some(value) = shrimp_preset.chloride_protection_factor {
+        params.chloride_protection_factor = value;
+    }
 
     params
 }
