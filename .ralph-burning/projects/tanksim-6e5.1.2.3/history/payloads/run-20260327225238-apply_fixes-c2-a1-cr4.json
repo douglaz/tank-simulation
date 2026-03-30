@@ -1,0 +1,45 @@
+{
+  "payload_id": "run-20260327225238-apply_fixes-c2-a1-cr4",
+  "stage_id": "apply_fixes",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T00:09:17.670195753Z",
+  "payload": {
+    "data": {
+      "change_summary": "Removed the redundant final schema-version restamp in `crates/tank_core/src/save.rs`. The migration loop already stamps each successful N→N+1 step, so migrated saves still deserialize at the current schema without the extra post-loop write, and current-version saves remain unchanged. Focused save/load and lint validation passed after the cleanup.",
+      "outstanding_risks": [
+        "Known branch-level regression carried forward from prior validation: `cargo test -p tank_core --test shrimp_population hatch_produces_juveniles -- --exact` was still failing earlier on this branch with TAN rising to about 2.169 mg/L and no juvenile hatch; this save-loader cleanup did not address or revalidate that issue.",
+        "Known architectural issue carried forward from prior review: `Engine::step_hours` still calls `enforce_invariants(&mut self.state)` before returning some invariant errors, so a rejected step can still mutate live state."
+      ],
+      "steps": [
+        {
+          "description": "Inspected the approved review findings in the save migration loader and confirmed the only actionable code cleanup was the redundant post-loop `set_schema_version` call in `SaveFile::from_value`.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Removed the redundant final schema-version restamp from `crates/tank_core/src/save.rs`, preserving the existing per-migration version stamping behavior for legacy save upgrades.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Reran focused validation for save/load migration behavior and `tank_core` test-target clippy after the cleanup.",
+          "order": 3,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo test -p tank_core --test save_load` passed: 15 tests passed, 0 failed.",
+        "`cargo clippy -p tank_core --tests -- -D warnings` passed with no warnings."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

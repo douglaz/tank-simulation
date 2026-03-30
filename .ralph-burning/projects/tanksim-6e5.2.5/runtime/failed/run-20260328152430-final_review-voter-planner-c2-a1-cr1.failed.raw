@@ -1,0 +1,190 @@
+=== stdout ===
+=== stderr ===
+OpenAI Codex v0.117.0 (research preview)
+--------
+workdir: /home/master/p/tank-simulation
+model: gpt-5.4
+provider: openai
+approval: never
+sandbox: danger-full-access
+reasoning effort: xhigh
+reasoning summaries: none
+session id: 019d3537-a7cd-7061-978d-bef4f6b95855
+--------
+user
+Contract: final_review:voter
+Role: Planner
+
+# Planner Positions
+
+You are evaluating proposed amendments to this project. Assess each amendment on its technical merit — correctness, safety, robustness, and maintainability.
+
+## Instructions
+
+1. Consider each amendment carefully on its own merits.
+2. If planner positions are provided below, weigh them as additional context when forming your decision.
+3. Vote ACCEPT or REJECT for each amendment with a clear rationale.
+4. Do NOT reject amendments because they are "out of scope" or "beyond the original spec" — any real bug or safety issue is valid regardless of scope.
+5. Do NOT dismiss concurrency or isolation issues as "theoretical" just because they don't currently cause failures — shared mutable state is a defect even if current callers happen to be read-only.
+
+## Proposed Amendments
+
+## Amendment: fr-1-e19cc992
+
+Fix the `algae_growth_matches_hand_computed_limitation_product` test in `crates/tank_core/tests/plant_algae_integration.rs:479-502`. The hand computation on lines 480-482 calculates `eff_light = intensity × photoperiod_norm` but does not include the Beer-Lambert `depth_factor` that was added to `algae_light_factor()` at `algae_growth.rs:292-294`. The test must compute `k` (extinction coefficient) and `h` (water depth) from the test state, call `column_average_attenuation_factor(k, h)`, and multiply into `eff_light` before the half-saturation calculation. Currently fails: expected 1.092762, got 1.057578.
+
+## Amendment: fr-1-4002fab0
+
+Fix 4 tank-size-independence tests that now fail because Beer-Lambert attenuation is inherently depth-dependent: `algae_size_independence_different_geometries` (line 401), `algae_water_column_limitation_is_volume_invariant_at_fixed_concentration` (line 356), `plant_water_column_limitation_is_volume_invariant_at_fixed_concentration` (line 224) in `plant_algae_integration.rs`, and `plant_limitation_is_tank_size_independent` in `plant_nutrient_normalization.rs`. These tests vary fill_height_cm or substrate_depth_cm while keeping concentrations identical, but different water depths now produce different depth_factors via Beer-Lambert. Either (a) make the tests use identical water depths (same fill height and substrate depth), or (b) update the assertion to compare nutrient limitation factors only (excluding the intentionally geometry-dependent light attenuation), or (c) document that size-independence applies to nutrient kinetics while light is intentionally geometry-sensitive.
+
+## Amendment: fr-1-267162b6
+
+The `algae_bloom_conditions_emit_events_and_overfeeding_raises_nuisance` test at `plant_algae_integration.rs:138-192` is failing: 'overfeeding should increase algae nuisance pressure (control=0.054, overfed=0.041)'. This is a pre-existing failure but represents a broken acceptance criterion for algae playability. The overfed tank should have higher nuisance than the control. Investigate whether the Beer-Lambert self-shading feedback (more algae → higher extinction → less light → less growth) is suppressing bloom dynamics too aggressively, or whether the parameter tuning needs adjustment (e.g., `algae_extinction_coeff_per_cm_per_g_l` default of 2.0 may be too high for the test's biomass levels).
+
+## Amendment: fr-1-c54083d9
+
+The `beer_lambert_at_depth` function in `light.rs:6-8` is `pub` but does not guard against negative k or z inputs. While `extinction_coefficient()` clamps k ≥ 0 and `water_depth_above_substrate_cm()` clamps z ≥ 0, external callers (the function is pub) could pass negative values, producing attenuation factors > 1.0 (light amplification). Add a `.max(0.0)` clamp on both parameters, or at minimum on the result, consistent with `column_average_attenuation_factor`'s `.clamp(0.0, 1.0)` pattern.
+
+## Amendment: fr-1-7a945229
+
+crates/tank_harness/tests/e2e_baseline_scenarios.rs:935-938 should not use `snap.recent_events` to decide whether the run ever emitted `EventKind::EggFailure`. `TankSnapshot::from_state` truncates `recent_events` to the last 20 entries at crates/tank_core/src/types/snapshot.rs:273-274, so a day with enough later events can evict the egg-failure record before the daily snapshot is taken and make this test fail spuriously. Check the full event log (`run.engine().full_state().event_log`) or add a harness helper that searches the unbounded log instead.
+
+## Authoritative JSON Schema
+
+The JSON schema below is authoritative. Return only JSON that conforms exactly to it.
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "FinalReviewVote": {
+      "description": "A vote on a single amendment.",
+      "properties": {
+        "amendment_id": {
+          "type": "string"
+        },
+        "decision": {
+          "$ref": "#/definitions/FinalReviewVoteDecision"
+        },
+        "rationale": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "amendment_id",
+        "decision",
+        "rationale"
+      ],
+      "type": "object"
+    },
+    "FinalReviewVoteDecision": {
+      "description": "Per-amendment vote used by both the planner-position step and reviewer voting.",
+      "enum": [
+        "accept",
+        "reject"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload returned by the planner-position step and each reviewer voting pass.",
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "votes": {
+      "items": {
+        "$ref": "#/definitions/FinalReviewVote"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "summary",
+    "votes"
+  ],
+  "title": "FinalReviewVotePayload",
+  "type": "object"
+}
+```
+
+--- Context JSON ---
+{
+  "amendments": [
+    {
+      "amendment_id": "fr-1-e19cc992",
+      "body": "Fix the `algae_growth_matches_hand_computed_limitation_product` test in `crates/tank_core/tests/plant_algae_integration.rs:479-502`. The hand computation on lines 480-482 calculates `eff_light = intensity × photoperiod_norm` but does not include the Beer-Lambert `depth_factor` that was added to `algae_light_factor()` at `algae_growth.rs:292-294`. The test must compute `k` (extinction coefficient) and `h` (water depth) from the test state, call `column_average_attenuation_factor(k, h)`, and multiply into `eff_light` before the half-saturation calculation. Currently fails: expected 1.092762, got 1.057578."
+    },
+    {
+      "amendment_id": "fr-1-4002fab0",
+      "body": "Fix 4 tank-size-independence tests that now fail because Beer-Lambert attenuation is inherently depth-dependent: `algae_size_independence_different_geometries` (line 401), `algae_water_column_limitation_is_volume_invariant_at_fixed_concentration` (line 356), `plant_water_column_limitation_is_volume_invariant_at_fixed_concentration` (line 224) in `plant_algae_integration.rs`, and `plant_limitation_is_tank_size_independent` in `plant_nutrient_normalization.rs`. These tests vary fill_height_cm or substrate_depth_cm while keeping concentrations identical, but different water depths now produce different depth_factors via Beer-Lambert. Either (a) make the tests use identical water depths (same fill height and substrate depth), or (b) update the assertion to compare nutrient limitation factors only (excluding the intentionally geometry-dependent light attenuation), or (c) document that size-independence applies to nutrient kinetics while light is intentionally geometry-sensitive."
+    },
+    {
+      "amendment_id": "fr-1-267162b6",
+      "body": "The `algae_bloom_conditions_emit_events_and_overfeeding_raises_nuisance` test at `plant_algae_integration.rs:138-192` is failing: 'overfeeding should increase algae nuisance pressure (control=0.054, overfed=0.041)'. This is a pre-existing failure but represents a broken acceptance criterion for algae playability. The overfed tank should have higher nuisance than the control. Investigate whether the Beer-Lambert self-shading feedback (more algae → higher extinction → less light → less growth) is suppressing bloom dynamics too aggressively, or whether the parameter tuning needs adjustment (e.g., `algae_extinction_coeff_per_cm_per_g_l` default of 2.0 may be too high for the test's biomass levels)."
+    },
+    {
+      "amendment_id": "fr-1-c54083d9",
+      "body": "The `beer_lambert_at_depth` function in `light.rs:6-8` is `pub` but does not guard against negative k or z inputs. While `extinction_coefficient()` clamps k ≥ 0 and `water_depth_above_substrate_cm()` clamps z ≥ 0, external callers (the function is pub) could pass negative values, producing attenuation factors > 1.0 (light amplification). Add a `.max(0.0)` clamp on both parameters, or at minimum on the result, consistent with `column_average_attenuation_factor`'s `.clamp(0.0, 1.0)` pattern."
+    },
+    {
+      "amendment_id": "fr-1-7a945229",
+      "body": "crates/tank_harness/tests/e2e_baseline_scenarios.rs:935-938 should not use `snap.recent_events` to decide whether the run ever emitted `EventKind::EggFailure`. `TankSnapshot::from_state` truncates `recent_events` to the last 20 entries at crates/tank_core/src/types/snapshot.rs:273-274, so a day with enough later events can evict the egg-failure record before the daily snapshot is taken and make this test fail spuriously. Check the full event log (`run.engine().full_state().event_log`) or add a harness helper that searches the unbounded log instead."
+    }
+  ]
+}
+
+Return ONLY valid JSON matching the following schema:
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "FinalReviewVote": {
+      "description": "A vote on a single amendment.",
+      "properties": {
+        "amendment_id": {
+          "type": "string"
+        },
+        "decision": {
+          "$ref": "#/definitions/FinalReviewVoteDecision"
+        },
+        "rationale": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "amendment_id",
+        "decision",
+        "rationale"
+      ],
+      "type": "object"
+    },
+    "FinalReviewVoteDecision": {
+      "description": "Per-amendment vote used by both the planner-position step and reviewer voting.",
+      "enum": [
+        "accept",
+        "reject"
+      ],
+      "type": "string"
+    }
+  },
+  "description": "Payload returned by the planner-position step and each reviewer voting pass.",
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "votes": {
+      "items": {
+        "$ref": "#/definitions/FinalReviewVote"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "summary",
+    "votes"
+  ],
+  "title": "FinalReviewVotePayload",
+  "type": "object"
+}
+
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:00 PM.
+ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:00 PM.

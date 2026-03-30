@@ -1,0 +1,99 @@
+{
+  "rollback_id": "736183d1-a7d9-4c17-92a6-0e2897c24776",
+  "created_at": "2026-03-30T09:05:20.006991577Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "fd6ba0e4a5542eb140ff6e2805a7a8aaad8b3d76",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260330074452",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 2
+      },
+      "started_at": "2026-03-30T07:44:52.239585331Z",
+      "prompt_hash_at_cycle_start": "66f17358106a4fe2",
+      "prompt_hash_at_stage_start": "66f17358106a4fe2",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 1
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T08:27:24.787635193Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 2,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-1-49d3b132",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "In `spawning()` (shrimp.rs:714-717), `density_factor` is computed via `density_repro_factor()` but is NOT applied to `spawn_rate`. The spawn rate is `base_spawn_rate * reproductive_readiness_index * f_mineral`, so density only affects spawning through the readiness EMA (smoothing=0.1). This means a sudden density increase (e.g., adding 50 shrimp at once) takes many days to suppress spawning. Consider multiplying `spawn_rate` by `density_factor` directly (matching how `f_mineral` is already applied directly), or document this as intentional delayed response. The variable `density_factor` is currently only used for event string formatting, which is misleading.",
+          "created_at": "2026-03-30T09:05:19.918255609Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "dbd982faee585f4f197d89b565cea54cb1b2687aa28867281644e3109fb6522d"
+        },
+        {
+          "amendment_id": "fr-1-c4841f7b",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "GH/mineral factor (`gh_mineral_factor`) is excluded from `reproductive_readiness_factors()` (shrimp.rs:1438-1466), so `dominant_repro_suppression_label()` can never report mineral deficiency as the dominant suppression factor. GH affects spawning (line 707) and hatch success (line 864) through separate direct multipliers, but the snapshot diagnostic `repro_dominant_suppression` would report 'none' even when low GH is the primary reason breeding fails. Add a 'minerals' entry to the readiness factors array (e.g., `(\"minerals\", gh_mineral_factor(chemistry.gh_d(), params))`) so the observability contract matches the acceptance criterion that 'debug output identifies which factors suppressed reproduction'.",
+          "created_at": "2026-03-30T09:05:19.918259998Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "2f8538b6d74baaf0ed4818d5611223deadc361fdbc42e4a46c30593cefc4b1de"
+        },
+        {
+          "amendment_id": "fr-1-1d9eb769",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "`crates/tank_harness/tests/e2e_habitat_geometry_probes.rs:302-325` mutates `TankState::new()` to use 18 cm vs 55 cm fill heights, then only rewrites a subset of dissolved totals. `TankState::new()` had already sized `state.water` for the original default geometry (`crates/tank_core/src/types/state.rs:63-79`), so untouched pools such as alkalinity, Ca/Mg, chloride, DOC/DON, etc. are left at default-tank totals and end up at different concentrations in the shallow and deep runs. That means `probe_light_depth_shallow_vs_deep_growth` is not isolating depth/light anymore; part of the observed divergence can come from stale chemistry that was never rescaled to the new volume.",
+          "created_at": "2026-03-30T09:05:19.918264035Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "8bd2c58f34b62df299a9983cc2e989ad1703659cdf228d386646b77fec570a42"
+        }
+      ],
+      "processed_count": 0
+    },
+    "status_summary": "running: final review restart round 2 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-30T08:44:09.280377914Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

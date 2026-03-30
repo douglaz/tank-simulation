@@ -1,0 +1,99 @@
+{
+  "rollback_id": "8d5a2019-73bf-4d19-b77f-2ddfb6f9bcd7",
+  "created_at": "2026-03-30T02:27:45.068874347Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "e2ad466dbb27456eccbdc005c954ffa46ac3536b",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260330010446",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 3
+      },
+      "started_at": "2026-03-30T01:04:46.019844232Z",
+      "prompt_hash_at_cycle_start": "34cb1a20d5b8afd3",
+      "prompt_hash_at_stage_start": "34cb1a20d5b8afd3",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 2
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T01:16:44.320468556Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 3,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-2-b79c3c25",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "In `crates/tank_core/tests/end_to_end.rs` lines 276-289 (uncommitted working change), the `happy_plants_grow_with_light_and_nutrients` assertion was relaxed from `>= initial_biomass` to `>= initial_biomass * 0.80`. If geometry-scaled initial biomass causes plants to self-shade and decline by 20% under 'happy' conditions (good light, good nutrients), this suggests the PLANT_BIOMASS_G_PER_1000_CM2_FOOTPRINT constant (6.0 g/1000cm²) may overshoot for smaller tanks or the self-shading model is too aggressive. Validate the constant against actual scenario footprints before committing the relaxed assertion.",
+          "created_at": "2026-03-30T02:27:44.982504876Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "d84b01c6464ef2355a97a799fee44742fa344f137f49741f205202e508828001"
+        },
+        {
+          "amendment_id": "fr-2-c9744d27",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "`crates/tank_scenarios/src/lib.rs:503-516` and `crates/tank_scenarios/src/lib.rs:744-752` stop scaling `filter.media_area_cm2`, but seeded scenarios still have no way to supply a replacement hardware-specific value (`crates/tank_scenarios/src/lib.rs:220-234`, `crates/tank_data/src/presets.rs:1864-1877`). Because `FilterHardware::default()` hard-codes 2000 cm2 (`crates/tank_core/src/types/hardware.rs:77-90`), every seeded tank now materializes with the same filter-media habitat area regardless of size while flow still scales with volume. That collapses size-dependent biofilter/habitat differences and makes startup scenarios ecologically incorrect. Restore geometry scaling or add an explicit scenario/startup media-area parameter before removing the old rule.",
+          "created_at": "2026-03-30T02:27:44.982509915Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "e7b6225d7f4ff40c0fb2b8425c424f5400b83929f997989b0a8162abd4e8e8e4"
+        },
+        {
+          "amendment_id": "fr-2-3782b77a",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "`crates/tank_core/tests/end_to_end.rs:257-289` weakens `happy_plants_grow_with_light_and_nutrients` from a growth assertion to an `>= 80%` survivability check without fixing the underlying regression. The test name and doc comment still say plants grow under good light and nutrients, but the suite now passes even when that happy-path scenario loses 20% of its biomass. This removes an important end-to-end guard for a user-visible regression instead of addressing the cause.",
+          "created_at": "2026-03-30T02:27:44.982512941Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "2d58cda0ad3d9aba48585ac1933b783022f55f4b24f25c7410f1b2e2bfa07af4"
+        }
+      ],
+      "processed_count": 5
+    },
+    "status_summary": "running: final review restart round 3 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-30T02:03:24.533650619Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

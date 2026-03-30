@@ -1,0 +1,110 @@
+{
+  "rollback_id": "cbcde7e0-a996-47a6-ac1d-27987725e7c2",
+  "created_at": "2026-03-28T01:02:51.368029376Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "851866dd13823ef93160eca0855c15c0e2dd1a21",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260327232421",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 3
+      },
+      "started_at": "2026-03-27T23:24:21.388593983Z",
+      "prompt_hash_at_cycle_start": "e27b6e04094528ad",
+      "prompt_hash_at_stage_start": "e27b6e04094528ad",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 2
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-27T23:45:30.046668008Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 3,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-2-10339894",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "BUG: In `engine.rs` RemoveShrimp handler (line 404), the reserve fraction denominator uses only `self.state.animal.adults_count` instead of `adults_count + juveniles_count`. When juveniles exist, removing all adults drains 100% of the shared reserve (fraction = count/adults_count = 1.0), leaving surviving juveniles with zero reserve. The parallel code in `route_dead_shrimp_to_detritus` (shrimp.rs:598) correctly uses `state.animal.adults_count + state.animal.juveniles_count` as the denominator. Fix: change line 404 from `let total = self.state.animal.adults_count;` to `let total = self.state.animal.adults_count + self.state.animal.juveniles_count;`.",
+          "created_at": "2026-03-28T01:02:51.260224200Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "688c950ac3abf8140bc6bfab219492db4f48469debf3cbb292a3e07ce5dd82c3"
+        },
+        {
+          "amendment_id": "fr-2-c4278bdd",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "Correctness gap: In `route_consumed_food` (shrimp.rs:224-225), the O2 consumption is clamped at zero via `.max(0.0)`, but the carbon and nitrogen routing (respired_c → DIC, respired_n → TAN) proceeds at full rate regardless of actual O2 availability. This breaks the stoichiometric coupling: when DO is exhausted, the model produces DIC and TAN as if aerobic respiration occurred, but no O2 was actually consumed. Consider either (a) scaling respired_c_mg and respired_n_mg by `actual_o2_consumed / o2_demand_mg` when O2 is limiting, or (b) adding a brief code comment explicitly acknowledging this as a Phase 1 simplification so downstream C7/C4 audits don't need to rediscover it.",
+          "created_at": "2026-03-28T01:02:51.260229139Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "05fdfb9e76305a090970806a1dad362577deb2216e6d3939d64e25e87108b858"
+        },
+        {
+          "amendment_id": "fr-2-7aba1e79",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "`crates/tank_core/src/systems/shrimp.rs:446-451`, `crates/tank_core/src/systems/shrimp.rs:532-538`, and especially `crates/tank_core/src/systems/shrimp.rs:631-670` let hatching and juvenile maturation fund new shrimp biomass from `DON/TAN` and `DOC/DIC` whenever `animal.reserve_g` is short. That bypasses the new ingestion -> assimilation -> retained-reserve pathway and allows shrimp biomass to be created from dissolved waste/carbonate pools instead of only from retained intake. Reproduction/growth should stay limited by reserve (or explicitly fail/stall) rather than mining water-column dissolved pools.",
+          "created_at": "2026-03-28T01:02:51.260232215Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "ddf7aa57b5ba5cc0257816659a6748830930621d4092a239ee5a94f698320ac6"
+        },
+        {
+          "amendment_id": "fr-2-9e8b4551",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "`crates/tank_core/src/systems/shrimp.rs:78-86` runs `shrimp_feeding()` before `update_condition()`, but the carbonate cache is not refreshed until `refresh_carbonate_state()` at the end of the daily step. `route_consumed_food()` mutates TAN/DIC/DO in `crates/tank_core/src/systems/shrimp.rs:211-229`, and `update_condition()` immediately recomputes NH3 using `state.water.ph` in `crates/tank_core/src/systems/shrimp.rs:243-245`. Same-day condition/reproduction logic therefore uses stale pre-feeding pH instead of the post-feeding carbonate state. Refresh carbonate state immediately after feeding (or inside the routing helper) before any pH-dependent calculations.",
+          "created_at": "2026-03-28T01:02:51.260235180Z",
+          "batch_sequence": 4,
+          "source": "workflow_stage",
+          "dedup_key": "8d961e01a557db8b123852e84e411d8c02225b857d3a4d27a6141e69fee68a51"
+        }
+      ],
+      "processed_count": 5
+    },
+    "status_summary": "running: final review restart round 3 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T00:42:46.859219913Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

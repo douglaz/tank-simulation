@@ -1,0 +1,88 @@
+{
+  "rollback_id": "53992bf7-1edf-41d8-a8a5-8d1a678ac270",
+  "created_at": "2026-03-30T08:10:02.230669348Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "3ce894310e5f38d8c79887160d510f74c285a7bf",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260330064830",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 3
+      },
+      "started_at": "2026-03-30T06:48:30.267500553Z",
+      "prompt_hash_at_cycle_start": "5b83f96f47ee8155",
+      "prompt_hash_at_stage_start": "5b83f96f47ee8155",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 2
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T07:11:36.017244936Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 3,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-2-b9bf2e92",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "Apply the same division-by-zero guard to ca_min_mg_per_l and mg_min_mg_per_l that was applied to gh_min_d. In update_molt_stress (shrimp.rs:459,464), ca_stress and mg_stress divide by params.ca_min_mg_per_l and params.mg_min_mg_per_l respectively without a .max(0.01) guard. Similarly, molt_mineral_modifier (shrimp.rs:1559-1560) divides by ca_min_mg_per_l and mg_min_mg_per_l without guards. If a user sets these parameters to zero (as the test_zero_gh_min_parameter_uses_defensive_guard test exercises for gh_min_d), NaN/Inf propagates through stress and molt calculations.",
+          "created_at": "2026-03-30T08:10:02.165311954Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "1ea6dd49bcc653d432af9c0b6f739c37db32d8f6dd38575da06168b301d2daf7"
+        },
+        {
+          "amendment_id": "fr-2-4af528d5",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 2,
+          "body": "The new snapshot-side `dominant_repro_suppression` implementation in `crates/tank_core/src/types/snapshot.rs:375` does not match the real reproduction model. It omits the molt-stress factor used by `update_reproductive_readiness` at `crates/tank_core/src/systems/shrimp.rs:679`, folds TAN and nitrite into a generic `chemistry` bucket instead of the separate `tan`/`nitrite` diagnostics in `crates/tank_core/src/systems/shrimp.rs:1572` and `:1574`, and uses different suppression curves/floors than the shared helper starting at `crates/tank_core/src/systems/shrimp.rs:1548`. Even after the compile error is fixed, `repro_dominant_suppression` can disagree with the actual readiness calculation and mislead debugging.",
+          "created_at": "2026-03-30T08:10:02.165316512Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "01a9cfe01e6882d062208f72b656d2d5b81127ca9638c3a828c88f62ea18169c"
+        }
+      ],
+      "processed_count": 2
+    },
+    "status_summary": "running: final review restart round 3 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-30T07:53:43.055556987Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

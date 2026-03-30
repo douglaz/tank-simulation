@@ -1,0 +1,77 @@
+{
+  "rollback_id": "7cadbf34-5f8a-4479-a4dc-537908193a1d",
+  "created_at": "2026-03-30T06:01:44.350123901Z",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "git_sha": "ef03a0370444987e72eb7edb353d3e089e83223d",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260330051540",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 2,
+        "attempt": 1,
+        "completion_round": 2
+      },
+      "started_at": "2026-03-30T05:15:40.946675787Z",
+      "prompt_hash_at_cycle_start": "2461063947d911b8",
+      "prompt_hash_at_stage_start": "2461063947d911b8",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 1
+    },
+    "status": "running",
+    "cycle_history": [
+      {
+        "cycle": 2,
+        "stage_id": "apply_fixes",
+        "started_at": "2026-03-30T05:33:45.789166401Z",
+        "completed_at": null
+      }
+    ],
+    "completion_rounds": 2,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-1-5075c6ab",
+          "source_stage": "final_review",
+          "source_cycle": 2,
+          "source_completion_round": 1,
+          "body": "Add validation for `chloride_protection_factor` in `validate_shrimp_runtime_params()` (invariants.rs). Currently `critical_molt_gh_ratio`, `molt_success_threshold`, and all other named shrimp parameters are validated, but `chloride_protection_factor` has no bounds check. A negative or NaN value would silently break the hazard formula (the `.max(0.0)` inside `compute_effective_nitrite_hazard` handles negatives at runtime, but NaN/Infinity would propagate). Add `check_non_negative(\"shrimp_params.chloride_protection_factor\", params.chloride_protection_factor)?;` alongside the existing parameter checks, and add a corresponding invalid-value test case to the `malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected` and `step_hours_rejects_invalid_molt_mineral_parameters_before_simulation` tests.",
+          "created_at": "2026-03-30T06:01:44.203877396Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "f7a7b4820691855d3ead85d32dfd5630b1fd18926f6dba5ef109bd512e2a0d50"
+        }
+      ],
+      "processed_count": 0
+    },
+    "status_summary": "running: final review restart round 2 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-30T05:44:58.669380920Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      },
+      "final_review_arbiter": {
+        "backend_family": "codex",
+        "model_id": "gpt-5.4"
+      }
+    }
+  }
+}

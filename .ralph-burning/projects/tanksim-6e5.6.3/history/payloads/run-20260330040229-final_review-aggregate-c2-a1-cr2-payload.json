@@ -1,0 +1,100 @@
+{
+  "payload_id": "run-20260330040229-final_review-aggregate-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T05:55:32.352780885Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-2-27e2dd70",
+      "fr-2-8281d091",
+      "fr-2-f0846ba3"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-2-27e2dd70",
+        "normalized_body": "Fix failing test `test_salt_treatment_emergency_scenario` in `crates/tank_core/tests/shrimp_chloride_protection.rs`. The `salt_treatment_source_profile()` helper constructs a `SourceWaterProfile` by copying DIC and alkalinity concentrations from the tank state, but the resulting DIC/alkalinity combination produces a pH that fails `validate_source_water_carbonate_profile()` with `InvalidSourceProfile { field: \"carbonate_derived_ph\", value: 8.5 }`. The source profile needs its DIC and alkalinity values adjusted (or a valid carbonate equilibrium explicitly set) so the profile passes validation when inserted into the source water catalog.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-8281d091",
+        "normalized_body": "In `crates/tank_core/src/systems/shrimp.rs`, the `molt_cycle` function also has a legacy-timer fallback (lines 508-523) that duplicates the migration logic in `save.rs:normalize_loaded_shrimp_reproduction_state`. With the new schema version guard in save.rs (only applying the fallback for `source_schema_version < PER_STAGE_MOLT_TIMER_SCHEMA_VERSION`), the runtime fallback in `molt_cycle` remains unconditional and will silently override zero stage timers from `inter_molt_timer_days` even on schema-14 saves. Consider whether the runtime fallback should also be guarded or removed, since its presence means the migration fix in save.rs is partially dead code for the runtime path.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-f0846ba3",
+        "normalized_body": "Fix [crates/tank_core/tests/shrimp_chloride_protection.rs:69-151]: the rewritten emergency scenario no longer proves that chloride protection is what lowered mortality. The helper at [crates/tank_core/tests/shrimp_chloride_protection.rs:69-88] builds replacement water from `WaterState::default_for_volume_l(1.0)` ([crates/tank_core/src/types/water.rs:87-109]), so the 50% water change also reduces TAN/DOC/DON and changes alkalinity, DIC, and DO, while the assertion at [crates/tank_core/tests/shrimp_chloride_protection.rs:109-151] compares pre-treatment vs post-treatment mortality inside the same evolving run instead of against a matched control. In a local probe, that assertion still held with `chloride_protection_factor = 0.0`, so this test can pass even if chloride protection itself is broken. Use a parallel untreated/control tank, or a second water-change control that keeps every field identical except chloride/sodium, so the test actually guards the chloride-specific mechanic.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-2-27e2dd70",
+        "normalized_body": "Fix failing test `test_salt_treatment_emergency_scenario` in `crates/tank_core/tests/shrimp_chloride_protection.rs`. The `salt_treatment_source_profile()` helper constructs a `SourceWaterProfile` by copying DIC and alkalinity concentrations from the tank state, but the resulting DIC/alkalinity combination produces a pH that fails `validate_source_water_carbonate_profile()` with `InvalidSourceProfile { field: \"carbonate_derived_ph\", value: 8.5 }`. The source profile needs its DIC and alkalinity values adjusted (or a valid carbonate equilibrium explicitly set) so the profile passes validation when inserted into the source water catalog.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-8281d091",
+        "normalized_body": "In `crates/tank_core/src/systems/shrimp.rs`, the `molt_cycle` function also has a legacy-timer fallback (lines 508-523) that duplicates the migration logic in `save.rs:normalize_loaded_shrimp_reproduction_state`. With the new schema version guard in save.rs (only applying the fallback for `source_schema_version < PER_STAGE_MOLT_TIMER_SCHEMA_VERSION`), the runtime fallback in `molt_cycle` remains unconditional and will silently override zero stage timers from `inter_molt_timer_days` even on schema-14 saves. Consider whether the runtime fallback should also be guarded or removed, since its presence means the migration fix in save.rs is partially dead code for the runtime path.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-2-f0846ba3",
+        "normalized_body": "Fix [crates/tank_core/tests/shrimp_chloride_protection.rs:69-151]: the rewritten emergency scenario no longer proves that chloride protection is what lowered mortality. The helper at [crates/tank_core/tests/shrimp_chloride_protection.rs:69-88] builds replacement water from `WaterState::default_for_volume_l(1.0)` ([crates/tank_core/src/types/water.rs:87-109]), so the 50% water change also reduces TAN/DOC/DON and changes alkalinity, DIC, and DO, while the assertion at [crates/tank_core/tests/shrimp_chloride_protection.rs:109-151] compares pre-treatment vs post-treatment mortality inside the same evolving run instead of against a matched control. In a local probe, that assertion still held with `chloride_protection_factor = 0.0`, so this test can pass even if chloride protection itself is broken. Use a parallel untreated/control tank, or a second water-change control that keeps every field identical except chloride/sodium, so the test actually guards the chloride-specific mechanic.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 2,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [],
+    "restart_required": true,
+    "summary": "Final review accepted 3 amendment(s); restart required.",
+    "total_proposed_amendments": 3,
+    "total_reviewers": 2,
+    "unique_amendment_count": 3
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 2
+}

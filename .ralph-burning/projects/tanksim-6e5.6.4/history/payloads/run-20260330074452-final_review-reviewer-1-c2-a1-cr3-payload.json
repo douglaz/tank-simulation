@@ -1,0 +1,31 @@
+{
+  "payload_id": "run-20260330074452-final_review-reviewer-1-c2-a1-cr3-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T10:15:11.872342724Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "Current diff is solving the wrong task. The touched implementation is limited to alkalinity accounting (`crates/tank_core/src/systems/nitrogen_cycle.rs:12`, `crates/tank_core/src/systems/water_change.rs:128`, `crates/tank_core/src/types/process.rs:10`) plus alkalinity-focused tests, but there is still no corresponding change in the shrimp reproduction pipeline/spec data requested by `tanksim-6e5.6.4`. As submitted, none of the required breeding-suppression, egg-dropping, or 2000-hour reproduction scenario acceptance criteria are implemented.",
+        "rationale": "This is a task-level correctness gap: the patch does not satisfy the bead it is being reviewed against."
+      },
+      {
+        "body": "`crates/tank_core/src/systems/nitrogen_cycle.rs:346` computes `total_mg_n_nitrified` as `nob_step.oxidized_n_mg + comammox_step.oxidized_n_mg`, while `crates/tank_core/src/engine.rs:232` records that field as the tick's total nitrification. That omits AOB TAN->NO2 oxidation whenever nitrite accumulates, even though that pathway is the one consuming alkalinity/O2. In low-NOB or low-DO scenarios the new trace will therefore report low nitrification while `alk_consumed_meq` shows the opposite.",
+        "rationale": "The new debugging/tracing output is supposed to make alkalinity suppression explainable; this metric becomes misleading in exactly the nitrite-bottleneck cases users will inspect."
+      },
+      {
+        "body": "`crates/tank_core/tests/nitrification_alkalinity.rs:1` contains the new regression coverage, but the file is still untracked, so it is absent from `git diff` and would not ship with the patch as reviewed. The submitted change therefore adds runtime behavior without actually delivering the promised test coverage.",
+        "rationale": "Without checking in the new test file, the acceptance criteria around alkalinity behavior are not enforced in CI or in the delivered patch."
+      }
+    ],
+    "summary": "I reviewed the changed tank-core files end to end and ran targeted tests around cycling, tracing, water-change mass balance, plant normalization, budget tracking, and the new nitrification alkalinity test file. The implementation is mostly coherent, but I found three release-blocking issues: the diff is scoped to alkalinity accounting rather than the requested reproduction task, the new nitrification trace undercounts AOB-only oxidation, and the new alkalinity test file is still untracked so its coverage is not actually part of the patch."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 3
+}

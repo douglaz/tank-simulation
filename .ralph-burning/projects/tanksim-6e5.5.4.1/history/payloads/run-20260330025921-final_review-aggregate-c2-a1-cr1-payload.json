@@ -1,0 +1,125 @@
+{
+  "payload_id": "run-20260330025921-final_review-aggregate-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T04:05:31.880084472Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-1-9df569ce",
+      "fr-1-b43b8059",
+      "fr-1-0c12a58f"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-1-9df569ce",
+        "normalized_body": "The depth-weighted average porosity in `effective_substrate_porosity` (systems/substrate.rs:127-139) may significantly overestimate O₂ penetration when a low-porosity top layer (e.g., fine sand, porosity 0.35) sits above a high-porosity deep layer (e.g., lava rock, porosity 0.55). In reality, the top layer's porosity is the rate-limiting bottleneck for surface-to-depth O₂ diffusion. The weighted average dilutes this constraint with the deeper layer's porosity, producing a D_eff that's too high. Consider using the porosity of the topmost layer (or the layer at the penetration boundary) instead of the depth-weighted average across the full stack, or document this as a known limitation with a TODO for heterogeneous-stack correction.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-a9320302",
+        "normalized_body": "Convenience accessors `substrate_oxic_volume_cm3()`, `substrate_oxic_pore_volume_cm3()`, `substrate_suboxic_volume_cm3()`, `substrate_suboxic_pore_volume_cm3()` in state.rs:266-279 each independently call `substrate_*_zone_geometry()`, which internally calls `substrate_o2_penetration_depth_cm()` (iterating all layers) and then iterates all layers again for geometry. Any tick-level code path that calls multiple of these accessors (or calls them alongside the full geometry accessors) redundantly recomputes the same values. Consider removing these single-field convenience accessors, or at minimum adding a doc comment warning callers to prefer `substrate_zone_geometry()` when they need more than one metric.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-57228e15",
+        "normalized_body": "`crates/tank_harness/tests/e2e_geometry_scaling.rs:20,167-177,224-239` re-tightens concentration parity back to 20%, but the current loading change does not actually get the model back inside that bound. `cargo test -p tank_harness --test e2e_geometry_scaling -- --nocapture` now fails in both `geometry_1x_vs_2x_stocked_metrics_stay_within_20_percent` and `nano_vs_standard_vs_large_stocked_runs_scale_within_20_percent`; the reported peak-TAN deltas are about 49.6% and 61.0%, so the submitted workspace is red again.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-b43b8059",
+        "normalized_body": "`crates/tank_core/src/systems/substrate.rs:81-124` does not include microfauna in `estimate_substrate_o2_demand_rate()`. The new redox boundary is therefore unaffected by `MicrofaunaState`, even though the bead defines substrate O2 demand as coming from decomposers, roots, and microfauna. In detritivore-heavy tanks this will overestimate `o2_penetration_depth_cm` and understate the suboxic volume that downstream denitrification/root-zone work consumes.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-0c12a58f",
+        "normalized_body": "`crates/tank_core/src/systems/substrate.rs:127-139` computes `D_eff` from a depth-weighted average porosity across the entire stacked bed. For heterogeneous substrates, that lets deep high-porosity layers make the surface diffusion path look easier than it is. A thin low-porosity cap over coarse lower media will therefore produce an oxic boundary that is too deep, even though oxygen has to traverse the cap first.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-1-9df569ce",
+        "normalized_body": "The depth-weighted average porosity in `effective_substrate_porosity` (systems/substrate.rs:127-139) may significantly overestimate O₂ penetration when a low-porosity top layer (e.g., fine sand, porosity 0.35) sits above a high-porosity deep layer (e.g., lava rock, porosity 0.55). In reality, the top layer's porosity is the rate-limiting bottleneck for surface-to-depth O₂ diffusion. The weighted average dilutes this constraint with the deeper layer's porosity, producing a D_eff that's too high. Consider using the porosity of the topmost layer (or the layer at the penetration boundary) instead of the depth-weighted average across the full stack, or document this as a known limitation with a TODO for heterogeneous-stack correction.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-b43b8059",
+        "normalized_body": "`crates/tank_core/src/systems/substrate.rs:81-124` does not include microfauna in `estimate_substrate_o2_demand_rate()`. The new redox boundary is therefore unaffected by `MicrofaunaState`, even though the bead defines substrate O2 demand as coming from decomposers, roots, and microfauna. In detritivore-heavy tanks this will overestimate `o2_penetration_depth_cm` and understate the suboxic volume that downstream denitrification/root-zone work consumes.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-0c12a58f",
+        "normalized_body": "`crates/tank_core/src/systems/substrate.rs:127-139` computes `D_eff` from a depth-weighted average porosity across the entire stacked bed. For heterogeneous substrates, that lets deep high-porosity layers make the surface diffusion path look easier than it is. A thin low-porosity cap over coarse lower media will therefore produce an oxic boundary that is too deep, even though oxygen has to traverse the cap first.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 1,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-1-a9320302",
+      "fr-1-57228e15"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 3 amendment(s); restart required.",
+    "total_proposed_amendments": 5,
+    "total_reviewers": 2,
+    "unique_amendment_count": 5
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 1
+}

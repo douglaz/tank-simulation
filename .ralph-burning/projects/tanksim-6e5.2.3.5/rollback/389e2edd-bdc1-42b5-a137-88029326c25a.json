@@ -1,0 +1,92 @@
+{
+  "rollback_id": "389e2edd-bdc1-42b5-a137-88029326c25a",
+  "created_at": "2026-03-28T16:03:19.057674322Z",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "git_sha": "77017523e7d1458fa0eb39d742b26cb26f8b6894",
+  "run_snapshot": {
+    "active_run": {
+      "run_id": "run-20260328152424",
+      "stage_cursor": {
+        "stage": "plan_and_implement",
+        "cycle": 1,
+        "attempt": 1,
+        "completion_round": 2
+      },
+      "started_at": "2026-03-28T15:24:24.386573465Z",
+      "prompt_hash_at_cycle_start": "ca420a57d9f34dab",
+      "prompt_hash_at_stage_start": "ca420a57d9f34dab",
+      "qa_iterations_current_cycle": 0,
+      "review_iterations_current_cycle": 0,
+      "final_review_restart_count": 1
+    },
+    "status": "running",
+    "cycle_history": [],
+    "completion_rounds": 2,
+    "rollback_point_meta": {
+      "last_rollback_id": null,
+      "rollback_count": 0
+    },
+    "amendment_queue": {
+      "pending": [
+        {
+          "amendment_id": "fr-1-008e032a",
+          "source_stage": "final_review",
+          "source_cycle": 1,
+          "source_completion_round": 1,
+          "body": "The test does not assert DO (dissolved oxygen) or alkalinity per-liter deltas after the tick. Nitrification consumes O2 and alkalinity via fixed stoichiometric factors (o2_for_aob=3.43, o2_for_nob=1.14, etc.), so these are derived from the N deltas. However, a volume-dependent bug in the DO/alkalinity bookkeeping code path (lines 230-235, 288-289, 332-334, 362-364 of nitrogen_cycle.rs) would not be caught. Add assertions for DO and alkalinity per-liter deltas alongside the existing TAN/NO2/NO3/DOC/DON checks to close this gap.",
+          "created_at": "2026-03-28T16:03:18.984898304Z",
+          "batch_sequence": 1,
+          "source": "workflow_stage",
+          "dedup_key": "5b090f2f52d4c5b2d35e486c320ce202466b7c9c1fbd3fb9a905175a1626c667"
+        },
+        {
+          "amendment_id": "fr-1-7e77d2a4",
+          "source_stage": "final_review",
+          "source_cycle": 1,
+          "source_completion_round": 1,
+          "body": "The extreme-scale test (concentration_kinetics_volume_independent_extreme_scales) does not include the Monod factor verification section that the primary test has. While the per-liter delta check is the stronger assertion, the acceptance criteria call for verifying Monod factors specifically. Add the same Monod factor comparison block (or factor it into a shared helper) so both tests cover both criteria.",
+          "created_at": "2026-03-28T16:03:18.984900959Z",
+          "batch_sequence": 2,
+          "source": "workflow_stage",
+          "dedup_key": "abe4e134325bad1aa43758e5c2e7d828b53290f2de4b9be6a5d773aa1674a2c8"
+        },
+        {
+          "amendment_id": "fr-1-905ce34d",
+          "source_stage": "final_review",
+          "source_cycle": 1,
+          "source_completion_round": 1,
+          "body": "Preserve explicit zero/custom substrate area multipliers instead of treating them as missing. `SubstrateLayerState::resolved_colonizable_area_factor` in `crates/tank_core/src/types/substrate.rs:44-49` falls back to the kind default whenever the serialized factor is `0.0`, and `refresh_habitat_registry` in `crates/tank_core/src/types/state.rs:245-248` writes that fallback back into the saved state. Because substrate preset validation explicitly allows non-negative factors (`crates/tank_data/src/presets.rs:290-318`), a deliberate `0.0` multiplier cannot survive refresh/load, and `migrate_v6_to_v7` in `crates/tank_core/src/save.rs:632-673` also hard-codes kind defaults instead of preserving custom saved area scaling. Only fall back when the field is absent/non-finite, or derive the migrated factor from the saved `colonizable_area_cm2`.",
+          "created_at": "2026-03-28T16:03:18.984905207Z",
+          "batch_sequence": 3,
+          "source": "workflow_stage",
+          "dedup_key": "797cc033868eeba0e360892f3b8e6014b3877936d5d34547b1f5afd9086866f7"
+        }
+      ],
+      "processed_count": 0
+    },
+    "status_summary": "running: final review restart round 2 -> Plan and Implement",
+    "last_stage_resolution_snapshot": {
+      "stage_id": "final_review",
+      "resolved_at": "2026-03-28T15:41:48.474509898Z",
+      "final_review_reviewers": [
+        {
+          "backend_family": "claude",
+          "model_id": "claude-opus-4-6"
+        },
+        {
+          "backend_family": "codex",
+          "model_id": "gpt-5.4"
+        }
+      ],
+      "final_review_planner": {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      },
+      "final_review_arbiter": {
+        "backend_family": "claude",
+        "model_id": "claude-opus-4-6"
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260330040229-apply_fixes-c2-a1-cr4-artifact",
+  "payload_id": "run-20260330040229-apply_fixes-c2-a1-cr4",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-30T07:03:39.445702601Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nConfirmed the branch already contains the approved molt/mineral fixes, so this apply-fixes pass was validation-only and required no source edits. I rechecked the named molt parameter wiring, high-mineral diagnostics, and ideal reproduction harness coverage, then reran the focused regressions plus the full `tank_core` suite; all passed on the current branch, including the previously noted `thermal_reproduction_penalty` and `root_zone_oxygenation` coverage.\n\n## Steps\n\n1. [Completed] Inspected the current branch for the approved shrimp molt/mineral parameter, event-diagnostic, and harness changes to verify the review-approved fixes were still present before making any edits.\n2. [Completed] Reran focused regressions for molt/mineral behavior, current-schema stage-timer save/load handling, and the controlled ideal reproduction harness path.\n3. [Completed] Ran the full `tank_core` suite to confirm broader stability and recorded this stage as validation-only because no further code changes were needed.\n\n## Validation Evidence\n\n- `rg -n \"molt_reserve_fraction|critical_molt_gh_ratio|HighMinerals|controlled_ideal_reproduction_path_still_hatches\" crates/tank_core crates/tank_harness crates/tank_scenarios`\n- `cargo test -p tank_core --test molt_mineral_budget -- --nocapture`\n- `cargo test -p tank_core --test save_load current_schema_roundtrip_preserves_zero_stage_timer_for_newly_added_adults -- --nocapture`\n- `cargo test -p tank_harness controlled_ideal_reproduction_path_still_hatches -- --nocapture`\n- `cargo test -p tank_core -- --nocapture`\n\n## Outstanding Risks\n\nNone identified.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 4
+}

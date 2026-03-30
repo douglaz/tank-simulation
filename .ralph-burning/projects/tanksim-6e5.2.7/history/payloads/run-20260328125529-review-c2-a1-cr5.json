@@ -1,0 +1,43 @@
+{
+  "payload_id": "run-20260328125529-review-c2-a1-cr5",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T15:45:09.458923166Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "All 49 tank_core lib tests pass, including snapshot_tds_and_conductivity_use_fresh_carbonate_projection, snapshot_deserializes_legacy_chemistry_aliases, snapshot_deserializes_enriched_api_payload_with_canonical_precedence, and snapshot_uses_one_carbonate_solution_for_ph_and_co2.",
+        "All 11 concentration_helpers integration tests pass, including tds_helpers_ignore_stale_bicarbonate_cache which proves state.tds_mg_per_l() ignores the cached bicarbonate_mg_total and uses a fresh carbonate solve.",
+        "All 3 tank_api tests pass: snapshot_response_keeps_legacy_chemistry_aliases, chemistry_response_explains_estimate_scope, biology_snapshot_keeps_total_and_stage_breakdown.",
+        "All 10 tank_tui lib tests pass, including overview_uses_shared_nh3_n_unit_label, overview_labels_tds_and_conductivity_as_estimates, parses_enriched_api_snapshot_response, and parses_load_response_with_legacy_snapshot_chemistry_field_names.",
+        "All 7 events integration tests pass, including threshold_event_summaries_use_explicit_chemistry_units.",
+        "cargo clippy -p tank_core -p tank_api -p tank_tui -- -D warnings: clean, zero warnings.",
+        "Snapshot fields verified with explicit unit suffixes: tan_mg_n_per_l, nh3_mg_n_per_l, nitrite_mg_n_per_l, nitrate_mg_n_per_l, phosphate_mg_p_per_l, dissolved_inorganic_carbon_mg_c_per_l, estimated_tds_7_ion_mg_per_l, estimated_conductivity_us_cm (snapshot.rs:30-45).",
+        "Amendment fr-4-2b018d6f (NH3 label) resolved: Both overview.rs and chemistry.rs use shared constant NH3_N_DISPLAY_UNIT = 'mg NH3-N/L' from screens/mod.rs:12. Test overview_uses_shared_nh3_n_unit_label confirms.",
+        "Amendment fr-4-84ddc83e (deserialization compatibility) resolved: normalize_snapshot_object() in tank_core::types::snapshot (lines 206-216) applies legacy alias normalization during TankSnapshot custom Deserialize impl (lines 218-229). Tests snapshot_deserializes_legacy_chemistry_aliases and snapshot_deserializes_enriched_api_payload_with_canonical_precedence confirm any Rust consumer gets automatic compatibility.",
+        "Amendment fr-4-83b30b59 (TDS/conductivity divergence) resolved: WaterState::tds_mg_per_l() now delegates to estimated_dissolved_solids() which calls projected_carbonate_equilibrium() for a fresh solve (water.rs:217-218,234-239). Snapshot test lines 441-450 assert snapshot.estimated_tds_7_ion_mg_per_l == state.tds_mg_per_l() within 1e-12, proving convergence.",
+        "Conversion constants centralized in conversions.rs with molar-mass derivations: NO3_PER_N (62.004/14.007), NO2_PER_N (46.005/14.007), NH4_PER_N (18.039/14.007), NH3_PER_N (17.031/14.007), PO4_PER_P (94.971/30.974). 7 unit tests verify reference values, round-trip accuracy, and zero preservation.",
+        "GH/KH constants named and documented in water.rs: CALCIUM_AS_CACO3_FACTOR, MAGNESIUM_AS_CACO3_FACTOR, MG_CACO3_PER_MEQ, MG_CACO3_PER_DEGREE, MOLAR_MASS_CACO3_G_PER_MOL, etc.",
+        "TDS scope metadata centralized in tank_core (water.rs:29-44): ESTIMATED_TDS_TRACKED_MAJOR_IONS, ESTIMATED_TDS_OMITTED_CONTRIBUTORS, ESTIMATED_TDS_SCOPE_LINES — consumed by both API (estimated_tds_scope_json) and TUI (scope lines on overview and chemistry screens) without duplication.",
+        "API backward compatibility maintained: insert_legacy_chemistry_fields() backfills 8 old field names. snapshot_response_json() used on /snapshot, /time/step, /load, and /scenarios/load endpoints. chemistry_field_semantics, estimated_tds_scope, and legacy_chemistry_aliases metadata included."
+      ],
+      "findings_or_gaps": [
+        "The conversions module is public but has no internal callers — it serves as a library API for external consumers. This is documented behavior per UNITS.md and was rejected as an amendment (fr-4-c9fd9fff) since it is not a correctness defect.",
+        "No dedicated end-to-end TUI render test asserts exact screen output; only targeted label, scope-line, and estimate-prefix assertions exist. Acceptable since the TUI is not a stable API surface.",
+        "The overview hardware panel inserts 3 scope lines which may overflow on very small terminals — a known aesthetic tradeoff for transparency about what the estimate covers.",
+        "An unrelated clippy warning in crates/tank_scenarios/src/lib.rs (redundant_field_names) persists but is outside the scope of this bead."
+      ],
+      "follow_up_or_amendments": [],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 5
+}

@@ -1,0 +1,24 @@
+{
+  "payload_id": "run-20260330074452-final_review-arbiter-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T09:05:19.900435688Z",
+  "payload": {
+    "rulings": [
+      {
+        "amendment_id": "fr-1-153ec732",
+        "decision": "reject",
+        "rationale": "The tipping evidence is the current source itself: `crates/tank_harness/tests/e2e_habitat_geometry_probes.rs:253-262` no longer compares `bio_large` to `bio_small * 0.95`; it now uses a flat viability threshold (`min_nitrifier_g = 0.02`) and asserts both runs exceed it. A local run of `cargo test -p tank_harness probe_biofilter_scaling_bigger_media_faster_cycling -- --nocapture` passes, so the amendment's central claim that the probe is red because of a 95% biomass-parity assertion is stale. There is still a plausible naming/coverage mismatch because the test no longer directly asserts 'faster cycling,' but that is a different and weaker issue than the specific disputed amendment."
+      }
+    ],
+    "summary": "Rejected the disputed amendment because its core factual predicate is outdated: the current test no longer uses the 95% nitrifier-biomass comparison and is not failing on that basis."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

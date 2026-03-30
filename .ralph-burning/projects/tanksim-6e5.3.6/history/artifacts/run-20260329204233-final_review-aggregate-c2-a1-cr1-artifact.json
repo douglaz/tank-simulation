@@ -1,0 +1,13 @@
+{
+  "artifact_id": "run-20260329204233-final_review-aggregate-c2-a1-cr1-artifact",
+  "payload_id": "run-20260329204233-final_review-aggregate-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "created_at": "2026-03-29T21:39:35.923019299Z",
+  "content": "# Final Review Aggregate\n\n**Summary:** Final review accepted 3 amendment(s); restart required.\n**Restart Required:** true\n**Force Completed:** false\n**Total Reviewers:** 2\n**Unique Amendments:** 5\n**Final Review Restarts:** 1/20\n\n## Accepted\n\n- `fr-1-d5896362`\n- `fr-1-0ed6fb15`\n- `fr-1-bd5aaa0c`\n\n## Rejected\n\n- `fr-1-026ed985`\n- `fr-1-bcb79444`\n\n## Disputed\n\nNone.\n\n## Final Accepted Amendments\n\n### `fr-1-d5896362`\n\nIn conservation_regression.rs, the grazing test (closed_system_grazing_conserves_n_and_c, lines 257-271) still uses bare `assert!()` for pathway verification instead of the new `assert_or_dump()` helper that all other five tests use. This means a grazing pathway assertion failure will NOT dump the trace to /tmp/tank_conservation_traces/grazing.jsonl, violating the acceptance criterion that 'failures dump the full trace to a file for debugging.' Replace the three bare `assert!()` calls with `assert_or_dump(\"grazing\", &engine, ...)` calls.\n\n### `fr-1-0ed6fb15`\n\nIn e2e_conservation.rs, `run_grazing()` (lines 375-390) has no pathway-verification assertions (ensure/ensure_trace_delta), while all other five scenario runners (run_feeding, run_mortality_senescence, run_trim_and_remove, run_trim_and_leave, run_water_change) were enhanced with these checks in this diff. Add at minimum: ensure that periphyton decreased, TAN increased, and fine detritus increased (mirroring the unit test), so the e2e runner catches the case where grazing is silently not exercised.\n\n### `fr-1-bd5aaa0c`\n\nIn the water-change test (both files), the expected_n_import calculation only sums `source.ammonia_mg_n_per_l + source.nitrate_mg_n_per_l + source.don_mg_n_per_l`, omitting `source.nitrite_mg_n_per_l`. The engine's budget (apply_water_change_with_budget, line 125-128) sums all four source species including nitrite. This only works because the source profile's nitrite is implicitly zero from SourceWaterProfile::zero(). Add `+ source.nitrite_mg_n_per_l` to the test's expected_n_import formula for correctness and resilience against fixture evolution.\n\n",
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 1
+}

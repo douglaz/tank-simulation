@@ -1,0 +1,88 @@
+{
+  "payload_id": "run-20260328023509-plan_and_implement-c1-a2-cr1",
+  "stage_id": "plan_and_implement",
+  "cycle": 1,
+  "attempt": 2,
+  "created_at": "2026-03-28T03:03:30.850528557Z",
+  "payload": {
+    "data": {
+      "change_summary": "All acceptance criteria for organism death → detritus routing are already fully implemented. Shrimp death routing exists in shrimp.rs:626-656 (route_dead_shrimp_to_detritus), plant senescence routing in plant_growth.rs:387-389 (route_plant_loss_to_fine_detritus), and algae death routing in algae_growth.rs:277-279 (route_algae_loss_to_fine_detritus). The death_biomass_to_detritus_fraction parameter (default 1.0) exists in process.rs:218. Body composition constants are documented in budget.rs:5-35 (ADULT_SHRIMP_BIOMASS_G, JUVENILE_SHRIMP_BIOMASS_G, SHRIMP_N_MG_PER_G_WET_MASS, SHRIMP_C_MG_PER_G_WET_MASS, PLANT_N_MG_PER_G_BIOMASS, ALGAE_N_MG_PER_G_BIOMASS, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G). All required unit and integration tests exist in budget_tracking.rs and shrimp_feeding_pathway.rs. Full test suite passes (0 failures), clippy clean.",
+      "outstanding_risks": [
+        "The shrimp body mass N:C ratio uses feed_n_to_c_ratio (0.16) rather than a shrimp-specific body composition ratio. This is a simplification noted in the code — shrimp tissue may have a different N:C than feed. A future refinement could add a shrimp_body_n_to_c_ratio parameter.",
+        "Phosphorus is not explicitly tracked in detritus pools. When detritus dissolves, P is released at a fixed FEED_P_TO_N_MASS_RATIO (0.10) which may not match actual organism tissue P:N ratios. This is an existing system-wide limitation, not specific to this bead.",
+        "Mortality probability is clamped at 0.5 per daily step, so even with base_mortality=1.0, not all shrimp die in a single step. The test at line 1163 accounts for this but it means mass extinction scenarios play out over multiple days."
+      ],
+      "steps": [
+        {
+          "description": "Verified shrimp death → detritus routing: route_dead_shrimp_to_detritus() at shrimp.rs:626-656 converts dead_count × body_mass → fine_detritus_g_total using live_biomass_detrital_mass_g() with N+C accounting. Reserve pool is proportionally transferred. death_biomass_to_detritus_fraction (1.0) gates the transfer with a debug_assert enforcing Phase 1 invariant.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Verified plant senescence → detritus routing: route_plant_loss_to_fine_detritus() at plant_growth.rs:387-389 uses plant_detrital_mass_g() which sums plant_nitrogen_mg() + plant_carbon_mg() / 1000 → fine_detritus_g_total. Senescence is amplified by poor health_index. Loss is clamped to available biomass via clamp_partitioned_losses(). Both N and C are properly routed.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Verified algae death → detritus routing: route_algae_loss_to_fine_detritus() at algae_growth.rs:277-279 uses algae_detrital_mass_g() which sums algae_nitrogen_mg() + algae_carbon_mg() / 1000 → fine_detritus_g_total. Both suspended algae (respiration + grazing losses) and periphyton (respiration + grazing + excess capacity losses) are routed. Both N and C properly accounted.",
+          "order": 3,
+          "status": "completed"
+        },
+        {
+          "description": "Verified death_biomass_to_detritus_fraction parameter exists at process.rs:218 with default 1.0, serde-enabled for future schema evolution. Documentation in the field comment explains Phase 1 fixed-at-1.0 rationale.",
+          "order": 4,
+          "status": "completed"
+        },
+        {
+          "description": "Verified body composition parameters are named and documented in budget.rs:5-35: ADULT_SHRIMP_BIOMASS_G=0.12, JUVENILE_SHRIMP_BIOMASS_G=0.05, LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G=0.20, SHRIMP_N_MG_PER_G_WET_MASS≈27.6, SHRIMP_C_MG_PER_G_WET_MASS≈172.4, PLANT_N_MG_PER_G_BIOMASS=28.0, ALGAE_N_MG_PER_G_BIOMASS=35.0. Literature validation notes are included in doc comments.",
+          "order": 5,
+          "status": "completed"
+        },
+        {
+          "description": "Verified unit test: test_shrimp_death_routes_body_mass_to_detritus_and_conserves_n_c() at budget_tracking.rs:1071 — kills shrimp under high stress, verifies detritus increases and total N/C conserved within 1e-6. Additionally test_shrimp_death_detritus_amount_matches_expected_body_mass() at line 1104 verifies exact detritus amounts match dead_count × body_mass.",
+          "order": 6,
+          "status": "completed"
+        },
+        {
+          "description": "Verified unit test: test_plant_loss_routing_is_clamped_to_available_biomass_and_stays_particulate() at budget_tracking.rs:544 — sets extreme respiration+senescence rates to kill all plant biomass, verifies total N/C conserved within 1e-6 and detritus increases. Also test_trim_plants_preserves_n_and_c_when_routed_to_detritus() at line 577.",
+          "order": 7,
+          "status": "completed"
+        },
+        {
+          "description": "Verified unit test: test_algae_loss_routing_is_clamped_to_available_biomass_and_stays_particulate() at budget_tracking.rs:509 — sets extreme respiration rate with high grazing to kill all algae biomass, verifies total N/C conserved within 1e-6 and detritus increases.",
+          "order": 8,
+          "status": "completed"
+        },
+        {
+          "description": "Verified integration test: test_high_mortality_200_hours_conserves_n_c_and_accumulates_detritus() at budget_tracking.rs:1187 — runs 200 hours (8×25h blocks) with high temperature (33°C), elevated ammonia, low DO, active microbes. Checks N/C conservation at each 25-hour checkpoint (tolerance <0.5mg) and verifies population decline.",
+          "order": 9,
+          "status": "completed"
+        },
+        {
+          "description": "Ran full test suite: all tests pass (0 failures across all crates). Ran cargo clippy: no warnings. No code changes needed — all acceptance criteria were already implemented.",
+          "order": 10,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "cargo test --test budget_tracking -- test_shrimp_death test_algae_loss_routing test_plant_loss_routing test_high_mortality: 5 passed, 0 failed",
+        "cargo test --test shrimp_feeding_pathway -- shrimp_mortality: 1 passed, 0 failed (shrimp_mortality_transfers_reserve_to_detritus)",
+        "cargo test (full suite): all test results ok, 0 failures across 36 test binaries",
+        "cargo clippy: no warnings, clean output",
+        "Shrimp death routing verified at shrimp.rs:626-656 with live_biomass_detrital_mass_g() for body mass and proportional reserve transfer",
+        "Plant senescence routing verified at plant_growth.rs:387-416 with plant_detrital_mass_g() summing N+C",
+        "Algae death routing verified at algae_growth.rs:277-279 with algae_detrital_mass_g() summing N+C",
+        "death_biomass_to_detritus_fraction parameter verified at process.rs:218, default 1.0, with Phase 1 invariant enforcement via debug_assert",
+        "Body composition constants verified at budget.rs:5-35 with literature-validated doc comments"
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 1
+}

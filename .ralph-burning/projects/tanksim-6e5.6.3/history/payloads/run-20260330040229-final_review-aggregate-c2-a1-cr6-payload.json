@@ -1,0 +1,192 @@
+{
+  "payload_id": "run-20260330040229-final_review-aggregate-c2-a1-cr6-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T08:56:21.359991197Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-6-659b3f63",
+      "fr-6-1c45f0d3",
+      "fr-6-b71a2aad",
+      "fr-6-fe4cee4a",
+      "fr-6-7ab7e2a1",
+      "fr-6-86390c91",
+      "fr-6-faf7e3a2"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-6-659b3f63",
+        "normalized_body": "In `molt_cycle` (shrimp.rs lines 649-654), the `failed_molt_accum` increment rate (0.3 per failed stage) and decrement rate (0.35 per successful stage) are hardcoded constants, not named parameters. Per the acceptance criteria, 'All molt-related thresholds and modifiers ... are named parameters in species/process data, not hardcoded constants.' These constants directly govern the dynamics of molt failure accumulation and should be promoted to named fields on `ShrimpRuntimeParams` and set in `neocaridina_davidi.toml`.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-6-1c45f0d3",
+        "normalized_body": "The integration test `test_soft_vs_hard_water_shrimp_survival` uses the `ro_like` source water profile, which has `calcium_mg_per_l = 20.0` and `magnesium_mg_per_l = 5.0` — exactly matching the species minimums (`ca_min_mg_per_l = 20.0`, `mg_min_mg_per_l = 5.0`). This means the Ca and Mg factors in `molt_mineral_modifier` are both 1.0 (no penalty). The soft-water case only tests the GH penalty (~4.0 dGH < 5.0 dGH min), not individual Ca/Mg deficiency. The acceptance criteria says 'both calcium and magnesium contribute to the mineral modifier' should be verified in integration, but only the unit test covers this. Either lower the ro_like Ca/Mg values below the species minimums (e.g., Ca=10, Mg=2) or use a custom profile in the integration test that exercises all three mineral channels.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-6-b71a2aad",
+        "normalized_body": "In `emit_molt_failure` (shrimp.rs lines 1362-1368), when no specific diagnostic threshold is triggered (GH is marginally low but above the event threshold, condition is above 0.65, reserves are adequate, etc.), the function defaults to `EventCause::PoorCondition` even though poor condition may not be the actual cause. A marginal miss on the combined `success_score` (e.g., 0.54 vs 0.55 threshold) from multiple slightly-below-optimal factors produces a misleading cause code. Consider adding a `MarginalFailure` or generic cause, or including the computed `success_score` and threshold in the event summary so the player can see the actual gap.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-6-fe4cee4a",
+        "normalized_body": "In `emit_molt_failure`, several diagnostic thresholds are hardcoded: the instability trigger at 0.3 (line 1337) and the poor-condition trigger at 0.65 (line 622 in `molt_cycle`). These thresholds determine which cause codes appear on MoltFailure events. While less critical than the core molt formula parameters, they affect player-visible diagnostics and should at minimum be documented constants or, ideally, configurable.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-6-7ab7e2a1",
+        "normalized_body": "The `failed_molt_accum` feeds into mortality through two independent channels: (1) directly via `molt_mortality = failed_molt_accum * failed_molt_mortality_scale` in `compute_mortality_probabilities` (line 1184), and (2) indirectly via `molt_stress_index += failed_molt_accum * 0.5` (line 677) which then contributes via `(molt_stress_index - 0.5).max(0.0)` in the stress_total (line 1178). The code comments acknowledge this as intentional, but the 0.5 blending factor on line 677 is hardcoded and not a named parameter. At `failed_molt_accum = 1.0`, the combined daily mortality contribution can reach ~0.25 (0.15 direct + ~0.10 indirect), which means near-total population wipeout within a week. This aggressive coupling should be documented more clearly and the 0.5 blending factor should be a named parameter.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-6-86390c91",
+        "normalized_body": "crates/tank_core/tests/reproduction_factors.rs:888-932 only records `max_tan`, `max_no2`, and `max_instability` from one snapshot per `run_day()` call, after 24 simulated hours have already elapsed. That means the new 'stable tank keeps chemistry in range' assertions cannot see any intra-day TAN/NO2/instability spikes between the feed at hour 0 and the day-end snapshot. A regression that creates dangerous hourly excursions but settles by the end of the day would still pass this test.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-6-faf7e3a2",
+        "normalized_body": "crates/tank_core/tests/reproduction_factors.rs:243-289 no longer isolates instability as the reason readiness stays low after a swing. The test now drives the tank to 36 C and then checks for 2-3 days of reduced readiness, but that same pattern can be produced by the direct temperature penalty and the condition/molt damage from the hot day even if post-swing readiness stops consulting `stability_tracker.instability_index`. The test verifies that instability remains elevated, but it does not prove that lingering instability is what is suppressing readiness.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-6-659b3f63",
+        "normalized_body": "In `molt_cycle` (shrimp.rs lines 649-654), the `failed_molt_accum` increment rate (0.3 per failed stage) and decrement rate (0.35 per successful stage) are hardcoded constants, not named parameters. Per the acceptance criteria, 'All molt-related thresholds and modifiers ... are named parameters in species/process data, not hardcoded constants.' These constants directly govern the dynamics of molt failure accumulation and should be promoted to named fields on `ShrimpRuntimeParams` and set in `neocaridina_davidi.toml`.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-6-1c45f0d3",
+        "normalized_body": "The integration test `test_soft_vs_hard_water_shrimp_survival` uses the `ro_like` source water profile, which has `calcium_mg_per_l = 20.0` and `magnesium_mg_per_l = 5.0` — exactly matching the species minimums (`ca_min_mg_per_l = 20.0`, `mg_min_mg_per_l = 5.0`). This means the Ca and Mg factors in `molt_mineral_modifier` are both 1.0 (no penalty). The soft-water case only tests the GH penalty (~4.0 dGH < 5.0 dGH min), not individual Ca/Mg deficiency. The acceptance criteria says 'both calcium and magnesium contribute to the mineral modifier' should be verified in integration, but only the unit test covers this. Either lower the ro_like Ca/Mg values below the species minimums (e.g., Ca=10, Mg=2) or use a custom profile in the integration test that exercises all three mineral channels.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-6-b71a2aad",
+        "normalized_body": "In `emit_molt_failure` (shrimp.rs lines 1362-1368), when no specific diagnostic threshold is triggered (GH is marginally low but above the event threshold, condition is above 0.65, reserves are adequate, etc.), the function defaults to `EventCause::PoorCondition` even though poor condition may not be the actual cause. A marginal miss on the combined `success_score` (e.g., 0.54 vs 0.55 threshold) from multiple slightly-below-optimal factors produces a misleading cause code. Consider adding a `MarginalFailure` or generic cause, or including the computed `success_score` and threshold in the event summary so the player can see the actual gap.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-6-fe4cee4a",
+        "normalized_body": "In `emit_molt_failure`, several diagnostic thresholds are hardcoded: the instability trigger at 0.3 (line 1337) and the poor-condition trigger at 0.65 (line 622 in `molt_cycle`). These thresholds determine which cause codes appear on MoltFailure events. While less critical than the core molt formula parameters, they affect player-visible diagnostics and should at minimum be documented constants or, ideally, configurable.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-6-7ab7e2a1",
+        "normalized_body": "The `failed_molt_accum` feeds into mortality through two independent channels: (1) directly via `molt_mortality = failed_molt_accum * failed_molt_mortality_scale` in `compute_mortality_probabilities` (line 1184), and (2) indirectly via `molt_stress_index += failed_molt_accum * 0.5` (line 677) which then contributes via `(molt_stress_index - 0.5).max(0.0)` in the stress_total (line 1178). The code comments acknowledge this as intentional, but the 0.5 blending factor on line 677 is hardcoded and not a named parameter. At `failed_molt_accum = 1.0`, the combined daily mortality contribution can reach ~0.25 (0.15 direct + ~0.10 indirect), which means near-total population wipeout within a week. This aggressive coupling should be documented more clearly and the 0.5 blending factor should be a named parameter.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-6-86390c91",
+        "normalized_body": "crates/tank_core/tests/reproduction_factors.rs:888-932 only records `max_tan`, `max_no2`, and `max_instability` from one snapshot per `run_day()` call, after 24 simulated hours have already elapsed. That means the new 'stable tank keeps chemistry in range' assertions cannot see any intra-day TAN/NO2/instability spikes between the feed at hour 0 and the day-end snapshot. A regression that creates dangerous hourly excursions but settles by the end of the day would still pass this test.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-6-faf7e3a2",
+        "normalized_body": "crates/tank_core/tests/reproduction_factors.rs:243-289 no longer isolates instability as the reason readiness stays low after a swing. The test now drives the tank to 36 C and then checks for 2-3 days of reduced readiness, but that same pattern can be produced by the direct temperature penalty and the condition/molt damage from the hot day even if post-swing readiness stops consulting `stability_tracker.instability_index`. The test verifies that instability remains elevated, but it does not prove that lingering instability is what is suppressing readiness.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 6,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [],
+    "restart_required": true,
+    "summary": "Final review accepted 7 amendment(s); restart required.",
+    "total_proposed_amendments": 7,
+    "total_reviewers": 2,
+    "unique_amendment_count": 7
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 6
+}

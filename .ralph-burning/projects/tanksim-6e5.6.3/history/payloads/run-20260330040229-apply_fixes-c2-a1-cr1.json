@@ -1,0 +1,48 @@
+{
+  "payload_id": "run-20260330040229-apply_fixes-c2-a1-cr1",
+  "stage_id": "apply_fixes",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T05:03:43.934074885Z",
+  "payload": {
+    "data": {
+      "change_summary": "Stabilized the new molt/mineral regressions so they isolate mineral effects deterministically and updated the shrimp reproduction budget fixture to seed explicit Ca/Mg support required by the molt model. The 1000-hour `hard_shrimp` vs `ro_like` survival comparison, failed-molt mortality regression, and broader closed-system budget coverage now pass against the existing stage-aware molt implementation in this branch.",
+      "outstanding_risks": [],
+      "steps": [
+        {
+          "description": "Adjusted the long-horizon molt/mineral tests to freeze condition drift and feeding noise so the soft-vs-hard water and failed-molt mortality assertions measure mineral-driven behavior deterministically.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Updated the shrimp reproduction budget fixture to include explicit calcium and magnesium support so the closed-system reproduction conservation test remains valid with mineral-gated molting.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Ran targeted regressions plus full `tank_core`, `tank_data`, and `tank_scenarios` test suites to verify the fixes end to end.",
+          "order": 3,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo test -p tank_core --test molt_mineral_budget -- --nocapture`",
+        "`cargo test -p tank_core step_hours_rejects_invalid_molt_mineral_parameters_before_simulation -- --nocapture`",
+        "`cargo test -p tank_core malformed_current_save_with_invalid_molt_mineral_parameters_is_rejected -- --nocapture`",
+        "`cargo test -p tank_core inverted_stage_molt_intervals -- --nocapture`",
+        "`cargo test -p tank_core test_closed_system_shrimp_reproduction_conserves_n_and_c -- --nocapture`",
+        "`cargo test -p tank_core`",
+        "`cargo test -p tank_data`",
+        "`cargo test -p tank_scenarios`"
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}
