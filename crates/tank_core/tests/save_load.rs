@@ -1392,6 +1392,7 @@ fn current_schema_roundtrip_preserves_zero_stage_timer_for_newly_added_adults(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut engine = Engine::from_parts(TankState::new(SimSeed(205)), vec![]);
     engine.apply_action(PlayerAction::AddShrimp { count: 4 })?;
+    engine.step_hours(1)?;
 
     assert!(engine.full_state().animal.adult.molt_timer_days.abs() < 1e-9);
     assert!(engine.full_state().animal.inter_molt_timer_days.abs() < 1e-9);

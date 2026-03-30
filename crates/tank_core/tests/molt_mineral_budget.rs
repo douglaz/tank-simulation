@@ -448,7 +448,7 @@ fn test_cold_molt_failure_reports_low_temperature() {
     state.process_params.shrimp_condition_smoothing = 0.0;
     state.water.temperature_c = 10.0;
     state.environment.ambient_temp_c = 10.0;
-    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days;
+    state.animal.adult.molt_timer_days = state.shrimp_params.base_molt_interval_days / 0.25;
 
     step_daily_shrimp(&mut state);
 

@@ -974,7 +974,6 @@ fn normalize_loaded_shrimp_reproduction_state(state: &mut TankState, source_sche
             state.animal.juvenile.molt_timer_days = legacy_timer;
         }
     }
-    state.animal.inter_molt_timer_days = state.animal.adult.molt_timer_days.max(0.0);
 }
 
 fn reconcile_stability_tracker(

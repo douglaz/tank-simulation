@@ -1372,15 +1372,6 @@ pub fn molt_mineral_modifier(
     (gh_factor * ca_factor.sqrt() * mg_factor.sqrt()).clamp(0.0, 1.0)
 }
 
-fn molt_condition_modifier(
-    condition_index: f64,
-    reserve_g: f64,
-    count: u32,
-    wet_biomass_g: f64,
-) -> f64 {
-    molt_condition_breakdown(condition_index, reserve_g, count, wet_biomass_g).modifier
-}
-
 fn molt_condition_breakdown(
     condition_index: f64,
     reserve_g: f64,
