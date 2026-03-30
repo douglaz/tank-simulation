@@ -735,36 +735,34 @@ fn spawning(state: &mut TankState) {
     }
 }
 
-/// Egg dropping: berried females may lose their clutch when exposed to
-/// sudden temperature swings or high environmental instability.
-/// Runs after spawning but before egg_development so newly spawned
-/// cohorts can still be affected by an ongoing disturbance.
+/// Egg dropping: berried females may lose their clutch when the
+/// environment is unstable (temperature swings, chemistry swings).
+///
+/// The stability tracker is updated *before* the daily shrimp pipeline,
+/// so `instability_index` already reflects today's chemistry/temperature
+/// swings. A temperature swing > `egg_drop_temp_swing_c` in 24 hours
+/// pushes `instability_index` well above `egg_drop_instability_threshold`,
+/// triggering proportional clutch loss.
 fn egg_dropping(state: &mut TankState) {
     if state.animal.egg_cohorts.is_empty() || state.animal.berried_females_count == 0 {
         return;
     }
 
     let params = &state.shrimp_params;
-    let temp_swing = (state.water.temperature_c - state.stability_tracker.prev_temp_c).abs();
     let instability = state.stability_tracker.instability_index;
 
-    // Probability from temperature swing exceeding species threshold
-    let temp_drop_prob = if temp_swing > params.egg_drop_temp_swing_c {
-        ((temp_swing - params.egg_drop_temp_swing_c) / params.egg_drop_temp_swing_c.max(0.01))
-            .clamp(0.0, 0.5)
+    // Egg dropping probability scales with how far instability exceeds the
+    // species tolerance threshold. A 2°C temperature swing in 24h
+    // contributes ~0.67 raw instability (temp_swing/3.0), which after
+    // smoothing puts the index well above the default 0.5 threshold.
+    let drop_prob = if instability > params.egg_drop_instability_threshold {
+        ((instability - params.egg_drop_instability_threshold)
+            / (1.0 - params.egg_drop_instability_threshold).max(0.01))
+            .clamp(0.0, 0.6)
     } else {
         0.0
     };
 
-    // Probability from sustained instability exceeding species threshold
-    let instab_drop_prob = if instability > params.egg_drop_instability_threshold {
-        ((instability - params.egg_drop_instability_threshold) * 0.3).clamp(0.0, 0.3)
-    } else {
-        0.0
-    };
-
-    // Combined probability, capped at 0.6 to leave some clutches intact
-    let drop_prob = (temp_drop_prob + instab_drop_prob).clamp(0.0, 0.6);
     if drop_prob <= f64::EPSILON {
         return;
     }
@@ -791,13 +789,7 @@ fn egg_dropping(state: &mut TankState) {
             .berried_females_count
             .saturating_sub(total_dropped);
 
-        let mut causes = Vec::new();
-        if temp_drop_prob > 0.0 {
-            causes.push(EventCause::HighTemperature);
-        }
-        if instab_drop_prob > 0.0 {
-            causes.push(EventCause::ChemistryInstability);
-        }
+        let causes = vec![EventCause::ChemistryInstability];
 
         crate::systems::events::emit_once_per_day_pub(
             state,
@@ -806,7 +798,8 @@ fn egg_dropping(state: &mut TankState) {
             causes,
             format!(
                 "{total_dropped} berried female(s) dropped eggs \
-                 (temp swing {temp_swing:.1}°C, instability {instability:.2})"
+                 (instability {instability:.2}, threshold {:.2})",
+                params.egg_drop_instability_threshold,
             ),
         );
     }
