@@ -1269,6 +1269,15 @@ fn run_probe_substrate_redox_denitrification_with_suffix(
         );
         record_check(
             &mut runs,
+            "redox_final_suboxic_zone",
+            planted_final_suboxic_vol > 0.0,
+            format!(
+                "planted substrate should retain a non-zero final suboxic pore volume after maturation: \
+                 planted={planted_final_suboxic_vol:.2} cm³, inert={inert_final_suboxic_vol:.2} cm³"
+            ),
+        );
+        record_check(
+            &mut runs,
             "redox_nitrate_drawdown",
             snap_planted.nitrate_mg_n_per_l < snap_inert.nitrate_mg_n_per_l * 0.5,
             format!(
