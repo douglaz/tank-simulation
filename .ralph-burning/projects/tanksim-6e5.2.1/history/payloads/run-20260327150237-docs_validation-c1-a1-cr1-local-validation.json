@@ -1,0 +1,18 @@
+{
+  "payload_id": "run-20260327150237-docs_validation-c1-a1-cr1-local-validation",
+  "stage_id": "docs_validation",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T15:13:25.772511304Z",
+  "payload": {
+    "commands": [],
+    "group_name": "docs_validation",
+    "passed": true
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "local_validation",
+    "command": "docs_validation"
+  },
+  "completion_round": 1
+}

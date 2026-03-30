@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260328125535-review-c1-a1-cr1-artifact",
+  "payload_id": "run-20260328125535-review-c1-a1-cr1",
+  "stage_id": "review",
+  "created_at": "2026-03-28T13:19:07.431063282Z",
+  "content": "# Review\n\n## Outcome\n\n**Request Changes**\n\n## Evidence\n\n- Reviewed the task-specific diff in `git diff 56df5f8..d4ee56f`; this stage adds the new 500-hour trim integration test in `crates/tank_core/tests/budget_tracking.rs` and the new save-migration test in `crates/tank_core/tests/save_load.rs`.\n- `cargo test -p tank_core test_trim_plants_and_remove_exports_n_and_c -- --nocapture` is currently blocked by unrelated compile failures elsewhere in `tank_core`, so validation for this bead had to rely on static inspection of the changed code.\n- `AnimalState` now uses stage cohorts `adult`, `sub_adult`, and `juvenile` (`crates/tank_core/src/types/biology.rs:93-100`), and `migrate_v4_to_v5` explicitly skips the animal rewrite whenever `juvenile` is already present (`crates/tank_core/src/save.rs:413-415`).\n\n## Findings and Gaps\n\n- `crates/tank_core/tests/budget_tracking.rs:1440-1441` still writes to removed fields `state.animal.adults_count` and `state.animal.juveniles_count`. The current `AnimalState` no longer exposes those members (`crates/tank_core/src/types/biology.rs:93-100`), so this newly added 500-hour trim test will still fail to compile once the branch-wide shrimp-refactor errors are cleared.\n- `crates/tank_core/tests/save_load.rs:361-365` does not construct a real schema-4 save. It serializes current `TankState`, which already has nested `animal.juvenile` and current-only fields like `habitat_registry` (`crates/tank_core/src/types/state.rs:49-52`). Because `migrate_v4_to_v5` short-circuits when `juvenile` exists (`crates/tank_core/src/save.rs:413-415`), the added regression test never exercises the actual legacy v4 migration path required by the acceptance criteria.\n\n## Follow-up and Amendments\n\n- Update `test_weekly_trim_and_remove_exports_nutrients_over_500_hours` to use the stage-cohort API (`state.animal.adult.count`, `state.animal.juvenile.count`) so the new coverage survives the shrimp-model refactor.\n- Rewrite the migration regression test to start from a genuine schema-4 JSON payload: flat `animal` fields (`adults_count`, `juveniles_count`, `condition_index`, `reserve_g`, `maturation_accum`), no current-only fields, and legacy `TrimPlants` queued actions. Then assert both the queued-action rename and successful full-chain load into the current schema.\n- After those fixes, rerun the targeted trim and save-load tests once the unrelated `tank_core` compile blockers are resolved.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 1
+}

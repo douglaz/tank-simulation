@@ -1,0 +1,182 @@
+{
+  "payload_id": "run-20260327155320-final_review-aggregate-c1-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 1,
+  "attempt": 1,
+  "created_at": "2026-03-27T16:37:23.333680394Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-1-e8deb6c0",
+      "fr-1-4cecd20d",
+      "fr-1-175e6bec",
+      "fr-1-62a277eb",
+      "fr-1-f002ba49",
+      "fr-1-82e8bfe5"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-1-e8deb6c0",
+        "normalized_body": "`TankState::seeded_example()` (state.rs:105-133) replaces `substrate_layers` after `new()` already computed water totals based on the default substrate depth. The total depth happens to match (default 3.0 cm = seeded_example 2.0+1.0 cm), but this is coincidental. If either default changes, dissolved-mass totals will be wrong for the new volume, silently producing incorrect concentrations. Add a `rescale_totals_for_volume()` call or rebuild `WaterState` after setting the new substrate layers, mirroring what `apply_startup_overrides` already does.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-4cecd20d",
+        "normalized_body": "The proptest and unit tests in concentration_helpers.rs only cover 8 of 13 helpers. `calcium_mg_per_l()`, `magnesium_mg_per_l()`, `gh_d()`, `tds_mg_per_l()`, and `conductivity_us_cm()` are missing from both the known-value unit test (`canonical_helpers_use_net_water_volume`) and the non-negativity property test. The acceptance criteria requires 'unit tests for every helper method' and 'helpers never return negative values (property test)'. Add assertions for all five missing helpers in both the unit test and the proptest.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-175e6bec",
+        "normalized_body": "Add a `don_mg_n_per_l()` (dissolved organic nitrogen) concentration helper to WaterState and TankState. The field `dissolved_organic_nitrogen_mg_n_total` exists and is actively used in nitrogen_cycle.rs (lines 77, 99-104) and water_change.rs, but has no canonical concentration accessor. The acceptance criteria says 'helper coverage is enough to support nitrogen... refactors', and tanksim-6e5.2.3 (normalize nitrogen-cycle kinetics to concentration-based terms) is a direct dependent that will need DON concentration.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-62a277eb",
+        "normalized_body": "Add a `kh_d()` helper to WaterState/TankState, analogous to the existing `gh_d()`. Currently snapshot.rs:73 computes KH inline as `(state.alkalinity_meq_per_l() * 50.0) / 17.848`. This is the same kind of ad-hoc re-derivation the helpers are designed to prevent, and it creates an asymmetry where GH has a canonical helper but KH does not.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-e6424ff8",
+        "normalized_body": "Each TankState concentration helper (tan_mg_n_per_l, nitrite_mg_n_per_l, etc.) independently calls `self.water_volume_l()`, which iterates `substrate_layers` to sum depths each time. In `TankSnapshot::from_state()` (snapshot.rs:64-75), this recomputes the substrate sum and volume ~13 times. Consider either (a) caching substrate_depth_cm/water_volume_l on TankState when substrate_layers changes, or (b) having a `ConcentrationView` struct that computes volume once and provides all accessors. The current approach is O(helpers × layers) per snapshot.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-f002ba49",
+        "normalized_body": "Fix save compatibility before shipping this. crates/tank_core/src/types/state.rs:174-229 switches canonical concentration reads to net water volume, but crates/tank_core/src/save.rs:8-47 still accepts schema_version 2 saves with no migration. Existing schema-2 saves written under the old gross-volume basis will now load with inflated mg/L and dGH/dKH values and smaller effective water-change/turnover volumes. Either bump the schema and reject old saves or migrate loaded water totals onto the new net-volume basis.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-82e8bfe5",
+        "normalized_body": "Update or remove the remaining gross-volume WaterState constructors. crates/tank_core/src/types/water.rs:63-70 and 197-199 still seed totals from TankGeometry::water_volume_l() (gross fill volume), while the rest of the refactor reads chemistry through TankState::water_volume_l() in crates/tank_core/src/types/state.rs:174-229. Any caller that uses WaterState::default_for_geometry, WaterState::from_source_profile, or WaterState::default with a substrate-bearing tank will recreate the same concentration mismatch this change set is meant to eliminate.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-1-e8deb6c0",
+        "normalized_body": "`TankState::seeded_example()` (state.rs:105-133) replaces `substrate_layers` after `new()` already computed water totals based on the default substrate depth. The total depth happens to match (default 3.0 cm = seeded_example 2.0+1.0 cm), but this is coincidental. If either default changes, dissolved-mass totals will be wrong for the new volume, silently producing incorrect concentrations. Add a `rescale_totals_for_volume()` call or rebuild `WaterState` after setting the new substrate layers, mirroring what `apply_startup_overrides` already does.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-4cecd20d",
+        "normalized_body": "The proptest and unit tests in concentration_helpers.rs only cover 8 of 13 helpers. `calcium_mg_per_l()`, `magnesium_mg_per_l()`, `gh_d()`, `tds_mg_per_l()`, and `conductivity_us_cm()` are missing from both the known-value unit test (`canonical_helpers_use_net_water_volume`) and the non-negativity property test. The acceptance criteria requires 'unit tests for every helper method' and 'helpers never return negative values (property test)'. Add assertions for all five missing helpers in both the unit test and the proptest.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-175e6bec",
+        "normalized_body": "Add a `don_mg_n_per_l()` (dissolved organic nitrogen) concentration helper to WaterState and TankState. The field `dissolved_organic_nitrogen_mg_n_total` exists and is actively used in nitrogen_cycle.rs (lines 77, 99-104) and water_change.rs, but has no canonical concentration accessor. The acceptance criteria says 'helper coverage is enough to support nitrogen... refactors', and tanksim-6e5.2.3 (normalize nitrogen-cycle kinetics to concentration-based terms) is a direct dependent that will need DON concentration.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-62a277eb",
+        "normalized_body": "Add a `kh_d()` helper to WaterState/TankState, analogous to the existing `gh_d()`. Currently snapshot.rs:73 computes KH inline as `(state.alkalinity_meq_per_l() * 50.0) / 17.848`. This is the same kind of ad-hoc re-derivation the helpers are designed to prevent, and it creates an asymmetry where GH has a canonical helper but KH does not.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-f002ba49",
+        "normalized_body": "Fix save compatibility before shipping this. crates/tank_core/src/types/state.rs:174-229 switches canonical concentration reads to net water volume, but crates/tank_core/src/save.rs:8-47 still accepts schema_version 2 saves with no migration. Existing schema-2 saves written under the old gross-volume basis will now load with inflated mg/L and dGH/dKH values and smaller effective water-change/turnover volumes. Either bump the schema and reject old saves or migrate loaded water totals onto the new net-volume basis.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-82e8bfe5",
+        "normalized_body": "Update or remove the remaining gross-volume WaterState constructors. crates/tank_core/src/types/water.rs:63-70 and 197-199 still seed totals from TankGeometry::water_volume_l() (gross fill volume), while the rest of the refactor reads chemistry through TankState::water_volume_l() in crates/tank_core/src/types/state.rs:174-229. Any caller that uses WaterState::default_for_geometry, WaterState::from_source_profile, or WaterState::default with a substrate-bearing tank will recreate the same concentration mismatch this change set is meant to eliminate.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 1,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-1-e6424ff8"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 6 amendment(s); restart required.",
+    "total_proposed_amendments": 7,
+    "total_reviewers": 2,
+    "unique_amendment_count": 7
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 1
+}

@@ -1,0 +1,102 @@
+{
+  "payload_id": "run-20260329191454-final_review-aggregate-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-29T19:52:23.293847944Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-1-6a5fe401",
+      "fr-1-9ac12929"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-1-6a5fe401",
+        "normalized_body": "In nitrogen_cycle.rs, after the comammox step (around line 350), `alk_budget` is not decremented by `comammox_alk_cost`, while `do_budget` IS always decremented after each step. Since nothing reads `alk_budget` after comammox this is harmless today, but if a future step (e.g. denitrification) needs the running alkalinity budget for rate-limiting, the stale value would silently over-allocate. Add `alk_budget = (alk_budget - comammox_alk_cost).max(0.0);` after line 350 to match the DO budget pattern and prevent a latent accounting bug.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-9ac12929",
+        "normalized_body": "In engine.rs, `StageTrace::metric()` unconditionally allocates `BudgetMetric` (including a heap `String` for the label) even when neither budget tracking nor tracing is enabled. For the nitrogen_cycle stage alone this is 5 allocations per tick, silently dropped if no budget ledger exists. Guard the allocation: either check `ctx.budget.is_some()` before calling `metric()`, or make `metric()` a no-op when a `budget_active` flag is false — similar to how `note()` already guards on `self.enabled`.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-c283b14f",
+        "normalized_body": "Add `crates/tank_core/tests/nitrification_alkalinity.rs:1` to version control. The entire acceptance-test file is currently untracked, so the new nitrification alkalinity regression/scenario coverage is not actually part of the reviewed change set yet.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-beff8673",
+        "normalized_body": "The new alkalinity diagnostics are still not denitrification-ready. `crates/tank_core/src/systems/nitrogen_cycle.rs:12-23` only exposes `alkalinity_consumed_meq`, and `crates/tank_core/src/engine.rs:229-239` only emits `nitrogen_cycle.alk_consumed_meq`. If E4b adds alkalinity return inside the nitrogen-cycle path, the current surface cannot attribute consumed versus returned alkalinity separately without another API/trace-schema change.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-1-6a5fe401",
+        "normalized_body": "In nitrogen_cycle.rs, after the comammox step (around line 350), `alk_budget` is not decremented by `comammox_alk_cost`, while `do_budget` IS always decremented after each step. Since nothing reads `alk_budget` after comammox this is harmless today, but if a future step (e.g. denitrification) needs the running alkalinity budget for rate-limiting, the stale value would silently over-allocate. Add `alk_budget = (alk_budget - comammox_alk_cost).max(0.0);` after line 350 to match the DO budget pattern and prevent a latent accounting bug.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-9ac12929",
+        "normalized_body": "In engine.rs, `StageTrace::metric()` unconditionally allocates `BudgetMetric` (including a heap `String` for the label) even when neither budget tracking nor tracing is enabled. For the nitrogen_cycle stage alone this is 5 allocations per tick, silently dropped if no budget ledger exists. Guard the allocation: either check `ctx.budget.is_some()` before calling `metric()`, or make `metric()` a no-op when a `budget_active` flag is false — similar to how `note()` already guards on `self.enabled`.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 1,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-1-c283b14f",
+      "fr-1-beff8673"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 2 amendment(s); restart required.",
+    "total_proposed_amendments": 4,
+    "total_reviewers": 2,
+    "unique_amendment_count": 4
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 1
+}

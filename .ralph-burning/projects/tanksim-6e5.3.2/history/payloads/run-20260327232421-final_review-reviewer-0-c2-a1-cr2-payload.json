@@ -1,0 +1,27 @@
+{
+  "payload_id": "run-20260327232421-final_review-reviewer-0-c2-a1-cr2-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T00:52:08.249679873Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "BUG: In `engine.rs` RemoveShrimp handler (line 404), the reserve fraction denominator uses only `self.state.animal.adults_count` instead of `adults_count + juveniles_count`. When juveniles exist, removing all adults drains 100% of the shared reserve (fraction = count/adults_count = 1.0), leaving surviving juveniles with zero reserve. The parallel code in `route_dead_shrimp_to_detritus` (shrimp.rs:598) correctly uses `state.animal.adults_count + state.animal.juveniles_count` as the denominator. Fix: change line 404 from `let total = self.state.animal.adults_count;` to `let total = self.state.animal.adults_count + self.state.animal.juveniles_count;`.",
+        "rationale": "This is a mass conservation bug: the reserve pool is shared by all shrimp (adults + juveniles), so removing adults should only take the adults' proportional share. The inconsistency with route_dead_shrimp_to_detritus confirms this is unintentional. Example: 5 adults + 20 juveniles, remove 5 adults → current code removes 100% of reserve, correct code removes 20%."
+      },
+      {
+        "body": "Correctness gap: In `route_consumed_food` (shrimp.rs:224-225), the O2 consumption is clamped at zero via `.max(0.0)`, but the carbon and nitrogen routing (respired_c → DIC, respired_n → TAN) proceeds at full rate regardless of actual O2 availability. This breaks the stoichiometric coupling: when DO is exhausted, the model produces DIC and TAN as if aerobic respiration occurred, but no O2 was actually consumed. Consider either (a) scaling respired_c_mg and respired_n_mg by `actual_o2_consumed / o2_demand_mg` when O2 is limiting, or (b) adding a brief code comment explicitly acknowledging this as a Phase 1 simplification so downstream C7/C4 audits don't need to rediscover it.",
+        "rationale": "Under extreme conditions (overloaded tank, DO crash), this can produce unrealistic TAN and DIC spikes without corresponding O2 consumption. While the shrimp stress/mortality system indirectly limits this (low DO → increased mortality → fewer shrimp → less respiration), the stoichiometric inconsistency could surface in budget audits or edge-case regression tests. At minimum, documenting it prevents the C4 bookkeeping audit (tanksim-6e5.3.4) from flagging it as a new discovery."
+      }
+    ],
+    "summary": "Thorough review of the shrimp ingestion → assimilation → excretion → feces → respiration loop implementation. The core routing math is correct: consumed N and C are partitioned through named fractions (assimilation efficiency, then respiration/excretion/growth of the assimilated share), and roundtrip conversions between elemental mg and organic-matter grams are algebraically consistent — verified by tracing the full chain through `algae_nitrogen_mg`, `organic_nitrogen_mg`, `detritus_nitrogen_mg`, and `live_biomass_nitrogen_mg`. The invariants system properly validates fraction ranges and sum-to-one constraints. Budget totals correctly include `reserve_g` and shrimp body mass. All 8 shrimp feeding pathway tests and 18 budget tracking tests pass. The `#[serde(default)]` annotations handle backward compatibility for old saves. One real bug found in `RemoveShrimp` reserve fraction calculation; one stoichiometric correctness gap in the O2-respiration coupling at zero DO."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}

@@ -1,0 +1,23 @@
+{
+  "payload_id": "run-20260327225238-final_review-reviewer-1-c2-a1-cr6-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T00:58:12.234819619Z",
+  "payload": {
+    "amendments": [
+      {
+        "body": "`crates/tank_core/src/save.rs:172-184` and `crates/tank_core/src/save.rs:350-361` currently treat “the `stability_tracker` field exists” as “the tracker baselines are valid.” That breaks real schema-2 saves created before tracker seeding was added: those payloads can serialize the `StabilityTracker::default()` sentinel values, and the load path preserves them unchanged instead of repairing them. After migration, `prev_temp_c`/`prev_ph`/`prev_gh_d`/`prev_do_mg_l` can still be out of sync with the migrated water state, so the first daily stability update reports a fake swing. In a repro with a schema-2 save taken immediately after tank creation, the file loads with `instability_index == 0` but jumps to `0.3` after the next 24-hour step solely from stale tracker baselines. Please detect/reseed this legacy-default tracker case (while still preserving valid historical trackers) and add a regression test for a v2 payload where the tracker is present but uninitialized.",
+        "rationale": "This is a user-visible correctness issue in the migration path: some legitimate v2 saves will load into a materially different simulation state, with shrimp stress penalties caused by migration metadata rather than by tank conditions."
+      }
+    ],
+    "summary": "Reviewed the migration scaffolding in `save.rs`, the updated `TankState` helpers, and the save/load migration tests. I found one correctness gap: schema-2 saves with a serialized but uninitialized `stability_tracker` are preserved as-is, which can inject a false instability spike after load. I did not find other correctness or safety issues in the reviewed changes."
+  },
+  "record_kind": "stage_supporting",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 6
+}

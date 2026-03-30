@@ -1,0 +1,14 @@
+{
+  "artifact_id": "run-20260327155320-apply_fixes-c1-a1-cr2-artifact",
+  "payload_id": "run-20260327155320-apply_fixes-c1-a1-cr2",
+  "stage_id": "apply_fixes",
+  "created_at": "2026-03-27T16:48:36.172565285Z",
+  "content": "# Apply Fixes\n\n## Change Summary\n\nNo further fixes were applied in this stage. The second review approved the canonical concentration helper remediation as-is, so the codebase remained unchanged and this pass only records that the remaining notes were non-blocking follow-ups outside the bead's required scope.\n\n## Steps\n\n0. [Completed] Reviewed the approved validation output from completion round 2 to determine whether any actionable fixes remained after the helper-layer remediation.\n1. [Completed] Confirmed that the remaining review notes were non-blocking follow-ups only and did not require additional source, test, or backlog changes for this bead.\n2. [Skipped] Apply further code or documentation fixes.\n3. [Completed] Recorded the approved outcome and carried forward the existing validation record because no code changed in this pass.\n\n## Validation Evidence\n\n- `run-20260327155320-review-c1-a1-cr2` concluded with `outcome: approved`.\n- No new code changes were made in this pass, so no additional validation commands were necessary.\n- The current validation record remains the previously successful runs: `cargo fmt --all`, `cargo test -q --test concentration_helpers`, `cargo test -q --test save_load`, and `cargo test --quiet`.\n\n## Outstanding Risks\n\n- A pre-existing `clippy::derivable_impls` warning in `tank_scenarios::StartupOverrides` remains for a separate housekeeping pass.\n- The `helpers_remain_stable_for_very_large_tanks` regression still checks finiteness and non-negativity rather than exact expected values, so extreme-volume coverage is intentionally less precise than the canonical conversion tests.\n",
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

@@ -1,0 +1,55 @@
+{
+  "payload_id": "run-20260328125540-plan_and_implement-c2-a1-cr2",
+  "stage_id": "plan_and_implement",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T14:40:41.742252513Z",
+  "payload": {
+    "data": {
+      "change_summary": "Implemented the pending shrimp stage-model amendments in the current workspace: `AnimalState::add_reserve_by_feeding_units()` now uses the adult feeding weight constant consistently; shrimp preset/scenario materialization now carries the stage-aware runtime knobs instead of defaulting them away, while preserving legacy scenario maturation tuning by splitting `process_params.shrimp_juvenile_maturation_days` into juvenile/sub-adult stage durations; v4->v5 save migration now seeds those stage durations from the legacy total-days field so older saves keep their prior maturation schedule; and load-time invariant enforcement now validates `ShrimpRuntimeParams`, with regression coverage for migration, scenario materialization, direct-load rejection of invalid stage params, and the updated thermal reproduction test contract.",
+      "outstanding_risks": [
+        "Scenario compatibility still infers a 60/40 juvenile/sub-adult split from the documented 30+20 default stage contract whenever only the legacy total maturation-days knob is available; any future preset that needs a different split must set explicit stage durations.",
+        "Direct callers that build `TankState` programmatically still need to write `state.shrimp_params` or call `apply_legacy_total_maturation_days()` themselves; the legacy `process_params.shrimp_juvenile_maturation_days` field is only translated during scenario materialization and v4->v5 save migration.",
+        "Focused tank_core, tank_data, and tank_scenarios suites passed, but I did not rerun the broader end-to-end/UI/harness matrix in this amendment pass."
+      ],
+      "steps": [
+        {
+          "description": "Inspect the shrimp biology weighting, preset/scenario materialization, save migration, and invariant validation paths behind the pending amendments.",
+          "order": 0,
+          "status": "completed"
+        },
+        {
+          "description": "Patch the runtime and preset wiring so stage-aware shrimp params are materialized explicitly, legacy maturation totals split into stage durations for scenarios and migrated saves, and the adult reserve-routing weight matches `feeding_units()` semantics.",
+          "order": 1,
+          "status": "completed"
+        },
+        {
+          "description": "Add load-time validation for `ShrimpRuntimeParams` and update regression coverage for scenario materialization, v4->v5 migration, invalid current-schema loads, and the thermal reproduction maturation override path.",
+          "order": 2,
+          "status": "completed"
+        },
+        {
+          "description": "Format the touched code and run focused validation across tank_core, tank_data, and tank_scenarios.",
+          "order": 3,
+          "status": "completed"
+        }
+      ],
+      "validation_evidence": [
+        "`cargo fmt --all` completed.",
+        "`cargo test -p tank_core --lib` passed.",
+        "`cargo test -p tank_core --test save_load` passed.",
+        "`cargo test -p tank_core --test thermal_reproduction_penalty` passed.",
+        "`cargo test -p tank_scenarios` passed.",
+        "`cargo test -p tank_data` passed."
+      ]
+    },
+    "family": "Execution"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "codex",
+    "model_id": "gpt-5.4"
+  },
+  "completion_round": 2
+}

@@ -1,0 +1,37 @@
+{
+  "payload_id": "run-20260328140833-review-c2-a1-cr2",
+  "stage_id": "review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-28T15:06:54.260425565Z",
+  "payload": {
+    "data": {
+      "evidence": [
+        "Full test suite passes: 349 tests passed, 0 failed, 2 ignored (unrelated doc-tests). Single warning is an unused import in tank_harness, unrelated to this change.",
+        "HabitatKind enum (5 variants) and HabitatEntry struct are serde-serializable with documented purpose (habitat.rs:1-58). Registry is stored in TankState and rebuilt via refresh_habitat_registry().",
+        "Colonizable areas are derived from live state: filter from hardware config (habitat.rs:140-142), glass from geometry+hardscape (habitat.rs:158-162), plants from biomass×SLA with guild-specific factors (habitat.rs:175-186), substrate surface from footprint gated on depth>0 (habitat.rs:194-198), substrate deep from footprint×depth×kind.colonizable_area_factor() (habitat.rs:210-215).",
+        "All exposure modifiers clamped to [0,1] in HabitatEntry construction (habitat.rs:122-124). Filter oxygen responds to clogging (habitat.rs:164). Substrate surface uses water_depth_above_substrate_cm for light attenuation (habitat.rs:106). Crowding derived from live biomass (habitat.rs:103, state.rs:201-208).",
+        "refresh_habitat_registry() (state.rs:236-247) recomputes crowding_index for all plant guilds, recalculates substrate layer colonizable areas via derived_colonizable_area_cm2(), then rebuilds the full registry — addressing amendments fr-1-a0ecdac3 and fr-1-cc4cd8d6.",
+        "Post-action refresh gated by affects_habitat_registry() (engine.rs:562,732-734), excluding Feed/AddShrimp/RemoveShrimp/SiphonDetritus — addressing amendment fr-1-4b75eb30.",
+        "Daily dual-refresh pattern documented with comment explaining clogging_index→FilterMedia dependency (engine.rs:376-386) — addressing amendment fr-1-6104f9a9.",
+        "depth_attenuation uses water_depth_above_substrate_cm() = (fill_height - substrate_depth).clamp(0, fill_height) (state.rs:196-199) instead of raw fill_height — addressing amendment fr-1-c473b4ce.",
+        "29 dedicated habitat_registry tests cover serialization round-trips, area computation for all 5 habitats, modifier sensitivity (flow, aeration, clogging, light, crowding, rooted plants, depth), bounds validation across extreme scenarios, biomass responsiveness, trim-driven refresh, and daily update consistency."
+      ],
+      "findings_or_gaps": [
+        "Minor redundancy: derived_plant_crowding_index() is called twice during a refresh cycle — once in refresh_habitat_registry() to update plant guild fields, and again in compute_habitat_registry() for the HabitatEnv. Both produce the same value so this is harmless, but a future cleanup could pass the pre-computed value.",
+        "SubstrateLayerState::default() still initializes colonizable_area_cm2 to 100.0, but this is overwritten during refresh_habitat_registry(). The stale default only matters for code that constructs a SubstrateLayerState and reads colonizable_area_cm2 without refreshing — acceptable given the refresh contract.",
+        "SubstrateKind::colonizable_area_factor() values (0.5–0.9) are code-level constants that need to stay aligned with the substrate preset pack, as noted in the prior stage's outstanding risks. No mechanism enforces this alignment automatically."
+      ],
+      "follow_up_or_amendments": [],
+      "outcome": "approved"
+    },
+    "family": "Validation"
+  },
+  "record_kind": "stage_primary",
+  "producer": {
+    "type": "agent",
+    "backend_family": "claude",
+    "model_id": "claude-opus-4-6"
+  },
+  "completion_round": 2
+}

@@ -1,0 +1,159 @@
+{
+  "payload_id": "run-20260330010446-final_review-aggregate-c2-a1-cr1-payload",
+  "stage_id": "final_review",
+  "cycle": 2,
+  "attempt": 1,
+  "created_at": "2026-03-30T01:50:36.988012268Z",
+  "payload": {
+    "accepted_amendment_ids": [
+      "fr-1-166b9893",
+      "fr-1-7d57d767",
+      "fr-1-cc6917b0",
+      "fr-1-49d86bea",
+      "fr-1-dba2064b"
+    ],
+    "amendments": [
+      {
+        "amendment_id": "fr-1-166b9893",
+        "normalized_body": "BUG (algae_growth.rs:212-221): Per-habitat periphyton light factor double-counts light intensity. `habitat_light` (from `HabitatEntry.light_exposure`) already incorporates `state.hardware.light.intensity_index` (see habitat.rs:176 for glass: `0.4 * env.light_intensity * ...`). The growth code then multiplies by `intensity_index` again at line 215, squaring the intensity effect. This makes periphyton grow slower than intended at typical intensity values (<1.0). Fix: remove the redundant `intensity_index` multiplication, using just `habitat_light * photoperiod_factor` as the half-saturation input, since the habitat registry already encodes intensity and depth attenuation.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-7d57d767",
+        "normalized_body": "BUG (algae_growth.rs:178-179): Stale comment claims 'Shrimp and microfauna grazing still operate on the total pool (habitat-aware grazing is deferred to a later phase)' but both shrimp.rs and microfauna.rs now implement habitat-aware grazing via `remove_periphyton_by_accessibility`. Update the comment to reflect the current implementation.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-cc6917b0",
+        "normalized_body": "BUG (algae_growth.rs:43-45): Module-level doc comment says 'Phase 3 (tanksim-6e5.5.3) will split them with habitat-specific light exposure' using future tense, but this PR implements exactly that split. Update the doc comment to reflect present tense ('Periphyton uses habitat-specific light exposure...') and remove the Phase 3 forward reference.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-49d86bea",
+        "normalized_body": "ROBUSTNESS (engine.rs:772-779): Filter cleaning (`CleanFilter` action) applies decomposer setback uniformly to ALL habitat pools including GlassHardscape, PlantSurfaces, and SubstrateDeep, which are physically distant from the filter. Now that per-habitat pools exist, the setback should be concentrated on FilterMedia (full setback) with modest/zero effect on other habitats. This preserves ecologically accurate differentiation that the habitat split was designed to provide.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-416a71b0",
+        "normalized_body": "Implement the actual tanksim-6e5.5.3 deliverable before landing this patch. The submitted code changes are all about nitrification/alkalinity bookkeeping and tracing in `crates/tank_core/src/types/process.rs:10-27`, `crates/tank_core/src/systems/nitrogen_cycle.rs:12-23` and `:366-385`, `crates/tank_core/src/engine.rs:229-239`, and `crates/tank_core/src/systems/water_change.rs:131-151`. None of the acceptance-criterion touch points for habitat-specific periphyton/decomposer pools or future habitat-aware grazing were changed, so this diff does not satisfy the bead it is attached to.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-dba2064b",
+        "normalized_body": "Add `crates/tank_core/tests/nitrification_alkalinity.rs` to git before relying on it as coverage. The only new regression suite lives in `crates/tank_core/tests/nitrification_alkalinity.rs:1-336`, but the file is still untracked (`git status` shows `??`, and `git ls-files --error-unmatch` reports it is unknown), so none of these tests will land or run in CI with the submitted diff.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "disputed_amendment_ids": [],
+    "final_accepted_amendments": [
+      {
+        "amendment_id": "fr-1-166b9893",
+        "normalized_body": "BUG (algae_growth.rs:212-221): Per-habitat periphyton light factor double-counts light intensity. `habitat_light` (from `HabitatEntry.light_exposure`) already incorporates `state.hardware.light.intensity_index` (see habitat.rs:176 for glass: `0.4 * env.light_intensity * ...`). The growth code then multiplies by `intensity_index` again at line 215, squaring the intensity effect. This makes periphyton grow slower than intended at typical intensity values (<1.0). Fix: remove the redundant `intensity_index` multiplication, using just `habitat_light * photoperiod_factor` as the half-saturation input, since the habitat registry already encodes intensity and depth attenuation.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-7d57d767",
+        "normalized_body": "BUG (algae_growth.rs:178-179): Stale comment claims 'Shrimp and microfauna grazing still operate on the total pool (habitat-aware grazing is deferred to a later phase)' but both shrimp.rs and microfauna.rs now implement habitat-aware grazing via `remove_periphyton_by_accessibility`. Update the comment to reflect the current implementation.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-cc6917b0",
+        "normalized_body": "BUG (algae_growth.rs:43-45): Module-level doc comment says 'Phase 3 (tanksim-6e5.5.3) will split them with habitat-specific light exposure' using future tense, but this PR implements exactly that split. Update the doc comment to reflect present tense ('Periphyton uses habitat-specific light exposure...') and remove the Phase 3 forward reference.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-49d86bea",
+        "normalized_body": "ROBUSTNESS (engine.rs:772-779): Filter cleaning (`CleanFilter` action) applies decomposer setback uniformly to ALL habitat pools including GlassHardscape, PlantSurfaces, and SubstrateDeep, which are physically distant from the filter. Now that per-habitat pools exist, the setback should be concentrated on FilterMedia (full setback) with modest/zero effect on other habitats. This preserves ecologically accurate differentiation that the habitat split was designed to provide.",
+        "sources": [
+          {
+            "backend_family": "claude",
+            "model_id": "claude-opus-4-6",
+            "reviewer_id": "reviewer-1"
+          }
+        ]
+      },
+      {
+        "amendment_id": "fr-1-dba2064b",
+        "normalized_body": "Add `crates/tank_core/tests/nitrification_alkalinity.rs` to git before relying on it as coverage. The only new regression suite lives in `crates/tank_core/tests/nitrification_alkalinity.rs:1-336`, but the file is still untracked (`git status` shows `??`, and `git ls-files --error-unmatch` reports it is unknown), so none of these tests will land or run in CI with the submitted diff.",
+        "sources": [
+          {
+            "backend_family": "codex",
+            "model_id": "gpt-5.4",
+            "reviewer_id": "reviewer-2"
+          }
+        ]
+      }
+    ],
+    "final_review_restart_count": 1,
+    "force_completed": false,
+    "max_restarts": 20,
+    "rejected_amendment_ids": [
+      "fr-1-416a71b0"
+    ],
+    "restart_required": true,
+    "summary": "Final review accepted 5 amendment(s); restart required.",
+    "total_proposed_amendments": 6,
+    "total_reviewers": 2,
+    "unique_amendment_count": 6
+  },
+  "record_kind": "stage_aggregate",
+  "producer": {
+    "type": "system",
+    "component": "final_review_aggregator"
+  },
+  "completion_round": 1
+}
