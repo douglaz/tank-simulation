@@ -407,8 +407,7 @@ impl Engine {
         // Step 11b: recompute substrate O₂ penetration depths from water-column
         // DO and biological demand (Bouldin steady-state model).
         self.maybe_record_stage(&mut ctx, "system:substrate_zones", |engine, stage_trace| {
-            let breakdown = systems::substrate::substrate_oxygenation_breakdown(&engine.state);
-            systems::substrate::step_substrate_zones(&mut engine.state);
+            let breakdown = systems::substrate::step_substrate_zones(&mut engine.state);
             stage_trace.metric_with_unit(
                 "substrate.base_o2_penetration_depth_cm",
                 breakdown.base_penetration_cm,

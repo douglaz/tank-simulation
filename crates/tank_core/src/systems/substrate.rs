@@ -28,6 +28,17 @@ pub struct SubstrateOxygenationBreakdown {
     pub active_root_biomass_g: f64,
 }
 
+impl SubstrateOxygenationBreakdown {
+    const fn zero() -> Self {
+        Self {
+            base_penetration_cm: 0.0,
+            root_oxygenation_bonus_cm: 0.0,
+            effective_penetration_cm: 0.0,
+            active_root_biomass_g: 0.0,
+        }
+    }
+}
+
 /// Update `o2_penetration_depth_cm` on every substrate layer from the
 /// Bouldin (1968) one-dimensional steady-state diffusion model:
 ///
@@ -37,10 +48,10 @@ pub struct SubstrateOxygenationBreakdown {
 ///   D_eff = D_free × porosity²  (tortuosity correction)
 ///   \[O₂\]_surface = water-column dissolved oxygen (mg cm⁻³)
 ///   R_total = biological O₂ demand per cm³ of bulk substrate (mg cm⁻³ s⁻¹)
-pub fn step_substrate_zones(state: &mut TankState) {
+pub fn step_substrate_zones(state: &mut TankState) -> SubstrateOxygenationBreakdown {
     let total_depth_cm = state.substrate_depth_cm();
     if state.water_volume_l() <= f64::EPSILON || total_depth_cm <= f64::EPSILON {
-        return;
+        return SubstrateOxygenationBreakdown::zero();
     }
 
     let breakdown = substrate_oxygenation_breakdown(state);
@@ -60,6 +71,8 @@ pub fn step_substrate_zones(state: &mut TankState) {
     for layer in &mut state.substrate_layers {
         layer.o2_penetration_depth_cm = breakdown.effective_penetration_cm;
     }
+
+    breakdown
 }
 
 /// Return the base diffusive depth, active rooted biomass, and saturated ROL bonus.
@@ -67,12 +80,7 @@ pub fn substrate_oxygenation_breakdown(state: &TankState) -> SubstrateOxygenatio
     let volume_l = state.water_volume_l();
     let total_depth_cm = state.substrate_depth_cm();
     if volume_l <= f64::EPSILON || total_depth_cm <= f64::EPSILON {
-        return SubstrateOxygenationBreakdown {
-            base_penetration_cm: 0.0,
-            root_oxygenation_bonus_cm: 0.0,
-            effective_penetration_cm: 0.0,
-            active_root_biomass_g: 0.0,
-        };
+        return SubstrateOxygenationBreakdown::zero();
     }
 
     let do_mg_per_cm3 = (state.water.dissolved_oxygen_mg_total / volume_l) / 1000.0;
@@ -345,6 +353,8 @@ fn substrate_root_activity_factor(
     let deep_area_cm2 = find_habitat(habitat_registry, HabitatKind::SubstrateDeep)
         .map(|entry| entry.colonizable_area_cm2.max(0.0))
         .unwrap_or(0.0);
+    // SubstrateSurface area includes footprint top surface; subtract it to get
+    // only interstitial grain-matrix area available for root colonization.
     let rootable_matrix_area_cm2 = (surface_area_cm2 - footprint_area_cm2).max(0.0) + deep_area_cm2;
     if rootable_matrix_area_cm2 <= f64::EPSILON {
         return 0.0;

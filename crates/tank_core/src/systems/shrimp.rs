@@ -446,9 +446,10 @@ fn update_molt_stress(state: &mut TankState) {
     let ca_mg_per_l = chemistry.calcium_mg_per_l();
     let mg_mg_per_l = chemistry.magnesium_mg_per_l();
     let params = &state.shrimp_params;
+    let gh_min_d = params.gh_min_d.max(0.01);
 
     let gh_stress = if gh_d < params.gh_min_d {
-        (params.gh_min_d - gh_d) / params.gh_min_d
+        (params.gh_min_d - gh_d) / gh_min_d
     } else {
         0.0
     };
@@ -1399,10 +1400,11 @@ pub fn molt_mineral_modifier(
     mg_mg_per_l: f64,
     params: &ShrimpRuntimeParams,
 ) -> f64 {
+    let gh_min_d = params.gh_min_d.max(0.01);
     let gh_factor = if gh_d >= params.gh_min_d && gh_d <= params.gh_max_d {
         1.0
     } else if gh_d < params.gh_min_d {
-        let gh_ratio = (gh_d / params.gh_min_d).clamp(0.0, 1.0);
+        let gh_ratio = (gh_d / gh_min_d).clamp(0.0, 1.0);
         gh_ratio * gh_ratio
     } else {
         (1.0 - (gh_d - params.gh_max_d) / 10.0).clamp(0.3, 1.0)
