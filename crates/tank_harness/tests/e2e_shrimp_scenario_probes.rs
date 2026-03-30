@@ -31,8 +31,8 @@ use tank_core::{
     systems::chemistry::{
         bicarbonate_mg_total_from_mmol_per_l, validate_source_water_carbonate_profile,
     },
-    EventKind, PlayerAction, ProcessParams, SimSeed, SimTracer, SimulationEngine,
-    SourceWaterProfile, TankGeometry, TankState, Verbosity, WaterState,
+    Engine, EventKind, PlayerAction, ProcessParams, SimSeed, SimTracer, SimulationEngine,
+    SourceWaterProfile, TankGeometry, TankSnapshot, TankState, Verbosity, WaterState,
 };
 use tank_harness::{Envelope, HarnessRun};
 
@@ -165,6 +165,29 @@ fn shrimp_diag(state: &TankState) -> String {
         chemistry.chloride_mg_per_l(),
         chemistry.do_mg_per_l(),
         state.water.temperature_c,
+    )
+}
+
+fn shrimp_diag_snapshot(snap: &TankSnapshot) -> String {
+    format!(
+        "shrimp={} (adult={}, sub_adult={}, juv={}, berried={}), \
+         cond={:.3}, molt_stress={:.3}, readiness={:.3}, \
+         repro_suppression={}, pH={:.2}, GH={:.1}, NO2={:.4}, Cl={:.2}, DO={:.2}, temp={:.1}C",
+        snap.total_shrimp_count,
+        snap.adult_shrimp_count,
+        snap.sub_adult_count,
+        snap.juveniles_count,
+        snap.berried_females_count,
+        snap.shrimp_condition_index,
+        snap.shrimp_molt_stress_index,
+        snap.shrimp_reproductive_readiness,
+        snap.repro_dominant_suppression,
+        snap.ph,
+        snap.gh_d,
+        snap.nitrite_mg_n_per_l,
+        snap.chloride_mg_per_l,
+        snap.do_mg_l,
+        snap.water_temp_c,
     )
 }
 
@@ -415,6 +438,13 @@ fn breeding_success_state(seed: SimSeed) -> TankState {
 /// berried females, and fewer juveniles compared to the cool tank. Heat
 /// stress accumulates hourly and feeds into molt stress, which in turn
 /// suppresses spawning.
+///
+/// Note: we intentionally do not assert that the final warm-tank
+/// `molt_stress` exceeds the cool tank. In the current calibrated model the
+/// cool colony breeds and molts more aggressively, so recent runs finish with
+/// an inverted ordering (`cool=1.000`, `warm=0.351`). The probe therefore
+/// locks the direct thermal outcomes that stay stable across retuning:
+/// lower readiness, fewer offspring, and more egg dropping in the warm arm.
 #[test]
 fn probe_thermal_suppression() -> Result<(), Box<dyn std::error::Error>> {
     require_probe_pass(run_probe_thermal_suppression())
@@ -559,6 +589,9 @@ fn run_probe_thermal_suppression_with_suffix(
     } else {
         warm_snap.shrimp_reproductive_readiness <= cool_snap.shrimp_reproductive_readiness
     };
+    // We intentionally do not assert a warm>cool final molt-stress ordering.
+    // Current calibrated runs invert that relationship because the cooler arm
+    // reproduces and molts more aggressively (`cool=1.000`, `warm=0.351`).
     if !warm_worse {
         record_failure_all(
             &mut runs,
@@ -594,11 +627,14 @@ fn run_probe_thermal_suppression_with_suffix(
     warm_run.checkpoint("final");
     let observed = format!(
         "cool_readiness={:.3}, warm_readiness={:.3}, cool_juv={}, warm_juv={}, \
-         cool_egg_drops={cool_egg_drops}, warm_egg_drops={warm_egg_drops}",
+         cool_egg_drops={cool_egg_drops}, warm_egg_drops={warm_egg_drops}, \
+         cool_molt_stress={:.3}, warm_molt_stress={:.3}",
         cool_snap.shrimp_reproductive_readiness,
         warm_snap.shrimp_reproductive_readiness,
         cool_snap.juveniles_count,
         warm_snap.juveniles_count,
+        cool_snap.shrimp_molt_stress_index,
+        warm_snap.shrimp_molt_stress_index,
     );
 
     eprintln!(
@@ -630,75 +666,7 @@ fn run_probe_thermal_suppression_with_suffix(
 /// without remineralisation.
 #[test]
 fn probe_chemistry_stress() -> Result<(), Box<dyn std::error::Error>> {
-    let state = chemistry_stress_state(SimSeed(6602));
-
-    let mut run = HarnessRun::from_state(SimSeed(6602), "chemistry_stress", state)
-        .with_artifact_label("shrimp_chemistry_stress");
-    run.enable_instrumentation();
-
-    let initial_snap = run.snapshot();
-    let initial_count = initial_snap.total_shrimp_count;
-    let initial_condition = initial_snap.shrimp_condition_index;
-
-    // Run 21 days with light feeding, no water changes (simulating neglect)
-    for _ in 0..21 {
-        run.apply_action(PlayerAction::Feed { grams: 0.05 })?;
-        run.step_hours(24)?;
-    }
-
-    let final_snap = run.snapshot();
-
-    // Population should have declined from nitrite + mineral stress
-    run.assert_snapshot("mortality_occurred", |snap| {
-        if snap.total_shrimp_count >= initial_count {
-            Err(format!(
-                "low GH + high NO₂ should cause mortality: initial={initial_count}, final={}. {}",
-                snap.total_shrimp_count,
-                shrimp_diag(snap),
-            ))
-        } else {
-            Ok(())
-        }
-    });
-
-    // Molt stress should be elevated
-    run.assert_snapshot("elevated_molt_stress", |snap| {
-        if snap.shrimp_molt_stress_index <= 0.2 {
-            Err(format!(
-                "molt stress should be elevated (> 0.2) under low-mineral conditions, \
-                 got {:.3}. {}",
-                snap.shrimp_molt_stress_index,
-                shrimp_diag(snap),
-            ))
-        } else {
-            Ok(())
-        }
-    });
-
-    // Condition should have declined
-    run.assert_snapshot("condition_declined", |snap| {
-        if snap.shrimp_condition_index >= initial_condition {
-            Err(format!(
-                "condition should decline under stress: initial={initial_condition:.3}, \
-                 final={:.3}. {}",
-                snap.shrimp_condition_index,
-                shrimp_diag(snap),
-            ))
-        } else {
-            Ok(())
-        }
-    });
-
-    eprintln!(
-        "probe_chemistry_stress: initial={initial_count}, final={}, \
-         condition {initial_condition:.3} -> {:.3}, molt_stress={:.3}. {}",
-        final_snap.total_shrimp_count,
-        final_snap.shrimp_condition_index,
-        final_snap.shrimp_molt_stress_index,
-        shrimp_diag(&final_snap),
-    );
-
-    run.finish().map_err(|e| e.into())
+    require_probe_pass(run_probe_chemistry_stress())
 }
 
 /// Build a tank with dangerously low minerals and elevated nitrite.
@@ -763,58 +731,105 @@ fn chemistry_stress_state(seed: SimSeed) -> TankState {
 }
 
 fn run_probe_chemistry_stress() -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_chemistry_stress_with_suffix(None)
+}
+
+fn run_probe_chemistry_stress_summary() -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_chemistry_stress_with_suffix(Some("summary"))
+}
+
+fn run_probe_chemistry_stress_with_suffix(
+    artifact_suffix: Option<&str>,
+) -> Result<ProbeResult, Box<dyn std::error::Error>> {
     let state = chemistry_stress_state(SimSeed(6602));
-    let mut engine = Engine::from_parts(state, vec![]);
-    let initial_snap = engine.snapshot();
+    let mut run = HarnessRun::from_state(SimSeed(6602), "chemistry_stress", state)
+        .with_artifact_label(probe_artifact_label(
+            "shrimp_chemistry_stress",
+            artifact_suffix,
+        ));
+    enable_probe_instrumentation(&mut run);
+    run.checkpoint("initial");
+
+    let initial_snap = run.snapshot();
     let initial_count = initial_snap.total_shrimp_count;
     let initial_condition = initial_snap.shrimp_condition_index;
 
-    for _ in 0..21 {
-        engine.apply_action(PlayerAction::Feed { grams: 0.05 })?;
-        engine.step_hours(24)?;
+    for day in 1..=21 {
+        run.apply_action(PlayerAction::Feed { grams: 0.05 })?;
+        run.step_hours(24)?;
+        if day % 7 == 0 {
+            run.checkpoint(&format!("day_{day}"));
+        }
     }
 
-    let snap = engine.snapshot();
-    let mortality = snap.total_shrimp_count < initial_count;
-    let elevated_stress = snap.shrimp_molt_stress_index > 0.2;
-    let condition_declined = snap.shrimp_condition_index < initial_condition;
-    let passed = mortality && elevated_stress && condition_declined;
+    let final_snap = run.snapshot();
+    let final_state = run.engine().full_state().clone();
+    let molt_failures = final_state
+        .event_log
+        .iter()
+        .filter(|event| event.kind == EventKind::MoltFailure)
+        .count();
 
+    if final_snap.total_shrimp_count >= initial_count {
+        run.record_failure(
+            "mortality_occurred",
+            format!(
+                "low GH + high NO₂ should cause mortality: initial={initial_count}, final={}. {}",
+                final_snap.total_shrimp_count,
+                shrimp_diag(&final_state),
+            ),
+        );
+    }
+
+    if final_snap.shrimp_molt_stress_index <= 0.2 {
+        run.record_failure(
+            "elevated_molt_stress",
+            format!(
+                "molt stress should be elevated (> 0.2) under low-mineral conditions, \
+                 got {:.3}. {}",
+                final_snap.shrimp_molt_stress_index,
+                shrimp_diag(&final_state),
+            ),
+        );
+    }
+
+    if final_snap.shrimp_condition_index >= initial_condition {
+        run.record_failure(
+            "condition_declined",
+            format!(
+                "condition should decline under stress: initial={initial_condition:.3}, final={:.3}. {}",
+                final_snap.shrimp_condition_index,
+                shrimp_diag(&final_state),
+            ),
+        );
+    }
+
+    if molt_failures == 0 && final_state.animal.failed_molt_accum <= 0.0 {
+        run.record_failure(
+            "molt_failures_logged",
+            format!(
+                "chemistry stress should surface failed molts or persistent failed-molt accumulation. {}",
+                shrimp_diag(&final_state),
+            ),
+        );
+    }
+
+    run.checkpoint("final");
     let observed = format!(
-        "count {initial_count}->{}, cond {initial_condition:.3}->{:.3}, molt_stress={:.3}",
-        snap.total_shrimp_count, snap.shrimp_condition_index, snap.shrimp_molt_stress_index,
+        "count {initial_count}->{}, cond {initial_condition:.3}->{:.3}, \
+         molt_stress={:.3}, failed_molt_accum={:.3}, molt_failures={molt_failures}",
+        final_snap.total_shrimp_count,
+        final_snap.shrimp_condition_index,
+        final_snap.shrimp_molt_stress_index,
+        final_state.animal.failed_molt_accum,
     );
-    let failure_detail = if passed {
-        String::new()
-    } else {
-        let mut issues = Vec::new();
-        if !mortality {
-            issues.push(format!(
-                "no mortality (count stayed at {})",
-                snap.total_shrimp_count
-            ));
-        }
-        if !elevated_stress {
-            issues.push(format!(
-                "molt stress not elevated ({:.3})",
-                snap.shrimp_molt_stress_index
-            ));
-        }
-        if !condition_declined {
-            issues.push(format!(
-                "condition did not decline ({:.3} >= {initial_condition:.3})",
-                snap.shrimp_condition_index
-            ));
-        }
-        format!("{} | {}", issues.join("; "), shrimp_diag(&snap))
-    };
 
-    Ok(ProbeResult {
-        name: "chemistry_stress",
-        passed,
-        observed,
-        failure_detail,
-    })
+    eprintln!(
+        "probe_chemistry_stress: {observed}. {}",
+        shrimp_diag(&final_state),
+    );
+
+    Ok(finish_probe("chemistry_stress", observed, vec![run]))
 }
 
 // ---------------------------------------------------------------------------
@@ -833,103 +848,7 @@ fn run_probe_chemistry_stress() -> Result<ProbeResult, Box<dyn std::error::Error
 /// than the unsalted control.
 #[test]
 fn probe_chloride_protection() -> Result<(), Box<dyn std::error::Error>> {
-    let base_state = chloride_test_base_state(SimSeed(6603));
-    let initial_count = base_state.animal.total_count();
-
-    // Phase 1: both tanks run 3 days unprotected
-    let mut crash_engine = Engine::from_parts(base_state, vec![]);
-    crash_engine.step_hours(3 * 24)?;
-    let pre_treatment = crash_engine.full_state().clone();
-    let count_before_treatment = pre_treatment.animal.total_count();
-    let phase1_deaths = initial_count - count_before_treatment;
-
-    // Build source-water profiles: one with salt, one matched control
-    let vol = pre_treatment.water_volume_l().max(f64::EPSILON);
-    let baseline_sodium = pre_treatment.water.sodium_mg_total / vol;
-    let baseline_chloride = pre_treatment.concentrations().chloride_mg_per_l();
-
-    let salt_profile = chloride_source_profile(&pre_treatment, baseline_sodium + 130.0, 200.0);
-    let control_profile =
-        chloride_source_profile(&pre_treatment, baseline_sodium, baseline_chloride);
-
-    // Treated branch: 50% water change with salt-enriched water
-    let mut treated_state = pre_treatment.clone();
-    treated_state
-        .source_water_catalog
-        .insert("salt_treatment".to_string(), salt_profile);
-    let mut treated_engine = Engine::from_parts(treated_state, vec![]);
-
-    // Control branch: 50% water change with matched (no extra salt) water
-    let mut control_state = pre_treatment;
-    control_state
-        .source_water_catalog
-        .insert("matched_control".to_string(), control_profile);
-    let mut control_engine = Engine::from_parts(control_state, vec![]);
-
-    // Apply water changes
-    treated_engine.apply_action(PlayerAction::WaterChangePercent {
-        percent: 50.0,
-        source_profile_id: "salt_treatment".to_string(),
-    })?;
-    control_engine.apply_action(PlayerAction::WaterChangePercent {
-        percent: 50.0,
-        source_profile_id: "matched_control".to_string(),
-    })?;
-    treated_engine.step_hours(1)?;
-    control_engine.step_hours(1)?;
-
-    // Phase 2: run both for 3 more days
-    treated_engine.step_hours(71)?;
-    control_engine.step_hours(71)?;
-
-    let treated_snap = treated_engine.snapshot();
-    let control_snap = control_engine.snapshot();
-    let treated_deaths =
-        count_before_treatment.saturating_sub(treated_engine.full_state().animal.total_count());
-    let control_deaths =
-        count_before_treatment.saturating_sub(control_engine.full_state().animal.total_count());
-
-    // Use a HarnessRun for structured failure recording
-    let mut run =
-        HarnessRun::from_state(SimSeed(6603), "chloride_probe", TankState::new(SimSeed(0)))
-            .with_artifact_label("shrimp_chloride_protection");
-
-    if treated_deaths >= control_deaths {
-        run.record_failure(
-            "chloride_less_mortality",
-            format!(
-                "salt-treated tank should have fewer post-treatment deaths: \
-                 treated={treated_deaths}, control={control_deaths}. \
-                 Treated: {} | Control: {}",
-                shrimp_diag(&treated_snap),
-                shrimp_diag(&control_snap),
-            ),
-        );
-    }
-
-    if treated_snap.effective_nitrite_hazard_mg_per_l
-        >= control_snap.effective_nitrite_hazard_mg_per_l
-    {
-        run.record_failure(
-            "chloride_reduces_hazard",
-            format!(
-                "chloride should reduce effective nitrite hazard: \
-                 treated={:.4}, control={:.4}",
-                treated_snap.effective_nitrite_hazard_mg_per_l,
-                control_snap.effective_nitrite_hazard_mg_per_l,
-            ),
-        );
-    }
-
-    eprintln!(
-        "probe_chloride_protection: phase1_deaths={phase1_deaths}, \
-         post_treatment: treated_deaths={treated_deaths}, control_deaths={control_deaths}. \
-         Treated: {} | Control: {}",
-        shrimp_diag(&treated_snap),
-        shrimp_diag(&control_snap),
-    );
-
-    run.finish().map_err(|e| e.into())
+    require_probe_pass(run_probe_chloride_protection())
 }
 
 /// Build a carbonate-consistent source-water profile that matches the
@@ -1046,13 +965,32 @@ fn chloride_test_base_state(seed: SimSeed) -> TankState {
 }
 
 fn run_probe_chloride_protection() -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_chloride_protection_with_suffix(None)
+}
+
+fn run_probe_chloride_protection_summary() -> Result<ProbeResult, Box<dyn std::error::Error>> {
+    run_probe_chloride_protection_with_suffix(Some("summary"))
+}
+
+fn run_probe_chloride_protection_with_suffix(
+    artifact_suffix: Option<&str>,
+) -> Result<ProbeResult, Box<dyn std::error::Error>> {
     let base_state = chloride_test_base_state(SimSeed(6603));
     let initial_count = base_state.animal.total_count();
 
-    let mut crash_engine = Engine::from_parts(base_state, vec![]);
-    crash_engine.step_hours(3 * 24)?;
-    let pre_treatment = crash_engine.full_state().clone();
+    let mut pre_treatment_run = HarnessRun::from_state(SimSeed(6603), "chloride_pre_treatment", base_state)
+        .with_artifact_label(probe_artifact_label(
+            "shrimp_chloride_pre_treatment",
+            artifact_suffix,
+        ));
+    enable_probe_instrumentation(&mut pre_treatment_run);
+    pre_treatment_run.checkpoint("initial");
+    pre_treatment_run.step_hours(3 * 24)?;
+    pre_treatment_run.checkpoint("pre_treatment");
+
+    let pre_treatment = pre_treatment_run.engine().full_state().clone();
     let count_before_treatment = pre_treatment.animal.total_count();
+    let phase1_deaths = initial_count.saturating_sub(count_before_treatment);
 
     let vol = pre_treatment.water_volume_l().max(f64::EPSILON);
     let baseline_sodium = pre_treatment.water.sodium_mg_total / vol;
@@ -1066,77 +1004,105 @@ fn run_probe_chloride_protection() -> Result<ProbeResult, Box<dyn std::error::Er
     treated_state
         .source_water_catalog
         .insert("salt_treatment".to_string(), salt_profile);
-    let mut treated_engine = Engine::from_parts(treated_state, vec![]);
+    let mut treated_run = HarnessRun::from_state(SimSeed(6603), "chloride_treated", treated_state)
+        .with_artifact_label(probe_artifact_label(
+            "shrimp_chloride_treated",
+            artifact_suffix,
+        ));
+    enable_probe_instrumentation(&mut treated_run);
+    treated_run.checkpoint("branch_start");
 
-    let mut control_state = pre_treatment;
+    let mut control_state = pre_treatment.clone();
     control_state
         .source_water_catalog
         .insert("matched_control".to_string(), control_profile);
-    let mut control_engine = Engine::from_parts(control_state, vec![]);
+    let mut control_run = HarnessRun::from_state(SimSeed(6603), "chloride_control", control_state)
+        .with_artifact_label(probe_artifact_label(
+            "shrimp_chloride_control",
+            artifact_suffix,
+        ));
+    enable_probe_instrumentation(&mut control_run);
+    control_run.checkpoint("branch_start");
 
-    treated_engine.apply_action(PlayerAction::WaterChangePercent {
+    treated_run.apply_action(PlayerAction::WaterChangePercent {
         percent: 50.0,
         source_profile_id: "salt_treatment".to_string(),
     })?;
-    control_engine.apply_action(PlayerAction::WaterChangePercent {
+    control_run.apply_action(PlayerAction::WaterChangePercent {
         percent: 50.0,
         source_profile_id: "matched_control".to_string(),
     })?;
-    treated_engine.step_hours(1)?;
-    control_engine.step_hours(1)?;
+    treated_run.step_hours(1)?;
+    control_run.step_hours(1)?;
+    treated_run.checkpoint("post_treatment");
+    control_run.checkpoint("post_treatment");
 
-    treated_engine.step_hours(71)?;
-    control_engine.step_hours(71)?;
+    treated_run.step_hours(71)?;
+    control_run.step_hours(71)?;
+    treated_run.checkpoint("final");
+    control_run.checkpoint("final");
 
-    let treated_snap = treated_engine.snapshot();
-    let control_snap = control_engine.snapshot();
+    let treated_snap = treated_run.snapshot();
+    let control_snap = control_run.snapshot();
+    let treated_state = treated_run.engine().full_state().clone();
+    let control_state = control_run.engine().full_state().clone();
     let treated_deaths =
-        count_before_treatment.saturating_sub(treated_engine.full_state().animal.total_count());
+        count_before_treatment.saturating_sub(treated_state.animal.total_count());
     let control_deaths =
-        count_before_treatment.saturating_sub(control_engine.full_state().animal.total_count());
+        count_before_treatment.saturating_sub(control_state.animal.total_count());
+    let mut runs = [&mut pre_treatment_run, &mut treated_run, &mut control_run];
 
-    let less_mortality = treated_deaths < control_deaths;
-    let lower_hazard = treated_snap.effective_nitrite_hazard_mg_per_l
-        < control_snap.effective_nitrite_hazard_mg_per_l;
-    let passed = less_mortality && lower_hazard;
+    if treated_deaths >= control_deaths {
+        record_failure_all(
+            &mut runs,
+            "chloride_less_mortality",
+            format!(
+                "salt-treated tank should have fewer post-treatment deaths: \
+                 treated={treated_deaths}, control={control_deaths}. \
+                 Pre-treatment: {} | Treated: {} | Control: {}",
+                shrimp_diag(&pre_treatment),
+                shrimp_diag(&treated_state),
+                shrimp_diag(&control_state),
+            ),
+        );
+    }
+
+    if treated_snap.effective_nitrite_hazard_mg_per_l
+        >= control_snap.effective_nitrite_hazard_mg_per_l
+    {
+        record_failure_all(
+            &mut runs,
+            "chloride_reduces_hazard",
+            format!(
+                "chloride should reduce effective nitrite hazard: treated={:.4}, control={:.4}. \
+                 Treated: {} | Control: {}",
+                treated_snap.effective_nitrite_hazard_mg_per_l,
+                control_snap.effective_nitrite_hazard_mg_per_l,
+                shrimp_diag(&treated_state),
+                shrimp_diag(&control_state),
+            ),
+        );
+    }
 
     let observed = format!(
-        "phase1_deaths={}, post: treated_deaths={treated_deaths}, control_deaths={control_deaths}, \
+        "phase1_deaths={phase1_deaths}, post: treated_deaths={treated_deaths}, control_deaths={control_deaths}, \
          treated_hazard={:.4}, control_hazard={:.4}",
-        initial_count - count_before_treatment,
         treated_snap.effective_nitrite_hazard_mg_per_l,
         control_snap.effective_nitrite_hazard_mg_per_l,
     );
-    let failure_detail = if passed {
-        String::new()
-    } else {
-        let mut issues = Vec::new();
-        if !less_mortality {
-            issues.push(format!(
-                "treated deaths ({treated_deaths}) not less than control ({control_deaths})"
-            ));
-        }
-        if !lower_hazard {
-            issues.push(format!(
-                "treated hazard ({:.4}) not lower than control ({:.4})",
-                treated_snap.effective_nitrite_hazard_mg_per_l,
-                control_snap.effective_nitrite_hazard_mg_per_l,
-            ));
-        }
-        format!(
-            "{} | Treated: {} | Control: {}",
-            issues.join("; "),
-            shrimp_diag(&treated_snap),
-            shrimp_diag(&control_snap),
-        )
-    };
 
-    Ok(ProbeResult {
-        name: "chloride_protection",
-        passed,
+    eprintln!(
+        "probe_chloride_protection: {observed}. Pre-treatment: {} | Treated: {} | Control: {}",
+        shrimp_diag(&pre_treatment),
+        shrimp_diag(&treated_state),
+        shrimp_diag(&control_state),
+    );
+
+    Ok(finish_probe(
+        "chloride_protection",
         observed,
-        failure_detail,
-    })
+        vec![pre_treatment_run, treated_run, control_run],
+    ))
 }
 
 // ---------------------------------------------------------------------------

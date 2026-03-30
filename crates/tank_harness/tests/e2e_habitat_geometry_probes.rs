@@ -924,7 +924,8 @@ fn run_probe_habitat_fouling_glass_vs_filter_with_suffix(
     } else {
         0.0
     };
-    let ratio_change = if ratio_hl > 1e-9 && ratio_ll > 1e-9 {
+    let ratio_measurable = ratio_hl > 1e-9 && ratio_ll > 1e-9;
+    let ratio_change = if ratio_measurable {
         (ratio_hl - ratio_ll).abs() / ratio_hl.max(ratio_ll)
     } else {
         0.0
@@ -949,7 +950,17 @@ fn run_probe_habitat_fouling_glass_vs_filter_with_suffix(
                  heavy_feed={hf_filter_dec:.6} g, moderate_feed={hl_filter_dec:.6} g"
             ),
         );
-        if ratio_hl > 1e-9 && ratio_ll > 1e-9 {
+        record_check(
+            &mut runs,
+            "fouling_ratio_measurable",
+            ratio_measurable,
+            format!(
+                "periphyton-to-decomposer ratio needs measurable filter decomposer biomass in both light arms: \
+                 high_light_ratio={ratio_hl:.4}, low_light_ratio={ratio_ll:.4}, \
+                 high_light_filter_dec={hl_filter_dec:.6} g, low_light_filter_dec={ll_filter_dec:.6} g"
+            ),
+        );
+        if ratio_measurable {
             record_check(
                 &mut runs,
                 "fouling_ratio_shift",
@@ -1278,8 +1289,19 @@ fn run_probe_substrate_redox_denitrification_with_suffix(
         );
         record_check(
             &mut runs,
+            "redox_inert_nitrate_floor",
+            snap_inert.nitrate_mg_n_per_l > 1.0,
+            format!(
+                "inert control nitrate must stay meaningfully above zero before using a ratio comparison: \
+                 planted={:.2} mg N/L, inert={:.2} mg N/L",
+                snap_planted.nitrate_mg_n_per_l, snap_inert.nitrate_mg_n_per_l
+            ),
+        );
+        record_check(
+            &mut runs,
             "redox_nitrate_drawdown",
-            snap_planted.nitrate_mg_n_per_l < snap_inert.nitrate_mg_n_per_l * 0.5,
+            snap_inert.nitrate_mg_n_per_l > 1.0
+                && snap_planted.nitrate_mg_n_per_l < snap_inert.nitrate_mg_n_per_l * 0.5,
             format!(
                 "planted substrate should finish with much lower nitrate than inert: \
                  planted={:.2} mg N/L, inert={:.2} mg N/L",
