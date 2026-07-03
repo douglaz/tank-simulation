@@ -114,6 +114,12 @@ phosphorus **visible**; enforcement and closure are W1b (Phase B). **No reconcil
   `nutrient_store_mg_p_total`. Surface it in budget snapshots so the imbalance is inspectable.
 - The runtime guard does **not** check phosphorus in Phase A (added in W1b once biomass/organic
   P is tracked). No behavior change (accessors/sums only).
+- **Populate `phosphorus` in explicit budget producers** (review fix): once
+  `BudgetDelta.phosphorus`/`BudgetTotals.phosphorus_mg` exist, stages that build an explicit
+  delta and move phosphate — notably `apply_water_change_with_budget` (returns N/C/O only today,
+  `water_change.rs:134`, while it moves phosphate at `:56`) — must set the phosphorus field, or
+  `record_stage` consistency breaks and P inspection is misleading. This is bookkeeping only
+  (the phosphate state moves are unchanged).
 
 The per-route P closure test and guard enforcement live in **W1b**; W1a keeps only A2
 (observability) and A7 (phosphate series unchanged).
@@ -174,6 +180,10 @@ W6a is behavior-neutral: **surface** the boundary inconsistency instead of hidin
 pH clamp engages, compute the implied alkalinity from the cached species and emit the
 difference vs `water.alkalinity_meq_total` as an explicit diagnostic
 (`BudgetMetric` `carbonate:boundary_alk_residual_meq`). No species/DIC/pH values change.
+**Emit from a single site (review fix):** `resolve_carbonate_state`/`solve_carbonate_equilibrium`
+is called from many paths (chemistry, water change, daily plant/algae, daily resolve, shrimp,
+save/load). Emit the residual only from the budgeted hourly-chemistry resolve stage, not from
+every call site, to avoid duplicate/ambiguous diagnostics.
 
 ### Tests
 - `carbonate_boundary_residual_reported` — force a clamp; assert the residual diagnostic
@@ -195,11 +205,16 @@ After W0→W1a→W2→W6a: `cargo test && cargo clippy -- -D warnings && cargo f
 This item does everything W1a deliberately deferred. Introduce P composition constants
 (`PLANT_P_MG_PER_G_BIOMASS = 4.0`, `ALGAE_P_MG_PER_G_BIOMASS = 5.0`, shrimp
 `body_phosphorus_mg_per_g_wet_mass` new param) and populate `OrganicMass.p_mg` on every organic
-route: plant/algae turnover, consumer feces/reserve/excretion, microbial decay, and
-decomposition. Add **derived biomass P and organic-pool P to `total_phosphorus_mg`** (so it now
-covers water + substrate + biomass + organic). **Unify** detritus-P release with the existing
-`don × FEED_P_TO_N_MASS_RATIO` phosphate mechanism (`nitrogen_cycle.rs:141-149`) so P
-mineralization is driven by tracked detritus P. **Extend the guard to phosphorus**
+route: **feed input**, plant/algae turnover, consumer feces/reserve/excretion, microbial decay,
+and decomposition. **Feed-P is load-bearing (review fix):** W0 builds the feed `OrganicMass`
+with `p=0`, and today feed phosphate is created by the `don × FEED_P_TO_N_MASS_RATIO` shortcut
+(`nitrogen_cycle.rs:145`). W1b must give feed a real P content (feed's organic P per gram) so
+that when the shortcut is removed, feed-derived P enters the organic P pool and mineralizes
+from tracked detritus P instead of vanishing — otherwise P is silently deleted (or, if the
+shortcut is kept, B1 never closes). Add **derived biomass P and organic-pool P to
+`total_phosphorus_mg`** (now water + substrate + biomass + organic). **Unify** detritus-P
+release with the phosphate mechanism (`nitrogen_cycle.rs:141-149`) so P mineralization is
+driven by tracked detritus P, replacing the N-derived shortcut. **Extend the guard to phosphorus**
 (`phosphorus_guard_delta_mg = total P net − open-action P flux`, mirroring
 `carbon_guard_delta_mg`) and add the `guard_trips_on_injected_p_leak` test. Add microbial-
 biomass P (currently N/C only in the budget, `budget.rs:335-356,447-468`). Ripple shrimp

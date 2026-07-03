@@ -151,9 +151,11 @@ or pH (that is W6b). Resolves the observability half of F6.
 
 **W1b. Track and close phosphorus.** Introduce P composition constants (plant/algae tissue P,
 shrimp `body_phosphorus_mg_per_g_wet_mass`) and populate the `p_mg` slots on every organic
-route (turnover, feces, reserve, microbial decay, decomposition). Add derived biomass P and
-organic P to `total_phosphorus_mg`; unify decomposition P release with the tracked detritus P
-content (replacing the `don × ratio` shortcut); extend the guard to phosphorus. Ripple shrimp
+route (feed input, turnover, feces, reserve, microbial decay, decomposition). Feed-derived P
+must be pinned to a real feed P content so that replacing the `don × ratio` phosphate shortcut
+does not silently delete feed phosphorus. Add derived biomass P and organic P to
+`total_phosphorus_mg`; unify decomposition P release with the tracked detritus P content; extend
+the guard to phosphorus. Ripple shrimp
 body-P into presets and scenario materialization (currently N/C only). Re-run calibration;
 phosphate dynamics shift — document deltas. Closes F1.
 
