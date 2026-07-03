@@ -1,13 +1,13 @@
 # Implementation Spec: v0.7 "Scientific Integrity"
 
-Companion to `docs/spec_v0.7_scientific_integrity.md` (rev 3). Defines *how*, at a level an
-implementer can build against. Rev 2 after codex xhigh review corrected several code-fact
-errors and moved genuinely behavior-changing work out of Phase A. The governing insight from
-review: **the only truly behavior-neutral Phase A work is accounting/representation. Any P
-that actually flows through organic pools, and any carbonate species reprojection, changes
-observable behavior and belongs in Phase B.** Phase A therefore *measures* the phosphorus
-and carbonate-boundary imbalances via explicit reconciliation/diagnostic terms; Phase B
-*fixes* them.
+Companion to `docs/spec_v0.7_scientific_integrity.md` (rev 4). Defines *how*, at a level an
+implementer can build against. Rev 3 after three codex xhigh reviews. The governing insight:
+**the only truly behavior-neutral Phase A work is accounting/representation. You cannot
+enforce conservation of a half-tracked element, so Phase A hardens the guard for the fully
+tracked N/C/O, makes phosphorus merely *visible* in the ledger, and defers all phosphorus
+tracking/routing/closure — and any carbonate species reprojection — to Phase B.** Phase A
+*exposes* the phosphorus and carbonate-boundary imbalances; Phase B *closes* them. There is
+no reconciliation term in Phase A (it would be vacuous over water+substrate P alone).
 
 Conventions: paths repo-relative; line anchors reflect branch `ralph/tank-sim` at spec time
 and may drift. "Behavior-neutral" = the eight validation scenarios and the calibration report
@@ -42,7 +42,9 @@ fn dry_mass_g(&self) -> f64 { (self.n_mg + self.c_mg) / 1000.0 } // P intentiona
 Convert to `OrganicMass`:
 - `fine_detritus_g_total` (~543) → `fine_detritus: OrganicMass`
 - `particulate_organics_g_total` (~542) → `particulate_organics: OrganicMass`
-- per-stage `reserve_g` (~85, ~94) → `reserve: OrganicMass`
+- per-stage shrimp `reserve_g` (~85, ~94) → `reserve: OrganicMass`
+- the microfauna `reserve_g` field (same anchor region) → `reserve: OrganicMass` (review fix:
+  call it out explicitly; it is a distinct pool from the shrimp stage reserves)
 
 **Do NOT convert `dissolved_feed_residue_g_total`** (review fix): it is a shadow counter for
 DOC/DON-origin residue, explicitly excluded from budget deltas
@@ -77,10 +79,12 @@ are NOT introduced here** — they arrive in W1b when P actually flows.
 ### Migration (review fix)
 `save.rs` uses `SCHEMA_VERSION = 14` with a contiguous migration list (`save.rs:17,46-76`).
 Add an explicit **v14→v15 raw-JSON migration** that maps each legacy scalar
-(`fine_detritus_g_total`, `particulate_organics_g_total`, per-stage `reserve_g`) to
-`{n_mg, c_mg, p_mg}` via the legacy projection (`organic_nitrogen_mg`/`organic_carbon_mg`
-with the default ratio, `p_mg = 0`). Serde defaults are insufficient; the migration is
-required. Bump to `SCHEMA_VERSION = 15`.
+(`fine_detritus_g_total`, `particulate_organics_g_total`, per-stage and microfauna
+`reserve_g`) to `{n_mg, c_mg, p_mg}` via the legacy projection
+(`organic_nitrogen_mg`/`organic_carbon_mg`, `p_mg = 0`) using the **saved** process
+`feed_n_to_c_ratio` from that save file, not the current default (review fix: a legacy save
+with a non-default ratio must migrate with its own ratio to stay behavior-neutral). Serde
+defaults are insufficient; the migration is required. Bump to `SCHEMA_VERSION = 15`.
 
 ### Tests (`crates/tank_core/tests/organic_mass_pools.rs`)
 - `organic_mass_split_conserves` (N/C/P exact through split+reassemble).
@@ -91,54 +95,51 @@ required. Bump to `SCHEMA_VERSION = 15`.
 
 ---
 
-## W1a — Phosphorus in the ledger + reconciliation (pure accounting)
+## W1a — Phosphorus ledger plumbing + observability (no enforcement)
 
-### Corrected premise (review fix)
-Phosphate is **already** released by the model: feed adds phosphate, and detritus dissolution
-releases `phosphate_mg = don_mg * FEED_P_TO_N_MASS_RATIO` (`nitrogen_cycle.rs:141-149`);
-plants/algae take up P (4.0 / 5.0 mg P/g), refund unused, substrate stores are drawn down,
-water changes exchange P. The only **explicitly tracked** P pools are
-`water.phosphate_mg_p_total` and per-layer substrate `nutrient_store_mg_p_total`. Biomass P is
-untracked; the uptake-minus-return imbalance is the leak.
+### Why observability, not enforcement (review fix)
+Phosphate is already released by the model (`phosphate_mg = don_mg * FEED_P_TO_N_MASS_RATIO`,
+`nitrogen_cycle.rs:141-149`) and taken up by plants/algae; the only **tracked** P pools are
+`water.phosphate_mg_p_total` and substrate `nutrient_store_mg_p_total`. Biomass and organic P
+are untracked. With only water+substrate P tracked, *every* P change is a boundary flow with
+untracked biomass, so a reconciliation term would either mask all changes (guard vacuous) or
+none (guard always fails). There is nothing to enforce yet. W1a therefore only makes
+phosphorus **visible**; enforcement and closure are W1b (Phase B). **No reconciliation term.**
 
-### W1a is accounting only — no organic-P routing, no state writes changed
+### W1a is pure plumbing — no state writes changed
 - `Element` (`budget_helpers.rs:70`): add `Phosphorus`. `BudgetDelta` (`budget.rs:67`): add
   `phosphorus: ElementBudget`. `BudgetTotals` (`budget.rs:92`): add `phosphorus_mg`.
   `BudgetSnapshot`: add `phosphorus_components`.
 - `total_phosphorus_mg(state)` = `water.phosphate_mg_p_total` + Σ substrate
-  `nutrient_store_mg_p_total`. (Biomass/detritus P is NOT summed — it is not tracked state in
-  Phase A.)
-- **One reconciliation flux** `"system:phosphorus_reconciliation"` = net P that left water/
-  substrate into untracked biomass this tick (uptake − refund) minus any P the existing
-  mechanisms returned (the `don × ratio` release and feed are ordinary tracked sources, not
-  reconciliation). Emit it so `total_phosphorus_mg` **plus** cumulative reconciliation closes,
-  with zero change to any P state value. Behavior-neutral by construction (no writes altered).
+  `nutrient_store_mg_p_total`. Surface it in budget snapshots so the imbalance is inspectable.
+- The runtime guard does **not** check phosphorus in Phase A (added in W1b once biomass/organic
+  P is tracked). No behavior change (accessors/sums only).
 
-Because nothing new flows, **the per-route P closure test (A1) moves to W1b**; W1a keeps A2
-(P + reconciliation closes) and A7 (phosphate series unchanged).
+The per-route P closure test and guard enforcement live in **W1b**; W1a keeps only A2
+(observability) and A7 (phosphate series unchanged).
 
 ### Tests (`crates/tank_core/tests/phosphorus_conservation.rs`)
-- `phosphorus_structural_coverage` — `total_phosphorus_mg` = water + substrate P.
-- `phosphorus_closes_with_reconciliation` — multi-day, ledger on; `total + Σreconciliation`
-  conserved to 1e-6; reconciliation entry present/finite each tick (A2).
+- `phosphorus_structural_coverage` — `total_phosphorus_mg` = water + substrate P for a
+  hand-built state; snapshot exposes it (A2).
 - `w1a_phosphate_series_unchanged` — phosphate time series identical pre/post (A7).
 
 ---
 
-## W2 — Enforce N/C/O/P in dev/CI; diagnostic clamp accounting
+## W2 — Enforce N/C/O in dev/CI; diagnostic clamp accounting
+
+Phosphorus is intentionally **not** in the Phase A guard (it is not closable until W1b tracks
+biomass/organic P). W2 hardens the three fully-tracked elements.
 
 ### Guard extension (`engine.rs:1158`)
-- **Phosphorus** (flat-conserved, no gas exchange): `phosphorus_guard_delta_mg = total P net
-  − open-action P flux − phosphorus_reconciliation_flux` (mirror `carbon_guard_delta_mg` /
-  `chemistry_external_carbon_flux_mg`, `engine.rs:1226-1241`).
 - **Oxygen** (review fix — O2 is flux-balanced, not flat): do **not** use `net − open_flux`.
   Promote the existing gross in/out check (`assert_o2_balanced`, `budget_helpers.rs:315-325`)
   into the runtime guard: assert the recorded O2 in/out entries (photosynthesis, reaeration,
   respiration, nitrification, shrimp, microfauna — `dissolved_oxygen.rs:121-132`,
   `nitrogen_cycle.rs:374-377,436-437,480-482`, `shrimp.rs:397-400`, `microfauna.rs:142-145`)
   account for the net DO change to tolerance.
-- Extend `enforce_tracked_tick_budget_guard` with oxygen and phosphorus branches →
-  `SimError::BudgetImbalance { element: "oxygen"|"phosphorus", .. }`.
+- Extend `enforce_tracked_tick_budget_guard` with an oxygen branch →
+  `SimError::BudgetImbalance { element: "oxygen", .. }`. (The phosphorus branch is added in
+  W1b.)
 
 ### On-by-default in dev/CI
 Under `cfg!(debug_assertions)` and a `TANK_BUDGET_GUARD=1` harness flag, construct the engine
@@ -154,7 +155,7 @@ carrying the discarded negative magnitude), not a conserved-ledger entry. A4 ass
 diagnostic fires with the right magnitude.
 
 ### Tests (`crates/tank_core/tests/conservation_guard.rs`)
-- `guard_trips_on_injected_{n,c,o,p}_leak` (A3).
+- `guard_trips_on_injected_{n,c,o}_leak` (A3). (The P injection test lands with W1b.)
 - `do_floor_records_debt_diagnostic` — force DO negative; assert `clamp:do_floor_debt`
   magnitude; assert it does **not** appear as a conserved-ledger delta (A4).
 
@@ -190,20 +191,25 @@ After W0→W1a→W2→W6a: `cargo test && cargo clippy -- -D warnings && cargo f
 
 ## Phase B (behavior; each lands alone + re-calibrates)
 
-### W1b — Actually route and close phosphorus (owns the deferred P-routing)
-Introduce P composition constants (`PLANT_P_MG_PER_G_BIOMASS = 4.0`,
-`ALGAE_P_MG_PER_G_BIOMASS = 5.0`, shrimp `body_phosphorus_mg_per_g_wet_mass` new param) and
-populate `OrganicMass.p_mg` on every organic route: plant/algae turnover, consumer
-feces/reserve/excretion, microbial decay, and decomposition. **Unify** detritus-P release with
-the existing `don × FEED_P_TO_N_MASS_RATIO` phosphate mechanism (`nitrogen_cycle.rs:141-149`)
-so P mineralization is driven by tracked detritus P, and **remove** the W1a reconciliation
-term. Add microbial-biomass P (currently N/C only in the budget, `budget.rs:335-356,447-468`).
-Ripple shrimp `body_phosphorus` into presets (`tank_data/src/presets.rs:529-534,770-778,
-1275-1287,1505-1512`) and scenario materialization (`tank_scenarios/src/lib.rs:772-777`),
-which currently expose N/C only. Optionally add
-`water.dissolved_organic_phosphorus_mg_p_total` if intermediate DOP is needed. Re-run
-calibration; phosphate dynamics shift — document envelope deltas. Tests: per-route N/C/P
-matrix (A1, now meaningful), `phosphorus_closes_without_reconciliation`.
+### W1b — Track, route, close, and enforce phosphorus (owns all P beyond plumbing)
+This item does everything W1a deliberately deferred. Introduce P composition constants
+(`PLANT_P_MG_PER_G_BIOMASS = 4.0`, `ALGAE_P_MG_PER_G_BIOMASS = 5.0`, shrimp
+`body_phosphorus_mg_per_g_wet_mass` new param) and populate `OrganicMass.p_mg` on every organic
+route: plant/algae turnover, consumer feces/reserve/excretion, microbial decay, and
+decomposition. Add **derived biomass P and organic-pool P to `total_phosphorus_mg`** (so it now
+covers water + substrate + biomass + organic). **Unify** detritus-P release with the existing
+`don × FEED_P_TO_N_MASS_RATIO` phosphate mechanism (`nitrogen_cycle.rs:141-149`) so P
+mineralization is driven by tracked detritus P. **Extend the guard to phosphorus**
+(`phosphorus_guard_delta_mg = total P net − open-action P flux`, mirroring
+`carbon_guard_delta_mg`) and add the `guard_trips_on_injected_p_leak` test. Add microbial-
+biomass P (currently N/C only in the budget, `budget.rs:335-356,447-468`). Ripple shrimp
+`body_phosphorus` into presets (`tank_data/src/presets.rs:529-534,770-778,1275-1287,
+1505-1512`) and scenario materialization (`tank_scenarios/src/lib.rs:772-777`), which currently
+expose N/C only. Optionally add `water.dissolved_organic_phosphorus_mg_p_total` if intermediate
+DOP is needed. A per-route N/C/P matrix test now closes P independently (B1). Re-run
+calibration; phosphate dynamics shift — document envelope deltas. Tests:
+`phosphorus_route_matrix_closes` (per-route N/C/P independent closure), `guard_enforces_p`
+(injected P leak trips the guard).
 
 ### W3b — Realistic macrophyte C:N
 Raise `PLANT_C_MG_PER_G_BIOMASS` from 175.0 to a literature macrophyte value (molar C:N
