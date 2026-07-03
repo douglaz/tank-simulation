@@ -1,6 +1,6 @@
 # Spec: v0.7 "Scientific Integrity" Release
 
-Status: DRAFT rev 2 (revised after codex xhigh review)
+Status: DRAFT rev 3 (revised after two codex xhigh reviews)
 Author: scientific-core review, 2026-07-03
 Scope owner: `tank_core`
 Predecessor: v0.2–v0.6 scientific-core overhaul (complete; backlog drained)
@@ -12,120 +12,115 @@ Predecessor: v0.2–v0.6 scientific-core overhaul (complete; backlog drained)
 The v0.2–v0.6 overhaul gave the simulator broad, mechanistic coverage: concentration-based
 Monod kinetics, AOB/NOB/comammox nitrification, denitrification, a closed-form carbonate
 equilibrium solver, a five-zone habitat registry, stage-structured shrimp, and parameter
-provenance. The breadth work is done. A code-level audit of the shipped model found that
-the project's central claim — **"deterministic mass-balance chemistry"** (README.md:47) —
-is only partially enforced, is enforced only when opted in, covers only two of the tracked
-conserved elements, and is silently violated for a third (phosphorus).
+provenance. The breadth work is done. A code-level audit of the shipped model found that the
+project's central claim — **"deterministic mass-balance chemistry"** (README.md:47) — is
+only partially enforced (opt-in, N/C only, clamp-masked) and is silently *violated* for
+phosphorus, which is taken up into biomass but never returned as phosphorus.
 
-This release makes the existing model *provably conservative and internally consistent*.
-It is split into two clearly separated phases:
+This release makes the existing model *provably conservative and internally consistent*,
+in two clearly separated phases:
 
-- **Phase A — Integrity (behavior-neutral).** Accounting and enforcement changes that must
-  NOT move any validation envelope. The conservation guard proves this: if Phase A changed
-  behavior, the guard or the calibration report would flag it.
+- **Phase A — Integrity (behavior-neutral).** Accounting, enforcement, and representation
+  changes that must NOT move any validation envelope. Where the current model has a real
+  imbalance (phosphorus), Phase A does **not** silently fix it — it makes the imbalance an
+  **explicit, logged reconciliation term** so behavior is unchanged and the conservation
+  guard passes with the leak visible instead of hidden.
 - **Phase B — Behavior corrections (envelope-moving, individually justified).** A small set
-  of biology/chemistry corrections that necessarily change output and require re-calibration
-  and written envelope justification. These are honestly labeled as behavior changes, not
-  "just accounting."
+  of deliberate biology/chemistry corrections that necessarily change output — including
+  actually *closing* the phosphorus leak — each requiring re-calibration and written
+  envelope justification.
 
-The earlier framing of "no new science" was inaccurate and has been dropped: several of the
-fixes below (realistic plant C:N, hypoxia response, reproduction aggregation, pH clamp) do
-change behavior. The split above makes that explicit and keeps the risky part isolated.
+The "no new science" framing from rev 1 was inaccurate and has been dropped. Phase B changes
+behavior on purpose; the split isolates that risk and keeps the guard meaningful.
 
 ### Guiding principle
 
 Every element the model tracks as a pool must be conserved across every transformation, or
-the transformation must be an explicitly accounted source/sink. Approximations are allowed;
-silent non-conservation is not.
+the transformation must be an **explicitly accounted** source/sink. A discovered imbalance is
+first made explicit (Phase A), then corrected as a deliberate, re-calibrated behavior change
+(Phase B). Silent non-conservation is never acceptable.
+
+### Chosen representation (decided here to unblock implementation specs)
+
+Every organic pool (fine/coarse detritus, feces, per-stage shrimp reserve, trim residue,
+suspended vs attached biomass where already split) is represented as an **explicit element
+vector** carrying `mg N`, `mg C`, and `mg P`. Gram-mass views are *derived* from the vector,
+not the source of truth. Mixing pools adds vectors; removing a fraction scales them; a
+transfer moves the same vector out of source and into sink. This makes every organic route
+conservative by construction and is the concrete target for the W0 implementation spec. The
+alternative (keep scalar grams + per-source projection) is rejected: it reintroduces exactly
+the shared-ratio coupling this release exists to remove.
 
 ---
 
 ## 2. Findings this release resolves
 
-Verified against the current code on branch `ralph/tank-sim` and re-checked by an
-independent xhigh review. File/line references are anchors, not exact contracts.
+Verified against code on branch `ralph/tank-sim` and re-checked by two independent xhigh
+reviews. File/line references are anchors, not exact contracts.
 
-### F1 — Phosphorus is tracked but never conserved (HIGH, integrity)
+### F1 — Phosphorus is taken up but never returned as phosphorus (HIGH)
 
-Phosphate is a first-class state variable: dissolved `water.phosphate_mg_p_total`
-(`types/water.rs:56`) and per-layer substrate `nutrient_store_mg_p_total`
-(`types/substrate.rs:80`). It moves through the system on the **uptake side**: feed input
-(`systems/nitrogen_cycle.rs:145,149`), plant/algae uptake (`systems/plant_growth.rs:105`,
-`systems/algae_growth.rs:112`), substrate-store drawdown weighted by the CEC index
-(`systems/plant_growth.rs:342`), refund of unused uptake (`systems/plant_growth.rs:271`),
-and water changes (`systems/water_change.rs:56,77`).
+Phosphate is first-class state: dissolved `water.phosphate_mg_p_total` (`types/water.rs:56`)
+and per-layer substrate `nutrient_store_mg_p_total` (`types/substrate.rs:80`). The **uptake**
+side is real: feed input (`systems/nitrogen_cycle.rs:145,149`), plant uptake at 4.0 mg P/g
+(`systems/plant_growth.rs:6,105`), algae uptake at 5.0 mg P/g (`systems/algae_growth.rs:112`),
+substrate-store drawdown weighted by the CEC index (`systems/plant_growth.rs:342`; note: this
+is drawdown only — there is **no** substrate P *release* path in the cited code), refund of
+unused uptake (`systems/plant_growth.rs:271`), and water changes (`systems/water_change.rs`).
 
-But the conserved element ledger — `BudgetTotals`/`BudgetDelta` (`types/budget.rs:67,92`)
-and the `Element` enum (`budget_helpers.rs:70`) — covers only **nitrogen, carbon, oxygen**.
-Phosphorus is absent from every check. Worse, the **loss side** of the P cycle is not even
-represented as phosphorus: when plant/algae biomass turns over, is grazed, is trimmed, or
-suspended algae is exported in a water change, the organic mass routes as *grams projected
-to N and C only* (see F3/W0). Phosphorus assimilated into biomass has no element-preserving
-return path at all. P can be silently created or destroyed and no test would detect it.
+The **loss** side does not carry phosphorus at all: when biomass turns over, is grazed,
+trimmed, decomposed, or exported, organic mass routes as *grams projected to N and C only*.
+The conserved ledger — `BudgetTotals`/`BudgetDelta` (`types/budget.rs:67,92`) and the
+`Element` enum (`budget_helpers.rs:70`) — has no phosphorus. Net effect: P assimilated into
+biomass (4.0/5.0 mg P/g) has no element-preserving return, and any P the detrital projection
+*does* imply (≈ N × feed P:N ≈ 2.8/3.5 mg P/g) does not match uptake. Phosphorus is silently
+non-conserved, and the mismatch means true closure is a **behavior change**, not accounting.
 
-Correction vs rev 1: there is no substrate P *release* path in the cited code (only
-CEC-weighted drawdown into plants), so "CEC storage/release" in rev 1 was imprecise.
+### F2 — Conservation enforcement is opt-in, partial, and clamp-masked (MED-HIGH)
 
-### F2 — Conservation enforcement is opt-in, partial, and clamp-masked (MED-HIGH, integrity)
-
-Correction vs rev 1: a runtime guard **does** exist. `enforce_tracked_tick_budget_guard()`
-returns `SimError::BudgetImbalance` on drift (`engine.rs:1158`). But it is inadequate as a
-conservation law for three reasons:
-1. **Off by default.** It runs only when `budget_ledger` is enabled; default engines set
-   `budget_ledger: None` (`engine.rs:215,284`), so production and most tests never run it.
-2. **Partial element coverage.** It checks nitrogen and carbon only — not oxygen, not
-   phosphorus.
-3. **Clamp-masked.** `BudgetTotals::from_state` floors oxygen with `.max(0.0)`
-   (`types/budget.rs:109`) and `enforce_invariants` normalizes negative DO before checking
-   (`invariants.rs:13`), so a negative-oxygen event is hidden from the total instead of
-   surfaced as a violation. Clamps are unaccounted sources/sinks.
+A runtime guard exists — `enforce_tracked_tick_budget_guard()` → `SimError::BudgetImbalance`
+(`engine.rs:1158`) — but: (1) it is **off by default** (`budget_ledger: None`,
+`engine.rs:~219,284`); (2) it checks **N and C only**, not O or P; (3) it is **clamp-masked**
+— `BudgetTotals::from_state` floors oxygen with `.max(0.0)` (`types/budget.rs:109`) and
+`enforce_invariants` normalizes negative DO before checking (`invariants.rs:13`), hiding a
+negative-oxygen event from the total instead of surfacing it.
 
 ### F3 — Organism stoichiometry is tied to the fish-food parameter (HIGH, mixed)
 
-Plant and algae tissue carbon is computed as `nitrogen / feed_n_to_c_ratio`
+Plant/algae tissue carbon is computed as `nitrogen / feed_n_to_c_ratio`
 (`types/budget.rs:536,544`; `feed_n_to_c_ratio = 0.16` at
-`crates/tank_data/data/process/default.toml:30`). Two distinct problems:
+`crates/tank_data/data/process/default.toml:30`).
+- **(integrity)** A *feed* parameter sets *organism* carbon content; must be organism-owned.
+  Decoupling while preserving current effective values is behavior-neutral.
+- **(behavior)** `0.16` implies plant molar C:N ~7 (algae-like); real submersed macrophytes
+  are ~15–30. Correcting the value changes carbon drawdown and detrital return.
 
-- **(integrity)** A *feed* parameter determines *plant and algae* carbon content. Organism
-  composition must be organism-owned. Decoupling it (keeping current effective values) is
-  behavior-neutral.
-- **(behavior)** `0.16` gives plants molar C:N ~7, which is algae-like; real submersed
-  macrophytes run molar C:N ~15–30. Correcting the *value* changes carbon drawdown and
-  detrital return, so it is a behavior change, not accounting.
-
-Shrimp sibling defect **(integrity)**: reserves are funded via `grams ×
-LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G` (= 0.20; `types/budget.rs:24`, used at
-`systems/shrimp.rs:1363,1385`) and projected to N/C by the generic reserve projection,
-while death returns body mass via the per-species `body_nitrogen/carbon_mg_per_g` fields
-(`systems/shrimp.rs:1330`). Element-wise conservation across birth→death holds only when
-*both* the reserve's organic fraction *and* its implied N:C match the body composition — a
-fragile coincidence of the shipped defaults, not a guaranteed identity. Any non-default body
-composition preset silently creates or destroys N and/or C each cycle.
+Shrimp sibling defect **(integrity)**: reserves are funded via `grams × 0.20`
+(`LIVE_BIOMASS_ORGANIC_FRACTION_G_PER_G`, `types/budget.rs:24`, used
+`systems/shrimp.rs:1363,1385`) and projected to N/C by the generic reserve projection, while
+death returns body mass via per-species `body_nitrogen/carbon_mg_per_g` (`shrimp.rs:1330`).
+These reconcile element-wise only when *both* the reserve's organic fraction *and* its
+implied N:C equal the body composition — a coincidence of the defaults, not an identity.
 
 ### F4 — Hypoxia inverts the biology (MED, behavior)
 
-Under O2-limited respiration, the *un-respired* carbon and nitrogen are added to the
-organism's reserve (`systems/shrimp.rs:408`, `systems/microfauna.rs:153`). Mass is
-conserved (so this is not an integrity bug), but the sign is biologically backwards: low DO
-makes shrimp and microfauna *accumulate more reserve* instead of depressing growth.
+Under O2-limited respiration the *un-respired* C and N are added to reserve
+(`systems/shrimp.rs:408`, `systems/microfauna.rs:153`). Mass conserves (not an integrity bug)
+but the sign is backwards: low DO grows reserve instead of depressing growth.
 
 ### F5 — Reproduction multiplies too many sub-unity factors (MED, behavior)
 
-Condition is a product of seven factors (`systems/shrimp.rs:455`); hatch rate multiplies a
-base by seven factors (`:940`); readiness multiplies eight (`:1586`). Independent factors
-near 0.8 collapse (0.8^8 ≈ 0.17). Adult condition is counted three times — readiness
-(`:1564`), hatch (`:928`), and clutch size (`:951`) — compounding one variable. Behavior /
-calibration, not conservation.
+Condition = product of 7 factors (`shrimp.rs:455`); hatch = base × 7 (`:940`); readiness =
+8 (`:1586`). 0.8^8 ≈ 0.17. Adult condition is counted three times — readiness (`:1564`),
+hatch (`:928`), clutch (`:951`). Behavior/calibration.
 
 ### F6 — pH clamp: boundary charge inconsistency + truncated swing (MED, mixed)
 
 `CARBONATE_PH_MAX = 8.5` (`systems/chemistry.rs:111`). At the boundary the solver reprojects
-species at the clamped pH and, by its own comment, the cached speciation "no longer imply[s]
+species at the clamped pH and its own comment notes the cached speciation "no longer imply[s]
 the original alkalinity" (`chemistry.rs:431`).
-- **(integrity)** The cached carbonate state silently mis-states charge at the boundary.
-  Making cached species consistent with alkalinity is an accounting fix.
-- **(behavior)** Raising the clamp so a brightly lit tank can reach pH 9+ changes output and
-  requires re-calibration.
+- **(integrity)** Cached carbonate state silently mis-states charge at the boundary.
+- **(behavior)** Raising the clamp so a lit tank reaches pH 9+ changes output.
 
 ---
 
@@ -133,68 +128,70 @@ the original alkalinity" (`chemistry.rs:431`).
 
 ### Phase A — Integrity (behavior-neutral; must not move envelopes)
 
-**W0. Element-explicit organic pools (FOUNDATION — precedes W1 and W3).**
-Today N/C conservation works only because every organic pool (detritus, feces, reserve,
-trim residue) is a scalar gram pool projected to N and C through one shared
-`feed_n_to_c_ratio`. That representation cannot conserve N, C, and P separately once
-different guilds have different C:N:P. Redesign the organic-pool representation so each
-pool carries (or is projected through a stored, source-specific) N, C, and P content, and
-every transfer route — plant loss → `fine_detritus_g_total` (`systems/plant_growth.rs:402`),
-consumer feces/reserve (`systems/shrimp.rs:366`, `systems/microfauna.rs:110`), trim-leave,
-decomposition, water-change export of suspended algae — moves all three elements
-consistently. This is the linchpin: W1 and W3 are unsound without it. Landed with current
-effective compositions, it is behavior-neutral.
+**W0. Element-explicit organic pools + organism-owned composition (FOUNDATION).**
+Replace scalar gram organic pools with the element-vector representation defined in §1. Give
+plants, algae, detritus, and shrimp their own C:N:P composition constants (with `param_meta`),
+replacing the `feed_n_to_c_ratio`-derived carbon; feed keeps its own ratio for feed only.
+Fund shrimp reserves from the same body composition used at death. **Preserve current
+effective N and C values** so N/C behavior is unchanged. Every organic route — plant loss →
+`fine_detritus_g_total` (`plant_growth.rs:402`), consumer feces/reserve (`shrimp.rs:366`,
+`microfauna.rs:110`), trim-leave, decomposition, and every export/import in the A1 route list
+— moves the full element vector. Define save/load migration for the changed state shape
+(legacy gram fields become derived views or are migrated) and preserve replay determinism.
+This is the linchpin; W1 and W3b are unsound without it. Absorbs the integrity half of F3.
 
-**W1. Phosphorus in the conserved ledger with real loss routes.**
+**W1a. Phosphorus in the ledger + explicit reconciliation (behavior-neutral).**
 Add phosphorus as a first-class conserved element in `BudgetTotals`, `BudgetDelta`,
-`BudgetSnapshot`, the `Element` enum, and the biomass→element projection. Wire **every** P
-transfer — uptake, refund, substrate drawdown, feed-derived organic P, and the loss routes
-enabled by W0 (turnover, grazing, trim-leave, decomposition, water-change export) — into the
-ledger. Resolves F1.
+`BudgetSnapshot`, `Element`, and the biomass→element projection. Wire every P transfer
+(uptake, refund, substrate drawdown, feed-derived organic P, and the W0 loss routes) into the
+ledger. Because current uptake (4.0/5.0 mg P/g) does not match current return (≈2.8/3.5
+mg P/g), introduce an **explicit, logged `phosphorus_reconciliation` source/sink budget term**
+that absorbs exactly today's asymmetry so total-P *with the reconciliation term* closes and
+observable phosphate behavior is unchanged (A7 holds). The reconciliation term is the
+measured size of the leak; it is not a fudge to be left forever — W1b removes it. Resolves the
+integrity half of F1.
 
 **W2. Enforce N/C/O/P closure by default in dev/CI; account for clamps.**
-Extend `enforce_tracked_tick_budget_guard()` to cover oxygen and phosphorus in addition to
-N and C, and make it run without requiring an opt-in ledger in `debug_assert` builds and in
-the validation harness (release builds stay free of the cost). Convert the O2 (and any
-other) clamp from a silent `.max(0.0)` into an explicit, logged budget source/sink so clamp
-events are accounted, not hidden. Resolves F2.
-
-**W3a. Organism-owned stoichiometry (values preserved).**
-Give plants, algae, detritus, and shrimp their own C:N:P composition constants (with
-`param_meta`), replacing the `feed_n_to_c_ratio`-derived carbon. Feed keeps its own ratio
-for feed only. Fund shrimp reserves from the same body composition used at death.
-**Preserve current effective numeric values** so this item is behavior-neutral and provable
-against the guard. Resolves the integrity half of F3.
+Extend the guard to cover oxygen and phosphorus, and make it run without an opt-in ledger in
+`debug_assert` builds and in the validation harness (release builds stay free of the cost).
+Convert **mass-affecting** clamps from silent `.max(0.0)` into explicit logged budget
+source/sinks: in scope are the DO floor (`budget.rs:109`, `invariants.rs:13`) and any pool
+`.max(0.0)` that discards tracked N/C/O/P mass; explicitly **exempt** non-mass index clamps
+(exposure modifiers, condition/maturity indices, clogging index). Resolves F2.
 
 **W6a. Carbonate boundary charge consistency (clamp unchanged).**
-At the pH clamp boundary, make the cached carbonate speciation consistent with the tracked
-alkalinity (reproject to preserve alkalinity, or record the residual as an explicit
-accounted deviation). Do **not** change the clamp value in Phase A. Resolves the integrity
-half of F6. Update `docs/carbonate_state_contract.md`.
+At the pH clamp boundary, **reproject the cached carbonate speciation to preserve the tracked
+alkalinity** (the definite contract — not "record a residual"). Do not change the clamp value
+in Phase A. Update `docs/carbonate_state_contract.md`. Resolves the integrity half of F6.
 
 ### Phase B — Behavior corrections (envelope-moving; each individually justified)
 
 Land only after Phase A is green and the guard is active, so every envelope shift is
 attributable to a deliberate correction and re-calibrated.
 
+**W1b. Close the phosphorus leak.** Route P through loss paths at true tissue P content and
+**remove the W1a reconciliation term**; phosphate concentrations now change. Re-run
+calibration; document envelope deltas (algae/plant dynamics are P-sensitive). Resolves the
+behavior half of F1.
+
 **W3b. Realistic macrophyte C:N.** Set plant tissue C:N to a literature macrophyte value
-(molar ~15–30). Re-run calibration; justify envelope changes. (behavior half of F3)
+(molar ~15–30). Re-run calibration; justify envelopes. (behavior half of F3)
 
 **W4. Hypoxia response.** Under O2 limitation, suppress assimilation/growth instead of
 crediting un-respired C/N to reserve; un-assimilated food routes to feces/detritus (via W0),
-never to phantom reserve; total mass still closes. Resolves F4.
+never phantom reserve; total mass still closes. Resolves F4.
 
 **W5. Reproduction aggregation.** Replace the product of sub-unity factors with a defensible
 aggregation (Liebig minimum or geometric mean of independent stressors) and count adult
 condition once. Re-tune only to keep envelopes sane. Resolves F5.
 
-**W6b. Raise pH clamp.** Raise `CARBONATE_PH_MAX` to admit realistic daytime highs (target
-up to ~pH 9.5) on top of the W6a boundary fix; verify solver stability across 15–35 °C.
-Resolves the behavior half of F6.
+**W6b. Raise pH clamp.** Raise `CARBONATE_PH_MAX` to admit realistic daytime highs (target up
+to ~pH 9.5) on top of W6a; verify solver stability across 15–35 °C. Resolves the behavior half
+of F6.
 
-**W7. Documentation refresh.** Update `PROVENANCE_STATUS.md`, `scientific_specs.md`, and
-README to reflect already-shipped phosphate/potassium tracking and live DIC rates, and to
-record the new conservation guarantees and per-guild stoichiometry.
+**W7. Documentation refresh.** Update `PROVENANCE_STATUS.md`, `scientific_specs.md`, README to
+reflect already-shipped phosphate/potassium tracking and live DIC rates, and record the new
+conservation guarantees and per-guild stoichiometry.
 
 ### Explicitly out of scope (deferred to v0.8+ realism release)
 
@@ -209,82 +206,86 @@ shock/acclimation; the algae NH4-uptake 60% cap vs plant full-NH4 inconsistency
 ## 4. Acceptance criteria
 
 Phase A (behavior-neutral):
-A1. **Element-explicit routes.** A route-matrix test exercises every organic transfer
-    (plant/algae turnover, grazing, feces, trim-leave, decomposition, water-change export)
-    and asserts N, C, and P each close independently. (W0, W1)
-A2. **Phosphorus structural + dynamic closure.** P has structural budget coverage mirroring
-    the existing N/C coverage, and a multi-day run (feed → uptake → drawdown → refund →
-    turnover → water change) conserves total P to fp tolerance. (W1)
-A3. **Guard covers N/C/O/P and is on in dev/CI.** Deliberately injecting a create/destroy of
-    any of the four elements trips the guard/`debug_assert` or a harness failure with the
-    ledger no longer opt-in for those builds. (W2)
-A4. **Clamp accounting.** A forced negative-DO condition records an explicit clamp
-    source/sink budget metric rather than a silent `.max(0.0)`. (W2)
-A5. **Stoichiometry is organism-owned and value-preserving.** Changing `feed_n_to_c_ratio`
-    no longer changes plant/algae tissue carbon; with values preserved, the full validation
-    suite envelopes are unchanged. A birth→death cycle with a **non-default** shrimp body
-    composition conserves N **and** C **independently** (asserted separately, not as a sum).
-    (W3a)
-A6. **Carbonate boundary consistency.** A test at the clamp boundary recomputes alkalinity
-    from the cached species and matches the tracked alkalinity within tolerance. (W6a)
+A1. **Element-explicit route matrix.** A test exercises **every** organic import/export and
+    asserts N, C, and P each close independently: plant/algae turnover, grazing, feces,
+    trim-leave, trim-and-remove (export), decomposition, `siphon_detritus`, filter-cleaning
+    biomass routing, shrimp add/remove (body + reserve), and water-change export of suspended
+    algae. (W0, W1a)
+A2. **Phosphorus structural + dynamic closure (with reconciliation).** P has structural budget
+    coverage mirroring N/C, and a multi-day run conserves total P **including the explicit
+    reconciliation term** to fp tolerance; the reconciliation term is reported and non-growing
+    in steady state. (W1a)
+A3. **Guard covers N/C/O/P, on in dev/CI.** Injecting a create/destroy of any of the four
+    elements trips the guard/`debug_assert` or a harness failure, with the ledger no longer
+    opt-in for those builds. (W2)
+A4. **Clamp accounting.** A forced negative-DO condition (and any other in-scope
+    mass-discarding clamp) records an explicit clamp source/sink budget metric rather than a
+    silent floor. (W2)
+A5. **Stoichiometry organism-owned and value-preserving.** Changing `feed_n_to_c_ratio` no
+    longer changes plant/algae tissue carbon; a birth→death cycle with a **non-default** shrimp
+    body composition conserves N **and** C **independently** (asserted separately, not summed).
+    (W0)
+A6. **Carbonate boundary consistency.** A boundary test recomputes alkalinity from the cached
+    species and matches the tracked alkalinity within tolerance. (W6a)
 A7. **Phase A moves no envelope.** The eight validation scenarios and the calibration report
-    are unchanged after Phase A. (all Phase A)
+    are unchanged after Phase A (P observable behavior held constant by the reconciliation
+    term). (all Phase A)
+A8. **Determinism + migration.** Seeded save→load→replay is bit-identical after the W0 state
+    reshape; a legacy save loads via migration with observable state preserved. (W0)
 
 Phase B (behavior; changes justified):
-B1. Plant tissue molar C:N sits in the literature macrophyte band; envelope deltas
-    documented. (W3b)
-B2. In a low-DO scenario, shrimp/microfauna reserve and growth **decrease** vs normoxia, and
-    total N/C still close. (W4)
-B3. Near-optimal conditions yield reproductive output in a sane range; condition is not
+B1. Phosphate dynamics change in a documented direction after the reconciliation term is
+    removed; envelopes re-justified. (W1b)
+B2. Plant tissue molar C:N sits in the literature macrophyte band; deltas documented. (W3b)
+B3. Low-DO scenario: shrimp/microfauna reserve and growth **decrease** vs normoxia; N/C still
+    close. (W4)
+B4. Near-optimal conditions yield reproductive output in a sane range; condition not
     triple-counted. (W5)
-B4. A brightly lit CO2-drawdown scenario reaches pH > 8.5 with the carbonate contract holding
+B5. A brightly lit CO2-drawdown scenario reaches pH > 8.5 with the carbonate contract holding
     at the new boundary. (W6b)
 
 Cross-cutting:
 C1. `cargo test && cargo clippy -- -D warnings && cargo fmt --check` pass. (all)
-C2. **Determinism preserved:** seeded save/load and replay remain bit-identical; no wall
-    clock, no unseeded RNG. (all)
+C2. No wall clock, no unseeded RNG introduced. (all)
 
 ---
 
 ## 5. Risks and mitigations
 
-- **W0 is invasive.** Redesigning organic-pool representation touches many systems.
-  Mitigation: it is the first item; land it behavior-neutral (current compositions) and
-  prove no-envelope-change (A7) before anything else.
-- **Guard failing "correctly" during W3.** If stoichiometry changes before W0 lands, the
-  now-active guard will legitimately fail. Mitigation: strict ordering W0 → W1/W2 → W3a.
-- **Re-tuning cascade in Phase B.** F3b/F5 may move envelopes. Mitigation: land each Phase B
-  item alone, re-run the calibration report, adjust envelopes only with written
-  justification.
-- **Debug-assert cost.** Per-tick full-ledger checks could slow long runs. Mitigation: gate
-  under `debug_assert`/harness flag; release builds unaffected.
-- **Boundary math (W6).** Raising the clamp must not destabilize the quadratic solver.
-  Mitigation: verify against `carbonate_state_contract.md` vectors across 15–35 °C.
+- **W0 is invasive** (touches many systems + persisted state). Mitigation: first item; land
+  behavior-neutral with migration; prove A7 + A8 before anything else.
+- **Reconciliation term misused.** Risk it becomes a permanent fudge. Mitigation: it is
+  reported every tick (A2), and W1b's definition of done is its removal.
+- **Guard failing "correctly" mid-change.** If stoichiometry/P closure changes before W0/W1a
+  land, the active guard legitimately fails. Mitigation: strict order W0 → W1a → W2.
+- **Phase B re-tuning cascade.** Mitigation: one Phase B item at a time, re-run calibration,
+  change envelopes only with written justification.
+- **Debug-assert cost.** Mitigation: gate under `debug_assert`/harness flag.
+- **Boundary math (W6).** Mitigation: verify against carbonate contract vectors 15–35 °C.
 
 ---
 
 ## 6. Deliverables
 
-1. Code changes in `tank_core` implementing W0, W1, W2, W3a, W6a (Phase A) then W3b, W4, W5,
-   W6b (Phase B), plus W7 docs.
-2. New tests: route-matrix N/C/P closure, P structural + dynamic, N/C/O/P guard-injection,
-   clamp accounting, non-default shrimp composition (N and C asserted separately), carbonate
-   boundary alkalinity recomputation; updated hypoxia, reproduction, and pH tests.
-3. Refreshed docs (W7) and an updated calibration report.
-4. A follow-on set of **detailed, buildable per-work-item implementation specs** (one per
-   W-item, W0 first) authored and reviewed before implementation begins.
+1. Code in `tank_core`: Phase A (W0 → W1a → W2 → W6a) then Phase B (W1b, W3b, W4, W5, W6b),
+   plus W7 docs.
+2. Tests: route-matrix N/C/P, P structural + dynamic (with reconciliation), N/C/O/P
+   guard-injection, clamp accounting, non-default shrimp composition (N and C separate),
+   carbonate boundary alkalinity recomputation, save-migration/replay determinism; updated
+   hypoxia, reproduction, and pH tests.
+3. Refreshed docs (W7) and updated calibration report.
+4. Detailed, buildable per-work-item implementation specs (W0 first), reviewed before coding.
 
 ---
 
 ## 7. Sequencing
 
-1. **W0** element-explicit organic pools (behavior-neutral) → prove A7 (no envelope change).
-2. **W1 + W2** P ledger + N/C/O/P guard on-by-default-in-dev + clamp accounting → A1–A4.
-3. **W3a** organism-owned stoichiometry, values preserved → A5, re-confirm A7.
+1. **W0** element-explicit pools + organism-owned composition + migration → prove A5, A7, A8.
+2. **W1a** P ledger + explicit reconciliation term → A1, A2, A7.
+3. **W2** N/C/O/P guard on-by-default-in-dev + clamp accounting → A3, A4.
 4. **W6a** carbonate boundary consistency → A6.
-5. Phase A gate: full suite + calibration report unchanged (A7).
-6. **W3b → W4 → W5 → W6b**, one at a time, each re-running calibration (B1–B4).
+5. **Phase A gate:** full suite + calibration report unchanged (A7, A8).
+6. **W1b → W3b → W4 → W5 → W6b**, one at a time, each re-running calibration (B1–B5).
 7. **W7** docs → final suite + calibration report.
 
 Implementation does not begin until the per-item implementation specs (Deliverable 4, W0
