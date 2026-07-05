@@ -1,6 +1,6 @@
 # Spec: v0.7 "Scientific Integrity" Release
 
-Status: DRAFT rev 4 (revised after three codex xhigh reviews)
+Status: DRAFT rev 5 (rev 4 + fresh-eyes review: FP-tolerance behavior-neutral bar, association-preserving stoichiometry, O2-guard spike)
 Author: scientific-core review, 2026-07-03
 Scope owner: `tank_core`
 Predecessor: v0.2–v0.6 scientific-core overhaul (complete; backlog drained)
@@ -119,12 +119,15 @@ species alkalinity-consistent changes output and the DIC-preserving carbonate te
 **W0. Element-explicit organic pools + organism-owned N/C composition (FOUNDATION).**
 Replace the scalar-gram independent organic pools (fine detritus, particulate organics,
 per-stage shrimp reserve, and the equivalent microfauna reserve) with the `(N,C,P)`
-element-vector of §1, gram view = N+C only, `p_mg = 0` for now. Give plants/algae/shrimp their
-own N and C composition constants (with `param_meta`), replacing `feed_n_to_c_ratio`
-projection (feed keeps its ratio for feed only); fund shrimp reserve from the same body N/C
-composition used at death. Sweep every raw gram read/write to the vector. Define a save
-migration for the changed state shape and preserve replay determinism. Absorbs the integrity
-half of F3. The `p_mg` slots are the seam W1b fills.
+element-vector of §1, gram view = N+C only, `p_mg = 0` for now. Give plants/algae their own N:C
+**ratio** constant (with `param_meta`) so organism carbon stops reading `feed_n_to_c_ratio`;
+keep the existing `carbon_from_nitrogen_mg(N, ratio)` expression with the organism's own ratio so
+the carbon path stays **bit-identical** (do not pre-divide into a carbon-per-gram constant — that
+re-associates the arithmetic; feed keeps its ratio for feed only). Fund shrimp reserve from the
+same body N/C composition used at death (this path genuinely re-associates arithmetic and drifts
+within the A7 tolerance). Sweep every raw gram read/write to the vector. Define a save migration
+for the changed state shape and preserve replay determinism. Absorbs the integrity half of F3.
+The `p_mg` slots are the seam W1b fills.
 
 **W1a. Phosphorus ledger plumbing + observability (behavior-neutral, no enforcement).**
 Add `Element::Phosphorus`, `BudgetDelta.phosphorus`, `BudgetTotals.phosphorus_mg`, a snapshot
@@ -209,10 +212,18 @@ A5. **Stoichiometry organism-owned, value-preserving.** Changing `feed_n_to_c_ra
 A6. **Carbonate boundary residual reported.** A clamp-boundary test asserts the residual
     diagnostic equals `implied_alk(cached species) − tracked_alk`, with DIC/species/pH
     unchanged vs today. (W6a)
-A7. **Phase A moves no envelope.** The eight validation scenarios and the calibration report
-    are unchanged after Phase A. (all)
-A8. **Determinism + migration.** Seeded save→load→replay is bit-identical after the W0 reshape;
-    a legacy save loads via migration with observable state preserved. (W0)
+A7. **Phase A moves no envelope.** After Phase A the eight validation scenarios keep the same
+    pass/marginal/fail status and stay inside their envelopes, and the calibration report's
+    observed values are unchanged within a tight floating-point tolerance (relative ~1e-9),
+    excluding non-deterministic report metadata (e.g. `generated_at`). This is a tolerance-level,
+    not byte-for-byte, claim: W0's stoichiometry decoupling keeps the plant/algae carbon path
+    bit-identical (organism-owned N:C ratio constant, see W0), but the shrimp-reserve funding
+    path and the organic-pool migration round-trip re-associate arithmetic and move low-order
+    bits by design. (all)
+A8. **Determinism + migration.** Seeded save→load→replay under the *new* code is bit-identical
+    after the W0 reshape (new-vs-new determinism); a legacy save loads via migration with
+    observable state preserved within the A7 tolerance (the gram→N/C→gram round-trip is not
+    bit-exact). (W0)
 
 Phase B (behavior; changes justified):
 B1. **Phosphorus closes and is enforced.** After W1b, a per-route N/C/P matrix closes P
@@ -235,10 +246,22 @@ C2. No wall clock, no unseeded RNG introduced. (all)
 
 - **W0 is invasive** (many systems + persisted state). Mitigation: first item; land
   behavior-neutral with migration; prove A5, A7, A8 before anything else.
+- **"Behavior-neutral" is FP-tolerance, not byte-for-byte.** Decoupling organism carbon and the
+  gram→N/C→gram migration re-associate floating-point arithmetic, so bit-for-bit equality is
+  unachievable (and the report already embeds a wall-clock `generated_at`). Mitigation: keep the
+  plant/algae carbon path bit-identical via an organism-owned N:C *ratio* constant (not a
+  pre-divided constant); assert A7 as status + envelope + relative ~1e-9 tolerance; reserve
+  bit-identity for A8 new-vs-new replay only.
 - **Half-tracked P looks "done" after Phase A.** Mitigation: A2 explicitly makes no enforcement
   claim; W1b's definition of done is guard-enforced P closure (B1).
 - **Guard failing "correctly" mid-change.** Mitigation: strict order W0 → W1a → W2; P
   enforcement only after W1b tracks biomass/organic P.
+- **O2 guard may trip on existing scenarios at first activation.** The guard has been opt-in and
+  N/C-only, so it has never run across the eight scenarios with oxygen included; the DO floor and
+  invariants normalization have masked any imbalance. Mitigation: before wiring W2's
+  guard-by-default, spike `assert_o2_balanced` across all eight scenarios; if any fails to close,
+  treat it as a separate tracked defect with its own envelope decision (possibly Phase B), not a
+  W2 tolerance bump.
 - **Phase B re-tuning cascade.** Mitigation: one item at a time, re-run calibration, change
   envelopes only with written justification.
 - **Debug-assert cost.** Mitigation: gate under `debug_assertions`/harness flag.

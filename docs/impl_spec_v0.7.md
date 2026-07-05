@@ -1,7 +1,10 @@
 # Implementation Spec: v0.7 "Scientific Integrity"
 
-Companion to `docs/spec_v0.7_scientific_integrity.md` (rev 4). Defines *how*, at a level an
-implementer can build against. Rev 3 after three codex xhigh reviews. The governing insight:
+Companion to `docs/spec_v0.7_scientific_integrity.md` (rev 5). Defines *how*, at a level an
+implementer can build against. Rev 4 after a fresh-eyes + codex FP review: behavior-neutral is
+an FP tolerance (not byte-for-byte), plant/algae carbon decouples via an organism-owned N:C
+*ratio* constant to stay bit-identical, W1a extends the consistency assertion to phosphorus, and
+W2 spikes the O2 balance before enabling the guard by default. The governing insight:
 **the only truly behavior-neutral Phase A work is accounting/representation. You cannot
 enforce conservation of a half-tracked element, so Phase A hardens the guard for the fully
 tracked N/C/O, makes phosphorus merely *visible* in the ledger, and defers all phosphorus
@@ -10,8 +13,16 @@ tracking/routing/closure — and any carbonate species reprojection — to Phase
 no reconciliation term in Phase A (it would be vacuous over water+substrate P alone).
 
 Conventions: paths repo-relative; line anchors reflect branch `ralph/tank-sim` at spec time
-and may drift. "Behavior-neutral" = the eight validation scenarios and the calibration report
-are byte-for-byte unchanged (A7).
+and may drift. "Behavior-neutral" = the eight validation scenarios keep the same
+pass/marginal/fail status and stay inside their envelopes, and the calibration report's observed
+numeric values are unchanged **within a tight floating-point tolerance** (relative ~1e-9),
+ignoring non-deterministic report metadata (e.g. `generated_at`, `calibration.rs:307`, which
+already makes the report non-reproducible byte-for-byte). It is **not** byte-for-byte: W0's
+stoichiometry decoupling and the organic-pool save migration both re-associate floating-point
+arithmetic, so a fraction of low-order bits legitimately change (see W0). Bit-identity is
+required only for A8's *new-code* save→load→replay determinism, never for an old-vs-new
+comparison. The harness comparison is already status-only (`calibration.rs:315`), so this
+tolerance framing matches how the report is actually diffed.
 
 ---
 
@@ -66,15 +77,32 @@ Every raw read/write of the converted scalars must move to `OrganicMass`:
   filter clogging, tracing, snapshots, and existing tests that read the scalars.
 
 ### Organism-owned N/C composition (behavior-neutral)
-Add `PLANT_C_MG_PER_G_BIOMASS = 175.0` (= current `28.0/0.16`) and
-`ALGAE_C_MG_PER_G_BIOMASS = 218.75` (= `35.0/0.16`) next to the existing N constants
-(`budget.rs:16-18`). Replace the `n_to_c_ratio`-parameterized carbon projectors
+Give plants/algae their own N:C **ratio** constant, **not** a pre-divided carbon-per-gram
+constant. Decoupling from the feed parameter must preserve the exact arithmetic association so
+the dominant carbon path stays bit-for-bit unchanged (review fix). Add
+`PLANT_N_TO_C_RATIO = 0.16` and `ALGAE_N_TO_C_RATIO = 0.16` (organism-owned, `param_meta`) next
+to the existing N constants (`budget.rs:16-18`), and keep the carbon projectors
 (`plant_carbon_mg`, `algae_carbon_mg`, `live_biomass_carbon_mg`, `detritus_carbon_mg`,
-`budget.rs:536-660`) with vector/constant forms; feed keeps `feed_n_to_c_ratio` for *feed
-input only*. Fund shrimp **reserve** from body N/C composition
-(`body_nitrogen/carbon_mg_per_g_wet_mass`) instead of `grams × 0.20 × feed ratio`, so
-reserve and death use the same composition (fixes F3 integrity). **P composition constants
-are NOT introduced here** — they arrive in W1b when P actually flows.
+`budget.rs:536-660`) computing the *same expression* —
+`carbon_from_nitrogen_mg(plant_nitrogen_mg(biomass), PLANT_N_TO_C_RATIO)` — with the organism's
+own ratio in place of `feed_n_to_c_ratio`. Since the value is identical (0.16) and the
+expression is unchanged, plant/algae tissue carbon (which feeds budget totals **and** detrital
+mass routing, `algae_detrital_mass_g` `budget.rs:548`, `live_biomass_detrital_mass_g`
+`budget.rs:570`) is bit-identical, while feed's ratio no longer governs organism carbon (A5).
+Feed keeps `feed_n_to_c_ratio` for *feed input only*.
+
+**Do NOT substitute a pre-divided `biomass × 175.0` / `× 218.75` constant here** (review fix):
+even though `28.0/0.16 == 175.0` exactly as a constant, `(biomass × 28.0) / 0.16` differs
+bit-for-bit from `biomass × 175.0` in ~28% of inputs (double rounding), which would perturb
+dynamics and the report for no benefit. The derived carbon-per-gram *equals* `175.0`/`218.75`;
+W3b changes the **ratio** to a literature macrophyte value (that is where carbon is meant to
+move). Fund shrimp **reserve** from body N/C composition
+(`body_nitrogen/carbon_mg_per_g_wet_mass`) instead of `grams × 0.20 × feed ratio`, so reserve
+and death use the same composition (fixes F3 integrity); this path genuinely re-associates
+arithmetic (F3: the two "reconcile only by coincidence of defaults"), so its low-order bits move
+within the tolerance defined above — that is the one W0 path that is not bit-identical, and it is
+covered by the FP-tolerance bar, not byte-for-byte. **P composition constants are NOT introduced
+here** — they arrive in W1b when P actually flows.
 
 ### Migration (review fix)
 `save.rs` uses `SCHEMA_VERSION = 14` with a contiguous migration list (`save.rs:17,46-76`).
@@ -86,9 +114,20 @@ Add an explicit **v14→v15 raw-JSON migration** that maps each legacy scalar
 with a non-default ratio must migrate with its own ratio to stay behavior-neutral). Serde
 defaults are insufficient; the migration is required. Bump to `SCHEMA_VERSION = 15`.
 
+Note (review fix): the gram→`{n,c}`→gram round-trip is **not** bit-exact. A legacy scalar `G`
+maps to `n = organic_nitrogen_mg(G, ratio)`, `c = organic_carbon_mg(G, ratio)`, and the derived
+accessor recomputes `(n + c) / 1000`; the split, the addition, and the divide each round, so the
+reconstructed gram value can differ from `G` in the last bits. This is expected and covered by
+the FP-tolerance behavior-neutral bar — A8's legacy-migration clause means "observable state
+preserved **within tolerance**", not bit-identical grams. New-code save→load→replay determinism
+(same code both sides) remains exactly bit-identical.
+
 ### Tests (`crates/tank_core/tests/organic_mass_pools.rs`)
 - `organic_mass_split_conserves` (N/C/P exact through split+reassemble).
-- `w0_behavior_neutral` — eight scenarios identical pre/post via `tank_harness` (A7).
+- `w0_behavior_neutral` — eight scenarios keep identical pass/marginal/fail status and stay in
+  envelope pre/post via `tank_harness`; observed values match within relative ~1e-9 (A7). Assert
+  status + tolerance, **not** exact equality (the shrimp-reserve path and migration round-trip
+  move low-order bits by design).
 - `w0_legacy_save_migrates` — v14 fixture loads to identical observable state (A8).
 - `w0_nondefault_shrimp_composition_conserves_n_and_c` — non-default body N/C summing ≠200;
   birth→death with `budget_ledger` on; N and C each close independently (A5).
@@ -114,12 +153,19 @@ phosphorus **visible**; enforcement and closure are W1b (Phase B). **No reconcil
   `nutrient_store_mg_p_total`. Surface it in budget snapshots so the imbalance is inspectable.
 - The runtime guard does **not** check phosphorus in Phase A (added in W1b once biomass/organic
   P is tracked). No behavior change (accessors/sums only).
-- **Populate `phosphorus` in explicit budget producers** (review fix): once
-  `BudgetDelta.phosphorus`/`BudgetTotals.phosphorus_mg` exist, stages that build an explicit
-  delta and move phosphate — notably `apply_water_change_with_budget` (returns N/C/O only today,
-  `water_change.rs:134`, while it moves phosphate at `:56`) — must set the phosphorus field, or
-  `record_stage` consistency breaks and P inspection is misleading. This is bookkeeping only
-  (the phosphate state moves are unchanged).
+- **Extend the consistency assertion to phosphorus, then populate explicit budget producers**
+  (review fix). `record_stage`'s `delta_net_matches_totals` (`budget.rs:698-704`) checks only
+  N/C/O today; W1a extends it to phosphorus so the ledger's P accounting is actually asserted
+  (otherwise a producer that leaves `phosphorus` at default while moving phosphate is a silent
+  wrong-inspection, not a caught error). With the assertion extended, every explicit
+  (non-snapshot) `BudgetDelta` producer must carry a P delta consistent with its phosphate move.
+  Of the three production producers — `step_hourly_chemistry_with_budget` (`chemistry.rs:558`),
+  `apply_water_change_with_budget` (`water_change.rs:99`), `step_dissolved_oxygen_with_budget`
+  (`dissolved_oxygen.rs:64`) — only water-change moves phosphate (`water_change.rs:56,77`) and so
+  must set a **non-zero** phosphorus field (it returns N/C/O only today, `water_change.rs:134`);
+  chemistry and DO satisfy the extended assertion automatically with a zero P delta (their
+  before/after `phosphorus_mg` are equal). This is bookkeeping only (the phosphate state moves are
+  unchanged).
 
 The per-route P closure test and guard enforcement live in **W1b**; W1a keeps only A2
 (observability) and A7 (phosphate series unchanged).
@@ -151,6 +197,17 @@ biomass/organic P). W2 hardens the three fully-tracked elements.
 Under `cfg!(debug_assertions)` and a `TANK_BUDGET_GUARD=1` harness flag, construct the engine
 with `budget_ledger` enabled (default stays `None`, `engine.rs:~219`, so release is zero-cost)
 and run the guard each tick. Wire `tank_harness` to set the flag on all eight scenarios.
+
+**Spike the O2 balance before wiring guard-by-default** (review fix). The guard has been opt-in
+(`budget_ledger: None`) and N/C-only, so it has **never** run across the eight scenarios with
+oxygen included, and the DO `.max(0.0)` floor (`budget.rs:109`) plus invariants DO normalization
+have been masking any negative-DO / imbalance events. Before adding the on-by-default wiring, run
+`assert_o2_balanced` (`budget_helpers.rs:322`) across all eight scenarios as a throwaway spike. If
+they all close to tolerance, proceed — W2 is the behavior-neutral hardening it claims to be. If
+any scenario does **not** close, that is a pre-existing conservation defect the guard has newly
+surfaced: treat it as a **separate, tracked defect** with its own envelope decision (it may be
+behavior-changing and belong in Phase B), **not** a W2 tolerance-widening exercise. Do not make
+the guard pass by loosening tolerance.
 
 ### Clamp accounting (review fix — diagnostic, NOT a ledger delta)
 Adding a budget delta for the DO floor would violate `record_stage`'s delta-vs-floored-totals
@@ -194,8 +251,9 @@ every call site, to avoid duplicate/ambiguous diagnostics.
 
 ## Phase A gate
 After W0→W1a→W2→W6a: `cargo test && cargo clippy -- -D warnings && cargo fmt --check` green;
-`cargo run -p tank_harness --bin calibration_report` unchanged (A7); save/replay bit-identical
-(A8). Do not start Phase B until this holds.
+`cargo run -p tank_harness --bin calibration_report` shows unchanged status/envelopes with
+observed values within the A7 FP tolerance (not byte-for-byte); new-code save→load→replay
+bit-identical (A8). Do not start Phase B until this holds.
 
 ---
 
@@ -227,8 +285,9 @@ calibration; phosphate dynamics shift — document envelope deltas. Tests:
 (injected P leak trips the guard).
 
 ### W3b — Realistic macrophyte C:N
-Raise `PLANT_C_MG_PER_G_BIOMASS` from 175.0 to a literature macrophyte value (molar C:N
-15–30; with N=28 mg/g → C≈360–720 mg/g; pick a `param_meta`-cited mid value). Re-run
+Lower `PLANT_N_TO_C_RATIO` from 0.16 to a literature macrophyte value (molar C:N 15–30 → N:C
+mass ratio ≈ 0.039–0.078; with N=28 mg/g this is C≈360–720 mg/g; pick a `param_meta`-cited mid
+value). This is the deliberate carbon-moving change the W0 ratio-constant seam exists for. Re-run
 calibration; document deltas; update `PROVENANCE_STATUS.md`.
 
 ### W4 — Hypoxia response
